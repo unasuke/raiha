@@ -1,0 +1,22 @@
+PATH
+  remote: .
+  specs:
+    raiha (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    minitest (5.14.4)
+    rake (10.5.0)
+
+PLATFORMS
+  x86_64-linux
+
+DEPENDENCIES
+  bundler (~> 2.0)
+  minitest (~> 5.0)
+  raiha!
+  rake (~> 10.0)
+
+BUNDLED WITH
+   2.2.22
