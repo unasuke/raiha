@@ -1,4 +1,4 @@
-require_relative 'base'
+require 'raiha/packet/base'
 
 module Raiha
   module Packet

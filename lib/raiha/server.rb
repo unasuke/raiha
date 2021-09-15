@@ -1,5 +1,5 @@
 require 'socket'
-require 'raiha/packet/base'
+require 'raiha/packet/initial'
 
 module Raiha
   class Server
