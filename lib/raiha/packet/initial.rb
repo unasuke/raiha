@@ -23,7 +23,7 @@ module Raiha
         end
       end
 
-      def remove_protection(type: :intial)
+      def remove_protection
         puts self.parsed
         pn_offset = 7 + 
           @parsed[:destination_connection_id_length][:value] +
