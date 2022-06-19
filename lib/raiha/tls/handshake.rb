@@ -1,7 +1,7 @@
 require 'raiha/tls/base'
 
 module Raiha
-  module Tls
+  class Tls
     class Handshake < Base
       def parse
         byte :msg_type, size: 1, type: :int

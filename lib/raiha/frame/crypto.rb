@@ -1,4 +1,5 @@
 require 'raiha/frame/base'
+require 'raiha/tls'
 
 module Raiha
   module Frame
@@ -10,6 +11,10 @@ module Raiha
         byte :crypto_data, size: :length
 
         self
+      end
+
+      def tls_message
+        ::Raiha::Tls.new.parse([@parsed[:crypto_data][:value]].pack("B*"))
       end
     end
   end

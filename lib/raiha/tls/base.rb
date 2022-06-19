@@ -1,5 +1,5 @@
 module Raiha
-  module Tls
+  class Tls
     class Base
       attr_reader :raw
       attr_reader :parsed
@@ -33,7 +33,6 @@ module Raiha
       end
 
       def byte(name, size:, type: :raw)
-        binding.irb
         if size.is_a?(Symbol)
           bits = @packed[@cursor...(@cursor+ @parsed[size][:value]*8)]
           @cursor += @parsed[size][:value] * 8

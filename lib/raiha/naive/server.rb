@@ -93,9 +93,9 @@ module Raiha
 
         if find_frame_type(frame) === :crypto
           crypto_frame = ::Raiha::Frame::Crypto.new([frame].pack("B*")).parse
+          pp crypto_frame.tls_message.msg_type
+          binding.irb
         end
-
-        binding.irb
       end
 
       private def long_header?
