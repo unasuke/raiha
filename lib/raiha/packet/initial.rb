@@ -1,4 +1,5 @@
 require 'raiha/packet/base'
+require 'openssl'
 
 module Raiha
   module Packet
@@ -21,10 +22,29 @@ module Raiha
           byte :packet_number, size: @parsed[:packet_number_length][:value] + 1, type: :int
           byte :payload, size: :length
         end
+
+        self
+      end
+
+      def raw_header
+        return nil if @protected
+        [@parsed[:header_form][:raw] + \
+        @parsed[:fixed_bit][:raw] + \
+        @parsed[:long_packet_type][:raw] + \
+        @parsed[:reserved_bit][:raw] + \
+        @parsed[:packet_number_length][:raw] + \
+        @parsed[:version][:raw] + \
+        @parsed[:destination_connection_id_length][:raw] + \
+        @parsed[:destination_connection_id][:raw] + \
+        @parsed[:source_connection_id_length][:raw] + \
+        @parsed[:source_connection_id][:raw] + \
+        @parsed[:token_length][:raw] + \
+        @parsed[:token][:raw] + \
+        @parsed[:length][:raw] + \
+        @parsed[:packet_number][:raw]].pack("B*")
       end
 
       def remove_protection
-        puts self.parsed
         pn_offset = 7 + 
           @parsed[:destination_connection_id_length][:value] +
           @parsed[:source_connection_id_length][:value] +
@@ -55,6 +75,21 @@ module Raiha
         # 先頭の0が消えてしまうので、パケット番号の長さに満たないぶんを zero fillする
         @raw[pn_offset...pn_offset+pn_length] = [("0" * (pn_length * 2 - packet_number.length)) + packet_number].pack("H*")
         self.class.new(@raw, protected: false).tap {|p| p.parse}
+      end
+
+      def frame
+        return nil if protected
+
+        payload_as_hex = [@parsed[:payload][:raw]].pack("B*")
+        dec = OpenSSL::Cipher.new('aes-128-gcm').decrypt
+        dec.key = ["1f369613dd76d5467730efcbe3b1a22d"].pack("H*") # quic key
+        dec.iv = [("fa044b2f42a3fd3b46fb255c".to_i(16) ^ @parsed[:packet_number][:value]).to_s(16)].pack("H*") # quic iv
+        dec.auth_data = raw_header
+        dec.auth_tag = payload_as_hex[payload_as_hex.length-16...payload_as_hex.length]
+        decrypted_payload = ""
+        decrypted_payload << dec.update(payload_as_hex[0...payload_as_hex.length-16])
+        decrypted_payload << dec.final
+        return decrypted_payload.unpack1("B*")
       end
     end
   end
