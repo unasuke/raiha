@@ -1,0 +1,8 @@
+module Raiha::Quic::Crypto
+  class HeaderProtection
+    MASK: String
+    ZERO: String
+
+    def initialize: (cipher_name: String, key: String) -> void
+  end
+end

@@ -1,0 +1,4 @@
+module Raiha::Quic
+  module Crypto
+  end
+end
