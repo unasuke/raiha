@@ -1,6 +1,6 @@
 require 'openssl'
 
-module Raiha
+module Raiha::Quic
   module Packet
     class Base
       attr_reader :raw
