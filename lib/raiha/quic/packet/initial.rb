@@ -1,6 +1,6 @@
 require 'raiha/packet/base'
 
-module Raiha
+module Raiha::Quic
   module Packet
     class Initial < Base
       def parse
