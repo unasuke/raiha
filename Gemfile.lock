@@ -69,10 +69,10 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  bundler (~> 2.0)
-  minitest (~> 5.0)
+  bundler
+  minitest
   raiha!
-  rake (~> 10.0)
+  rake
   rbs
   steep
 
