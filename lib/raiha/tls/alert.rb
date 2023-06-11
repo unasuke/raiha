@@ -2,21 +2,21 @@
 
 module Raiha::TLS
   # Represents alerts of the TLS 1.3 protocol.
-  # See also https://datatracker.ietf.org/doc/html/rfc8446#section-6
+  # @see https://datatracker.ietf.org/doc/html/rfc8446#section-6
   class Alert
     # Abstract base class for all alerts.
     # @!attribute [r] kind
     #   @return [Symbol] Alert kind
     # @!attribute [r] level
-    #   @return [Symbol] Alert level. `:warning` or `:fatal`
+    #   @return [Symbol] Alert level. +:warning+ or +:fatal+
     class Base < TLSError
       attr_reader :kind
       attr_reader :level
 
       # @param error_message [String] Message of the error
       # @param kind [Symbol] Alert kind.
-      # @param level [Symbol] Alert level. Accepts `:warning` or `:fatal`
-      # @raise [ArgumentError] if kind or level are unexpected, raises ArgumentError
+      # @param level [Symbol] Alert level. Accepts +:warning+ or +:fatal+
+      # @raise [ArgumentError] if kind or level are unexpected, raises +ArgumentError+
       # @see https://www.rfc-editor.org/rfc/rfc8446.html#section-6
       # @see https://www.rfc-editor.org/rfc/rfc8446.html#appendix-B.2
       def initialize(error_message, kind:, level:)
