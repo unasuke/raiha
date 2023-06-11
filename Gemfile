@@ -5,4 +5,9 @@ gemspec
 
 group :development do
   gem "steep"
+  gem "rbs"
+end
+
+group :test do
+  gem "minitest"
 end
