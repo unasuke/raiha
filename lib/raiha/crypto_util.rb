@@ -57,7 +57,6 @@ module Raiha::CryptoUtil
       t = OpenSSL::HMAC.digest("SHA256", prk, t + info + i.chr)
       okm += t
     end
-    pp okm.unpack1("H*")
     okm[0...length]
   end
   module_function :hkdf_expand
