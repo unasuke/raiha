@@ -1,0 +1,14 @@
+module Raiha::Quic::Crypto
+  class AEAD
+    NONCE_LENGTH: 12
+    TAG_LENGTH: 16
+
+    @cipher_name: String
+    @key: String
+    @iv: String
+
+    def initialize: (String cipher_name, String key, String iv) -> void
+    def encrypt: (String data, String associated_data, Integer packet_number) -> String
+    def decrypt: (String data, String associated_data, Integer packet_number) -> String
+  end
+end
