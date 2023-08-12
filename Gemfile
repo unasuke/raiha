@@ -6,6 +6,7 @@ gemspec
 group :development do
   gem "steep"
   gem "rbs"
+  gem "rake"
 end
 
 group :test do
