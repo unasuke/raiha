@@ -8,6 +8,7 @@ group :development do
   gem "rbs"
   gem "rake"
   gem "bindata"
+  gem "rubocop"
 end
 
 group :test do
