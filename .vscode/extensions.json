@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "koichisasada.vscode-rdbg",
+        "rubocop.vscode-rubocop",
+        "shopify.ruby-lsp",
+        "soutaro.rbs-syntax",
+        "soutaro.steep-vscode"
+    ]
+}
