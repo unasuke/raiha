@@ -36,7 +36,4 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "bindata"
   spec.add_dependency "tttls1.3"
-
-  spec.add_development_dependency "bundler"
-  spec.add_development_dependency "rake"
 end
