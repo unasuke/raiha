@@ -7,6 +7,7 @@ group :development do
   gem "steep"
   gem "rbs"
   gem "rake"
+  gem "bindata"
 end
 
 group :test do
