@@ -2,7 +2,15 @@ module Raiha::Quic::Crypto
   class HeaderProtection
     MASK: String
     ZERO: String
+    PACKET_NUMBER_LENGTH_MAX: 4
+    SAMPLE_LENGTH: 16
+
+    @cipher: OpenSSL::Cipher
+    @mask: String
 
     def initialize: (cipher_name: String, key: String) -> void
+    def apply: (IO::Buffer plain_header, IO::Buffer protected_payload) -> untyped
+    def remove: (IO::Buffer packet, Integer encrypted_offset) -> { plain_header: IO::Buffer, packet_number: Integer }
+    private def mask: (IO::Buffer sample) -> String
   end
 end
