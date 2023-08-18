@@ -19,7 +19,6 @@ module Raiha::Quic
       # @param key [String] key
       # @raise [RutimeError] If +cihper_name+ is invalid, raise it.
       def initialize(cipher_name:, key:)
-        @key = key
         @cipher = OpenSSL::Cipher.new(cipher_name)
         @cipher.encrypt
         @cipher.key = key
