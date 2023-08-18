@@ -17,10 +17,16 @@ GEM
     bindata (2.4.15)
     concurrent-ruby (1.2.2)
     csv (3.2.6)
+    debug (1.8.0)
+      irb (>= 1.5.0)
+      reline (>= 0.3.1)
     ffi (1.15.5)
     fileutils (1.7.1)
     i18n (1.14.1)
       concurrent-ruby (~> 1.0)
+    io-console (0.6.0)
+    irb (1.7.4)
+      reline (>= 0.3.6)
     json (2.6.3)
     language_server-protocol (3.17.0.3)
     listen (3.8.0)
@@ -41,6 +47,8 @@ GEM
       ffi (~> 1.0)
     rbs (3.1.0)
     regexp_parser (2.8.1)
+    reline (0.3.7)
+      io-console (~> 0.5)
     rexml (3.2.6)
     rubocop (1.56.0)
       base64 (~> 0.1.1)
@@ -88,6 +96,7 @@ PLATFORMS
 
 DEPENDENCIES
   bindata
+  debug
   minitest
   raiha!
   rake
