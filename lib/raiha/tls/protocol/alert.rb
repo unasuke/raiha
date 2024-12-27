@@ -22,7 +22,7 @@ module Raiha::TLS
       def initialize(error_message, kind:, level:)
         super(error_message)
         raise ArgumentError, "Unknown error kind #{kind}" unless KINDS.keys.include?(kind)
-        raise ArgumentError, "Unknown alert level #{kind}" unless %i(warning fatal).include?(label)
+        raise ArgumentError, "Unknown alert level #{kind}" unless %i(warning fatal).include?(level)
         @kind = kind
         @level = level
       end
