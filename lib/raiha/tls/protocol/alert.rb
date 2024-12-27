@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
-module Raiha::TLS
+require_relative "../../tls"
+
+module Raiha::TLS::Protocol
   # Represents alerts of the TLS 1.3 protocol.
   # @see https://datatracker.ietf.org/doc/html/rfc8446#section-6
   class Alert
@@ -9,7 +11,7 @@ module Raiha::TLS
     #   @return [Symbol] Alert kind
     # @!attribute [r] level
     #   @return [Symbol] Alert level. +:warning+ or +:fatal+
-    class Base < TLSError
+    class Base < ::Raiha::TLS::TLSError
       attr_reader :kind
       attr_reader :level
 

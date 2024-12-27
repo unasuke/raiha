@@ -1,5 +1,5 @@
 require "test_helper"
-require "raiha/tls/protocols/handshake"
+require "raiha/tls/protocol"
 
 # https://datatracker.ietf.org/doc/html/rfc8448#section-3
 RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO = [<<~HS.gsub(/[[:space:]]/, '')].pack("H*")
@@ -22,9 +22,9 @@ RANDOM
 
 class RaihaProtocolsHandShakeTest < Minitest::Test
   def test_serialize_client_hello
-    hs = ::Raiha::TLS::Handshake.new.tap do |hs|
-      hs.handshake_type = ::Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
-      hs.message = ::Raiha::TLS::ClientHello.build
+    hs = ::Raiha::TLS::Protocol::Handshake.new.tap do |hs|
+      hs.handshake_type = ::Raiha::TLS::Protocol::Handshake::HANDSHAKE_TYPE[:client_hello]
+      hs.message = ::Raiha::TLS::Protocol::Handshake::ClientHello.build
     end
     hs.message.random = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO_RANDOM
     # TODO: Build ClientHello extentions
@@ -32,9 +32,9 @@ class RaihaProtocolsHandShakeTest < Minitest::Test
   end
 
   def test_deserialize_client_hello
-    hs = ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO)
+    hs = ::Raiha::TLS::Protocol::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO)
     assert_equal 192, hs.length
-    assert_equal ::Raiha::TLS::ClientHello, hs.message.class
+    assert_equal ::Raiha::TLS::Protocol::Handshake::ClientHello, hs.message.class
     assert_equal RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO_RANDOM, hs.message.random
     assert_equal 3, hs.message.cipher_suites.size
     assert_equal 9, hs.message.extensions.size
