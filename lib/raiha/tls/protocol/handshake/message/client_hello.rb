@@ -1,4 +1,5 @@
 require_relative "../message"
+require_relative "../extension"
 
 module Raiha::TLS::Protocol
   class Handshake
