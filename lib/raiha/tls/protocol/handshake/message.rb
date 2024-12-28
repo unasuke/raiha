@@ -1,4 +1,3 @@
-
 module Raiha::TLS::Protocol
   class Handshake
     class Message
@@ -19,3 +18,4 @@ module Raiha::TLS::Protocol
 end
 
 require_relative "message/client_hello"
+require_relative "message/server_hello"

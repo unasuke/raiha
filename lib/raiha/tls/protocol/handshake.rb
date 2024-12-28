@@ -45,13 +45,6 @@ module Raiha::TLS::Protocol
     end
   end
 
-  # class ServerHello < Message
-  #   attr_accessor :random
-  #   attr_accessor :legacy_session_id_echo
-  #   attr_accessor :cipher_suite
-  #   attr_accessor :extensions
-  # end
-
   class CipherSuite
     TLS_AES_128_GCM_SHA256 = [0x13, 0x01]
     TLS_AES_256_GCM_SHA384 = [0x13, 0x02]
