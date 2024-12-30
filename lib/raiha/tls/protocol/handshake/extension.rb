@@ -17,6 +17,7 @@ module Raiha::TLS::Protocol
         client_certificate_type: 19,
         server_certificate_type: 20,
         padding: 21,
+        record_size_limit: 28,
         session_ticket: 35,
         pre_shared_key: 41,
         early_data: 42,
@@ -80,6 +81,7 @@ end
   client_certificate_type
   server_certificate_type
   padding
+  record_size_limit
   session_ticket
   pre_shared_key
   early_data
