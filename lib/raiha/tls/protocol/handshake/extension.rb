@@ -41,10 +41,18 @@ module Raiha::TLS::Protocol
         extensions = []
         buf = StringIO.new(data)
         until buf.eof?
-          extension = self.new
-          extension.extension_type = buf.read(2).unpack1("n")
-          extension_data_length = buf.read(2).unpack1("n")
-          extension.extension_data = buf.read(extension_data_length)
+          ext_type = buf.read(2).unpack1("n")
+          ext_data_length = buf.read(2).unpack1("n")
+          ext_data = buf.read(ext_data_length)
+
+          if (ext_type_name = EXTENSION_TYPE.invert[ext_type])
+            extension = self.const_get(ext_type_name.to_s.split("_").map(&:capitalize).join).new
+            extension.extension_data = ext_data
+          else
+            extension = self.new
+            extension.extension_type = ext_type
+            extension.extension_data = ext_data
+          end
           extensions << extension
         end
         extensions
@@ -56,4 +64,31 @@ module Raiha::TLS::Protocol
       # end
     end
   end
+end
+
+%w[
+  server_name
+  max_fragment_length
+  status_request
+  supported_groups
+  signature_algorithms
+  use_srtp
+  heartbeat
+  application_layer_protocol_negotiation
+  signed_certificate_timestamp
+  client_certificate_type
+  server_certificate_type
+  padding
+  pre_shared_key
+  early_data
+  supported_versions
+  cookie
+  psk_key_exchange_modes
+  certificate_authorities
+  oid_filters
+  post_handshake_auth
+  signature_algorithms_cert
+  key_share
+].each do |file|
+  require_relative "extension/#{file}"
 end
