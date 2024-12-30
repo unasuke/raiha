@@ -17,7 +17,7 @@ module Raiha::TLS::Protocol
         client_certificate_type: 19,
         server_certificate_type: 20,
         padding: 21,
-        pre_shred_key: 41,
+        pre_shared_key: 41,
         early_data: 42,
         supported_versions: 43,
         cookie: 44,
