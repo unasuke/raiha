@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class UseSrtp < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 14
+        end
+      end
+    end
+  end
+end

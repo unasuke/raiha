@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class StatusRequest < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 5
+        end
+      end
+    end
+  end
+end

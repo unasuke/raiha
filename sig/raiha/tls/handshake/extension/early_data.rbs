@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class EarlyData < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 42
+        end
+      end
+    end
+  end
+end

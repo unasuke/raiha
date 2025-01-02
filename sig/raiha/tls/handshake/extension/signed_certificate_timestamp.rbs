@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class SignedCertificateTimestamp < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 18
+        end
+      end
+    end
+  end
+end

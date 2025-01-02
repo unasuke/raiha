@@ -1,0 +1,12 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class PostHandshakeAuth < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 49
+        end
+      end
+    end
+  end
+end
+
