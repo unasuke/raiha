@@ -1,0 +1,15 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class Padding < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 21
+
+          attr_accessor length: Integer
+
+          def self.generate_padding_with_length: (Integer) -> Padding
+        end
+      end
+    end
+  end
+end

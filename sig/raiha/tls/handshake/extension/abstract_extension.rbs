@@ -1,0 +1,16 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class AbstractExtension
+          EXTENSION_TYPE_NUMBER: Integer
+
+          @extension_data: String
+
+          def extension_data=: (String data) -> void
+          def serialize: -> String
+        end
+      end
+    end
+  end
+end

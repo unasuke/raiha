@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class KeyShare < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 51
+        end
+      end
+    end
+  end
+end

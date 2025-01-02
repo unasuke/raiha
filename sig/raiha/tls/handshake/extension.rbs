@@ -1,0 +1,15 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        EXTENSION_TYPE: Hash[Symbol, Integer]
+
+        attr_accessor extension_type: Integer
+        attr_accessor extension_data: String
+
+        def serialize: -> String
+        def self.deserialize_extensions: (String) -> Array[Extension]
+      end
+    end
+  end
+end

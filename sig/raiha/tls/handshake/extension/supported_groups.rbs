@@ -1,0 +1,11 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class SupportedGroups < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 10
+        end
+      end
+    end
+  end
+end

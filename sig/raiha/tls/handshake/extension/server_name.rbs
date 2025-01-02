@@ -1,0 +1,12 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class ServerName < AbstractExtension
+          EXTENSION_TYPE_NUMBER: 0
+          attr_accessor server_name: String
+        end
+      end
+    end
+  end
+end

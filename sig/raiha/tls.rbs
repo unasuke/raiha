@@ -15,59 +15,5 @@ module Raiha
 
     class Server < Context
     end
-    class Handshake
-      attr_accessor handshake_type: Integer
-      attr_accessor length: Integer
-      attr_accessor message: Message
-    end
-
-    class Message
-      def serialize: -> String
-    end
-
-    class ClientHello < Message
-      LEGACY_VERSION: Array[Integer]
-      TLS13_SUPPORTED_VERSION: Array[Integer]
-
-      attr_accessor random: String
-      attr_accessor legacy_session_id: Integer
-      attr_accessor cipher_suites: Array[CipherSuite]
-      attr_accessor extensions: Array[Extension]
-      attr_accessor legacy_compression_methods: Array[Integer]
-
-      def self.build: -> ClientHello
-      def self.deserialize: (String data) -> ClientHello
-      def extensions_for_client_hello: -> Array[Extension]
-      def serialize_cipher_suites: -> String
-      def serialize_extensions: -> String
-    end
-
-    class ServerHello < Message
-    end
-
-    class CipherSuite
-      TLS_AES_128_GCM_SHA256: Array[Integer]
-      TLS_AES_256_GCM_SHA384: Array[Integer]
-      TLS_CHACHA20_POLY1305_SHA256: Array[Integer]
-      TLS_AES_128_CCM_SHA256: Array[Integer]
-      TLS_AES_128_CCM_8_SHA256: Array[Integer]
-
-      @name: Symbol
-
-      def self.deserialize: (String) -> CipherSuite
-      def initialize: (Symbol) -> void
-      def value: -> Array[Integer]
-      def serialize: -> String
-    end
-
-    class Extension
-      EXTENSION_TYPE: Hash[Symbol, Integer]
-
-      attr_accessor extension_type: Integer
-      attr_accessor extension_data: Array[Integer]
-
-      def serialize: -> String
-      def self.deserialize_extensions: (String) -> Array[Extension]
-    end
   end
 end
