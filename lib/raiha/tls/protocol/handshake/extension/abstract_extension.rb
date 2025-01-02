@@ -13,8 +13,7 @@ class Raiha::TLS::Protocol::Handshake
       end
 
       def serialize
-        packed_extension_data = @extension_data.pack("C*")
-        [EXTENSION_TYPE_NUMBER].pack("n") + [packed_extension_data.bytesize].pack("n") + packed_extension_data
+        [EXTENSION_TYPE_NUMBER].pack("n") + [@extension_data.bytesize].pack("n") + @extension_data
       end
     end
   end
