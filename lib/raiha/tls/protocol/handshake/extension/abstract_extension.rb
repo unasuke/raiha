@@ -9,11 +9,11 @@ class Raiha::TLS::Protocol::Handshake
       EXTENSION_TYPE_NUMBER = nil # If not override this const, #serialize method will raise error.
 
       def extension_data=(data)
-        @exention_data = data
+        @extension_data = data
       end
 
       def serialize
-        packed_extension_data = extension_data.pack("C*")
+        packed_extension_data = @extension_data.pack("C*")
         [EXTENSION_TYPE_NUMBER].pack("n") + [packed_extension_data.bytesize].pack("n") + packed_extension_data
       end
     end
