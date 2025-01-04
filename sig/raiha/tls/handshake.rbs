@@ -8,7 +8,7 @@ module Raiha
       attr_accessor message: Message
 
       def serialize: -> String
-      def self.deserialize: (String data) -> Handshake
+      def self.deserialize: (String data) -> Handshake?
     end
 
     class CipherSuite
