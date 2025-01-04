@@ -41,7 +41,10 @@ module Raiha
 
         hs.handshake_type = type
         hs.length = ("\x00" + buf.read(3)).unpack1("N")
-        hs.message = Message.deserialize(data: buf.read(hs.length), type: hs.handshake_type)
+        body = buf.read
+        return nil if body.bytesize != hs.length
+
+        hs.message = Message.deserialize(data: body, type: hs.handshake_type)
         hs
       end
     end
