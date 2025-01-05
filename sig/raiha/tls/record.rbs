@@ -1,0 +1,23 @@
+module Raiha
+  module TLS
+    class Record
+      CONTENT_TYPE: Hash[Symbol, Integer]
+      LEGACY_PROTOCOL_VERSION: String
+
+      class TLSPlaintext
+        FRAGMENT_SIZE_LIMIT: Integer
+
+        attr_accessor content_type: Integer
+        attr_accessor fragment: String
+
+        def self.serialize: (Handshake::Message content)-> Array[String]
+        def self.deserialize: (Array[String] bufs) -> Array[Handshake]?
+        def self.unwrap_serialized_fragment: (String) -> {content_type: Integer, fragment: String}
+      end
+
+      class TLSCiphertext
+      end
+    end
+  end
+end
+
