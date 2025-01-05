@@ -2,7 +2,7 @@ module Raiha
   module TLS
     class Record
       CONTENT_TYPE: Hash[Symbol, Integer]
-      LEGACY_PROTOCOL_VERSION: String
+      LEGACY_RECORD_VERSION: String
 
       class TLSPlaintext
         FRAGMENT_SIZE_LIMIT: Integer

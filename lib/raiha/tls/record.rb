@@ -12,7 +12,7 @@ module Raiha
         handshake: 22,
         application_data: 23,
       }.freeze
-      LEGACY_PROTOCOL_VERSION = [0x03, 0x03].pack("C*") # TLS v1.2
+      LEGACY_RECORD_VERSION = [0x03, 0x03].pack("C*") # TLS v1.2
 
       # TLSPlaintext class represents the +TLSPlaintext+ struct object.
       #
@@ -50,7 +50,7 @@ module Raiha
             else
               raise "TODO #{content.class}"
             end
-            buf << LEGACY_PROTOCOL_VERSION
+            buf << LEGACY_RECORD_VERSION
             buf << [fragment.bytesize].pack("n")
             buf << fragment
             bufs << buf
@@ -98,7 +98,7 @@ module Raiha
           buf = StringIO.new(serialized_tlsplaintext)
           content_type = buf.read(1).unpack1("C")
           legacy_record_version = buf.read(2)
-          raise "unknown legacy record version: #{legacy_record_version}" unless legacy_record_version == LEGACY_PROTOCOL_VERSION
+          raise "unknown legacy record version: #{legacy_record_version}" unless legacy_record_version == LEGACY_RECORD_VERSION
 
           length = buf.read(2).unpack1("n")
           fragment = buf.read(length)
