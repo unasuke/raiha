@@ -71,11 +71,13 @@ module Raiha
         end
 
         def serialize_cipher_suites
+          # TODO: move to abstract class?
           buf = cipher_suites.map(&:serialize).join
           [buf.bytesize].pack("n") + buf
         end
 
         def serialize_extensions
+          # TODO: move to abstract class?
           buf = extensions.map(&:serialize).join
           [buf.bytesize].pack("n") + buf
         end
