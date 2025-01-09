@@ -1,0 +1,26 @@
+module Raiha
+  module TLS
+    class Client
+      module State
+        START: :START
+        WAIT_SH: :WAIT_SH
+        WAIT_EE: :WAIT_EE
+        WAIT_CERT_CR: :WAIT_CERT_CR
+        WAIT_CERT: :WAIT_CERT
+        WAIT_CV: :WAIT_CV
+        WAIT_FINISHED: :WAIT_FINISHED
+        CONNECTED: :CONNECTED
+      end
+
+      @state: Symbol
+      @buffer: Array[String]
+      @supported_groups: Array[untyped]
+      @transcript_hash: untyped
+
+
+      def initialize: -> void
+      def build_client_hello: -> Array[String]
+      private def state=: (State) -> void
+    end
+  end
+end

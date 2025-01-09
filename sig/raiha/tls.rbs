@@ -7,13 +7,5 @@ module Raiha
       @state: untyped
     end
 
-    class Client < Context
-      module State
-        START: Symbol
-      end
-    end
-
-    class Server < Context
-    end
   end
 end
