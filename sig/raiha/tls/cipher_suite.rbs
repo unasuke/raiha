@@ -1,0 +1,20 @@
+module Raiha
+  module TLS
+    class CipherSuite
+      TLS_AES_128_GCM_SHA256: Array[Integer]
+      TLS_AES_256_GCM_SHA384: Array[Integer]
+      TLS_CHACHA20_POLY1305_SHA256: Array[Integer]
+      TLS_AES_128_CCM_SHA256: Array[Integer]
+      TLS_AES_128_CCM_8_SHA256: Array[Integer]
+
+      SUPPORTED_CIPHER_SUITES: Array[Symbol]
+
+      @name: Symbol
+
+      def self.deserialize: (String) -> CipherSuite
+      def initialize: (Symbol) -> void
+      def value: -> Array[Integer]
+      def serialize: -> String
+    end
+  end
+end
