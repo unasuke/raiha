@@ -24,6 +24,15 @@ module Raiha
       end
 
       class ServerHello < Message
+        attr_accessor random: String
+        attr_accessor legacy_session_id_echo: Integer
+        attr_accessor cipher_suite: CipherSuite
+        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension]
+        attr_accessor legacy_compression_method: Integer
+
+        def self.build_from_client_hello: (ClientHello client_hello) -> ServerHello
+        def serialize_cipher_suite: -> String
+        def serialize_extensions: -> String
       end
     end
   end
