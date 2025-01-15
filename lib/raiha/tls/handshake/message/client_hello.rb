@@ -3,6 +3,22 @@ require_relative "../extension"
 module Raiha
   module TLS
     class Handshake
+      # ClientHello
+      #
+      #   uint16 ProtocolVersion;
+      #   opaque Random[32];
+      #
+      #   uint8 CipherSuite[2];    /* Cryptographic suite selector */
+      #
+      #   struct {
+      #       ProtocolVersion legacy_version = 0x0303;    /* TLS v1.2 */
+      #       Random random;
+      #       opaque legacy_session_id<0..32>;
+      #       CipherSuite cipher_suites<2..2^16-2>;
+      #       opaque legacy_compression_methods<1..2^8-1>;
+      #       Extension extensions<8..2^16-1>;
+      #   } ClientHello;
+      # @see https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.2
       class ClientHello < Message
         LEGACY_VERSION = [0x03, 0x03]
         TLS13_SUPPORTED_VERSION = [0x03, 0x04]
