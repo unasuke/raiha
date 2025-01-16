@@ -18,6 +18,8 @@ module Raiha
         CONNECTED = :CONNECTED
       end
 
+      attr_reader :state
+
       def initialize
         @state = State::START
         @buffer = []

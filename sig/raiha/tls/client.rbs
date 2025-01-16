@@ -17,6 +17,7 @@ module Raiha
       @supported_groups: Array[untyped]
       @transcript_hash: untyped
 
+      attr_reader state: Symbol
 
       def initialize: -> void
       def build_client_hello: -> Array[String]
