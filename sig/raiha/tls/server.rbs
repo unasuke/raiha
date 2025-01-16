@@ -18,7 +18,8 @@ module Raiha
       attr_reader state: Symbol
 
       def initialize: -> void
-      def receive: (String datagram) -> void
+      def datagrams_to_send: -> Array[String]
+      def receive: (Array[String] datagrams) -> void
       private def transition_state: (State) -> void
     end
   end

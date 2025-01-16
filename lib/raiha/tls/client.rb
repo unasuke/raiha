@@ -37,16 +37,16 @@ module Raiha
         @buffer
       end
 
-      def receive(datagram)
+      def receive(datagrams)
         case @state
         when State::WAIT_SH
-          receive_server_hello(datagram)
+          receive_server_hello(datagrams)
         else
           # TODO: WIP
         end
       end
 
-      def receive_server_hello(datagram)
+      def receive_server_hello(datagrams)
         hs = Handshake.deserialize(datagram)
         if hs.handshake_type == Handshake::HANDSHAKE_TYPE[:server_hello]
 
