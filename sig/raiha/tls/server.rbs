@@ -14,6 +14,7 @@ module Raiha
       end
 
       @state: Symbol
+      @cipher_suite: CipherSuite?
 
       attr_reader state: Symbol
 
