@@ -21,7 +21,7 @@ module Raiha
       def initialize: -> void
       def datagrams_to_send: -> Array[String]
       def receive: (Array[String] datagrams) -> void
-      private def transition_state: (State) -> void
+      private def transition_state: (Symbol state) -> void
     end
   end
 end
