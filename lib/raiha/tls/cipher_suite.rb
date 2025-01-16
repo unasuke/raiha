@@ -23,6 +23,10 @@ module Raiha
         value.pack("C*")
       end
 
+      def supported?
+        SUPPORTED_CIPHER_SUITES.include?(@name.to_sym)
+      end
+
       def self.deserialize(data)
         val = data.unpack("CC")
         self.new(self.constants.find { |c| self.const_get(c) == val })
