@@ -15,6 +15,7 @@ module Raiha
       def initialize: (Symbol) -> void
       def value: -> Array[Integer]
       def serialize: -> String
+      def supported?: -> bool
     end
   end
 end
