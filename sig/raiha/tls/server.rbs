@@ -17,6 +17,7 @@ module Raiha
 
       def initialize: -> void
       def receive: (String datagram) -> void
+      private def transition_state: (State) -> void
     end
   end
 end
