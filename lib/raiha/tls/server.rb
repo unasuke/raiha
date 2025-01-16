@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "context"
+require_relative "record"
+require_relative "handshake"
 
 module Raiha
   module TLS
