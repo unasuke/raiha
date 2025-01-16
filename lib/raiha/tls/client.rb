@@ -29,7 +29,7 @@ module Raiha
         case @state
         when State::START
           @buffer << build_client_hello
-          state = State::WAIT_SH
+          transition_state(State::WAIT_SH)
         end
 
         @buffer
@@ -63,7 +63,7 @@ module Raiha
         Record.serialize(hs_clienthello)
       end
 
-      private def state=(state)
+      private def transition_state(state)
         if @state == State::START && state == State::WAIT_SH
           @state = state
         end

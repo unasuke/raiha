@@ -26,6 +26,12 @@ module Raiha
 
       def receive_client_hello()
       end
+
+      private def transition_state(state)
+        if @state == State::START && state == State::RECVD_CH
+          @state = state
+        end
+      end
     end
   end
 end

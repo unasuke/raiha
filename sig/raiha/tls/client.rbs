@@ -20,7 +20,7 @@ module Raiha
 
       def initialize: -> void
       def build_client_hello: -> Array[String]
-      private def state=: (State) -> void
+      private def transition_state: (State) -> void
     end
   end
 end
