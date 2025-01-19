@@ -8,7 +8,10 @@ module Raiha
         class AbstractExtension
           EXTENSION_TYPE_NUMBER = nil # If not override this const, #serialize method will raise error.
 
+          attr_reader :extension_data
+
           def extension_data=(data)
+            # TODO: extension specific validation
             @extension_data = data
           end
 
