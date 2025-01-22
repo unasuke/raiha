@@ -53,7 +53,7 @@ module Raiha
           ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(buf.read(2)) }
           ch.legacy_compression_methods = [0x00]; buf.read(2)
           extensions_bytesize = buf.read(2).unpack1("n")
-          ch.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize))
+          ch.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :client_hello)
           ch
         end
 

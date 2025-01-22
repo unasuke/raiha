@@ -15,7 +15,9 @@ module Raiha
               raise "Padding length must be between 0 and 65535"
             end
 
-            padding = self.new
+            # padding extension is only available in client hello
+            # @see https://www.ietf.org/archive/id/draft-ietf-tls-rfc8446bis-11.html#table-1
+            padding = self.new(on: :client_hello)
             padding.length = length
             padding.extension_data = "\x00" * length
             padding

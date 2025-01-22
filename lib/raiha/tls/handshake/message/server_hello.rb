@@ -80,7 +80,7 @@ module Raiha
           sh.cipher_suite = CipherSuite.deserialize(buf.read(2))
           sh.legacy_compression_method = buf.read(2)
           extensions_bytesize = buf.read(2).unpack1("n")
-          sh.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize))
+          sh.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :server_hello)
           sh
         end
 

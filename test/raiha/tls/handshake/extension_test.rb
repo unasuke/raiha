@@ -24,7 +24,7 @@ class RaihaTLSHandshakeExtensionTest < Minitest::Test
 
   def test_deserialize_extensions
     exts = "\x00\x2b\x00\x02\x03\x04\x00\x0a\x00\x02\x03\x04\x00\x0d\x00\x02\x03\x04"
-    extensions = Raiha::TLS::Handshake::Extension.deserialize_extensions(exts)
+    extensions = Raiha::TLS::Handshake::Extension.deserialize_extensions(exts, type: :client_hello)
     assert_equal Raiha::TLS::Handshake::Extension::SupportedVersions, extensions[0].class
     assert_equal "\x03\x04", extensions[0].extension_data
     assert_equal Raiha::TLS::Handshake::Extension::SupportedGroups, extensions[1].class

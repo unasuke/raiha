@@ -39,7 +39,7 @@ module Raiha
           [extension_type].pack("n") + [packed_extension_data.bytesize].pack("n") + packed_extension_data
         end
 
-        def self.deserialize_extensions(data)
+        def self.deserialize_extensions(data, type:)
           extensions = []
           buf = StringIO.new(data)
           until buf.eof?
@@ -48,7 +48,7 @@ module Raiha
             ext_data = buf.read(ext_data_length)
 
             if (ext_type_name = EXTENSION_TYPE.invert[ext_type])
-              extension = self.const_get(ext_type_name.to_s.split("_").map(&:capitalize).join).new
+              extension = self.const_get(ext_type_name.to_s.split("_").map(&:capitalize).join).new(on: type)
               extension.extension_data = ext_data
             else
               extension = self.new

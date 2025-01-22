@@ -8,7 +8,7 @@ module Raiha
         attr_accessor extension_data: String
 
         def serialize: -> String
-        def self.deserialize_extensions: (String) -> Array[Extension]
+        def self.deserialize_extensions: (String, type: :client_hello | :server_hello | :hello_retry_request | :encrypted_extensions | :certificate | :certificate_request | :new_session_ticket) -> Array[Extension]
       end
     end
   end
