@@ -10,6 +10,10 @@ module Raiha
 
           attr_reader :extension_data
 
+          def initialize(on:)
+            @on = on
+          end
+
           def extension_data=(data)
             # TODO: extension specific validation
             @extension_data = data

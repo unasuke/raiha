@@ -6,7 +6,9 @@ module Raiha
           EXTENSION_TYPE_NUMBER: Integer
 
           @extension_data: String
+          @on: :client_hello | :server_hello | :hello_retry_request | :encrypted_extensions | :certificate | :certificate_request | :new_session_ticket
 
+          def initialize: (on: :client_hello | :server_hello | :hello_retry_request | :encrypted_extensions | :certificate | :certificate_request | :new_session_ticket) -> void
           def extension_data=: (String data) -> void
           def serialize: -> String
         end
