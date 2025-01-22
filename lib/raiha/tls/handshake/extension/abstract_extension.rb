@@ -16,7 +16,7 @@ module Raiha
           end
 
           def serialize
-            [EXTENSION_TYPE_NUMBER].pack("n") + [@extension_data.bytesize].pack("n") + @extension_data
+            [self.class::EXTENSION_TYPE_NUMBER].pack("n") + [@extension_data.bytesize].pack("n") + @extension_data
           end
         end
       end
