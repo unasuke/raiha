@@ -4,6 +4,17 @@ module Raiha
       class Extension
         class KeyShare < AbstractExtension
           EXTENSION_TYPE_NUMBER: 51
+          NAMED_GROUPS: Hash[String, String]
+
+          attr_accessor groups: Array[{ group: String, key_exchange: String }]
+
+          @groups: Array[{ group: String, key_exchange: String }]
+
+          def self.generate_key: (Array[String] groups, on: :client_hello | :server_hello | :hello_retry_request) -> KeyShare
+          private def serialize_for_client_hello: -> String
+          private def serialize_for_server_hello: -> String
+          private def serialize_for_hello_retry_request: -> String
+          private def validate_group_and_key_exchange: (String group_name, String key_exchange) -> { group: String, key_exchange: String }
         end
       end
     end
