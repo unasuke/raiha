@@ -16,3 +16,6 @@ module Raiha
     end
   end
 end
+
+require_relative "record/tls_plaintext"
+require_relative "record/tls_ciphertext"
