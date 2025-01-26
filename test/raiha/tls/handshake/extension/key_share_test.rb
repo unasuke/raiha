@@ -4,16 +4,16 @@ require "raiha/tls/handshake/extension"
 
 class RaihaTLSHandshakeExtensionKeyShareTest < Minitest::Test
   # https://tls13.xargs.org/#client-hello (without extension_type and extension_data length bytes)
-  TLS13_XARGS_ORG_CLIENT_HELLO_KEY_SHARE_DATA = [<<~RANDOM.gsub(/[[:space:]]/, '')].pack("H*")
+  TLS13_XARGS_ORG_CLIENT_HELLO_KEY_SHARE_DATA = [<<~DATA.gsub(/[[:space:]]/, '')].pack("H*")
     00 24 00 1d 00 20 35 80 72 d6 36 58 80 d1 ae ea 32 9a df
     91 21 38 38 51 ed 21 a2 8e 3b 75 e9 65 d0 d2 cd 16 62 54
-  RANDOM
+  DATA
 
   # https://tls13.xargs.org/#server-hello (without extension_type and extension_data length bytes)
-  TLS13_XARGS_ORG_SERVER_HELLO_KEY_SHARE_DATA = [<<~RANDOM.gsub(/[[:space:]]/, '')].pack("H*")
+  TLS13_XARGS_ORG_SERVER_HELLO_KEY_SHARE_DATA = [<<~DATA.gsub(/[[:space:]]/, '')].pack("H*")
     00 1d 00 20 9f d7 ad 6d cf f4 29 8d d3 f9 6d 5b 1b 2a
     f9 10 a0 53 5b 14 88 d7 f8 fa bb 34 9a 98 28 80 b6 15
-  RANDOM
+  DATA
 
   def test_generate
     key_share = Raiha::TLS::Handshake::Extension::KeyShare.generate_key
