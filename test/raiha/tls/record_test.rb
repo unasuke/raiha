@@ -52,6 +52,16 @@ class RaihaTLSRecordTest < Minitest::Test
     record = Raiha::TLS::Record::TLSPlaintext.serialize(handshake)
     deserialized = Raiha::TLS::Record::TLSPlaintext.deserialize(record)
     assert_equal 1, deserialized.length
+
+    handshake2 = Raiha::TLS::Handshake.new.tap do |hs|
+      hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
+      hs.message = Raiha::TLS::Handshake::ClientHello.build
+    end
+    record2 = Raiha::TLS::Record::TLSPlaintext.serialize(handshake2)
+    deserialized2 = Raiha::TLS::Record::TLSPlaintext.deserialize(record + record2)
+    assert_equal 2, deserialized2.length
+    assert_equal Raiha::TLS::Handshake, deserialized2[0].class
+    assert_equal Raiha::TLS::Handshake, deserialized2[1].class
   end
 
   def test_tlsplaintext_deserialize_fragmented_handshake
