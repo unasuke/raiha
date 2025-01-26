@@ -4,6 +4,11 @@ module Raiha
       class Extension
         class SupportedGroups < AbstractExtension
           EXTENSION_TYPE_NUMBER: 10
+          NAMED_GROUPS: Hash[String, String]
+          FFDHE_PRIVATE_USE: Range[Integer]
+          ECDHE_PRIVATE_USE: Range[Integer]
+
+          attr_accessor groups: Array[String]
         end
       end
     end
