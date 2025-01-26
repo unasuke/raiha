@@ -4,6 +4,10 @@ module Raiha
       class Extension
         class SignatureAlgorithms < AbstractExtension
           EXTENSION_TYPE_NUMBER: 13
+          SIGNATURE_SCHEMES: Hash[String, String]
+          PRIVATE_USE: Range[Integer]
+
+          attr_accessor signature_schemes: Array[String]
         end
       end
     end
