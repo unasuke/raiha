@@ -1,0 +1,9 @@
+module Raiha
+  module TLS
+    class ApplicationData
+      attr_accessor content: String
+
+      def self.deserialize: (String buf) -> ApplicationData
+    end
+  end
+end
