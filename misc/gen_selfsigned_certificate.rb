@@ -1,7 +1,7 @@
 require 'openssl'
 
 rsa = OpenSSL::PKey::RSA.generate(2048)
-File.write("server.key", rsa.to_pem)
+File.write(File.join(__dir__, "..", "tmp", "server.key"), rsa.to_pem)
 
 csr = OpenSSL::X509::Request.new
 name = OpenSSL::X509::Name.new
@@ -25,7 +25,7 @@ cert.subject = name
 cert.issuer = name
 cert.public_key = csr.public_key
 cert.sign(rsa, "sha256")
-File.write("server.crt", cert.to_pem)
+File.write(File.join(__dir__, "..", "tmp", "server.crt"), cert.to_pem)
 
 # openssl s_server -accept 4433 -cert server.crt -key server.key -tls1_3
 # openssl s_client -connect localhost:4433 -tls1_3 [-keylogfile SSLKEYLOGFILE] -CAfile server.crt
