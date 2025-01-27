@@ -1,0 +1,9 @@
+module Raiha
+  module TLS
+    class ChangeCipherSpec
+      attr_accessor content: String
+
+      def self.deserialize: (String buf) -> ChangeCipherSpec
+    end
+  end
+end
