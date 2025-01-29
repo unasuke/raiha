@@ -1,0 +1,13 @@
+module Raiha
+  module TLS
+    class KeySchedule
+      attr_accessor pkey: (OpenSSL::PKey::PKey | OpenSSL::PKey::EC)
+      attr_accessor group: String
+      attr_accessor public_key: String
+      attr_reader shared_secret: String
+
+      def initialize: (mode: :client|:server) -> void
+      def compute_shared_secret: -> void
+    end
+  end
+end
