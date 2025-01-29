@@ -23,9 +23,54 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
     c9 82 88 76 11 20 95 fe 66 76 2b db f7 c6 72 e1 56 d6 cc 25 3b 83 3d f1 dd 69 b1 b0 4e 75 1f 0f
   HEX
 
+  # @see https://datatracker.ietf.org/doc/html/rfc8448#section-3
   RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_IKM = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
     8b d4 05 4f b5 5b 9d 63 fd fb ac f9 f0 4b 9f 0d 35 e6 d6 3f 53 75 63 ef d4 62 72 90 0f 89 49 2d
   HEX
+
+  def test_compute_shared_secret_prime256v1
+    client_pkey = OpenSSL::PKey::EC.generate("prime256v1")
+    server_pkey = OpenSSL::PKey::EC.generate("prime256v1")
+
+    client_key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :client).tap do |ks|
+      ks.pkey = client_pkey
+      ks.group = "prime256v1"
+      ks.public_key = server_pkey.public_key.to_octet_string(:uncompressed)
+    end
+
+    server_key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
+      ks.pkey = server_pkey
+      ks.group = "prime256v1"
+      ks.public_key = client_pkey.public_key.to_octet_string(:uncompressed)
+    end
+
+    client_key_schedule.compute_shared_secret
+    server_key_schedule.compute_shared_secret
+
+    assert_equal client_key_schedule.shared_secret, server_key_schedule.shared_secret
+  end
+
+  def test_compute_shared_secret_secp384r1
+    client_pkey = OpenSSL::PKey::EC.generate("secp384r1")
+    server_pkey = OpenSSL::PKey::EC.generate("secp384r1")
+
+    client_key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :client).tap do |ks|
+      ks.pkey = client_pkey
+      ks.group = "secp384r1"
+      ks.public_key = server_pkey.public_key.to_octet_string(:uncompressed)
+    end
+
+    server_key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
+      ks.pkey = server_pkey
+      ks.group = "secp384r1"
+      ks.public_key = client_pkey.public_key.to_octet_string(:uncompressed)
+    end
+
+    client_key_schedule.compute_shared_secret
+    server_key_schedule.compute_shared_secret
+
+    assert_equal client_key_schedule.shared_secret, server_key_schedule.shared_secret
+  end
 
   def test_compute_shared_secret_rfc8448_x25519
     client_key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :client).tap do |ks|
