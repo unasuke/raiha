@@ -86,6 +86,10 @@ module Raiha
           buf
         end
 
+        def setup_key_share(group_and_pkeys)
+          @extensions << Extension::KeyShare.setup(group_and_pkeys)
+        end
+
         def serialize_cipher_suites
           # TODO: move to abstract class?
           buf = cipher_suites.map(&:serialize).join

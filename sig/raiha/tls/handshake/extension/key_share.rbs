@@ -10,7 +10,7 @@ module Raiha
 
           @groups: Array[{ group: String, key_exchange: String }]
 
-          def self.generate_key: (Array[String] groups, on: :client_hello | :server_hello | :hello_retry_request) -> KeyShare
+          def self.setup: (?Array[{ group: String, key_exchange: String }] group_and_pkeys, ?on: :client_hello | :server_hello | :hello_retry_request) -> KeyShare
           private def serialize_for_client_hello: -> String
           private def serialize_for_server_hello: -> String
           private def serialize_for_hello_retry_request: -> String

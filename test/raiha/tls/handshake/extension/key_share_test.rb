@@ -15,27 +15,35 @@ class RaihaTLSHandshakeExtensionKeyShareTest < Minitest::Test
     f9 10 a0 53 5b 14 88 d7 f8 fa bb 34 9a 98 28 80 b6 15
   DATA
 
-  def test_generate
-    key_share = Raiha::TLS::Handshake::Extension::KeyShare.generate_key
+  def test_setup
+    group_and_pkeys = [{ group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }]
+    key_share = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys)
     assert_equal "prime256v1", key_share.groups.first[:group]
 
-    assert_raises(OpenSSL::PKey::ECError) do
-      Raiha::TLS::Handshake::Extension::KeyShare.generate_key(["unsupported_group"])
+    unsupported_group_and_pkeys = [{ group: "x25519", pkey: OpenSSL::PKey.generate_key("x25519") }]
+    assert_raises do
+      Raiha::TLS::Handshake::Extension::KeyShare.setup(unsupported_group_and_pkeys)
     end
   end
 
   def test_serialize_client_hello
-    key_share = Raiha::TLS::Handshake::Extension::KeyShare.generate_key(on: :client_hello)
+    group_and_pkeys = [{ group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }]
+    key_share = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys)
     assert_equal String, key_share.serialize.class
     assert_equal "prime256v1", key_share.groups.first[:group]
   end
 
   def test_serialize_server_hello
-    key_share1 = Raiha::TLS::Handshake::Extension::KeyShare.generate_key(["prime256v1"], on: :server_hello)
+    group_and_pkeys1 = [{ group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }]
+    key_share1 = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys1, on: :server_hello)
     assert_equal String, key_share1.serialize.class
     assert_equal "prime256v1", key_share1.groups.first[:group]
 
-    key_share2 = Raiha::TLS::Handshake::Extension::KeyShare.generate_key(["prime256v1", "secp384r1"], on: :server_hello)
+    group_and_pkeys2 = [
+      { group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") },
+      { group: "secp384r1", pkey: OpenSSL::PKey::EC.generate("secp384r1") },
+    ]
+    key_share2 = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys2, on: :server_hello)
     assert_raises do
       key_share2.serialize
     end
@@ -52,13 +60,14 @@ class RaihaTLSHandshakeExtensionKeyShareTest < Minitest::Test
   end
 
   def test_deserialize
-    key_share1 = Raiha::TLS::Handshake::Extension::KeyShare.generate_key(["prime256v1"], on: :client_hello)
+    group_and_pkeys = [{ group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }]
+    key_share1 = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys, on: :client_hello)
     deserialized1 = Raiha::TLS::Handshake::Extension.deserialize_extensions(key_share1.serialize, type: :client_hello)
     deserialized_key_share1 = deserialized1.first
     assert_equal 1, deserialized_key_share1.groups.length
     assert_equal "prime256v1", deserialized_key_share1.groups.first[:group]
 
-    key_share2 = Raiha::TLS::Handshake::Extension::KeyShare.generate_key(["prime256v1"], on: :server_hello)
+    key_share2 = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys, on: :server_hello)
     deserialized2 = Raiha::TLS::Handshake::Extension.deserialize_extensions(key_share2.serialize, type: :server_hello)
     deserialized_key_share2 = deserialized2.first
     assert_equal 1, deserialized_key_share2.groups.length
