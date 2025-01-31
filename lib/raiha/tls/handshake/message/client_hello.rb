@@ -35,8 +35,8 @@ module Raiha
           ch.legacy_session_id = 0x00
           ch.cipher_suites = [
             CipherSuite.new(:TLS_AES_128_GCM_SHA256),
-            CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256),
-            CipherSuite.new(:TLS_AES_256_GCM_SHA384),
+            # CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256), # TODO:
+            # CipherSuite.new(:TLS_AES_256_GCM_SHA384),
           ]
           ch.legacy_compression_methods = [0x00]
           ch.extensions = ch.extensions_for_client_hello
@@ -60,18 +60,13 @@ module Raiha
         # Build extensions for ClientHello
         def extensions_for_client_hello
           [
-            Extension.new.tap do |ext|
-              ext.extension_type = Extension::EXTENSION_TYPE[:supported_versions]
-              ext.extension_data = TLS13_SUPPORTED_VERSION
+            Extension::SupportedVersions.generate_for_tls13,
+            Extension::SupportedGroups.new(on: :client_hello).tap do |ext|
+              ext.groups = ["prime256v1"]
             end,
-            Extension.new.tap do |ext|
-              ext.extension_type = Extension::EXTENSION_TYPE[:supported_groups]
-              ext.extension_data = [0x03, 0x04]
+            Extension::SignatureAlgorithms.new(on: :client_hello).tap do |ext|
+              ext.signature_schemes = ["rsa_pss_rsae_sha256"]
             end,
-            Extension.new.tap do |ext|
-              ext.extension_type = Extension::EXTENSION_TYPE[:signature_algorithms]
-              ext.extension_data = [0x03, 0x04]
-            end
           ]
         end
 
