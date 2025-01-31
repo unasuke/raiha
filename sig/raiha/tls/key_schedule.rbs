@@ -6,8 +6,33 @@ module Raiha
       attr_accessor public_key: String
       attr_reader shared_secret: String
 
+      @hash_algorithm: String
+      @aead_algorithm: String
+      @client_early_traffic_secret: String
+      @early_exporter_secret: String
+      @client_handshake_traffic_secret: String
+      @server_handshake_traffic_secret: String
+      @client_application_traffic_secret: Array[String]
+      @server_application_traffic_secret: Array[String]
+      @exporter_secret: String
+      @resumption_secret: String
+
       def initialize: (mode: :client|:server) -> void
       def compute_shared_secret: -> void
+      def cipher_suite=: (CipherSuite cipher_suite) -> void
+      def derive_secret: (secret: :early_secret|:handshake_secret|:main_secret, label: String, messages: Array[String]) -> String
+      def hkdf_label: (length: Integer, label: String, context: String) -> String
+
+      def transcript_hash: (Array[String] messages) -> String
+      # def derive_binder_key: -> String
+      def client_early_traffic_secret: (Raiha::TLS::Handshake client_hello) -> String
+      def early_exporter_secret: (Raiha::TLS::Handshake client_hello) -> String
+      def client_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def server_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def client_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages, ?Integer generation) -> String
+      def server_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages, ?Integer generation) -> String
+      def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
     end
   end
 end
