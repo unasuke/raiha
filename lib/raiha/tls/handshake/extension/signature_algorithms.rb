@@ -46,6 +46,7 @@ module Raiha
         #   } SignatureSchemeList;
         #
         # @see https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.3
+        # @see https://datatracker.ietf.org/doc/html/rfc8446#appendix-B.3.1.3
         # @see https://datatracker.ietf.org/doc/rfc8446/
         class SignatureAlgorithms < AbstractExtension
           EXTENSION_TYPE_NUMBER = 13
@@ -78,9 +79,18 @@ module Raiha
             # Legacy algorithms
             "rsa_pkcs1_sha1" => "\x02\x01",
             "ecdsa_sha1" => "\x02\x03",
+
+            # Reserved Code Points (not obsolete)
+            "dsa_sha1_RESERVED" => "\x02\x02",
+            "dsa_sha256_RESERVED" => "\x04\x02",
+            "dsa_sha384_RESERVED" => "\x05\x02",
+            "dsa_sha512_RESERVED" => "\x06\x02",
           }.freeze
 
           PRIVATE_USE = (0xFE00..0xFFFF)
+          OBSOLETE_RESERVEDS = [
+            (0x0000..0x0200), (0x0204..0x0400), (0x0404..0x0500), (0x0504..0x0600), (0x0604..0x06FF)
+          ].freeze
 
           attr_accessor :signature_schemes
 
@@ -91,11 +101,14 @@ module Raiha
             buf = StringIO.new(data)
             signature_schemes_length = buf.read(2).unpack1("n") / 2
             signature_schemes_length.times do
-              signature_scheme = SIGNATURE_SCHEMES.key(buf.read(2))
+              signature_scheme_id = buf.read(2)
+              signature_scheme = SIGNATURE_SCHEMES.key(signature_scheme_id)
               if signature_scheme
                 @signature_schemes << signature_scheme
-              elsif PRIVATE_USE.include?(signature_scheme.unpack1("n"))
-                @signature_schemes << "private_use" if PRIVATE_USE.include?(signature_scheme)
+              elsif PRIVATE_USE.include?(signature_scheme_id)
+                @signature_schemes << "private_use"
+              elsif OBSOLETE_RESERVEDS.any? { |obsolete| obsolete.include?(signature_scheme_id) }
+                @signature_schemes << "obsolete_reserved"
               else
                 # TODO: raise error?
               end
