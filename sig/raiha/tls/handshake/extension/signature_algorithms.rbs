@@ -6,6 +6,7 @@ module Raiha
           EXTENSION_TYPE_NUMBER: 13
           SIGNATURE_SCHEMES: Hash[String, String]
           PRIVATE_USE: Range[Integer]
+          OBSOLETE_RESERVEDS: Array[Range[Integer]]
 
           attr_accessor signature_schemes: Array[String]
         end
