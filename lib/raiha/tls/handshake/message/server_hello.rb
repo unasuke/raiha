@@ -35,6 +35,7 @@ module Raiha
         attr_accessor :extensions
 
         def self.build_from_client_hello(client_hello)
+          # TODO:
           sh = self.new
           loop do
             sh.random = SecureRandom.random_bytes(32)
@@ -64,9 +65,9 @@ module Raiha
           buf = String.new(encoding: "BINARY")
           buf << LEGACY_VERSION.pack("C*")
           buf << random
-          buf << legacy_session_id_echo
+          buf << [legacy_session_id_echo].pack("C")
           buf << cipher_suite.serialize
-          buf << [legacy_compression_method].pack("C")
+          buf << [0].pack("C") # legacy compression method
           buf << serialize_extensions
           buf
         end
@@ -78,7 +79,7 @@ module Raiha
           sh.random = buf.read(32)
           sh.legacy_session_id_echo = buf.read(1).unpack1("C") # 0x00
           sh.cipher_suite = CipherSuite.deserialize(buf.read(2))
-          sh.legacy_compression_method = buf.read(2)
+          sh.legacy_compression_method = buf.read(1)
           extensions_bytesize = buf.read(2).unpack1("n")
           sh.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :server_hello)
           sh
