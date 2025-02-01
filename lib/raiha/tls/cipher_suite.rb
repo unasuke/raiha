@@ -1,32 +1,32 @@
 module Raiha
   module TLS
     class CipherSuite
-      TLS_AES_128_GCM_SHA256 = [0x13, 0x01]
-      TLS_AES_256_GCM_SHA384 = [0x13, 0x02]
-      TLS_CHACHA20_POLY1305_SHA256 = [0x13, 0x03]
-      TLS_AES_128_CCM_SHA256 = [0x13, 0x04]
-      TLS_AES_128_CCM_8_SHA256 = [0x13, 0x05]
-
-      SUPPORTED_CIPHER_SUITES = [:TLS_AES_128_GCM_SHA256, :TLS_AES_256_GCM_SHA384, :TLS_CHACHA20_POLY1305_SHA256]
+      CIPHER_SUITES = [
+        { name: :TLS_AES_128_GCM_SHA256, value: "\x13\x01", supported: true },
+        { name: :TLS_AES_256_GCM_SHA384, value: "\x13\x02", supported: true },
+        { name: :TLS_CHACHA20_POLY1305_SHA256, value: "\x13\x03", supported: true },
+        { name: :TLS_AES_128_CCM_SHA256, value: "\x13\x04", supported: false },
+        { name: :TLS_AES_128_CCM_8_SHA256, value: "\x13\x05", supported: false },
+      ]
 
       attr_reader :name
+      attr_reader :value
 
       def initialize(cipher_name)
-        raise "unknown cipher suite: #{cipher_name.inspect}" unless self.class.constants.include?(cipher_name)
+        raise "unknown cipher suite: #{cipher_name.inspect}" unless CIPHER_SUITES.any? { |c| c[:name] == cipher_name }
 
-        @name = cipher_name
-      end
-
-      def value
-        self.class.const_get(@name)
+        cipher_suite = CIPHER_SUITES.find { |c| c[:name] == cipher_name }
+        @name = cipher_suite[:name]
+        @value = cipher_suite[:value]
+        @supported = cipher_suite[:supported]
       end
 
       def serialize
-        value.pack("C*")
+        @value
       end
 
       def supported?
-        SUPPORTED_CIPHER_SUITES.include?(@name.to_sym)
+        @supported
       end
 
       def hash_algorithm
@@ -58,8 +58,7 @@ module Raiha
       end
 
       def self.deserialize(data)
-        val = data.unpack("CC")
-        self.new(self.constants.find { |c| self.const_get(c) == val })
+        self.new(CIPHER_SUITES.find { |c| c[:value] == data }[:name])
       end
     end
   end
