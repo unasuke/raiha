@@ -21,11 +21,11 @@ class RaihaTLSCipherSuiteTest < Minitest::Test
   end
 
   def test_value
-    assert_equal [0x13, 0x01], ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).value
-    assert_equal [0x13, 0x02], ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).value
-    assert_equal [0x13, 0x03], ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).value
-    assert_equal [0x13, 0x04], ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).value
-    assert_equal [0x13, 0x05], ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).value
+    assert_equal "\x13\x01", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).value
+    assert_equal "\x13\x02", ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).value
+    assert_equal "\x13\x03", ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).value
+    assert_equal "\x13\x04", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).value
+    assert_equal "\x13\x05", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).value
   end
 
   def test_serialize

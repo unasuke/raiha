@@ -1,19 +1,17 @@
 module Raiha
   module TLS
     class CipherSuite
-      TLS_AES_128_GCM_SHA256: Array[Integer]
-      TLS_AES_256_GCM_SHA384: Array[Integer]
-      TLS_CHACHA20_POLY1305_SHA256: Array[Integer]
-      TLS_AES_128_CCM_SHA256: Array[Integer]
-      TLS_AES_128_CCM_8_SHA256: Array[Integer]
-
-      SUPPORTED_CIPHER_SUITES: Array[Symbol]
+      CIPHER_SUITES: Array[{name: Symbol, value: String, supported: bool}]
 
       @name: Symbol
+      @value: String
+      @supported: bool
+
+      attr_reader name: Symbol
+      attr_reader value: String
 
       def self.deserialize: (String) -> CipherSuite
       def initialize: (Symbol) -> void
-      def value: -> Array[Integer]
       def serialize: -> String
       def supported?: -> bool
       def hash_algorithm: -> String
