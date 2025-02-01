@@ -4,6 +4,8 @@ module Raiha
       class Extension
         class SupportedVersions < AbstractExtension
           EXTENSION_TYPE_NUMBER: 43
+          @protocol_versions: Array[String]
+
           def self.generate_for_tls13: ->  SupportedVersions
         end
       end
