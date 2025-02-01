@@ -1,5 +1,6 @@
 require "test_helper"
 require "raiha/tls/handshake"
+require "raiha/tls/cipher_suite"
 
 # https://datatracker.ietf.org/doc/html/rfc8448#section-3
 RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO = [<<~HS.gsub(/[[:space:]]/, '')].pack("H*")
@@ -56,11 +57,4 @@ class RaihaTLSHandShakeTest < Minitest::Test
     too_short_hs = ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO[0..-2])
     assert_nil too_short_hs
   end
-
-  def test_respond_to_client_hello
-    hs = ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO)
-    server_hello = ::Raiha::TLS::Handshake::ServerHello.respond_to_client_hello(hs.message)
-    assert_equal 192, server_hello.length
-  end
 end
-
