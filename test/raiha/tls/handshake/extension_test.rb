@@ -23,13 +23,25 @@ class RaihaTLSHandshakeExtensionTest < Minitest::Test
   end
 
   def test_deserialize_extensions
-    exts = "\x00\x2b\x00\x02\x03\x04\x00\x0a\x00\x02\x03\x04\x00\x0d\x00\x02\x03\x04"
-    extensions = Raiha::TLS::Handshake::Extension.deserialize_extensions(exts, type: :client_hello)
+    client_hello_exts = "\x00\x2b\x00\x03\x02\x03\x04\x00\x0a\x00\x04\x00\x02\x00\x17\x00\x0d\x00\x04\x00\x02\x08\x04"
+    extensions = Raiha::TLS::Handshake::Extension.deserialize_extensions(client_hello_exts, type: :client_hello)
     assert_equal Raiha::TLS::Handshake::Extension::SupportedVersions, extensions[0].class
-    assert_equal "\x03\x04", extensions[0].extension_data
+    assert_equal_bin "\x02\x03\x04", extensions[0].extension_data
     assert_equal Raiha::TLS::Handshake::Extension::SupportedGroups, extensions[1].class
-    assert_equal "\x03\x04", extensions[1].extension_data
+    assert_equal_bin "\x00\x02\x00\x17", extensions[1].extension_data
+    assert_equal ["prime256v1"], extensions[1].groups
     assert_equal Raiha::TLS::Handshake::Extension::SignatureAlgorithms, extensions[2].class
-    assert_equal "\x03\x04", extensions[2].extension_data
+    assert_equal_bin "\x00\x02\x08\x04", extensions[2].extension_data
+    assert_equal ["rsa_pss_rsae_sha256"], extensions[2].signature_schemes
+
+    # @see https://tls13.xargs.org/#server-hello
+    server_hello_exts = "\x00\x2b\x00\x02\x03\x04\x00\x33\x00\x24\x00\x1d\x00\x20\x9f\xd7\xad\x6d\xcf\xf4\x29\x8d\xd3" +
+      "\xf9\x6d\x5b\x1b\x2a\xf9\x10\xa0\x53\x5b\x14\x88\xd7\xf8\xfa\xbb\x34\x9a\x98\x28\x80\xb6\x15"
+    extensions = Raiha::TLS::Handshake::Extension.deserialize_extensions(server_hello_exts, type: :server_hello)
+    assert_equal 2, extensions.length
+    assert_equal Raiha::TLS::Handshake::Extension::SupportedVersions, extensions[0].class
+    assert_equal_bin "\x03\x04", extensions[0].extension_data
+    assert_equal Raiha::TLS::Handshake::Extension::KeyShare, extensions[1].class
+    assert_equal "x25519", extensions[1].groups.first[:group]
   end
 end
