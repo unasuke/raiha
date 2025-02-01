@@ -53,10 +53,7 @@ module Raiha
           @extensions = [
             # Mandatory extension
             # https://www.ietf.org/archive/id/draft-ietf-tls-rfc8446bis-11.html#section-4.1.3-4.12.1
-            Extension.new.tap do |ext|
-              ext.extension_type = Extension::EXTENSION_TYPE[:supported_versions]
-              ext.extension_data = TLS13_SUPPORTED_VERSION
-            end
+            Extension::SupportedVersions.generate_for_tls13
           ]
           @legacy_compression_method = 0
         end

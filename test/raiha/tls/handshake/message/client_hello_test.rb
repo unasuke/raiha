@@ -6,7 +6,7 @@ class RaihaTLSHandshakeClientHelloTest < Minitest::Test
   def test_build
     ch = Raiha::TLS::Handshake::ClientHello.build
     assert_equal Raiha::TLS::Handshake::ClientHello, ch.class
-    assert_equal 3, ch.cipher_suites.length
+    assert_equal 1, ch.cipher_suites.length
     assert_equal 0x00, ch.legacy_session_id
   end
 
@@ -20,7 +20,7 @@ class RaihaTLSHandshakeClientHelloTest < Minitest::Test
     serialized = Raiha::TLS::Handshake::ClientHello.build.serialize
     deserialized = Raiha::TLS::Handshake::ClientHello.deserialize(serialized)
     assert_equal Raiha::TLS::Handshake::ClientHello, deserialized.class
-    assert_equal 3, deserialized.cipher_suites.length
+    assert_equal 1, deserialized.cipher_suites.length
     assert_equal 0x00, deserialized.legacy_session_id
   end
 
