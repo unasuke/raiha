@@ -35,8 +35,7 @@ module Raiha
         attr_accessor :extension_data
 
         def serialize
-          packed_extension_data = extension_data.pack("C*")
-          [extension_type].pack("n") + [packed_extension_data.bytesize].pack("n") + packed_extension_data
+          [extension_type].pack("n") + [extension_data.bytesize].pack("n") + extension_data
         end
 
         def self.deserialize_extensions(data, type:)

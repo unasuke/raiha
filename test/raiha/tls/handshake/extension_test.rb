@@ -5,19 +5,19 @@ class RaihaTLSHandshakeExtensionTest < Minitest::Test
   def test_serialize
     ext1 = Raiha::TLS::Handshake::Extension.new.tap do |ext|
       ext.extension_type = Raiha::TLS::Handshake::Extension::EXTENSION_TYPE[:supported_versions]
-      ext.extension_data = [0x03, 0x04] # TLS13_SUPPORTED_VERSION
+      ext.extension_data = "\x03\x04" # TLS13_SUPPORTED_VERSION
     end
     assert_equal "\x00\x2b\x00\x02\x03\x04", ext1.serialize
 
     ext2 = Raiha::TLS::Handshake::Extension.new.tap do |ext|
       ext.extension_type = Raiha::TLS::Handshake::Extension::EXTENSION_TYPE[:supported_groups]
-      ext.extension_data = [0x03, 0x04]
+      ext.extension_data = "\x03\x04"
     end
     assert_equal "\x00\x0a\x00\x02\x03\x04", ext2.serialize
 
     ext3 = Raiha::TLS::Handshake::Extension.new.tap do |ext|
       ext.extension_type = Raiha::TLS::Handshake::Extension::EXTENSION_TYPE[:signature_algorithms]
-      ext.extension_data = [0x03, 0x04]
+      ext.extension_data = "\x03\x04"
     end
     assert_equal "\x00\x0d\x00\x02\x03\x04", ext3.serialize
   end
