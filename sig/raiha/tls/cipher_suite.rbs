@@ -16,6 +16,8 @@ module Raiha
       def value: -> Array[Integer]
       def serialize: -> String
       def supported?: -> bool
+      def hash_algorithm: -> String
+      def aead_algorithm: -> String
     end
   end
 end
