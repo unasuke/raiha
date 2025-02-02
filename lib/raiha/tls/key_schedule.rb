@@ -88,10 +88,12 @@ module Raiha
       def client_handshake_traffic_secret(messages)
         @client_handshake_traffic_secret ||= derive_secret(secret: :handshake_secret, label: "c hs traffic", messages: messages.map(&:serialize))
       end
+      alias_method :c_hs_traffic_secret, :client_handshake_traffic_secret
 
       def server_handshake_traffic_secret(messages)
         @server_handshake_traffic_secret ||= derive_secret(secret: :handshake_secret, label: "s hs traffic", messages: messages.map(&:serialize))
       end
+      alias_method :s_hs_traffic_secret, :server_handshake_traffic_secret
 
       # TODO: not tested yet
       # def client_application_traffic_secret(messages, generation = 0)
