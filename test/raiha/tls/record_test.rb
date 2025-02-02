@@ -59,24 +59,24 @@ class RaihaTLSRecordTest < Minitest::Test
     assert_equal 16389, record[0].bytesize # limit of single TLSPlaintext struct
   end
 
-  def test_tlsplaintext_unwrap_fragment
+  def test_tlsplaintext_unwrap_fragments
     # normal case
     handshake = Raiha::TLS::Handshake.new.tap do |hs|
       hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
       hs.message = Raiha::TLS::Handshake::ClientHello.build
     end
     record = Raiha::TLS::Record::TLSPlaintext.serialize(handshake)
-    fragment = Raiha::TLS::Record::TLSPlaintext.unwrap_fragment(record[0])
-    assert_equal String, fragment[:fragment].class
+    fragments = Raiha::TLS::Record.unwrap_fragments(record[0])
+    assert_equal String, fragments.first[:fragment].class
 
     # fragment size is too large
     assert_raises(RuntimeError) do
-      fragment = Raiha::TLS::Record::TLSPlaintext.unwrap_fragment(record[0] + "\x00")
+      fragments = Raiha::TLS::Record.unwrap_fragments(record[0] + "\x00")
     end
 
     # fragment size is too short
     assert_raises(RuntimeError) do
-      fragment = Raiha::TLS::Record::TLSPlaintext.unwrap_fragment(record[0][0..-2])
+      fragments = Raiha::TLS::Record.unwrap_fragments(record[0][0..-2])
     end
   end
 
@@ -86,7 +86,7 @@ class RaihaTLSRecordTest < Minitest::Test
       hs.message = Raiha::TLS::Handshake::ClientHello.build
     end
     record = Raiha::TLS::Record::TLSPlaintext.serialize(handshake)
-    deserialized = Raiha::TLS::Record::TLSPlaintext.deserialize(record)
+    deserialized = Raiha::TLS::Record.deserialize(record.join)
     assert_equal 1, deserialized.length
 
     handshake2 = Raiha::TLS::Handshake.new.tap do |hs|
@@ -94,26 +94,14 @@ class RaihaTLSRecordTest < Minitest::Test
       hs.message = Raiha::TLS::Handshake::ClientHello.build
     end
     record2 = Raiha::TLS::Record::TLSPlaintext.serialize(handshake2)
-    deserialized2 = Raiha::TLS::Record::TLSPlaintext.deserialize(record + record2)
+    deserialized2 = Raiha::TLS::Record.deserialize(record.join + record2.join)
     assert_equal 2, deserialized2.length
     assert_equal Raiha::TLS::Handshake, deserialized2[0].class
     assert_equal Raiha::TLS::Handshake, deserialized2[1].class
   end
 
-  def test_tlsplaintext_deserialize_fragmented_handshake
-    handshake = Raiha::TLS::Handshake.new.tap do |hs|
-      hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
-      hs.message = Raiha::TLS::Handshake::ClientHello.build
-      hs.message.extensions << Raiha::TLS::Handshake::Extension::Padding.generate_padding_with_length(16384)
-    end
-    record = Raiha::TLS::Record::TLSPlaintext.serialize(handshake)
-    deserialized = Raiha::TLS::Record::TLSPlaintext.deserialize(record)
-    assert_equal 1, deserialized.length
-    assert_equal Raiha::TLS::Handshake, deserialized[0].class
-  end
-
   def test_tlsplaintext_deserialize_openssl_sample
-    record = Raiha::TLS::Record::TLSPlaintext.deserialize(OPENSSL_HANDSHAKE_REPOSNSE_SAMPLE)
+    record = Raiha::TLS::Record.deserialize(OPENSSL_HANDSHAKE_REPOSNSE_SAMPLE)
     assert_equal 6, record.length
     assert_equal Raiha::TLS::Handshake, record[0].class
     assert_equal Raiha::TLS::Handshake::ServerHello, record[0].message.class

@@ -1,5 +1,8 @@
 require "stringio"
 require_relative "../record"
+require_relative "../change_cipher_spec"
+require_relative "../application_data"
+require_relative "../handshake"
 
 module Raiha
   module TLS
@@ -47,56 +50,6 @@ module Raiha
             count += 1
           end
           bufs
-        end
-
-        def self.deserialize(bufs)
-          cursor = 0
-          deserialized = []
-          loop do
-            target = bufs[cursor]
-            fragment = unwrap_fragment(target)
-
-            case fragment[:content_type]
-            when CONTENT_TYPE[:handshake]
-              fragment_hs = fragment[:fragment]
-              loop do
-                hs = Handshake.deserialize(fragment_hs)
-                if hs.nil?
-                  cursor += 1
-                  target = bufs[cursor]
-                  fragment = unwrap_fragment(target)
-                  if fragment[:content_type] == CONTENT_TYPE[:handshake]
-                    fragment_hs += fragment[:fragment]
-                  else
-                    raise "unexpected content type: #{fragment[:content_type]}"
-                  end
-                else
-                  deserialized << hs
-                  break
-                end
-              end
-            end
-
-            cursor += 1
-            break if bufs.length <= cursor
-          end
-
-          deserialized
-        end
-
-        def self.unwrap_fragment(serialized_tlsplaintext)
-          buf = StringIO.new(serialized_tlsplaintext)
-          content_type = buf.read(1).unpack1("C")
-          legacy_record_version = buf.read(2)
-          raise "unknown legacy record version: #{legacy_record_version}" unless legacy_record_version == LEGACY_RECORD_VERSION
-
-          length = buf.read(2).unpack1("n")
-          fragment = buf.read(length)
-          if !buf.eof? || fragment.bytesize != length
-            raise "incorrect fragment size: #{fragment.bytesize}, given length: #{length}"
-          end
-
-          { content_type: content_type, fragment: fragment }
         end
       end
     end
