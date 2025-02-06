@@ -26,13 +26,24 @@ module Raiha
           when CONTENT_TYPE[:invalid]
             # TODO:
           when CONTENT_TYPE[:change_cipher_spec]
-            deserialized << ChangeCipherSpec.deserialize(fragment[:fragment])
+            deserialized << TLSPlaintext.new.tap do |record|
+              record.content_type = fragment[:content_type]
+              record.length = fragment[:length]
+              record.fragment = ChangeCipherSpec.deserialize(fragment[:fragment])
+            end
           when CONTENT_TYPE[:alert]
             # TODO: deserialized << Alert.deserialize(fragment[:fragment])
           when CONTENT_TYPE[:handshake]
-            deserialized << Handshake.deserialize(fragment[:fragment])
+            deserialized << TLSPlaintext.new.tap do |record|
+              record.content_type = fragment[:content_type]
+              record.length = fragment[:length]
+              record.fragment = Handshake.deserialize(fragment[:fragment])
+            end
           when CONTENT_TYPE[:application_data]
-            deserialized << ApplicationData.deserialize(fragment[:fragment])
+            deserialized << TLSCiphertext.new.tap do |record|
+              record.length = fragment[:length]
+              record.encrypted_record = fragment[:fragment]
+            end
           else
             puts "unknown content type: #{fragment[:content_type]}"
           end

@@ -28,6 +28,7 @@ module Raiha
       class TLSPlaintext
         FRAGMENT_SIZE_LIMIT = 2**14
         attr_accessor :content_type
+        attr_accessor :length
         attr_accessor :fragment
 
         def self.serialize(content)
