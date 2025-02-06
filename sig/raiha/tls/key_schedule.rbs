@@ -23,7 +23,7 @@ module Raiha
       def compute_shared_secret: -> void
       def cipher_suite=: (CipherSuite cipher_suite) -> void
       def derive_secret: (secret: :early_secret|:handshake_secret|:main_secret, label: String, messages: Array[String]) -> String
-      def hkdf_label: (length: Integer, label: String, context: String) -> String
+      def hkdf_label: (Integer length, String label, String context) -> String
 
       def transcript_hash: (Array[String] messages) -> String
       # def derive_binder_key: -> String
@@ -35,6 +35,8 @@ module Raiha
       def server_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages, ?Integer generation) -> String
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+
+      private def hkdf_expand: (prk: String, info: String, length: Integer) -> String
     end
   end
 end
