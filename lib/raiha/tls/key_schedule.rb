@@ -95,6 +95,16 @@ module Raiha
         @server_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "s hs traffic", messages: messages.map(&:serialize))
       end
 
+      def server_handshake_write_key
+        # TODO: don't hardcode length
+        @server_handshake_write_key ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(16, "key", ""), length: 16)
+      end
+
+      def server_handshake_write_iv
+        # TODO: don't hardcode length
+        @server_handshake_write_iv ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
+      end
+
       # TODO: not tested yet
       # def client_application_traffic_secret(messages, generation = 0)
       #   @client_application_traffic_secret[generation] ||= derive_secret(secret: :main_secret, label: "c ap traffic", messages: messages.map(&:serialize))
@@ -114,6 +124,19 @@ module Raiha
       # def resumption_secret(messages)
       #   @resumption_secret ||= derive_secret(secret: :handshake_secret, label: "res master", messages: messages.map(&:serialize))
       # end
+
+      # @see https://www.rfc-editor.org/rfc/rfc5869#section-2.3
+      private def hkdf_expand(prk:, info:, length:)
+        digest = OpenSSL::Digest.new(@hash_algorithm)
+        n = (length.to_f/digest.digest_length).ceil
+        t = ''
+        okm = ''
+        n.times do |i|
+          t = OpenSSL::HMAC.digest(@hash_algorithm, prk, t + info + [i+1].pack("C"))
+          okm += t
+        end
+        okm[0...length]
+      end
     end
   end
 end

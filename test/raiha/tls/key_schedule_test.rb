@@ -67,6 +67,16 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
     b6 7b 7d 69 0c c1 6c 4e 75 e5 42 13 cb 2d 37 b4 e9 c9 12 bc de d9 10 5d 42 be fd 59 d3 91 ad 38
   HEX
 
+  # @see https://datatracker.ietf.org/doc/html/rfc8448#section-3
+  RFC8448_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_KEY = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
+    3f ce 51 60 09 c2 17 27 d0 f2 e4 e8 6e e4 03 bc
+  HEX
+
+  # @see https://datatracker.ietf.org/doc/html/rfc8448#section-3
+  RFC8448_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_IV = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
+    5d 31 3e b2 67 12 76 ee 13 00 0b 30
+  HEX
+
   def test_compute_shared_secret_prime256v1
     client_pkey = OpenSSL::PKey::EC.generate("prime256v1")
     server_pkey = OpenSSL::PKey::EC.generate("prime256v1")
@@ -186,6 +196,8 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
     ])
     assert_equal_bin RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_SERVER_HANDSHAKE_TRAFFIC, key_schedule.server_handshake_traffic_secret
+    assert_equal_bin RFC8448_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_KEY, key_schedule.server_handshake_write_key
+    assert_equal_bin RFC8448_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_IV, key_schedule.server_handshake_write_iv
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_client_application_traffic_secret_0
