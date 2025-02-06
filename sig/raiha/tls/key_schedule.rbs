@@ -5,6 +5,8 @@ module Raiha
       attr_accessor group: String
       attr_accessor public_key: String
       attr_reader shared_secret: String
+      attr_reader client_handshake_traffic_secret: String
+      attr_reader server_handshake_traffic_secret: String
 
       @hash_algorithm: String
       @aead_algorithm: String
@@ -27,8 +29,8 @@ module Raiha
       # def derive_binder_key: -> String
       def client_early_traffic_secret: (Raiha::TLS::Handshake client_hello) -> String
       def early_exporter_secret: (Raiha::TLS::Handshake client_hello) -> String
-      def client_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
-      def server_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def derive_client_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def derive_server_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def client_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages, ?Integer generation) -> String
       def server_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages, ?Integer generation) -> String
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String

@@ -13,6 +13,8 @@ module Raiha
       attr_accessor :pkey
       attr_accessor :group
       attr_reader :shared_secret
+      attr_reader :client_handshake_traffic_secret
+      attr_reader :server_handshake_traffic_secret
 
       def initialize(mode:)
         @mode = mode
@@ -85,15 +87,13 @@ module Raiha
       #   @early_exporter_secret ||= derive_secret(secret: :early_secret, label: "e exp master", messages: [client_hello.serialize])
       # end
 
-      def client_handshake_traffic_secret(messages)
-        @client_handshake_traffic_secret ||= derive_secret(secret: :handshake_secret, label: "c hs traffic", messages: messages.map(&:serialize))
+      def derive_client_handshake_traffic_secret(messages)
+        @client_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "c hs traffic", messages: messages.map(&:serialize))
       end
-      alias_method :c_hs_traffic_secret, :client_handshake_traffic_secret
 
-      def server_handshake_traffic_secret(messages)
-        @server_handshake_traffic_secret ||= derive_secret(secret: :handshake_secret, label: "s hs traffic", messages: messages.map(&:serialize))
+      def derive_server_handshake_traffic_secret(messages)
+        @server_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "s hs traffic", messages: messages.map(&:serialize))
       end
-      alias_method :s_hs_traffic_secret, :server_handshake_traffic_secret
 
       # TODO: not tested yet
       # def client_application_traffic_secret(messages, generation = 0)
