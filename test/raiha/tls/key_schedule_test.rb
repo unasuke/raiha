@@ -150,18 +150,18 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
 
     assert_raises do
       # didn't derive early secret yet
-      key_schedule.client_handshake_traffic_secret([
+      key_schedule.derive_client_handshake_traffic_secret([
           ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
           ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
         ])
     end
     key_schedule.compute_shared_secret
     key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    derived = key_schedule.client_handshake_traffic_secret([
+    key_schedule.derive_client_handshake_traffic_secret([
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
     ])
-    assert_equal RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, derived
+    assert_equal_bin RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, key_schedule.client_handshake_traffic_secret
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_server_handshake_traffic_secret
@@ -174,18 +174,18 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
 
     assert_raises do
       # didn't derive early secret yet
-      key_schedule.server_handshake_traffic_secret([
+      key_schedule.derive_server_handshake_traffic_secret([
           ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
           ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
         ])
     end
     key_schedule.compute_shared_secret
     key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    derived = key_schedule.server_handshake_traffic_secret([
+    key_schedule.derive_server_handshake_traffic_secret([
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
     ])
-    assert_equal RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_SERVER_HANDSHAKE_TRAFFIC, derived
+    assert_equal_bin RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_SERVER_HANDSHAKE_TRAFFIC, key_schedule.server_handshake_traffic_secret
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_client_application_traffic_secret_0
@@ -198,10 +198,10 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
 
     key_schedule.compute_shared_secret
     key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    derived = key_schedule.client_handshake_traffic_secret([
+    key_schedule.derive_client_handshake_traffic_secret([
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
       ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
     ])
-    assert_equal RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, derived
+    assert_equal_bin RFC8448_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, key_schedule.client_handshake_traffic_secret
   end
 end
