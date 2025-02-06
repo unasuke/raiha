@@ -4,14 +4,15 @@ module Raiha
       CONTENT_TYPE: Hash[Symbol, Integer]
       LEGACY_RECORD_VERSION: String
 
-      def self.deserialize: (String buf) -> Array[Handshake|ChangeCipherSpec|ApplicationData]
+      def self.deserialize: (String buf) -> Array[TLSPlaintext|TLSCiphertext]
       def self.unwrap_fragments: (String serialized_records) -> Array[{content_type: Integer, length: Integer, fragment: String}]
 
       class TLSPlaintext
         FRAGMENT_SIZE_LIMIT: Integer
 
         attr_accessor content_type: Integer
-        attr_accessor fragment: String
+        attr_accessor length: Integer
+        attr_accessor fragment: ChangeCipherSpec|Handshake
 
         def self.serialize: (Handshake content)-> Array[String]
       end
