@@ -23,6 +23,12 @@ module Raiha
         attr_accessor tls_inner_plaintext: TLSInnerPlaintext|nil
 
       end
+
+      class TLSInnerPlaintext
+        attr_accessor content: Handshake # TODO
+        attr_accessor content_type: Integer
+        attr_accessor zeros: Integer
+      end
     end
   end
 end

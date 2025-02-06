@@ -50,6 +50,12 @@ module Raiha
         def serialize
         end
       end
+
+      class TLSInnerPlaintext
+        attr_accessor :content
+        attr_accessor :content_type
+        attr_accessor :zeros
+      end
     end
   end
 end
