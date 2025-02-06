@@ -52,7 +52,8 @@ module Raiha
           length = buf.read(2).unpack1("n")
           fragment = buf.read(length)
           raise if fragment.bytesize != length
-          fragments << { content_type: content_type, fragment: fragment }
+
+          fragments << { content_type: content_type, length: length, fragment: fragment }
           break if buf.eof?
         end
 
