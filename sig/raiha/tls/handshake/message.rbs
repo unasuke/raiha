@@ -40,6 +40,16 @@ module Raiha
 
         def self.deserialize: (String data) -> EncryptedExtensions
       end
+
+      class Certificate < Message
+        CERTIFICATE_TYPE: Hash[Symbol, Integer]
+
+        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension]
+        attr_accessor opaque_certificate_data: String
+        attr_accessor certificate_request_context: String
+
+        def self.deserialize: (String data) -> Certificate
+      end
     end
   end
 end
