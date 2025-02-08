@@ -50,6 +50,15 @@ module Raiha
 
         def self.deserialize: (String data) -> Certificate
       end
+
+      class CertificateVerify < Message
+        SIGNATURE_SCHEMES: Hash[String, String]
+
+        attr_accessor algorithm: String
+        attr_accessor signature: String
+
+        def self.deserialize: (String data) -> CertificateVerify
+      end
     end
   end
 end
