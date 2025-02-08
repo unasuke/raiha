@@ -59,6 +59,12 @@ module Raiha
 
         def self.deserialize: (String data) -> CertificateVerify
       end
+
+      class Finished < Message
+        attr_accessor verify_data: String
+
+        def self.deserialize: (String data) -> Finished
+      end
     end
   end
 end
