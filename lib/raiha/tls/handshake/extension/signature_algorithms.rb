@@ -51,6 +51,7 @@ module Raiha
         class SignatureAlgorithms < AbstractExtension
           EXTENSION_TYPE_NUMBER = 13
 
+          # TODO: move to somewhere
           SIGNATURE_SCHEMES = {
             # RSASSA-PKCS1-v1_5 algorithms
             "rsa_pkcs1_sha256" => "\x04\x01",
