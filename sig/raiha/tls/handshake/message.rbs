@@ -30,6 +30,7 @@ module Raiha
         attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension]
         attr_accessor legacy_compression_method: Integer
 
+        def self.deserialize: (String data) -> ServerHello
         def self.build_from_client_hello: (ClientHello client_hello) -> ServerHello
         def serialize_cipher_suite: -> String
         def serialize_extensions: -> String
