@@ -26,9 +26,12 @@ module Raiha
       end
 
       class TLSInnerPlaintext
-        attr_accessor content: Handshake # TODO
+        # attr_accessor content: Handshake # TODO
+        attr_accessor content: String
         attr_accessor content_type: Integer
         attr_accessor zeros: Integer
+
+        def self.deserialize: (String data) -> TLSInnerPlaintext
       end
     end
   end

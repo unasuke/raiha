@@ -55,6 +55,15 @@ module Raiha
         attr_accessor :content
         attr_accessor :content_type
         attr_accessor :zeros
+
+        def self.deserialize(data)
+          tls_inner_plaintext = self.new
+          pads = 0
+          loop { pads -= 1; break if data[pads] != "\x00" }
+          tls_inner_plaintext.content = data[0..(pads - 1)]
+          tls_inner_plaintext.content_type = data[pads].unpack1("C")
+          tls_inner_plaintext
+        end
       end
     end
   end
