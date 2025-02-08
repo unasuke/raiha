@@ -34,6 +34,12 @@ module Raiha
         def serialize_cipher_suite: -> String
         def serialize_extensions: -> String
       end
+
+      class EncryptedExtensions < Message
+        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension]
+
+        def self.deserialize: (String data) -> EncryptedExtensions
+      end
     end
   end
 end
