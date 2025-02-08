@@ -18,6 +18,8 @@ module Raiha
             Certificate.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:certificate_verify]
             CertificateVerify.deserialize(data)
+          when Handshake::HANDSHAKE_TYPE[:finished]
+            Finished.deserialize(data)
           else
             raise "unknown message type: #{type}"
           end
@@ -32,3 +34,4 @@ require_relative "message/server_hello"
 require_relative "message/encrypted_extensions"
 require_relative "message/certificate"
 require_relative "message/certificate_verify"
+require_relative "message/finished"
