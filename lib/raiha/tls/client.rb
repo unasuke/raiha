@@ -70,6 +70,16 @@ module Raiha
       private def transition_state(state)
         if @state == State::START && state == State::WAIT_SH
           @state = state
+        elsif @state == State::WAIT_SH && state == State::WAIT_EE
+          @state = state
+        elsif @state == State::WAIT_EE && state == State::WAIT_CERT_CR
+          @state = state
+        elsif @state == State::WAIT_CERT_CR && state == State::WAIT_CV
+          @state = state
+        elsif @state == State::WAIT_CV && state == State::WAIT_FINISHED
+          @state = state
+        else
+          raise "TODO: #{@state} -> #{state} is wrong state transition"
         end
       end
     end
