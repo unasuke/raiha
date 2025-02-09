@@ -67,6 +67,7 @@ module Raiha
         attr_accessor verify_data: String
 
         def self.deserialize: (String data) -> Finished
+        def serialize: -> String
       end
     end
   end
