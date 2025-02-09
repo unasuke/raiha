@@ -17,4 +17,10 @@ class RaihaTLSHandshakeEncryptedExtensionsTest < Minitest::Test
     assert_equal Raiha::TLS::Handshake::Extension::RecordSizeLimit, handshake.message.extensions[1].class
     assert_equal Raiha::TLS::Handshake::Extension::ServerName, handshake.message.extensions[2].class
   end
+
+  def test_serialize_rfc8448
+    handshake = Raiha::TLS::Handshake.deserialize(RFC8448_1RTT_SERVER_HANDSHAKE_ENCRYPTED_EXTENSIONS)
+    serialized = handshake.serialize
+    assert_equal_bin RFC8448_1RTT_SERVER_HANDSHAKE_ENCRYPTED_EXTENSIONS, serialized
+  end
 end
