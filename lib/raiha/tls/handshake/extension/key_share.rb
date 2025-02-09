@@ -41,17 +41,32 @@ module Raiha
             "ffdhe8192" => "\x01\x04",
           }.freeze
 
-          attr_accessor :private_key
+          # attr_accessor :private_key
           attr_accessor :ec
           attr_accessor :groups
           attr_accessor :key_exchange
 
-          def self.generate_key(groups = ["prime256v1"], on: :client_hello)
+          # def self.generate_key(groups = ["prime256v1"], on: :client_hello)
+          #   self.new(on: on).tap do |key_share|
+          #     key_share.groups = []
+          #     groups.each do |group|
+          #       ec = OpenSSL::PKey::EC.generate(group) # TODO: x25519
+          #       key_share.groups << { group: group, key_exchange: ec.public_key.to_octet_string(:uncompressed) }
+          #     end
+          #   end
+          # end
+
+          def self.setup(group_and_pkeys, on: :client_hello)
             self.new(on: on).tap do |key_share|
               key_share.groups = []
-              groups.each do |group|
-                ec = OpenSSL::PKey::EC.generate(group) # TODO: x25519
-                key_share.groups << { group: group, key_exchange: ec.public_key.to_octet_string(:uncompressed) }
+              group_and_pkeys.each do |group_and_pkey|
+                case group_and_pkey[:group]
+                when "prime256v1", "secp384r1", "secp521r1"
+                  key_share.groups << { group: group_and_pkey[:group],
+                                        key_exchange: group_and_pkey[:pkey].public_key.to_octet_string(:uncompressed) }
+                else
+                  raise "TODO: #{group_and_pkey[:group]}"
+                end
               end
             end
           end
