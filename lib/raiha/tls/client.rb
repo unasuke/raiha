@@ -3,6 +3,8 @@
 require_relative "context"
 require_relative "record"
 require_relative "handshake"
+require_relative "key_schedule"
+require_relative "aead"
 
 module Raiha
   module TLS
@@ -27,8 +29,12 @@ module Raiha
         @supported_groups = []
         @transcript_hash = {}
         @client_hello = nil
+        @server_hello = nil
+        @received = []
+        @key_schedule = KeySchedule.new(mode: :client)
         @groups = ["prime256v1"]
         @pkeys = @groups.map { |group| { group: group, pkey: OpenSSL::PKey::EC.generate(group) } }
+        @cipher = nil
       end
 
       def datagrams_to_send
@@ -38,25 +44,47 @@ module Raiha
             transition_state(State::WAIT_SH)
           end
         end
-
-        @buffer
       end
 
-      def receive(datagrams)
-        case @state
-        when State::WAIT_SH
-          receive_server_hello(datagrams)
-        else
-          # TODO: WIP
+      def receive(datagram)
+        @received = Record.deserialize(datagram)
+        loop do
+          case @state
+          when State::WAIT_SH
+            receive_server_hello
+          else
+            # TODO: WIP
+          end
         end
       end
 
-      def receive_server_hello(datagrams)
-        hs = Handshake.deserialize(datagram)
-        if hs.handshake_type == Handshake::HANDSHAKE_TYPE[:server_hello]
 
-        else
-          # TODO: alert?
+      def receive_server_hello
+        @received.each.with_index do |record, idx|
+          # TODO: check change_cipher_spec
+          case
+          when record.is_a?(Record::TLSPlaintext) && record.fragment.is_a?(Handshake) && record.fragment.message.is_a?(Handshake::ServerHello)
+            # TODO: HelloRetryRequest
+            @server_hello = record.fragment.message
+            if valid_server_hello?
+              @transcript_hash[:server_hello] = record.fragment
+              setup_key_schedule
+              setup_cipher
+              transition_state(State::WAIT_EE)
+            end
+            @received.delete_at(idx)
+            break
+          end
+        end
+      end
+
+
+      end
+
+        end
+      end
+
+
         end
       end
 
@@ -89,6 +117,39 @@ module Raiha
           raise "TODO: #{@state} -> #{state} is wrong state transition"
         end
       end
+
+      private def valid_server_hello?
+        return false unless @server_hello.legacy_session_id_echo == @client_hello.legacy_session_id
+        return false unless @client_hello.cipher_suites.map(&:name).include?(@server_hello.cipher_suite.name)
+
+        @server_hello.extensions.any? { |ext|
+          # TODO: validate value by extension itself
+          ext.is_a?(Raiha::TLS::Handshake::Extension::SupportedVersions) && ext.extension_data == "\x03\x04"
+        }
+        @server_hello.extensions.any? { |ext|
+          # TODO: validate value by extension itself
+          ext.is_a?(Raiha::TLS::Handshake::Extension::KeyShare)
+          # TODO: check pre_shared_key or key_share
+        }
+        # TODO: check returned extensions and send setensions
+      end
+
+      private def setup_key_schedule
+        server_key_share = @server_hello.key_share
+        @key_schedule.cipher_suite = @server_hello.cipher_suite
+        @key_schedule.group = server_key_share.groups.first[:group]
+        @key_schedule.public_key = server_key_share.groups.first[:key_exchange]
+        @key_schedule.pkey = @pkeys.find { |pkeys| pkeys[:group] == server_key_share.groups.first[:group] }[:pkey]
+        @key_schedule.compute_shared_secret
+        @key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
+        @key_schedule.derive_client_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
+        @key_schedule.derive_server_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
+      end
+
+      private def setup_cipher
+        @cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
+      end
+
     end
   end
 end
