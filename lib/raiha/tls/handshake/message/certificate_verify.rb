@@ -64,6 +64,13 @@ module Raiha
 
           cert_verify
         end
+
+        def serialize
+          buf = String.new(encoding: "BINARY")
+          buf << SIGNATURE_SCHEMES[algorithm]
+          buf << [signature.bytesize].pack("n")
+          buf << signature
+        end
       end
     end
   end
