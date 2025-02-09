@@ -15,6 +15,8 @@ module Raiha
       attr_reader :shared_secret
       attr_reader :client_handshake_traffic_secret
       attr_reader :server_handshake_traffic_secret
+      attr_reader :client_application_traffic_secret
+      attr_reader :server_application_traffic_secret
 
       def initialize(mode:)
         @mode = mode
@@ -23,6 +25,7 @@ module Raiha
         @aead_algorithm = nil
         @digest = nil
         @ikm = { early_secret: nil, handshake_secret: nil, main_secret: nil }
+        @salt = { main_secret: nil }
         @client_application_traffic_secret = []
         @server_application_traffic_secret = []
       end
@@ -58,9 +61,12 @@ module Raiha
           raise unless @ikm[:handshake_secret] # TODO: nice error message
           raise unless @shared_secret # TODO: nice error message
 
+          @salt[:main_secret] = \
+            OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, "derived", transcript_hash([])), length: digest_length, hash: @hash_algorithm)
           OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, label, transcript_hash(messages)), length: digest_length, hash: @hash_algorithm)
         when :main_secret
-          # TODO
+          @ikm[:main_secret] = "\x00" * digest_length
+          OpenSSL::KDF.hkdf(@ikm[:main_secret], salt: @salt[:main_secret], info: hkdf_label(digest_length, label, transcript_hash(messages)), length: digest_length, hash: @hash_algorithm)
         end
       end
 
@@ -75,7 +81,6 @@ module Raiha
         hash.update(messages.join)
         hash.digest
       end
-
 
       # TODO: not tested yet
       # def client_early_traffic_secret(client_hello)
@@ -103,6 +108,36 @@ module Raiha
       def server_handshake_write_iv
         # TODO: don't hardcode length
         @server_handshake_write_iv ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
+      end
+
+      def derive_client_application_traffic_secret(messages)
+        # TODO: generation
+        @client_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "c ap traffic", messages: messages.map(&:serialize))
+      end
+
+      def derive_server_application_traffic_secret(messages)
+        # TODO: generation
+        @server_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "s ap traffic", messages: messages.map(&:serialize))
+      end
+
+      def client_application_write_key
+        # TODO: don't hardcode length
+        @client_application_write_key ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(16, "key", ""), length: 16)
+      end
+
+      def client_application_write_iv
+        # TODO: don't hardcode length
+        @client_application_write_iv ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(12, "iv", ""), length: 12)
+      end
+
+      def server_application_write_key
+        # TODO: don't hardcode length
+        @server_application_write_key ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(16, "key", ""), length: 16)
+      end
+
+      def server_application_write_iv
+        # TODO: don't hardcode length
+        @server_application_write_iv ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(12, "iv", ""), length: 12)
       end
 
       # TODO: not tested yet
