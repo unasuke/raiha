@@ -16,6 +16,10 @@ module Raiha
           finished.verify_data = data
           finished
         end
+
+        def serialize
+          verify_data
+        end
       end
     end
   end
