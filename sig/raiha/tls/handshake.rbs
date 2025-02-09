@@ -9,6 +9,7 @@ module Raiha
 
       def serialize: -> String
       def self.deserialize: (String data) -> Handshake?
+      def self.deserialize_multiple: (String data) -> Array[Handshake]
     end
   end
 end

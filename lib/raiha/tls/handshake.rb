@@ -48,6 +48,25 @@ module Raiha
         hs.message = Message.deserialize(data: body, type: hs.handshake_type)
         hs
       end
+
+      def self.deserialize_multiple(data)
+        handshakes = []
+        buf = StringIO.new(data)
+        loop do
+          type = buf.read(1).unpack1("C")
+          raise "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
+
+          hs = self.new
+          hs.handshake_type = type
+          hs.length = ("\x00" + buf.read(3)).unpack1("N")
+          body = buf.read(hs.length)
+          hs.message = Message.deserialize(data: body, type: hs.handshake_type)
+          handshakes << hs
+
+          break if buf.eof?
+        end
+        handshakes
+      end
     end
   end
 end
