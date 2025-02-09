@@ -35,4 +35,9 @@ class RaihaTLSHandshakeCertificateTest < Minitest::Test
     assert_equal 0, handshake.message.extensions.length
     assert_equal OpenSSL::X509::Certificate, OpenSSL::X509::Certificate.new(handshake.message.opaque_certificate_data).class
   end
+
+  def test_serialize_rfc8448
+    handshake = Raiha::TLS::Handshake.deserialize(RFC8448_1RTT_SERVER_HANDSHAKE_CERTIFICATE)
+    assert_equal_bin RFC8448_1RTT_SERVER_HANDSHAKE_CERTIFICATE, handshake.serialize
+  end
 end

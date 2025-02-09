@@ -55,6 +55,25 @@ module Raiha
 
           cert
         end
+
+        def serialize
+          buf = String.new(encoding: "BINARY")
+          buf << [certificate_request_context.bytesize].pack("C")
+          buf << certificate_request_context
+          certificate_list = ""
+          certificate_list += [opaque_certificate_data.bytesize].pack("L>")[1..]
+          certificate_list += opaque_certificate_data
+          certificate_list += serialize_extensions
+          buf << [certificate_list.bytesize].pack("L>")[1..]
+          buf << certificate_list
+        end
+
+        def serialize_extensions
+          # TODO: move to abstract class?
+          buf = extensions.map(&:serialize).join
+          [buf.bytesize].pack("n") + buf
+        end
+
       end
     end
   end
