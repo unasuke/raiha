@@ -54,6 +54,8 @@ module Raiha
             receive_server_hello
           when State::WAIT_EE
             receive_encrypted_extensions
+          when State::WAIT_CERT_CR
+            receive_certificate_or_certificate_request
           else
             # TODO: WIP
           end
@@ -104,6 +106,27 @@ module Raiha
           if encrypted_extensions
             @transcript_hash[:encrypted_extensions] = encrypted_extensions
             transition_state(State::WAIT_CERT_CR)
+            break
+          end
+        end
+      end
+
+      # Accepts CertificateRequest message or Certificate message
+      def receive_certificate_or_certificate_request
+        loop do
+          received = @received.shift
+          break if received.nil?
+          next unless received.is_a?(Record::TLSCiphertext)
+
+          inner_plaintext = @cipher.decrypt(ciphertext: received, phase: :handshake)
+          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
+
+          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
+          # certificate_request = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateRequest) }
+          certificate = handshakes.find { |hs| hs.message.is_a?(Handshake::Certificate) }
+          if certificate
+            @transcript_hash[:certificate] = certificate
+            transition_state(State::WAIT_CV)
             break
           end
         end
