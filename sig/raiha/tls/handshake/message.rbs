@@ -64,6 +64,9 @@ module Raiha
 
         def self.deserialize: (String data) -> CertificateVerify
         def serialize: -> String
+        def verify_signature: (Certificate certificate_message, Array[String] messages, String context) -> String
+        private def signed_data: (Array[String] messages, String context) -> String # TODO: move to somewhere
+        private def transcript_hash: (Array[String] messages) -> String # TODO: move to somewhere
       end
 
       class Finished < Message

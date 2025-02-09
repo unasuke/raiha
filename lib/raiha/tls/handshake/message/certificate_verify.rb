@@ -1,4 +1,5 @@
 require "stringio"
+require "openssl"
 
 module Raiha
   module TLS
@@ -70,6 +71,26 @@ module Raiha
           buf << SIGNATURE_SCHEMES[algorithm]
           buf << [signature.bytesize].pack("n")
           buf << signature
+        end
+
+        def verify_signature(certificate_message, messages, context)
+          case algorithm
+          when "rsa_pss_rsae_sha256"
+            certificate_message.certificate.public_key.verify_pss("sha256", signature, signed_data(messages, context), salt_length: :auto, mgf1_hash: "sha256")
+          else
+            raise "TODO: #{algorithm} is not supported (yet)"
+          end
+        end
+
+        private def signed_data(messages, context)
+          ("\x20" * 64) + context + "\x00" + transcript_hash(messages)
+        end
+
+        private def transcript_hash(messages)
+          # TODO: sha256 is hardcoded, move to somewhere
+          hash = OpenSSL::Digest.new("sha256").new
+          hash.update(messages.join)
+          hash.digest
         end
       end
     end
