@@ -56,6 +56,8 @@ module Raiha
             receive_encrypted_extensions
           when State::WAIT_CERT_CR
             receive_certificate_or_certificate_request
+          when State::WAIT_CV
+            receive_certificate_verify
           else
             # TODO: WIP
           end
@@ -132,6 +134,24 @@ module Raiha
         end
       end
 
+      # Accepts CertificateVerify message
+      def receive_certificate_verify
+        loop do
+          received = @received.shift
+          break if received.nil?
+          next unless received.is_a?(Record::TLSCiphertext)
+
+          inner_plaintext = @cipher.decrypt(ciphertext: received, phase: :handshake)
+          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
+
+          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
+          certificate_verify = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateVerify) }
+          if certificate_verify
+            verify_certificate_verify(certificate_verify)
+            @transcript_hash[:certificate_verify] = certificate_verify
+            transition_state(State::WAIT_FINISHED)
+            break
+          end
         end
       end
 
@@ -199,6 +219,19 @@ module Raiha
 
       private def setup_cipher
         @cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
+      end
+
+      private def verify_certificate_verify(certificate_verify)
+        raise unless certificate_verify.message.verify_signature(
+          @transcript_hash[:certificate].message,
+          [
+            @transcript_hash[:client_hello].serialize,
+            @transcript_hash[:server_hello].serialize,
+            @transcript_hash[:encrypted_extensions].serialize,
+            @transcript_hash[:certificate].serialize,
+          ],
+          "TLS 1.3, server CertificateVerify"
+        )
       end
 
     end
