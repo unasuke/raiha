@@ -12,13 +12,13 @@ class RaihaTLSHandshakeCertificateVerifyTest < Minitest::Test
     3d a5 04 3e 06 3d da 65 cd f5 ae a2 0d 53 df ac d4 2f 74 f3
   HEX
 
-  def test_deserialize_rfc8446
+  def test_deserialize_rfc8448
     handshake = Raiha::TLS::Handshake.deserialize(RFC8448_1RTT_SERVER_HANDSHAKE_CERTIFICATE_VERIFY)
     assert_equal Raiha::TLS::Handshake::CertificateVerify, handshake.message.class
     assert_equal "rsa_pss_rsae_sha256", handshake.message.algorithm
   end
 
-  def test_serialize_rfc8446
+  def test_serialize_rfc8448
     handshake = Raiha::TLS::Handshake.deserialize(RFC8448_1RTT_SERVER_HANDSHAKE_CERTIFICATE_VERIFY)
     serialized = handshake.serialize
     assert_equal_bin RFC8448_1RTT_SERVER_HANDSHAKE_CERTIFICATE_VERIFY, serialized
