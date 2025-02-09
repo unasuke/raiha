@@ -60,6 +60,7 @@ module Raiha
         attr_accessor signature: String
 
         def self.deserialize: (String data) -> CertificateVerify
+        def serialize: -> String
       end
 
       class Finished < Message
