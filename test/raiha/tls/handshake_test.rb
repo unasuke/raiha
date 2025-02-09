@@ -57,4 +57,11 @@ class RaihaTLSHandShakeTest < Minitest::Test
     too_short_hs = ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO[0..-2])
     assert_nil too_short_hs
   end
+
+  def test_deserialize_multiple
+    handshakes = ::Raiha::TLS::Handshake.deserialize_multiple(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO + RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
+    assert_equal 2, handshakes.size
+    assert_equal ::Raiha::TLS::Handshake::ClientHello, handshakes[0].message.class
+    assert_equal ::Raiha::TLS::Handshake::ServerHello, handshakes[1].message.class
+  end
 end
