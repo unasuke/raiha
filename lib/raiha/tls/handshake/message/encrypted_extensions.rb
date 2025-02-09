@@ -18,6 +18,18 @@ module Raiha
           ee.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :encrypted_extensions)
           ee
         end
+
+        def serialize
+          buf = String.new(encoding: "BINARY")
+          buf << serialize_extensions
+          buf
+        end
+
+        def serialize_extensions
+          # TODO: move to abstract class?
+          buf = extensions.map(&:serialize).join
+          [buf.bytesize].pack("n") + buf
+        end
       end
     end
   end
