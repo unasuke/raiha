@@ -52,6 +52,8 @@ module Raiha
           case @state
           when State::WAIT_SH
             receive_server_hello
+          when State::WAIT_EE
+            receive_encrypted_extensions
           else
             # TODO: WIP
           end
@@ -78,7 +80,33 @@ module Raiha
         end
       end
 
+      # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
+      def receive_encrypted_extensions
+        loop do
+          received = @received.shift
+          break if received.nil?
 
+          # verify timing
+          if received.is_a?(Record::TLSPlaintext) &&
+            received.fragment.is_a?(Handshake) &&
+            received.fragment.message.is_a?(Handshake::ChangeCipherSpec)
+            next
+          end
+
+          next unless received.is_a?(Record::TLSCiphertext)
+
+          inner_plaintext = @cipher.decrypt(ciphertext: received, phase: :handshake)
+          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
+
+          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
+          encrypted_extensions = handshakes.find { |hs| hs.message.is_a?(Handshake::EncryptedExtensions) }
+
+          if encrypted_extensions
+            @transcript_hash[:encrypted_extensions] = encrypted_extensions
+            transition_state(State::WAIT_CERT_CR)
+            break
+          end
+        end
       end
 
         end
