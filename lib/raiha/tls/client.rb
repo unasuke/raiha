@@ -7,8 +7,6 @@ require_relative "handshake"
 module Raiha
   module TLS
     class Client < Context
-    # include Raiha::Buffer::Packable
-
       module State
         START = :START
         WAIT_SH = :WAIT_SH
