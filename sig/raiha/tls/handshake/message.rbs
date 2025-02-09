@@ -49,8 +49,11 @@ module Raiha
         attr_accessor opaque_certificate_data: String
         attr_accessor certificate_request_context: String
 
+        @certificate: OpenSSL::X509::Certificate
+
         def self.deserialize: (String data) -> Certificate
         def serialize: -> String
+        def certificate: -> OpenSSL::X509::Certificate
       end
 
       class CertificateVerify < Message

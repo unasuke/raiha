@@ -74,6 +74,9 @@ module Raiha
           [buf.bytesize].pack("n") + buf
         end
 
+        def certificate
+          @certificate ||= OpenSSL::X509::Certificate.new(opaque_certificate_data)
+        end
       end
     end
   end
