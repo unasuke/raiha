@@ -49,6 +49,20 @@ module Raiha
 
         def serialize
         end
+
+        def auth_tag
+          # TODO: 16
+          @encrypted_record[-16..-1]
+        end
+
+        def encrypted_record_without_auth_tag
+          # TODO: 16
+          @encrypted_record[0...-16]
+        end
+
+        def additional_data
+          [@content_type].pack("C") + @protocol_version + [@length].pack("n")
+        end
       end
 
       class TLSInnerPlaintext
