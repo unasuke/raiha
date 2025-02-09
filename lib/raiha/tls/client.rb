@@ -5,6 +5,7 @@ require_relative "record"
 require_relative "handshake"
 require_relative "key_schedule"
 require_relative "aead"
+require_relative "../crypto_util"
 
 module Raiha
   module TLS
@@ -58,9 +59,12 @@ module Raiha
             receive_certificate_or_certificate_request
           when State::WAIT_CV
             receive_certificate_verify
+          when State::WAIT_FINISHED
+            receive_finished
           else
             # TODO: WIP
           end
+          break if @received.empty?
         end
       end
 
@@ -155,7 +159,24 @@ module Raiha
         end
       end
 
+      def receive_finished
+        loop do
+          received = @received.shift
+          break if received.nil?
+          next unless received.is_a?(Record::TLSCiphertext)
 
+          inner_plaintext = @cipher.decrypt(ciphertext: received, phase: :handshake)
+          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
+
+          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
+          finished = handshakes.find { |hs| hs.message.is_a?(Handshake::Finished) }
+          if finished
+            verify_finished(finished)
+            @transcript_hash[:finished] = finished
+            derive_application_traffic_secrets
+            # transition_state(State::CONNECTED)
+            break
+          end
         end
       end
 
@@ -171,6 +192,8 @@ module Raiha
         Record::TLSPlaintext.serialize(hs_clienthello)
       end
 
+      def finished?
+        @state == State::CONNECTED
       end
 
       private def transition_state(state)
@@ -234,6 +257,38 @@ module Raiha
         )
       end
 
+      private def verify_finished(finished)
+        # CryptoUtil.hkdf_expand_label("secret", "finished", context, length)
+        # finished_key  = @key_schedule.hkdf_expand()
+        messages = [
+          @transcript_hash[:client_hello].serialize,
+          @transcript_hash[:server_hello].serialize,
+          @transcript_hash[:encrypted_extensions].serialize,
+          @transcript_hash[:certificate].serialize,
+          @transcript_hash[:certificate_verify].serialize,
+        ]
+        raise unless finished.message.verify_data == finished_verify_data(messages)
+      end
+
+      private def derive_application_traffic_secrets
+        messages = [
+          @transcript_hash[:client_hello],
+          @transcript_hash[:server_hello],
+          @transcript_hash[:encrypted_extensions],
+          @transcript_hash[:certificate],
+          @transcript_hash[:certificate_verify],
+          @transcript_hash[:finished],
+        ]
+        @key_schedule.derive_client_application_traffic_secret(messages)
+        @key_schedule.derive_server_application_traffic_secret(messages)
+      end
+
+      private def finished_verify_data(messages)
+        key = @key_schedule.server_handshake_traffic_secret
+        # TODO: don't hardcode hash algorithm
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
+        OpenSSL::HMAC.digest("sha256", finished_key, @key_schedule.transcript_hash(messages))
+      end
     end
   end
 end
