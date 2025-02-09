@@ -50,6 +50,7 @@ module Raiha
         attr_accessor certificate_request_context: String
 
         def self.deserialize: (String data) -> Certificate
+        def serialize: -> String
       end
 
       class CertificateVerify < Message
