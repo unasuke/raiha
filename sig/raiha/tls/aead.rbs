@@ -1,0 +1,16 @@
+module Raiha
+  module TLS
+    class AEAD
+      @cipher_suite: CipherSuite
+      @sequence_number: Integer
+      @cipher: OpenSSL::Cipher
+      @key_schedule: KeySchedule
+
+      def initialize:(cipher_suite: CipherSuite, key_schedule: KeySchedule) -> void
+      def decrypt:(ciphertext: Record::TLSCiphertext, phase: (:handshake | :application)) -> Record::TLSInnerPlaintext
+      # def encrypt:(plaintext: Record::TLSPlaintext, phase: (:handshake | :application)) -> Record::TLSCiphertext
+      private def nonce: (String key) -> String
+      private def key_and_iv_from_phase: ((:handshake | :application) phase) -> [String, String]
+    end
+  end
+end
