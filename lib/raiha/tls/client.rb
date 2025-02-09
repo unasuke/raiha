@@ -32,8 +32,9 @@ module Raiha
       def datagrams_to_send
         case @state
         when State::START
-          @buffer << build_client_hello
-          transition_state(State::WAIT_SH)
+          build_client_hello.tap do
+            transition_state(State::WAIT_SH)
+          end
         end
 
         @buffer
