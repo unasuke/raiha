@@ -35,8 +35,8 @@ module Raiha
         @key_schedule = KeySchedule.new(mode: :client)
         @groups = ["prime256v1"]
         @pkeys = @groups.map { |group| { group: group, pkey: OpenSSL::PKey::EC.generate(group) } }
-        @handshake_cipher = nil
-        @application_cipher = nil
+        @server_cipher = nil
+        @client_cipher = nil
       end
 
       def datagrams_to_send
@@ -104,7 +104,7 @@ module Raiha
 
           next unless received.is_a?(Record::TLSCiphertext)
 
-          inner_plaintext = @handshake_cipher.decrypt(ciphertext: received, phase: :handshake)
+          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
 
           handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
@@ -125,7 +125,7 @@ module Raiha
           break if received.nil?
           next unless received.is_a?(Record::TLSCiphertext)
 
-          inner_plaintext = @handshake_cipher.decrypt(ciphertext: received, phase: :handshake)
+          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
 
           handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
@@ -146,7 +146,7 @@ module Raiha
           break if received.nil?
           next unless received.is_a?(Record::TLSCiphertext)
 
-          inner_plaintext = @handshake_cipher.decrypt(ciphertext: received, phase: :handshake)
+          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
 
           handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
@@ -166,7 +166,7 @@ module Raiha
           break if received.nil?
           next unless received.is_a?(Record::TLSCiphertext)
 
-          inner_plaintext = @handshake_cipher.decrypt(ciphertext: received, phase: :handshake)
+          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
 
           handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
@@ -242,7 +242,8 @@ module Raiha
       end
 
       private def setup_cipher
-        @handshake_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
+        @server_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
+        @client_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
       end
 
       private def verify_certificate_verify(certificate_verify)
