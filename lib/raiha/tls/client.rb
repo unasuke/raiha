@@ -45,7 +45,11 @@ module Raiha
           build_client_hello.tap do
             transition_state(State::WAIT_SH)
           end
+        when State::CONNECTED
+          @buffer
         end
+      ensure
+        @buffer = []
       end
 
       def receive(datagram)
@@ -175,7 +179,8 @@ module Raiha
             verify_finished(finished)
             @transcript_hash[:finished] = finished
             derive_application_traffic_secrets
-            # transition_state(State::CONNECTED)
+            respond_to_finished
+            transition_state(State::CONNECTED)
             break
           end
         end
@@ -193,6 +198,31 @@ module Raiha
         Record::TLSPlaintext.serialize(hs_clienthello)
       end
 
+      def respond_to_finished
+        finished = Handshake::Finished.new.tap do |fin|
+          fin.verify_data = finished_verify_data(
+            [
+              @transcript_hash[:client_hello].serialize,
+              @transcript_hash[:server_hello].serialize,
+              @transcript_hash[:encrypted_extensions].serialize,
+              @transcript_hash[:certificate].serialize,
+              @transcript_hash[:certificate_verify].serialize,
+              @transcript_hash[:finished].serialize,
+            ], @key_schedule.client_handshake_traffic_secret
+          )
+        end
+        hs_finished = Raiha::TLS::Handshake.new.tap do |hs|
+          hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:finished]
+          hs.message = finished
+        end
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = hs_finished.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
+        @buffer << ciphertext.serialize
+      end
+
       def finished?
         @state == State::CONNECTED
       end
@@ -207,6 +237,8 @@ module Raiha
         elsif @state == State::WAIT_CERT_CR && state == State::WAIT_CV
           @state = state
         elsif @state == State::WAIT_CV && state == State::WAIT_FINISHED
+          @state = state
+        elsif @state == State::WAIT_FINISHED && state == State::CONNECTED
           @state = state
         else
           raise "TODO: #{@state} -> #{state} is wrong state transition"
