@@ -25,9 +25,24 @@ module Raiha
         @cipher.iv = nonce(iv)
         @cipher.auth_data = ciphertext.additional_data
         @cipher.auth_tag = ciphertext.auth_tag
+
         Record::TLSInnerPlaintext.deserialize(
           @cipher.update(ciphertext.encrypted_record_without_auth_tag) + @cipher.final
         ).tap { @sequence_number += 1 }
+      end
+
+      def encrypt(plaintext:, phase:)
+        key, iv = key_and_iv_from_phase(phase)
+        @cipher.reset
+        @cipher.encrypt
+        @cipher.key = key
+        @cipher.iv = nonce(iv)
+        @cipher.auth_data = plaintext.additional_data
+        ciphertext = @cipher.update(plaintext.serialize) + @cipher.final + @cipher.auth_tag
+
+        Record::TLSCiphertext.new.tap do |ct|
+          ct.encrypted_record = ciphertext
+        end
       end
 
       private def key_and_iv_from_phase(phase)
