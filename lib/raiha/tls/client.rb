@@ -242,8 +242,8 @@ module Raiha
       end
 
       private def setup_cipher
-        @server_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
-        @client_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule)
+        @server_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule, mode: :server)
+        @client_cipher = AEAD.new(cipher_suite: @server_hello.cipher_suite, key_schedule: @key_schedule, mode: :client)
       end
 
       private def verify_certificate_verify(certificate_verify)
