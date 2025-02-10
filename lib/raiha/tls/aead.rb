@@ -31,6 +31,15 @@ module Raiha
       end
 
       private def key_and_iv_from_phase(phase)
+        case @mode
+        when :server
+          key_and_iv_server(phase)
+        when :client
+          key_and_iv_client(phase)
+        end
+      end
+
+      private def key_and_iv_server(phase)
         case phase
         when :handshake
           [
@@ -41,6 +50,21 @@ module Raiha
           [
             @key_schedule.server_application_write_key,
             @key_schedule.server_application_write_iv,
+          ]
+        end
+      end
+
+      private def key_and_iv_client(phase)
+        case phase
+        when :handshake
+          [
+            @key_schedule.client_handshake_write_key,
+            @key_schedule.client_handshake_write_iv,
+          ]
+        when :application
+          [
+            @key_schedule.client_application_write_key,
+            @key_schedule.client_application_write_iv,
           ]
         end
       end
