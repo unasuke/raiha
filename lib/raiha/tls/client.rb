@@ -18,6 +18,7 @@ module Raiha
         WAIT_CERT = :WAIT_CERT
         WAIT_CV = :WAIT_CV
         WAIT_FINISHED = :WAIT_FINISHED
+        WAIT_SEND_FINISHED = :WAIT_SEND_FINISHED
         CONNECTED = :CONNECTED
       end
 
@@ -45,8 +46,10 @@ module Raiha
           build_client_hello.tap do
             transition_state(State::WAIT_SH)
           end
-        when State::CONNECTED
-          @buffer
+        when State::WAIT_SEND_FINISHED
+          respond_to_finished.tap do
+            transition_state(State::CONNECTED)
+          end
         end
       ensure
         @buffer = []
@@ -179,8 +182,8 @@ module Raiha
             verify_finished(finished)
             @transcript_hash[:finished] = finished
             derive_application_traffic_secrets
+            transition_state(State::WAIT_SEND_FINISHED)
             respond_to_finished
-            transition_state(State::CONNECTED)
             break
           end
         end
@@ -220,7 +223,7 @@ module Raiha
           inner.content_type = Record::CONTENT_TYPE[:handshake]
         end
         ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
-        @buffer << ciphertext.serialize
+        [ciphertext.serialize]
       end
 
       def finished?
@@ -238,7 +241,9 @@ module Raiha
           @state = state
         elsif @state == State::WAIT_CV && state == State::WAIT_FINISHED
           @state = state
-        elsif @state == State::WAIT_FINISHED && state == State::CONNECTED
+        elsif @state == State::WAIT_FINISHED && state == State::WAIT_SEND_FINISHED
+          @state = state
+        elsif @state == State::WAIT_SEND_FINISHED && state == State::CONNECTED
           @state = state
         else
           raise "TODO: #{@state} -> #{state} is wrong state transition"
