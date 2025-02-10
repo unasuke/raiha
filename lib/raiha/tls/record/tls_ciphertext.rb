@@ -48,6 +48,7 @@ module Raiha
         end
 
         def serialize
+          [@content_type].pack("C") + @protocol_version + [@encrypted_record.bytesize].pack("n") + @encrypted_record
         end
 
         def auth_tag
@@ -70,6 +71,8 @@ module Raiha
         attr_accessor :content_type
         attr_accessor :zeros
 
+        PROTOCOL_VERSION = [0x03, 0x03].pack("C*") # TLS v1.2
+
         def self.deserialize(data)
           tls_inner_plaintext = self.new
           pads = 0
@@ -77,6 +80,15 @@ module Raiha
           tls_inner_plaintext.content = data[0..(pads - 1)]
           tls_inner_plaintext.content_type = data[pads].unpack1("C")
           tls_inner_plaintext
+        end
+
+        def serialize
+          content + [content_type].pack("C") # TODO: no zeros
+        end
+
+        def additional_data
+          # TODO: hardcoded values
+          [23].pack("C") + PROTOCOL_VERSION + [serialize.bytesize + 16].pack("n")
         end
       end
     end

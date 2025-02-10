@@ -10,6 +10,7 @@ class RaihaTLSAEADTest < Minitest::Test
 
   def test_decrypt
     aead = Raiha::TLS::AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule)
+    aead.mode = :server
     record = Raiha::TLS::Record.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_PROTECTED_RECORD).first
     plain = aead.decrypt(ciphertext: record, phase: :handshake)
     whole_expected_message =
@@ -19,6 +20,18 @@ class RaihaTLSAEADTest < Minitest::Test
       RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_FINISHED
     assert_equal whole_expected_message.bytesize, plain.content.bytesize
     assert_equal_bin whole_expected_message, plain.content
+  end
+
+  def test_encrypt
+    aead = Raiha::TLS::AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule)
+    aead.mode = :client
+    handshake_finished = Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_FINISHED)
+    plaintext = Raiha::TLS::Record::TLSInnerPlaintext.new.tap do |inner|
+      inner.content = handshake_finished.serialize # double serialize ;)
+      inner.content_type = Raiha::TLS::Record::CONTENT_TYPE[:handshake]
+    end
+    ciphertext = aead.encrypt(plaintext: plaintext, phase: :handshake)
+    assert_equal_bin RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_FINISHED_PROTECTED, ciphertext.serialize
   end
 
   private def setup_key_schedule
