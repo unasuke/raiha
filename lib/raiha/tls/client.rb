@@ -268,7 +268,7 @@ module Raiha
           @transcript_hash[:certificate].serialize,
           @transcript_hash[:certificate_verify].serialize,
         ]
-        raise unless finished.message.verify_data == finished_verify_data(messages)
+        raise unless finished.message.verify_data == finished_verify_data(messages, @key_schedule.server_handshake_traffic_secret)
       end
 
       private def derive_application_traffic_secrets
@@ -284,8 +284,7 @@ module Raiha
         @key_schedule.derive_server_application_traffic_secret(messages)
       end
 
-      private def finished_verify_data(messages)
-        key = @key_schedule.server_handshake_traffic_secret
+      private def finished_verify_data(messages, key)
         # TODO: don't hardcode hash algorithm
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
         OpenSSL::HMAC.digest("sha256", finished_key, @key_schedule.transcript_hash(messages))
