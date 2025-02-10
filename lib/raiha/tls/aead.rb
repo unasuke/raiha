@@ -7,11 +7,14 @@ require_relative "record"
 module Raiha
   module TLS
     class AEAD
-      def initialize(cipher_suite:, key_schedule:)
+      attr_accessor :mode
+
+      def initialize(cipher_suite:, key_schedule:, mode: :server)
         @cipher_suite = cipher_suite
         @sequence_number = 0
         @cipher = OpenSSL::Cipher.new(cipher_suite.aead_algorithm)
         @key_schedule = key_schedule
+        @mode = mode # TODO: mode useful api
       end
 
       def decrypt(ciphertext:, phase:)
