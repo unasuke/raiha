@@ -170,6 +170,12 @@ module Raiha
       #   @resumption_secret ||= derive_secret(secret: :handshake_secret, label: "res master", messages: messages.map(&:serialize))
       # end
 
+      def finished_verify_data(messages, from: :server)
+        key = from == :server ? @server_handshake_traffic_secret : @client_handshake_traffic_secret
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(@hash_algorithm).digest_length)
+        OpenSSL::HMAC.digest(@hash_algorithm, finished_key, transcript_hash(messages))
+      end
+
       # @see https://www.rfc-editor.org/rfc/rfc5869#section-2.3
       private def hkdf_expand(prk:, info:, length:)
         digest = OpenSSL::Digest.new(@hash_algorithm)
