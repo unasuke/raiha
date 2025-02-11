@@ -172,3 +172,16 @@ HEX
 RFC8448_SIMPLE_1RTT_CLIENT_APPLICATION_WRITE_TRAFFIC_IV = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
   5b 78 92 3d ee 08 57 90 33 e5 23 d9
 HEX
+
+RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_FINISHED = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
+  14 00 00 20 a8 ec 43 6d 67 76 34 ae 52 5a
+  c1 fc eb e1 1a 03 9e c1 76 94 fa c6 e9 85 27 b6 42 f2 ed d5 ce
+  61
+HEX
+
+RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_FINISHED_PROTECTED = [<<~HEX.gsub(/[[:space:]]/, '')].pack("H*")
+  17 03 03 00 35 75 ec 4d c2 38 cc e6
+  0b 29 80 44 a7 1e 21 9c 56 cc 77 b0 51 7f e9 b9 3c 7a 4b fc 44
+  d8 7f 38 f8 03 38 ac 98 fc 46 de b3 84 bd 1c ae ac ab 68 67 d7
+  26 c4 05 46
+HEX
