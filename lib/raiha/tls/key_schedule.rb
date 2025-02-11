@@ -110,6 +110,16 @@ module Raiha
         @server_handshake_write_iv ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
       end
 
+      def client_handshake_write_key
+        # TODO: don't hardcode length
+        @client_handshake_write_key ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(16, "key", ""), length: 16)
+      end
+
+      def client_handshake_write_iv
+        # TODO: don't hardcode length
+        @client_handshake_write_iv ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
+      end
+
       def derive_client_application_traffic_secret(messages)
         # TODO: generation
         @client_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "c ap traffic", messages: messages.map(&:serialize))
