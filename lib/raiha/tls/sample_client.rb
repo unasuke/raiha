@@ -8,7 +8,7 @@ module Raiha
         client = self.new
         begin
           client.connect!
-          client.send("ping")
+          client.send("\n\n=====ping=====\n\n")
         ensure
           client.close
         end
