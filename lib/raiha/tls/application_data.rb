@@ -8,6 +8,10 @@ module Raiha
           application_data.content = buf
         end
       end
+
+      def serialize
+        content
+      end
     end
   end
 end

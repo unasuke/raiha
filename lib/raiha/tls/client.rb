@@ -230,6 +230,17 @@ module Raiha
         @state == State::CONNECTED
       end
 
+      def encrypt_application_data(data)
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = ApplicationData.new.tap do |appdata|
+            appdata.content = data
+          end.serialize
+          inner.content_type = Record::CONTENT_TYPE[:application_data]
+        end
+        ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :application)
+        ciphertext.serialize
+      end
+
       private def transition_state(state)
         if @state == State::START && state == State::WAIT_SH
           @state = state
