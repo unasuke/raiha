@@ -22,7 +22,7 @@ module Raiha
       def initialize: -> void
       def build_client_hello: -> Array[String]
       def datagrams_to_send: -> Array[String]
-      def receive: (Array[String] datagrams) -> void
+      def receive: (String datagram) -> void
       private def transition_state: (Symbol state) -> void
     end
   end
