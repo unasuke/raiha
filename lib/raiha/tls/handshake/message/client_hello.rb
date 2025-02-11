@@ -96,6 +96,10 @@ module Raiha
           buf = extensions.map(&:serialize).join
           [buf.bytesize].pack("n") + buf
         end
+
+        def key_share
+          @extensions.find { |ext| ext.is_a?(Extension::KeyShare) }
+        end
       end
     end
   end
