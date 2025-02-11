@@ -18,6 +18,6 @@ class RaihaTLSHandshakeExtensionSupportedVersionsTest < Minitest::Test
   def test_serialize_for_server_hello
     ext = Raiha::TLS::Handshake::Extension::SupportedVersions.new(on: :server_hello)
     ext.protocol_versions = ["\x03\x04"]
-    assert_equal_bin "\x00\x2b\x03\x04", ext.serialize
+    assert_equal_bin "\x00\x2b\x00\x02\x03\x04", ext.serialize
   end
 end
