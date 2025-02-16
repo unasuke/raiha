@@ -15,6 +15,11 @@ module Raiha
         attr_accessor fragment: ChangeCipherSpec|Handshake
 
         def self.serialize: (Handshake content)-> Array[String]
+        def invalid?: -> bool
+        def change_cipher_spec?: -> bool
+        def handshake?: -> bool
+        def alert?: -> bool
+        def application_data?: -> bool
       end
 
       class TLSCiphertext
