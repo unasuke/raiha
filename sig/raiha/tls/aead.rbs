@@ -6,7 +6,7 @@ module Raiha
       @cipher: OpenSSL::Cipher
       @key_schedule: KeySchedule
 
-      def initialize:(cipher_suite: CipherSuite, key_schedule: KeySchedule) -> void
+      def initialize:(cipher_suite: CipherSuite, key_schedule: KeySchedule, ?mode: (:client | :server)) -> void
       def decrypt:(ciphertext: Record::TLSCiphertext, phase: (:handshake | :application)) -> Record::TLSInnerPlaintext
       def encrypt:(plaintext: Record::TLSPlaintext, phase: (:handshake | :application)) -> Record::TLSCiphertext
       private def nonce: (String key) -> String
