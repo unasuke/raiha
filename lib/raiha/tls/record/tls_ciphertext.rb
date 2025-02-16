@@ -64,6 +64,14 @@ module Raiha
         def additional_data
           [@content_type].pack("C") + @protocol_version + [@length].pack("n")
         end
+
+        def plaintext?
+          false
+        end
+
+        def ciphertext?
+          true
+        end
       end
 
       class TLSInnerPlaintext

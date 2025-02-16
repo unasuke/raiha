@@ -20,6 +20,8 @@ module Raiha
         def handshake?: -> bool
         def alert?: -> bool
         def application_data?: -> bool
+        def plaintext?: -> TrueClass
+        def ciphertext?: -> FalseClass
       end
 
       class TLSCiphertext
@@ -28,6 +30,8 @@ module Raiha
         attr_accessor encrypted_record: String
         attr_accessor tls_inner_plaintext: TLSInnerPlaintext|nil
 
+        def plaintext?: -> FalseClass
+        def ciphertext?: -> TrueClass
       end
 
       class TLSInnerPlaintext
