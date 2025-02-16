@@ -17,6 +17,7 @@ module Raiha
       @buffer: Array[String]
       @supported_groups: Array[untyped]
       @transcript_hash: untyped
+      @received: Array[Record::TLSPlaintext|Record::TLSCiphertext]
 
       attr_reader state: Symbol
 
@@ -24,6 +25,7 @@ module Raiha
       def build_client_hello: -> Array[String]
       def datagrams_to_send: -> Array[String]
       def receive: (String datagram) -> void
+      def receive_server_hello: -> void
       private def transition_state: (Symbol state) -> void
     end
   end
