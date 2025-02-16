@@ -83,12 +83,12 @@ module Raiha
           received = @received.shift
           break if received.nil?
 
-          if received.is_a?(Record::TLSPlaintext) && received.content_type == Record::CONTENT_TYPE[:change_cipher_spec]
+          if received.is_a?(Record::TLSPlaintext) && received.change_cipher_spec?
             next
           end
 
           # TODO: HelloRetryRequest
-          if received.is_a?(Record::TLSPlaintext) && received.fragment.is_a?(Handshake) && received.fragment.message.is_a?(Handshake::ServerHello)
+          if received.is_a?(Record::TLSPlaintext) && received.handshake? && received.fragment.message.is_a?(Handshake::ServerHello)
             @server_hello = received.fragment.message
             @transcript_hash[:server_hello] = received.fragment
             break
@@ -112,7 +112,7 @@ module Raiha
 
           # verify timing
           if received.is_a?(Record::TLSPlaintext) &&
-            received.fragment.is_a?(Handshake) &&
+            received.handshake? &&
             received.fragment.message.is_a?(Handshake::ChangeCipherSpec)
             next
           end

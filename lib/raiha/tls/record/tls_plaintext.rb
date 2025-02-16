@@ -52,6 +52,26 @@ module Raiha
           end
           bufs
         end
+
+        def invalid?
+          @content_type == CONTENT_TYPE[:invalid]
+        end
+
+        def change_cipher_spec?
+          @content_type == CONTENT_TYPE[:change_cipher_spec]
+        end
+
+        def handshake?
+          @content_type == CONTENT_TYPE[:handshake]
+        end
+
+        def alert?
+          @content_type == CONTENT_TYPE[:alert]
+        end
+
+        def application_data?
+          @content_type == CONTENT_TYPE[:application_data]
+        end
       end
     end
   end
