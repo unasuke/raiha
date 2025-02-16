@@ -72,6 +72,14 @@ module Raiha
         def application_data?
           @content_type == CONTENT_TYPE[:application_data]
         end
+
+        def plaintext?
+          true
+        end
+
+        def ciphertext?
+          false
+        end
       end
     end
   end

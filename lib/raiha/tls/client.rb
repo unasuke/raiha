@@ -83,12 +83,12 @@ module Raiha
           received = @received.shift
           break if received.nil?
 
-          if received.is_a?(Record::TLSPlaintext) && received.change_cipher_spec?
+          if received.plaintext? && received.change_cipher_spec?
             next
           end
 
           # TODO: HelloRetryRequest
-          if received.is_a?(Record::TLSPlaintext) && received.handshake? && received.fragment.message.is_a?(Handshake::ServerHello)
+          if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ServerHello)
             @server_hello = received.fragment.message
             @transcript_hash[:server_hello] = received.fragment
             break
@@ -111,13 +111,13 @@ module Raiha
           break if received.nil?
 
           # verify timing
-          if received.is_a?(Record::TLSPlaintext) &&
+          if received.plaintext? &&
             received.handshake? &&
             received.fragment.message.is_a?(Handshake::ChangeCipherSpec)
             next
           end
 
-          next unless received.is_a?(Record::TLSCiphertext)
+          next unless received.ciphertext?
 
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
@@ -138,7 +138,7 @@ module Raiha
         loop do
           received = @received.shift
           break if received.nil?
-          next unless received.is_a?(Record::TLSCiphertext)
+          next unless received.ciphertext?
 
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
@@ -159,7 +159,7 @@ module Raiha
         loop do
           received = @received.shift
           break if received.nil?
-          next unless received.is_a?(Record::TLSCiphertext)
+          next unless received.ciphertext?
 
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
@@ -179,7 +179,7 @@ module Raiha
         loop do
           received = @received.shift
           break if received.nil?
-          next unless received.is_a?(Record::TLSCiphertext)
+          next unless received.ciphertext?
 
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
           next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
