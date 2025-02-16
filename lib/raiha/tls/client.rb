@@ -57,6 +57,7 @@ module Raiha
 
       def receive(datagram)
         @received = Record.deserialize(datagram)
+
         loop do
           case @state
           when State::WAIT_SH
@@ -76,23 +77,30 @@ module Raiha
         end
       end
 
-
+      # Accepts ServerHello message (or HelloRetryRequest message)
       def receive_server_hello
-        @received.each.with_index do |record, idx|
-          # TODO: check change_cipher_spec
-          case
-          when record.is_a?(Record::TLSPlaintext) && record.fragment.is_a?(Handshake) && record.fragment.message.is_a?(Handshake::ServerHello)
-            # TODO: HelloRetryRequest
-            @server_hello = record.fragment.message
-            if valid_server_hello?
-              @transcript_hash[:server_hello] = record.fragment
-              setup_key_schedule
-              setup_cipher
-              transition_state(State::WAIT_EE)
-            end
-            @received.delete_at(idx)
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          if received.is_a?(Record::TLSPlaintext) && received.content_type == Record::CONTENT_TYPE[:change_cipher_spec]
+            next
+          end
+
+          # TODO: HelloRetryRequest
+          if received.is_a?(Record::TLSPlaintext) && received.fragment.is_a?(Handshake) && received.fragment.message.is_a?(Handshake::ServerHello)
+            @server_hello = received.fragment.message
+            @transcript_hash[:server_hello] = received.fragment
             break
           end
+        end
+
+        if valid_server_hello?
+          setup_key_schedule
+          setup_cipher
+          transition_state(State::WAIT_EE)
+        else
+          # TODO: error handling
         end
       end
 
