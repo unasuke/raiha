@@ -9,6 +9,7 @@ module Raiha
         WAIT_CERT: :WAIT_CERT
         WAIT_CV: :WAIT_CV
         WAIT_FINISHED: :WAIT_FINISHED
+        WAIT_SEND_FINISHED: :WAIT_SEND_FINISHED
         CONNECTED: :CONNECTED
       end
 
