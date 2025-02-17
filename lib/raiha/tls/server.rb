@@ -27,12 +27,15 @@ module Raiha
         @client_hello = nil
         @server_hello = nil
         @buffer = []
+        @received = []
       end
 
-      def receive(datagrams)
+      def receive(datagram)
+        @received = Record.deserialize(datagram)
+
         case @state
         when State::START
-          receive_client_hello(datagrams)
+          receive_client_hello
         end
       end
 
@@ -45,14 +48,26 @@ module Raiha
         end
 
         @client_hello = hs.message
+      end
+
+      def receive_client_hello
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ClientHello)
+            @client_hello = received.fragment.message
+            break
+          else
+            # TODO: not a client hello
+          end
+        end
 
         unless @cipher_suite = choose_cipher_suite(@client_hello.cipher_suites)
           raise "TODO: alert? cannot choose cipher suite"
         end
 
         transition_state(State::RECVD_CH)
-
-        @server_hello = Raiha::TLS::Handshake::ServerHello.build_from_client_hello(@client_hello)
       end
 
       def choose_cipher_suite(cipher_suites)

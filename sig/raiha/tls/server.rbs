@@ -20,7 +20,7 @@ module Raiha
 
       def initialize: -> void
       def datagrams_to_send: -> Array[String]
-      def receive: (Array[String] datagrams) -> void
+      def receive: (String datagram) -> void
       def choose_cipher_suite: (Array[CipherSuite] cipher_suites) -> CipherSuite?
       private def transition_state: (Symbol state) -> void
     end
