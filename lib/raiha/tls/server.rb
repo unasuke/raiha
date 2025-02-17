@@ -36,18 +36,23 @@ module Raiha
         case @state
         when State::START
           receive_client_hello
+          select_parameters
         end
       end
 
-      def receive_client_hello(datagrams)
-        # binding.irb
-        records = Raiha::TLS::Record::TLSPlaintext.deserialize(datagrams)
-        hs = records.first
-        if hs.handshake_type != Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
-          raise "TODO: alert? not client hello"
+      def datagrams_to_send
+        case @state
+        when State::RECVD_CH
+          [
+            build_server_hello,
+            build_encrypted_extensions,
+            build_certificate,
+            build_certificate_verify,
+            build_finished,
+          ]
+        else
+          # TODO: WIP
         end
-
-        @client_hello = hs.message
       end
 
       def receive_client_hello
@@ -72,6 +77,26 @@ module Raiha
 
       def choose_cipher_suite(cipher_suites)
         cipher_suites.find(&:supported?)
+      end
+
+      def select_parameters
+        raise unless @client_hello
+        # TODO: select parameters
+      end
+
+      def build_server_hello
+      end
+
+      def build_enctypted_extensions
+      end
+
+      def build_certificate
+      end
+
+      def build_certificate_verify
+      end
+
+      def build_finished
       end
 
       private def transition_state(state)
