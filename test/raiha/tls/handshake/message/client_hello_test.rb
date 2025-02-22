@@ -21,7 +21,7 @@ class RaihaTLSHandshakeClientHelloTest < Minitest::Test
     deserialized = Raiha::TLS::Handshake::ClientHello.deserialize(serialized)
     assert_equal Raiha::TLS::Handshake::ClientHello, deserialized.class
     assert_equal 1, deserialized.cipher_suites.length
-    assert_equal 0x00, deserialized.legacy_session_id
+    assert_equal "", deserialized.legacy_session_id
   end
 
   def test_extensions_for_client_hello

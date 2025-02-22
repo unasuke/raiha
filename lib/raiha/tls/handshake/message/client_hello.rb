@@ -32,7 +32,7 @@ module Raiha
         def self.build
           ch = self.new
           ch.random = SecureRandom.random_bytes(32)
-          ch.legacy_session_id = 0x00
+          ch.legacy_session_id = ""
           ch.cipher_suites = [
             CipherSuite.new(:TLS_AES_128_GCM_SHA256),
             # CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256), # TODO:
@@ -48,7 +48,8 @@ module Raiha
           buf = StringIO.new(data)
           buf.read(2) # legacy version
           ch.random = buf.read(32)
-          ch.legacy_session_id = buf.read(1).unpack1("C") # 0xc00
+          legacy_session_id_length = buf.read(1).unpack1("C") # 0xc00
+          ch.legacy_session_id = buf.read(legacy_session_id_length)
           cipher_suites_count = buf.read(2).unpack1("n") / 2
           ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(buf.read(2)) }
           ch.legacy_compression_methods = [0x00]; buf.read(2)
@@ -74,6 +75,7 @@ module Raiha
           buf = String.new(encoding: "BINARY")
           buf << LEGACY_VERSION.pack("C*")
           buf << random
+          buf << [legacy_session_id.bytesize].pack("C")
           buf << legacy_session_id
           buf << serialize_cipher_suites
           buf << "\x01" + legacy_compression_methods.pack("C*") # 0x01 is length
