@@ -48,6 +48,8 @@ module Raiha
         @hash_algorithm = cipher_suite.hash_algorithm
         @aead_algorithm = cipher_suite.aead_algorithm
         @digest = OpenSSL::Digest.new(@hash_algorithm)
+        @key_length = OpenSSL::Cipher.new(cipher_suite.aead_algorithm).key_len
+        @iv_length = OpenSSL::Cipher.new(cipher_suite.aead_algorithm).iv_len
       end
 
       def derive_secret(secret:, label:, messages: [])
@@ -101,23 +103,19 @@ module Raiha
       end
 
       def server_handshake_write_key
-        # TODO: don't hardcode length
-        @server_handshake_write_key ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(16, "key", ""), length: 16)
+        @server_handshake_write_key ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
 
       def server_handshake_write_iv
-        # TODO: don't hardcode length
-        @server_handshake_write_iv ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
+        @server_handshake_write_iv ||= hkdf_expand(prk: @server_handshake_traffic_secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
       def client_handshake_write_key
-        # TODO: don't hardcode length
-        @client_handshake_write_key ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(16, "key", ""), length: 16)
+        @client_handshake_write_key ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
 
       def client_handshake_write_iv
-        # TODO: don't hardcode length
-        @client_handshake_write_iv ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(12, "iv", ""), length: 12)
+        @client_handshake_write_iv ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
       def derive_client_application_traffic_secret(messages)
@@ -131,23 +129,19 @@ module Raiha
       end
 
       def client_application_write_key
-        # TODO: don't hardcode length
-        @client_application_write_key ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(16, "key", ""), length: 16)
+        @client_application_write_key ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
 
       def client_application_write_iv
-        # TODO: don't hardcode length
-        @client_application_write_iv ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(12, "iv", ""), length: 12)
+        @client_application_write_iv ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
       def server_application_write_key
-        # TODO: don't hardcode length
-        @server_application_write_key ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(16, "key", ""), length: 16)
+        @server_application_write_key ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
 
       def server_application_write_iv
-        # TODO: don't hardcode length
-        @server_application_write_iv ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(12, "iv", ""), length: 12)
+        @server_application_write_iv ||= hkdf_expand(prk: @server_application_traffic_secret.last, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
       # TODO: not tested yet
