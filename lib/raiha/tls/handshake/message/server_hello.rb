@@ -62,7 +62,8 @@ module Raiha
           buf = String.new(encoding: "BINARY")
           buf << LEGACY_VERSION.pack("C*")
           buf << random
-          buf << [legacy_session_id_echo].pack("C")
+          buf << [legacy_session_id_echo.bytesize].pack("C")
+          buf << legacy_session_id_echo
           buf << cipher_suite.serialize
           buf << [0].pack("C") # legacy compression method
           buf << serialize_extensions
@@ -74,7 +75,8 @@ module Raiha
           buf = StringIO.new(data)
           buf.read(2) # legacy version
           sh.random = buf.read(32)
-          sh.legacy_session_id_echo = buf.read(1).unpack1("C") # 0x00
+          legacy_session_id_echo_length = buf.read(1).unpack1("C")
+          sh.legacy_session_id_echo = buf.read(legacy_session_id_echo_length)
           sh.cipher_suite = CipherSuite.deserialize(buf.read(2))
           sh.legacy_compression_method = buf.read(1)
           extensions_bytesize = buf.read(2).unpack1("n")
