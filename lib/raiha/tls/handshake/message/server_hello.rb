@@ -53,7 +53,7 @@ module Raiha
           @extensions = [
             # Mandatory extension
             # https://www.ietf.org/archive/id/draft-ietf-tls-rfc8446bis-11.html#section-4.1.3-4.12.1
-            Extension::SupportedVersions.generate_for_tls13
+            Extension::SupportedVersions.generate_for_tls13(on: :server_hello)
           ]
           @legacy_compression_method = 0
         end

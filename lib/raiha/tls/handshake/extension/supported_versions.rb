@@ -21,9 +21,18 @@ module Raiha
 
           attr_accessor :protocol_versions
 
-          def self.generate_for_tls13
-            self.new(on: :client_hello).tap do |ext|
-              ext.extension_data = "\x02\x03\x04"
+          def self.generate_for_tls13(on: :client_hello)
+            case on
+            when :client_hello
+              self.new(on: :client_hello).tap do |ext|
+                ext.extension_data = "\x02\x03\x04"
+              end
+            when :server_hello
+              self.new(on: :server_hello).tap do |ext|
+                ext.extension_data = "\x03\x04"
+              end
+            else
+              raise ArgumentError, "Invalid on: #{on}"
             end
           end
 
