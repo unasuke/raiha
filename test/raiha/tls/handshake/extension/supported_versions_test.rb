@@ -7,6 +7,11 @@ class RaihaTLSHandshakeExtensionSupportedVersionsTest < Minitest::Test
     assert_equal Raiha::TLS::Handshake::Extension::SupportedVersions, ext.class
     assert_equal_bin "\x02\x03\x04", ext.extension_data
     assert_equal ["\x03\x04"], ext.protocol_versions
+
+    ext2 = Raiha::TLS::Handshake::Extension::SupportedVersions.generate_for_tls13(on: :server_hello)
+    assert_equal Raiha::TLS::Handshake::Extension::SupportedVersions, ext2.class
+    assert_equal_bin "\x03\x04", ext2.extension_data
+    assert_equal ["\x03\x04"], ext2.protocol_versions
   end
 
   def test_serialize_for_client_hello
