@@ -37,6 +37,11 @@ module Raiha
         attr_accessor :opaque_certificate_data
         attr_accessor :extensions
 
+        def initialize
+          @certificate_request_context = ""
+          @extensions = []
+        end
+
         def self.deserialize(data)
           cert = self.new
           buf = StringIO.new(data)
