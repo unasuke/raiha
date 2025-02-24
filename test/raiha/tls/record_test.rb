@@ -40,6 +40,21 @@ class RaihaTLSRecordTest < Minitest::Test
     fb a6 37 97 69 fe be de ef 76 22 b1 87 77 b1 9b 4a 9d
   SAMPLE
 
+  OPENSSL_HANDSHAKE_SAMPLE_CLIENT_HELLO = [<<~SAMPLE.gsub(/[[:space:]]/, '')].pack("H*")
+    16 03 01 00 e5 01 00 00 e1 03 03 52 89 f8 e5 df c1 45 b0 ba
+    70 be 82 c4 59 20 8a 12 f2 c6 a4 b1 ee 6a 2e 7c fa 94 e5 df
+    1e b0 4e 20 38 9c 80 5c a2 47 05 67 8a 48 4e 48 3e d7 d6 43
+    99 a8 68 2a 76 bc 0a 52 a5 17 d0 ff f7 0c cf bd 00 02 13 01
+    01 00 00 96 00 0b 00 04 03 00 01 02 00 0a 00 16 00 14 00 1d
+    00 17 00 1e 00 19 00 18 01 00 01 01 01 02 01 03 01 04 00 23
+    00 00 00 16 00 00 00 17 00 00 00 0d 00 24 00 22 04 03 05 03
+    06 03 08 07 08 08 08 1a 08 1b 08 1c 08 09 08 0a 08 0b 08 04
+    08 05 08 06 04 01 05 01 06 01 00 2b 00 03 02 03 04 00 2d 00
+    02 01 01 00 33 00 26 00 24 00 1d 00 20 54 b2 82 f2 bd 56 15
+    99 bc f3 65 54 8e b7 df ef e6 51 7c a5 6d bc 39 d8 b7 9a 29
+    ad ad 25 d6 12 00 1b 00 05 04 00 01 00 03
+  SAMPLE
+
   def test_tlsplaintext_serialize
     handshake = Raiha::TLS::Handshake.new.tap do |hs|
       hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
@@ -108,6 +123,14 @@ class RaihaTLSRecordTest < Minitest::Test
     assert_equal 6, record.length
     assert_equal Raiha::TLS::Record::TLSPlaintext, record[0].class
     assert_equal Raiha::TLS::Handshake::ServerHello, record[0].fragment.message.class
+  end
+
+  def test_tlsplaintext_deserialize_openssl_sample_client_hello
+    record = Raiha::TLS::Record.deserialize(OPENSSL_HANDSHAKE_SAMPLE_CLIENT_HELLO)
+    assert_equal 1, record.length
+    assert_equal Raiha::TLS::Record::TLSPlaintext, record[0].class
+    assert_equal Raiha::TLS::Handshake::ClientHello, record[0].fragment.message.class
+    assert_equal_bin OPENSSL_HANDSHAKE_SAMPLE_CLIENT_HELLO, record[0].serialize
   end
 
   def test_deserialize_tlsciphertext

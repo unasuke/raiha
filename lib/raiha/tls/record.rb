@@ -30,6 +30,7 @@ module Raiha
               record.content_type = fragment[:content_type]
               record.length = fragment[:length]
               record.fragment = ChangeCipherSpec.deserialize(fragment[:fragment])
+              record.legacy_record_version = fragment[:legacy_record_version]
             end
           when CONTENT_TYPE[:alert]
             # TODO: deserialized << Alert.deserialize(fragment[:fragment])
@@ -38,6 +39,7 @@ module Raiha
               record.content_type = fragment[:content_type]
               record.length = fragment[:length]
               record.fragment = Handshake.deserialize(fragment[:fragment])
+              record.legacy_record_version = fragment[:legacy_record_version]
             end
           when CONTENT_TYPE[:application_data]
             deserialized << TLSCiphertext.new.tap do |record|
@@ -57,14 +59,13 @@ module Raiha
         buf = StringIO.new(serialized_records)
         loop do
           content_type = buf.read(1).unpack1("C")
-          legacy_record_version = buf.read(2)
-          raise "unknown legacy record version: #{legacy_record_version}" unless legacy_record_version == LEGACY_RECORD_VERSION
+          legacy_record_version = buf.read(2) # [MUST] Ignore legacy_record_version field
 
           length = buf.read(2).unpack1("n")
           fragment = buf.read(length)
           raise if fragment.bytesize != length
 
-          fragments << { content_type: content_type, length: length, fragment: fragment }
+          fragments << { content_type: content_type, length: length, fragment: fragment, legacy_record_version: legacy_record_version }
           break if buf.eof?
         end
 
