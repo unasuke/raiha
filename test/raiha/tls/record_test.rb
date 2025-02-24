@@ -4,7 +4,7 @@ require "raiha/tls/handshake"
 require "raiha/tls/record"
 
 class RaihaTLSRecordTest < Minitest::Test
-  OPENSSL_HANDSHAKE_REPOSNSE_SAMPLE = [<<~SAMPLE.gsub(/[[:space:]]/, '')].pack("H*")
+  OPENSSL_HANDSHAKE_RESPONSE_SAMPLE = [<<~SAMPLE.gsub(/[[:space:]]/, '')].pack("H*")
     16 03 03 00 7b 02 00 00 77 03 03 b9 8c 21 87 f7 0a 8a 14 7a cc b5 8c 05 d9 3f a6 23 ed 54 e4 bf e9 92 92 43 1c 9c 64 de
     e7 ee 74 00 13 01 00 00 4f 00 2b 00 02 03 04 00 33 00 45 00 17 00 41 04 a8 23 97 d3 35 47 92 b8 13 0c cf 09 5b 33 e4 e6
     9a 53 66 e0 0a cf e1 bd 2e fe e2 93 66 f6 b0 86 79 18 ef b7 1d 22 2f 3d 0c 64 15 d5 be 70 f2 ce 4e dd fc 82 b7 e8 f3 42
@@ -119,7 +119,7 @@ class RaihaTLSRecordTest < Minitest::Test
   end
 
   def test_tlsplaintext_deserialize_openssl_sample
-    record = Raiha::TLS::Record.deserialize(OPENSSL_HANDSHAKE_REPOSNSE_SAMPLE)
+    record = Raiha::TLS::Record.deserialize(OPENSSL_HANDSHAKE_RESPONSE_SAMPLE)
     assert_equal 6, record.length
     assert_equal Raiha::TLS::Record::TLSPlaintext, record[0].class
     assert_equal Raiha::TLS::Handshake::ServerHello, record[0].fragment.message.class
