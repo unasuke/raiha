@@ -30,6 +30,7 @@ module Raiha
         attr_accessor :content_type
         attr_accessor :length
         attr_accessor :fragment
+        attr_accessor :legacy_record_version
 
         def self.serialize(content)
           bufs = []
@@ -44,13 +45,29 @@ module Raiha
             else
               raise "TODO #{content.class}"
             end
-            buf << LEGACY_RECORD_VERSION
+            buf << (@legacy_record_version || LEGACY_RECORD_VERSION)
             buf << [fragment.bytesize].pack("n")
             buf << fragment
             bufs << buf
             count += 1
           end
           bufs
+        end
+
+        def serialize
+          buf = String.new(encoding: "BINARY")
+          serialized = @fragment.serialize
+
+          case @fragment
+          when Handshake
+            buf << [CONTENT_TYPE[:handshake]].pack("C")
+          else
+            raise "TODO #{@fragment.class}"
+          end
+          buf << (@legacy_record_version || LEGACY_RECORD_VERSION)
+          buf << [serialized.bytesize].pack("n")
+          buf << serialized
+          buf
         end
 
         def invalid?

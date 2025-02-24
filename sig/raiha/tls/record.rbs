@@ -13,6 +13,7 @@ module Raiha
         attr_accessor content_type: Integer
         attr_accessor length: Integer
         attr_accessor fragment: ChangeCipherSpec|Handshake
+        attr_accessor legacy_record_version: String
 
         def self.serialize: (Handshake content)-> Array[String]
         def invalid?: -> bool
