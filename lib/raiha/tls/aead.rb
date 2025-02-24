@@ -42,7 +42,8 @@ module Raiha
 
         Record::TLSCiphertext.new.tap do |ct|
           ct.encrypted_record = ciphertext
-        end
+          ct.tls_inner_plaintext = plaintext
+        end.tap { @sequence_number += 1 }
       end
 
       private def key_and_iv_from_phase(phase)
