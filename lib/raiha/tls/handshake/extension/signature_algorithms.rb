@@ -111,14 +111,15 @@ module Raiha
               elsif OBSOLETE_RESERVEDS.any? { |obsolete| obsolete.include?(signature_scheme_id) }
                 @signature_schemes << "obsolete_reserved"
               else
-                # TODO: raise error?
+                # TODO: Use raw value for unknown signature scheme
+                @signature_schemes << signature_scheme_id
               end
             end
           end
 
           def serialize
             data = [@signature_schemes.length * 2].pack("n") +
-                   @signature_schemes.map { |scheme| SIGNATURE_SCHEMES[scheme] }.join
+                   @signature_schemes.map { |scheme| SIGNATURE_SCHEMES[scheme] || scheme }.join
             [EXTENSION_TYPE_NUMBER].pack("n") + [data.bytesize].pack("n") + data
           end
         end
