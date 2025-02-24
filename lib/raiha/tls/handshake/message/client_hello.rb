@@ -38,7 +38,7 @@ module Raiha
             # CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256), # TODO:
             # CipherSuite.new(:TLS_AES_256_GCM_SHA384),
           ]
-          ch.legacy_compression_methods = [0x00]
+          ch.legacy_compression_methods = 0
           ch.extensions = ch.extensions_for_client_hello
           ch
         end
@@ -52,7 +52,8 @@ module Raiha
           ch.legacy_session_id = buf.read(legacy_session_id_length)
           cipher_suites_count = buf.read(2).unpack1("n") / 2
           ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(buf.read(2)) }
-          ch.legacy_compression_methods = [0x00]; buf.read(2)
+          legacy_compression_methods_length = buf.read(1).unpack1("C")
+          ch.legacy_compression_methods = buf.read(legacy_compression_methods_length).unpack1("C*")
           extensions_bytesize = buf.read(2).unpack1("n")
           ch.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :client_hello)
           ch
@@ -78,7 +79,7 @@ module Raiha
           buf << [legacy_session_id.bytesize].pack("C")
           buf << legacy_session_id
           buf << serialize_cipher_suites
-          buf << "\x01" + legacy_compression_methods.pack("C*") # 0x01 is length
+          buf << "\x01" + [legacy_compression_methods].pack("C") # 0x01 is length
           buf << serialize_extensions
           buf
         end
