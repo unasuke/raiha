@@ -15,7 +15,6 @@ class RaihaTLSHandshakeServerHelloTest < Minitest::Test
   end
 
   def test_deserialize
-    skip
     sh_original = Raiha::TLS::Handshake::ServerHello.build_from_client_hello(Raiha::TLS::Handshake::ClientHello.build)
     sh_deserialized = Raiha::TLS::Handshake::ServerHello.deserialize(sh_original.serialize)
     assert_equal sh_original.class, sh_deserialized.class
