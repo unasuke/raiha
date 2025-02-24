@@ -73,6 +73,10 @@ module Raiha
           buf << signature
         end
 
+        def sign(private_key, messages, context)
+          @signature = private_key.sign_pss("sha256", signed_data(messages, context), salt_length: :digest, mgf1_hash: "sha256")
+        end
+
         def verify_signature(certificate_message, messages, context)
           case algorithm
           when "rsa_pss_rsae_sha256"
