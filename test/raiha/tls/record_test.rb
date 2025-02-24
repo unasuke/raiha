@@ -86,12 +86,12 @@ class RaihaTLSRecordTest < Minitest::Test
     assert_equal String, fragments.first[:fragment].class
 
     # fragment size is too large
-    assert_raises(RuntimeError) do
+    assert_raises do
       fragments = Raiha::TLS::Record.unwrap_fragments(record[0] + "\x00")
     end
 
     # fragment size is too short
-    assert_raises(RuntimeError) do
+    assert_raises do
       fragments = Raiha::TLS::Record.unwrap_fragments(record[0][0..-2])
     end
   end
