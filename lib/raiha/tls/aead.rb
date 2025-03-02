@@ -46,6 +46,11 @@ module Raiha
         end.tap { @sequence_number += 1 }
       end
 
+      # TODO: more useful api
+      def reset_sequence_number
+        @sequence_number = 0
+      end
+
       private def key_and_iv_from_phase(phase)
         case @mode
         when :server
