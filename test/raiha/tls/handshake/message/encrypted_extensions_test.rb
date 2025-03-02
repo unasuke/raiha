@@ -17,4 +17,24 @@ class RaihaTLSHandshakeEncryptedExtensionsTest < Minitest::Test
     serialized = handshake.serialize
     assert_equal_bin RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_ENCRYPTED_EXTENSIONS, serialized
   end
+
+  def test_serialize_and_deserialize
+    handshake = Raiha::TLS::Handshake.new.tap do |hs|
+      hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:encrypted_extensions]
+      hs.message = Raiha::TLS::Handshake::EncryptedExtensions.new.tap do |ee|
+        ee.extensions = [
+          Raiha::TLS::Handshake::Extension::SupportedGroups.new(on: :encrypted_extensions).tap do |sg|
+            sg.groups = ["prime256v1", "x25519"]
+          end
+        ]
+      end
+    end
+
+    serialized = handshake.serialize
+    deserialized = Raiha::TLS::Handshake.deserialize(serialized)
+    assert_equal Raiha::TLS::Handshake::EncryptedExtensions, deserialized.message.class
+    assert_equal Raiha::TLS::Handshake::Extension::SupportedGroups, deserialized.message.extensions[0].class
+    assert_equal ["prime256v1", "x25519"], deserialized.message.extensions[0].groups
+    assert_equal_bin deserialized.serialize, serialized
+  end
 end
