@@ -9,6 +9,7 @@ module Raiha
         server = self.new
         begin
           server.connect!
+          server.send("\n\n=====ping from server=====\n\n")
         ensure
           server.close
         end
@@ -20,15 +21,18 @@ module Raiha
         @port = 4433
         @socket = TCPServer.new(@host, @port)
         @logger = Logger.new($stdout)
+        @connection = nil
       end
 
       def connect!
         @logger.info("Server started on #{@host}:#{@port}")
         server = @socket.accept
+        @connection = server
         loop do
+          break if @server.connected?
+
           begin
             response = server.recvmsg_nonblock
-            pp response.first if response
             @server.receive(response.first) if response
 
             @server.datagrams_to_send&.each do |datagram|
@@ -42,6 +46,10 @@ module Raiha
 
       def close
         @socket&.close
+      end
+
+      def send(data)
+        @connection.sendmsg(@server.encrypt_application_data(data))
       end
     end
   end
