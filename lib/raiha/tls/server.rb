@@ -45,6 +45,8 @@ module Raiha
         when State::START
           receive_client_hello
           select_parameters
+        when State::NEGOTIATED
+          receive_finished
         end
       end
 
@@ -199,13 +201,48 @@ module Raiha
           inner.content_type = Record::CONTENT_TYPE[:handshake]
         end
         transition_state(State::NEGOTIATED)
+        derive_application_traffic_secrets
         @server_cipher.encrypt(plaintext: innerplaintext, phase: :handshake).serialize
+      end
+
+      def receive_finished
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          next if received.plaintext? && received.change_cipher_spec?
+          inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :handshake)
+          finished = Handshake.deserialize_multiple(inner_plaintext.content).find { |hs| hs.message.is_a?(Handshake::Finished) }
+
+          if finished
+            verify_finished(finished)
+            transition_state(State::CONNECTED)
+            @server_cipher.reset_sequence_number
+          end
+        end
+      end
+
+      def connected?
+        @state == State::CONNECTED
+      end
+
+      def encrypt_application_data(data)
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = ApplicationData.new.tap do |appdata|
+            appdata.content = data
+          end.serialize
+          inner.content_type = Record::CONTENT_TYPE[:application_data]
+        end
+        ciphertext = @server_cipher.encrypt(plaintext: innerplaintext, phase: :application)
+        ciphertext.serialize
       end
 
       private def transition_state(state)
         if @state == State::START && state == State::RECVD_CH
           @state = state
         elsif @state == State::RECVD_CH && state == State::NEGOTIATED
+          @state = state
+        elsif @state == State::NEGOTIATED && state == State::CONNECTED
           @state = state
         else
           raise "Invalid state transition: #{@state} -> #{state}"
@@ -232,6 +269,31 @@ module Raiha
         # TODO: don't hardcode hash algorithm
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
         OpenSSL::HMAC.digest("sha256", finished_key, @key_schedule.transcript_hash(messages))
+      end
+
+      private def verify_finished(finished)
+        messages = [
+          @transcript_hash[:client_hello].serialize,
+          @transcript_hash[:server_hello].serialize,
+          @transcript_hash[:encrypted_extensions].serialize,
+          @transcript_hash[:certificate].serialize,
+          @transcript_hash[:certificate_verify].serialize,
+          @transcript_hash[:finished].serialize,
+        ]
+        raise unless finished.message.verify_data == finished_verify_data(messages, @key_schedule.client_handshake_traffic_secret)
+      end
+
+      private def derive_application_traffic_secrets
+        messages = [
+          @transcript_hash[:client_hello],
+          @transcript_hash[:server_hello],
+          @transcript_hash[:encrypted_extensions],
+          @transcript_hash[:certificate],
+          @transcript_hash[:certificate_verify],
+          @transcript_hash[:finished],
+        ]
+        @key_schedule.derive_client_application_traffic_secret(messages)
+        @key_schedule.derive_server_application_traffic_secret(messages)
       end
     end
   end
