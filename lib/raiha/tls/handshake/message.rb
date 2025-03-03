@@ -3,7 +3,7 @@ module Raiha
     class Handshake
       class Message
         def serialize
-          raise NotImplementedError
+          raise NoMethodError
         end
 
         def self.deserialize(data:, type:)

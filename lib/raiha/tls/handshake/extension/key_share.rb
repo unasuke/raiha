@@ -136,7 +136,7 @@ module Raiha
           end
 
           private def serialize_for_hello_retry_request
-            raise NotImplementedError
+            raise NoMethodError
           end
 
           private def validate_group_and_key_exchange(group_name, key_exchange)
@@ -153,7 +153,7 @@ module Raiha
               { group: group_name, key_exchange: point.to_octet_string(:uncompressed) }
             else
               # TODO:
-              raise NotImplementedError
+              raise NoMethodError
             end
           end
         end
