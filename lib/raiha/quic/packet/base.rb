@@ -16,7 +16,7 @@ module Raiha::Quic
       end
 
       def parse
-        raise NotImplementedError
+        raise NoMethodError
       end
 
       def bit(name, size:, type: :raw)
@@ -31,7 +31,7 @@ module Raiha::Quic
         @parsed[name.to_sym] = case type
         when :raw then {raw: bits, value: bits}
         when :int then {raw: bits, value: bits.to_i(2)}
-        else raise NotImplementedError
+        else raise NoMethodError
         end
       end
 
@@ -47,7 +47,7 @@ module Raiha::Quic
         @parsed[name.to_sym] = case type
         when :raw then {raw: bits, value: bits}
         when :int then {raw: bits, value: bits.to_i(2)}
-        else raise NotImplementedError
+        else raise NoMethodError
         end
       end
 
