@@ -231,6 +231,7 @@ module Raiha
           inner.content_type = Record::CONTENT_TYPE[:handshake]
         end
         ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
+        @client_cipher.reset_sequence_number
         [ciphertext.serialize]
       end
 
