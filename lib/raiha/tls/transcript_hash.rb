@@ -16,6 +16,11 @@ module Raiha
         @digest.digest
       end
 
+      def empty_digest
+        @digest.reset
+        @digest.digest
+      end
+
       private def values_for_hash
         # TODO: hello_retry_request
         %i(
