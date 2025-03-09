@@ -1,0 +1,8 @@
+module Raiha
+  module TLS
+    class TranscriptHash < Hash[Symbol, String]
+      def digest_algorithm: (String) -> void
+      def hash: () -> String
+    end
+  end
+end

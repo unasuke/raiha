@@ -52,36 +52,29 @@ module Raiha
         @iv_length = OpenSSL::Cipher.new(cipher_suite.aead_algorithm).iv_len
       end
 
-      def derive_secret(secret:, label:, messages: [])
+      def derive_secret(secret:, label:, transcript_hash:)
         digest_length = OpenSSL::Digest.new(@hash_algorithm).digest_length
         case secret
         when :early_secret
           @ikm[:early_secret] = "\x00" * digest_length
           @ikm[:handshake_secret] = \
-            OpenSSL::KDF.hkdf(@ikm[:early_secret], salt: "", info: hkdf_label(digest_length, label, transcript_hash(messages)), length: digest_length, hash: @hash_algorithm)
+            OpenSSL::KDF.hkdf(@ikm[:early_secret], salt: "", info: hkdf_label(digest_length, label, transcript_hash), length: digest_length, hash: @hash_algorithm)
         when :handshake_secret
           raise unless @ikm[:handshake_secret] # TODO: nice error message
           raise unless @shared_secret # TODO: nice error message
 
+          empty_digest = OpenSSL::Digest.new(@hash_algorithm).new.digest
           @salt[:main_secret] = \
-            OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, "derived", transcript_hash([])), length: digest_length, hash: @hash_algorithm)
-          OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, label, transcript_hash(messages)), length: digest_length, hash: @hash_algorithm)
+            OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, "derived", empty_digest), length: digest_length, hash: @hash_algorithm)
+          OpenSSL::KDF.hkdf(@shared_secret, salt: @ikm[:handshake_secret], info: hkdf_label(digest_length, label, transcript_hash), length: digest_length, hash: @hash_algorithm)
         when :main_secret
           @ikm[:main_secret] = "\x00" * digest_length
-          OpenSSL::KDF.hkdf(@ikm[:main_secret], salt: @salt[:main_secret], info: hkdf_label(digest_length, label, transcript_hash(messages)), length: digest_length, hash: @hash_algorithm)
+          OpenSSL::KDF.hkdf(@ikm[:main_secret], salt: @salt[:main_secret], info: hkdf_label(digest_length, label, transcript_hash), length: digest_length, hash: @hash_algorithm)
         end
       end
 
       def hkdf_label(length, label, context)
         [length].pack("n") + ["tls13 #{label}".length].pack("C") + "tls13 #{label}" + [context.length].pack("C") + context
-      end
-
-      def transcript_hash(messages = [])
-        raise unless @hash_algorithm
-        hash = OpenSSL::Digest.new(@hash_algorithm).new
-        # messages.each do |message|
-        hash.update(messages.join)
-        hash.digest
       end
 
       # TODO: not tested yet
@@ -94,12 +87,12 @@ module Raiha
       #   @early_exporter_secret ||= derive_secret(secret: :early_secret, label: "e exp master", messages: [client_hello.serialize])
       # end
 
-      def derive_client_handshake_traffic_secret(messages)
-        @client_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "c hs traffic", messages: messages.map(&:serialize))
+      def derive_client_handshake_traffic_secret(transcript_hash)
+        @client_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "c hs traffic", transcript_hash: transcript_hash)
       end
 
-      def derive_server_handshake_traffic_secret(messages)
-        @server_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "s hs traffic", messages: messages.map(&:serialize))
+      def derive_server_handshake_traffic_secret(transcript_hash)
+        @server_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "s hs traffic", transcript_hash: transcript_hash)
       end
 
       def server_handshake_write_key
@@ -118,14 +111,14 @@ module Raiha
         @client_handshake_write_iv ||= hkdf_expand(prk: @client_handshake_traffic_secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
-      def derive_client_application_traffic_secret(messages)
+      def derive_client_application_traffic_secret(transcript_hash)
         # TODO: generation
-        @client_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "c ap traffic", messages: messages.map(&:serialize))
+        @client_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "c ap traffic", transcript_hash: transcript_hash)
       end
 
-      def derive_server_application_traffic_secret(messages)
+      def derive_server_application_traffic_secret(transcript_hash)
         # TODO: generation
-        @server_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "s ap traffic", messages: messages.map(&:serialize))
+        @server_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "s ap traffic", transcript_hash: transcript_hash)
       end
 
       def client_application_write_key
@@ -164,10 +157,10 @@ module Raiha
       #   @resumption_secret ||= derive_secret(secret: :handshake_secret, label: "res master", messages: messages.map(&:serialize))
       # end
 
-      def finished_verify_data(messages, from: :server)
+      def finished_verify_data(transcript_hash, from: :server)
         key = from == :server ? @server_handshake_traffic_secret : @client_handshake_traffic_secret
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(@hash_algorithm).digest_length)
-        OpenSSL::HMAC.digest(@hash_algorithm, finished_key, transcript_hash(messages))
+        OpenSSL::HMAC.digest(@hash_algorithm, finished_key, transcript_hash)
       end
 
       # @see https://www.rfc-editor.org/rfc/rfc5869#section-2.3

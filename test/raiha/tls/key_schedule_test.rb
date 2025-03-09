@@ -1,6 +1,7 @@
 require "test_helper"
 require "support/rfc8448_test_vector"
 require "raiha/tls/key_schedule"
+require "raiha/tls/transcript_hash"
 require "raiha/tls/handshake"
 require "openssl"
 
@@ -65,20 +66,26 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
     client_key_schedule.compute_shared_secret
     server_key_schedule.compute_shared_secret
 
-    assert_equal client_key_schedule.shared_secret, server_key_schedule.shared_secret
-    assert_equal client_key_schedule.shared_secret, RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_IKM
-    assert_equal server_key_schedule.shared_secret, RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_IKM # double check ;)
+    assert_equal_bin client_key_schedule.shared_secret, server_key_schedule.shared_secret
+    assert_equal_bin client_key_schedule.shared_secret, RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_IKM
+    assert_equal_bin server_key_schedule.shared_secret, RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_IKM # double check ;)
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_derived
+    transcript_hash = ::Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
     end
-    derived = key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    assert_equal RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_DERIVED, derived
+    derived = key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: transcript_hash.hash)
+    assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_DERIVED, derived
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_client_handshake_traffic_secret
+    transcript_hash = ::Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
       ks.pkey = OpenSSL::PKey.new_raw_private_key("x25519", RFC8448_SIMPLE_1RTT_CLIENT_EPHEMERAL_X25519_PRIVATE_KEY)
@@ -88,21 +95,21 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
 
     assert_raises do
       # didn't derive early secret yet
-      key_schedule.derive_client_handshake_traffic_secret([
-          ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-          ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-        ])
+      key_schedule.derive_client_handshake_traffic_secret(transcript_hash.hash)
     end
     key_schedule.compute_shared_secret
-    key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    key_schedule.derive_client_handshake_traffic_secret([
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-    ])
+    key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: transcript_hash.hash)
+
+    transcript_hash[:client_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO
+    transcript_hash[:server_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+    key_schedule.derive_client_handshake_traffic_secret(transcript_hash.hash)
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, key_schedule.client_handshake_traffic_secret
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_server_handshake_traffic_secret
+    transcript_hash = ::Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
       ks.pkey = OpenSSL::PKey.new_raw_private_key("x25519", RFC8448_SIMPLE_1RTT_CLIENT_EPHEMERAL_X25519_PRIVATE_KEY)
@@ -112,23 +119,23 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
 
     assert_raises do
       # didn't derive early secret yet
-      key_schedule.derive_server_handshake_traffic_secret([
-          ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-          ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-        ])
+      key_schedule.derive_server_handshake_traffic_secret(transcript_hash.hash)
     end
     key_schedule.compute_shared_secret
-    key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    key_schedule.derive_server_handshake_traffic_secret([
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-    ])
+    key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: transcript_hash.hash)
+
+    transcript_hash[:client_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO
+    transcript_hash[:server_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+    key_schedule.derive_server_handshake_traffic_secret(transcript_hash.hash)
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_SERVER_HANDSHAKE_TRAFFIC, key_schedule.server_handshake_traffic_secret
     assert_equal_bin RFC8448_SIMPLE_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_KEY, key_schedule.server_handshake_write_key
     assert_equal_bin RFC8448_SIMPLE_1RTT_SERVER_HANDSHAKE_WRITE_TRAFFIC_IV, key_schedule.server_handshake_write_iv
   end
 
   def test_derive_secret_rfc8448_1rtt_handshake_tls13_client_application_traffic_secret_0
+    transcript_hash = ::Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
       ks.pkey = OpenSSL::PKey.new_raw_private_key("x25519", RFC8448_SIMPLE_1RTT_CLIENT_EPHEMERAL_X25519_PRIVATE_KEY)
@@ -137,15 +144,17 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
     end
 
     key_schedule.compute_shared_secret
-    key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    key_schedule.derive_client_handshake_traffic_secret([
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-    ])
+    key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: transcript_hash.hash)
+    transcript_hash[:client_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO
+    transcript_hash[:server_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+    key_schedule.derive_client_handshake_traffic_secret(transcript_hash.hash)
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, key_schedule.client_handshake_traffic_secret
   end
 
   def test_derive_application_traffic_secret_rfc8448_1rtt
+    transcript_hash = ::Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     key_schedule = ::Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
       ks.pkey = OpenSSL::PKey.new_raw_private_key("x25519", RFC8448_SIMPLE_1RTT_CLIENT_EPHEMERAL_X25519_PRIVATE_KEY)
@@ -153,28 +162,22 @@ class RaihaTLSKeyScheduleTest < Minitest::Test
       ks.public_key = RFC8448_SIMPLE_1RTT_SERVER_EPHEMERAL_X25519_PUBLIC_KEY
     end
     key_schedule.compute_shared_secret
-    key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-    key_schedule.derive_client_handshake_traffic_secret([
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-    ])
-    key_schedule.derive_server_handshake_traffic_secret([
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-    ])
+    key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: transcript_hash.hash)
+
+    transcript_hash[:client_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO
+    transcript_hash[:server_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+    key_schedule.derive_client_handshake_traffic_secret(transcript_hash.hash)
+    key_schedule.derive_server_handshake_traffic_secret(transcript_hash.hash)
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_CLIENT_HANDSHAKE_TRAFFIC, key_schedule.client_handshake_traffic_secret
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SECRET_FOR_HANDSHAKE_TLS13_SERVER_HANDSHAKE_TRAFFIC, key_schedule.server_handshake_traffic_secret
 
-    messages = [
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_ENCRYPTED_EXTENSIONS),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_CERTIFICATE),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_CERTIFICATE_VERIFY),
-      ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_FINISHED),
-    ]
-    key_schedule.derive_client_application_traffic_secret(messages)
-    key_schedule.derive_server_application_traffic_secret(messages)
+    transcript_hash[:encrypted_extensions] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_ENCRYPTED_EXTENSIONS
+    transcript_hash[:certificate] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_CERTIFICATE
+    transcript_hash[:certificate_verify] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_CERTIFICATE_VERIFY
+    transcript_hash[:finished] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_FINISHED
+
+    key_schedule.derive_client_application_traffic_secret(transcript_hash.hash)
+    key_schedule.derive_server_application_traffic_secret(transcript_hash.hash)
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_CLIENT_APPLICATION_TRAFFIC_SECRET_0, key_schedule.client_application_traffic_secret[0]
     assert_equal_bin RFC8448_SIMPLE_1RTT_DERIVED_SERVER_APPLICATION_TRAFFIC_SECRET_0, key_schedule.server_application_traffic_secret[0]
     assert_equal_bin RFC8448_SIMPLE_1RTT_SERVER_APPLICATION_WRITE_TRAFFIC_KEY, key_schedule.server_application_write_key

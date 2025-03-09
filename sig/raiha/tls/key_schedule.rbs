@@ -32,19 +32,19 @@ module Raiha
       def initialize: (mode: :client|:server) -> void
       def compute_shared_secret: -> void
       def cipher_suite=: (CipherSuite cipher_suite) -> void
-      def derive_secret: (secret: :early_secret|:handshake_secret|:main_secret, label: String, messages: Array[String]) -> String
+      def derive_secret: (secret: :early_secret|:handshake_secret|:main_secret, label: String, transcript_hash: String) -> String
       def hkdf_label: (Integer length, String label, String context) -> String
 
       def transcript_hash: (Array[String] messages) -> String
       # def derive_binder_key: -> String
       def client_early_traffic_secret: (Raiha::TLS::Handshake client_hello) -> String
       def early_exporter_secret: (Raiha::TLS::Handshake client_hello) -> String
-      def derive_client_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
-      def derive_server_handshake_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def derive_client_handshake_traffic_secret: (String transcript_hash) -> String
+      def derive_server_handshake_traffic_secret: (String transcript_hash) -> String
       def server_handshake_write_key: -> String
       def server_handshake_write_iv: -> String
-      def derive_client_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
-      def derive_server_application_traffic_secret: (Array[Raiha::TLS::Handshake] messages) -> String
+      def derive_client_application_traffic_secret: (String transcript_hash) -> String
+      def derive_server_application_traffic_secret: (String transcript_hash) -> String
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
 
