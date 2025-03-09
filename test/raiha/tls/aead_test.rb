@@ -2,6 +2,7 @@ require "test_helper"
 require "support/rfc8448_test_vector"
 require "raiha/tls/aead"
 require "raiha/tls/handshake"
+require "raiha/tls/transcript_hash"
 
 class RaihaTLSAEADTest < Minitest::Test
   def setup
@@ -35,21 +36,20 @@ class RaihaTLSAEADTest < Minitest::Test
   end
 
   private def setup_key_schedule
+    @transcript_hash = Raiha::TLS::TranscriptHash.new.tap do |th|
+      th.digest_algorithm = "sha256"
+    end
     @key_schedule = Raiha::TLS::KeySchedule.new(mode: :server).tap do |ks|
       ks.cipher_suite = ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
       ks.pkey = OpenSSL::PKey.new_raw_private_key("x25519", RFC8448_SIMPLE_1RTT_SERVER_EPHEMERAL_X25519_PRIVATE_KEY)
       ks.group = "x25519"
       ks.public_key = RFC8448_SIMPLE_1RTT_CLIENT_EPHEMERAL_X25519_PUBLIC_KEY
       ks.compute_shared_secret
-      ks.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-      ks.derive_client_handshake_traffic_secret([
-        ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-        ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-      ])
-      ks.derive_server_handshake_traffic_secret([
-        ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO),
-        ::Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO)
-      ])
+      ks.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.hash)
+      @transcript_hash[:client_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO
+      @transcript_hash[:server_hello] = RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+      ks.derive_client_handshake_traffic_secret(@transcript_hash.hash)
+      ks.derive_server_handshake_traffic_secret(@transcript_hash.hash)
     end
     @cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
   end
