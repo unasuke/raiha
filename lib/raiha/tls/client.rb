@@ -286,7 +286,7 @@ module Raiha
         @key_schedule.public_key = server_key_share.groups.first[:key_exchange]
         @key_schedule.pkey = @pkeys.find { |pkeys| pkeys[:group] == server_key_share.groups.first[:group] }[:pkey]
         @key_schedule.compute_shared_secret
-        @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.hash)
+        @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.empty_digest)
         @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
         @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)
       end
