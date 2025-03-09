@@ -8,7 +8,8 @@ module Raiha
         client = self.new
         begin
           client.connect!
-          client.send("\n\n=====ping=====\n\n")
+          client.send("\n\n=====ping from client=====\n\n")
+          client.read
         ensure
           client.close
         end
@@ -35,6 +36,11 @@ module Raiha
             next
           end
         end
+      end
+
+      def read
+        response = @socket.recvmsg
+        @client.receive(response.first)
       end
 
       def close
