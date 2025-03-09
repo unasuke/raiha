@@ -71,6 +71,8 @@ module Raiha
             receive_certificate_verify
           when State::WAIT_FINISHED
             receive_finished
+          when State::CONNECTED
+            receive_application_data
           else
             # TODO: WIP
           end
@@ -225,6 +227,7 @@ module Raiha
         end
         ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
         @client_cipher.reset_sequence_number
+        @server_cipher.reset_sequence_number
         [ciphertext.serialize]
       end
 
@@ -241,6 +244,19 @@ module Raiha
         end
         ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :application)
         ciphertext.serialize
+      end
+
+      def receive_application_data
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          next if received.plaintext?
+
+          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :application)
+          pp received
+          pp inner_plaintext
+        end
       end
 
       private def transition_state(state)

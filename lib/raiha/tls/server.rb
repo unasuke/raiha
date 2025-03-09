@@ -48,6 +48,8 @@ module Raiha
           select_parameters
         when State::NEGOTIATED
           receive_finished
+        when State::CONNECTED
+          receive_application_data
         end
       end
 
@@ -215,6 +217,7 @@ module Raiha
             verify_finished(finished)
             transition_state(State::CONNECTED)
             @server_cipher.reset_sequence_number
+            @client_cipher.reset_sequence_number
           end
         end
       end
@@ -232,6 +235,19 @@ module Raiha
         end
         ciphertext = @server_cipher.encrypt(plaintext: innerplaintext, phase: :application)
         ciphertext.serialize
+      end
+
+      def receive_application_data
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          next if received.plaintext?
+
+          inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :application)
+          pp received
+          pp inner_plaintext
+        end
       end
 
       private def transition_state(state)

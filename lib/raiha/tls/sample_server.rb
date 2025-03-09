@@ -10,6 +10,7 @@ module Raiha
         begin
           server.connect!
           server.send("\n\n=====ping from server=====\n\n")
+          server.read
         ensure
           server.close
         end
@@ -42,6 +43,11 @@ module Raiha
             next
           end
         end
+      end
+
+      def read
+        response = @connection.recvmsg
+        @server.receive(response.first)
       end
 
       def close
