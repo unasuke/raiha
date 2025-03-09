@@ -5,6 +5,7 @@ require_relative "record"
 require_relative "handshake"
 require_relative "key_schedule"
 require_relative "aead"
+require_relative "transcript_hash"
 require_relative "../crypto_util"
 
 module Raiha
@@ -33,7 +34,7 @@ module Raiha
         @received = []
         @extensions = {}
         @key_schedule = KeySchedule.new(mode: :server)
-        @transcript_hash = {}
+        @transcript_hash = TranscriptHash.new
         @server_certificate = OpenSSL::X509::Certificate.load_file(File.expand_path("../../../tmp/server.crt", __dir__)).first # TODO
         @server_private_key = OpenSSL::PKey::RSA.new(File.read(File.expand_path("../../../tmp/server.key", __dir__))) # TODO
       end
@@ -72,7 +73,7 @@ module Raiha
 
           if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ClientHello)
             @client_hello = received.fragment.message
-            @transcript_hash[:client_hello] = received.fragment
+            @transcript_hash[:client_hello] = received.fragment.serialize
             @extensions[:client_hello] = received.fragment.message.extensions
             break
           else
@@ -84,6 +85,7 @@ module Raiha
 
       def choose_cipher_suite
         @cipher_suite = @client_hello.cipher_suites.find(&:supported?)
+        @transcript_hash.digest_algorithm = @cipher_suite.hash_algorithm
       end
 
       def choose_group
@@ -112,12 +114,19 @@ module Raiha
           hs.message = Handshake::ServerHello.build_from_client_hello(@client_hello).tap do |sh|
             sh.extensions += [
               Handshake::Extension::KeyShare.new(on: :server_hello).tap do |ks|
-                ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].raw_public_key }] # TODO: x25519 (OpenSSL::PKey::PKey) only
+                # TODO: ugly
+                if @pkey[:group] == "x25519"
+                  ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].raw_public_key }] # TODO: x25519 (OpenSSL::PKey::PKey) only
+                elsif @pkey[:group] == "prime256v1"
+                  ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].public_key.to_octet_string(:uncompressed) }]
+                else
+                  raise "TODO: #{@pkey[:group]}"
+                end
               end
             ]
           end
         end
-        @transcript_hash[:server_hello] = handshake
+        @transcript_hash[:server_hello] = handshake.serialize
         @server_hello = handshake.message
         setup_key_schedule
         setup_cipher
@@ -135,8 +144,7 @@ module Raiha
             ]
           end
         end
-        @transcript_hash[:encrypted_extensions] = handshake
-
+        @transcript_hash[:encrypted_extensions] = handshake.serialize
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -152,7 +160,7 @@ module Raiha
             cert.opaque_certificate_data = @server_certificate.to_der
           end
         end
-        @transcript_hash[:certificate] = handshake
+        @transcript_hash[:certificate] = handshake.serialize
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -165,15 +173,10 @@ module Raiha
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:certificate_verify]
           hs.message = Handshake::CertificateVerify.new.tap do |cv|
             cv.algorithm = "rsa_pss_rsae_sha256"
-            cv.sign(@server_private_key, [
-              @transcript_hash[:client_hello].serialize,
-              @transcript_hash[:server_hello].serialize,
-              @transcript_hash[:encrypted_extensions].serialize,
-              @transcript_hash[:certificate].serialize,
-            ], "TLS 1.3, server CertificateVerify")
+            cv.sign(@server_private_key, @transcript_hash.hash, "TLS 1.3, server CertificateVerify")
           end
         end
-        @transcript_hash[:certificate_verify] = handshake
+        @transcript_hash[:certificate_verify] = handshake.serialize
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -185,17 +188,11 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:finished]
           hs.message = Handshake::Finished.new.tap do |fin|
-            fin.verify_data = finished_verify_data([
-              @transcript_hash[:client_hello].serialize,
-              @transcript_hash[:server_hello].serialize,
-              @transcript_hash[:encrypted_extensions].serialize,
-              @transcript_hash[:certificate].serialize,
-              @transcript_hash[:certificate_verify].serialize,
-            ], @key_schedule.server_handshake_traffic_secret)
+            fin.verify_data = finished_verify_data(@key_schedule.server_handshake_traffic_secret)
           end
         end
 
-        @transcript_hash[:finished] = handshake
+        @transcript_hash[:finished] = handshake.serialize
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -255,9 +252,9 @@ module Raiha
         @key_schedule.public_key = @client_hello.key_share.groups.find { |g| g[:group] == @pkey[:group] }[:key_exchange]
         @key_schedule.pkey = @pkey[:pkey]
         @key_schedule.compute_shared_secret
-        @key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-        @key_schedule.derive_client_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
-        @key_schedule.derive_server_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
+        @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.hash)
+        @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
+        @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)
       end
 
       private def setup_cipher
@@ -265,35 +262,19 @@ module Raiha
         @client_cipher = AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule, mode: :client)
       end
 
-      private def finished_verify_data(messages, key)
+      private def finished_verify_data(key)
         # TODO: don't hardcode hash algorithm
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
-        OpenSSL::HMAC.digest("sha256", finished_key, @key_schedule.transcript_hash(messages))
+        OpenSSL::HMAC.digest("sha256", finished_key, @transcript_hash.hash)
       end
 
       private def verify_finished(finished)
-        messages = [
-          @transcript_hash[:client_hello].serialize,
-          @transcript_hash[:server_hello].serialize,
-          @transcript_hash[:encrypted_extensions].serialize,
-          @transcript_hash[:certificate].serialize,
-          @transcript_hash[:certificate_verify].serialize,
-          @transcript_hash[:finished].serialize,
-        ]
-        raise unless finished.message.verify_data == finished_verify_data(messages, @key_schedule.client_handshake_traffic_secret)
+        raise unless finished.message.verify_data == finished_verify_data(@key_schedule.client_handshake_traffic_secret)
       end
 
       private def derive_application_traffic_secrets
-        messages = [
-          @transcript_hash[:client_hello],
-          @transcript_hash[:server_hello],
-          @transcript_hash[:encrypted_extensions],
-          @transcript_hash[:certificate],
-          @transcript_hash[:certificate_verify],
-          @transcript_hash[:finished],
-        ]
-        @key_schedule.derive_client_application_traffic_secret(messages)
-        @key_schedule.derive_server_application_traffic_secret(messages)
+        @key_schedule.derive_client_application_traffic_secret(@transcript_hash.hash)
+        @key_schedule.derive_server_application_traffic_secret(@transcript_hash.hash)
       end
     end
   end

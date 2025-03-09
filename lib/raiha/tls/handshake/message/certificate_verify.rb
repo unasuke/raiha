@@ -73,28 +73,21 @@ module Raiha
           buf << signature
         end
 
-        def sign(private_key, messages, context)
-          @signature = private_key.sign_pss("sha256", signed_data(messages, context), salt_length: :digest, mgf1_hash: "sha256")
+        def sign(private_key, transcript_hash, context)
+          @signature = private_key.sign_pss("sha256", signed_data(transcript_hash, context), salt_length: :digest, mgf1_hash: "sha256")
         end
 
-        def verify_signature(certificate_message, messages, context)
+        def verify_signature(certificate, transcript_hash, context)
           case algorithm
           when "rsa_pss_rsae_sha256"
-            certificate_message.certificate.public_key.verify_pss("sha256", signature, signed_data(messages, context), salt_length: :auto, mgf1_hash: "sha256")
+            certificate.public_key.verify_pss("sha256", signature, signed_data(transcript_hash, context), salt_length: :auto, mgf1_hash: "sha256")
           else
             raise "TODO: #{algorithm} is not supported (yet)"
           end
         end
 
-        private def signed_data(messages, context)
-          ("\x20" * 64) + context + "\x00" + transcript_hash(messages)
-        end
-
-        private def transcript_hash(messages)
-          # TODO: sha256 is hardcoded, move to somewhere
-          hash = OpenSSL::Digest.new("sha256").new
-          hash.update(messages.join)
-          hash.digest
+        private def signed_data(transcript_hash, context)
+          ("\x20" * 64) + context + "\x00" + transcript_hash
         end
       end
     end

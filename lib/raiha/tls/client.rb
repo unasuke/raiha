@@ -5,6 +5,7 @@ require_relative "record"
 require_relative "handshake"
 require_relative "key_schedule"
 require_relative "aead"
+require_relative "transcript_hash"
 require_relative "../crypto_util"
 
 module Raiha
@@ -29,7 +30,7 @@ module Raiha
         @state = State::START
         @buffer = []
         @supported_groups = []
-        @transcript_hash = {}
+        @transcript_hash = TranscriptHash.new
         @client_hello = nil
         @server_hello = nil
         @received = []
@@ -90,11 +91,10 @@ module Raiha
           # TODO: HelloRetryRequest
           if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ServerHello)
             @server_hello = received.fragment.message
-            @transcript_hash[:server_hello] = received.fragment
+            @transcript_hash[:server_hello] = received.fragment.serialize
             break
           end
         end
-
         if valid_server_hello?
           setup_key_schedule
           setup_cipher
@@ -126,7 +126,7 @@ module Raiha
           encrypted_extensions = handshakes.find { |hs| hs.message.is_a?(Handshake::EncryptedExtensions) }
 
           if encrypted_extensions
-            @transcript_hash[:encrypted_extensions] = encrypted_extensions
+            @transcript_hash[:encrypted_extensions] = encrypted_extensions.serialize
             transition_state(State::WAIT_CERT_CR)
             break
           end
@@ -147,7 +147,8 @@ module Raiha
           # certificate_request = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateRequest) }
           certificate = handshakes.find { |hs| hs.message.is_a?(Handshake::Certificate) }
           if certificate
-            @transcript_hash[:certificate] = certificate
+            @peer_certificate = certificate.message.certificate
+            @transcript_hash[:certificate] = certificate.serialize
             transition_state(State::WAIT_CV)
             break
           end
@@ -168,7 +169,7 @@ module Raiha
           certificate_verify = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateVerify) }
           if certificate_verify
             verify_certificate_verify(certificate_verify)
-            @transcript_hash[:certificate_verify] = certificate_verify
+            @transcript_hash[:certificate_verify] = certificate_verify.serialize
             transition_state(State::WAIT_FINISHED)
             break
           end
@@ -188,7 +189,7 @@ module Raiha
           finished = handshakes.find { |hs| hs.message.is_a?(Handshake::Finished) }
           if finished
             verify_finished(finished)
-            @transcript_hash[:finished] = finished
+            @transcript_hash[:finished] = finished.serialize
             derive_application_traffic_secrets
             transition_state(State::WAIT_SEND_FINISHED)
             respond_to_finished
@@ -204,23 +205,15 @@ module Raiha
         end
         hs_clienthello.message.setup_key_share(@pkeys)
         @client_hello = hs_clienthello.message
-        @transcript_hash[:client_hello] = hs_clienthello
+        @transcript_hash.digest_algorithm = @client_hello.cipher_suites.first.hash_algorithm
+        @transcript_hash[:client_hello] = hs_clienthello.serialize
         # hs_clienthello.serialize
         Record::TLSPlaintext.serialize(hs_clienthello)
       end
 
       def respond_to_finished
         finished = Handshake::Finished.new.tap do |fin|
-          fin.verify_data = finished_verify_data(
-            [
-              @transcript_hash[:client_hello].serialize,
-              @transcript_hash[:server_hello].serialize,
-              @transcript_hash[:encrypted_extensions].serialize,
-              @transcript_hash[:certificate].serialize,
-              @transcript_hash[:certificate_verify].serialize,
-              @transcript_hash[:finished].serialize,
-            ], @key_schedule.client_handshake_traffic_secret
-          )
+          fin.verify_data = finished_verify_data(@key_schedule.client_handshake_traffic_secret)
         end
         hs_finished = Raiha::TLS::Handshake.new.tap do |hs|
           hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:finished]
@@ -293,9 +286,9 @@ module Raiha
         @key_schedule.public_key = server_key_share.groups.first[:key_exchange]
         @key_schedule.pkey = @pkeys.find { |pkeys| pkeys[:group] == server_key_share.groups.first[:group] }[:pkey]
         @key_schedule.compute_shared_secret
-        @key_schedule.derive_secret(secret: :early_secret, label: "derived", messages: [""])
-        @key_schedule.derive_client_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
-        @key_schedule.derive_server_handshake_traffic_secret([@transcript_hash[:client_hello], @transcript_hash[:server_hello]])
+        @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.hash)
+        @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
+        @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)
       end
 
       private def setup_cipher
@@ -305,13 +298,8 @@ module Raiha
 
       private def verify_certificate_verify(certificate_verify)
         raise unless certificate_verify.message.verify_signature(
-          @transcript_hash[:certificate].message,
-          [
-            @transcript_hash[:client_hello].serialize,
-            @transcript_hash[:server_hello].serialize,
-            @transcript_hash[:encrypted_extensions].serialize,
-            @transcript_hash[:certificate].serialize,
-          ],
+          @peer_certificate,
+          @transcript_hash.hash,
           "TLS 1.3, server CertificateVerify"
         )
       end
@@ -319,33 +307,18 @@ module Raiha
       private def verify_finished(finished)
         # CryptoUtil.hkdf_expand_label("secret", "finished", context, length)
         # finished_key  = @key_schedule.hkdf_expand()
-        messages = [
-          @transcript_hash[:client_hello].serialize,
-          @transcript_hash[:server_hello].serialize,
-          @transcript_hash[:encrypted_extensions].serialize,
-          @transcript_hash[:certificate].serialize,
-          @transcript_hash[:certificate_verify].serialize,
-        ]
-        raise unless finished.message.verify_data == finished_verify_data(messages, @key_schedule.server_handshake_traffic_secret)
+        raise unless finished.message.verify_data == finished_verify_data(@key_schedule.server_handshake_traffic_secret)
       end
 
       private def derive_application_traffic_secrets
-        messages = [
-          @transcript_hash[:client_hello],
-          @transcript_hash[:server_hello],
-          @transcript_hash[:encrypted_extensions],
-          @transcript_hash[:certificate],
-          @transcript_hash[:certificate_verify],
-          @transcript_hash[:finished],
-        ]
-        @key_schedule.derive_client_application_traffic_secret(messages)
-        @key_schedule.derive_server_application_traffic_secret(messages)
+        @key_schedule.derive_client_application_traffic_secret(@transcript_hash.hash)
+        @key_schedule.derive_server_application_traffic_secret(@transcript_hash.hash)
       end
 
-      private def finished_verify_data(messages, key)
+      private def finished_verify_data(key)
         # TODO: don't hardcode hash algorithm
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
-        OpenSSL::HMAC.digest("sha256", finished_key, @key_schedule.transcript_hash(messages))
+        OpenSSL::HMAC.digest("sha256", finished_key, @transcript_hash.hash)
       end
     end
   end
