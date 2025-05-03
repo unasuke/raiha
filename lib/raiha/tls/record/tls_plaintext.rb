@@ -3,6 +3,7 @@ require_relative "../record"
 require_relative "../change_cipher_spec"
 require_relative "../application_data"
 require_relative "../handshake"
+require_relative "../alert"
 
 module Raiha
   module TLS
@@ -42,6 +43,8 @@ module Raiha
             case content
             when Handshake
               buf << [CONTENT_TYPE[:handshake]].pack("C")
+            when Alert::ErrorAlert, Alert::ClosureAlert
+              buf << [CONTENT_TYPE[:alert]].pack("C")
             else
               raise "TODO #{content.class}"
             end
