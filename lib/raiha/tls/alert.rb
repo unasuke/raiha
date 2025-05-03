@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../../tls"
+require_relative "../tls"
 
 module Raiha
   module TLS
@@ -61,11 +61,18 @@ module Raiha
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#section-6
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#appendix-B.2
         def initialize(kind:, level: :fatal)
-          raise ArgumentError, "Unknown error kind #{kind}" unless KINDS.keys.include?(kind)
+          raise ArgumentError, "Unknown error kind #{kind}" unless self.class::KINDS.keys.include?(kind)
           raise ArgumentError, "Unknown alert level #{level}" unless %i(warning fatal).include?(level)
 
           @kind = kind
           @level = level
+        end
+
+        def serialize
+          buf = String.new(encoding: "BINARY")
+          buf << [(@level == :warning ? 1 : 2)].pack("C")
+          buf << [self.class::KINDS[@kind]].pack("C")
+          buf
         end
       end
 
