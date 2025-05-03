@@ -60,9 +60,10 @@ module Raiha
         # @raise [ArgumentError] if kind or level are unexpected, raises +ArgumentError+
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#section-6
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#appendix-B.2
-        def initialize(kind:, level:)
+        def initialize(kind:, level: :fatal)
           raise ArgumentError, "Unknown error kind #{kind}" unless KINDS.keys.include?(kind)
-          raise ArgumentError, "Unknown alert level #{kind}" unless %i(warning fatal).include?(level)
+          raise ArgumentError, "Unknown alert level #{level}" unless %i(warning fatal).include?(level)
+
           @kind = kind
           @level = level
         end
