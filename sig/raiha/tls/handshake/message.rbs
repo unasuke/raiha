@@ -7,10 +7,11 @@ module Raiha
       end
 
       class ClientHello < Message
-        LEGACY_VERSION: Array[Integer]
+        LEGACY_VERSION: "\x03\x03"
         TLS13_SUPPORTED_VERSION: Array[Integer]
 
         attr_accessor random: String
+        attr_accessor legacy_version: String
         attr_accessor legacy_session_id: Integer
         attr_accessor cipher_suites: Array[CipherSuite]
         attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension::AbstractExtension|::Raiha::TLS::Handshake::Extension]

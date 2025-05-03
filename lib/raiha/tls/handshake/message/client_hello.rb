@@ -20,10 +20,11 @@ module Raiha
       #   } ClientHello;
       # @see https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.2
       class ClientHello < Message
-        LEGACY_VERSION = [0x03, 0x03]
+        LEGACY_VERSION = "\x03\x03"
         TLS13_SUPPORTED_VERSION = [0x03, 0x04]
 
         attr_accessor :random
+        attr_accessor :legacy_version
         attr_accessor :legacy_session_id
         attr_accessor :cipher_suites
         attr_accessor :legacy_compression_methods
@@ -31,6 +32,7 @@ module Raiha
 
         def self.build
           ch = self.new
+          ch.legacy_version = LEGACY_VERSION
           ch.random = SecureRandom.random_bytes(32)
           ch.legacy_session_id = ""
           ch.cipher_suites = [
@@ -46,7 +48,7 @@ module Raiha
         def self.deserialize(data)
           ch = self.new
           buf = StringIO.new(data)
-          buf.read(2) # legacy version
+          ch.legacy_version = buf.read(2)
           ch.random = buf.read(32)
           legacy_session_id_length = buf.read(1).unpack1("C") # 0xc00
           ch.legacy_session_id = buf.read(legacy_session_id_length)
@@ -74,7 +76,7 @@ module Raiha
 
         def serialize
           buf = String.new(encoding: "BINARY")
-          buf << LEGACY_VERSION.pack("C*")
+          buf << LEGACY_VERSION
           buf << random
           buf << [legacy_session_id.bytesize].pack("C")
           buf << legacy_session_id
@@ -102,6 +104,10 @@ module Raiha
 
         def key_share
           @extensions.find { |ext| ext.is_a?(Extension::KeyShare) }
+        end
+
+        def valid_legacy_version?
+          legacy_version == LEGACY_VERSION
         end
       end
     end
