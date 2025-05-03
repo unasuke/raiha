@@ -2,6 +2,7 @@ require "test_helper"
 require "support/rfc8448_test_vector"
 require "raiha/tls/handshake"
 require "raiha/tls/record"
+require "raiha/tls/alert"
 
 class RaihaTLSRecordTest < Minitest::Test
   OPENSSL_HANDSHAKE_RESPONSE_SAMPLE = [<<~SAMPLE.gsub(/[[:space:]]/, '')].pack("H*")
@@ -55,12 +56,18 @@ class RaihaTLSRecordTest < Minitest::Test
     ad ad 25 d6 12 00 1b 00 05 04 00 01 00 03
   SAMPLE
 
-  def test_tlsplaintext_serialize
+  def test_tlsplaintext_serialize_handshake_message
     handshake = Raiha::TLS::Handshake.new.tap do |hs|
       hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
       hs.message = Raiha::TLS::Handshake::ClientHello.build
     end
     record = Raiha::TLS::Record::TLSPlaintext.serialize(handshake)
+    assert_equal 1, record.size
+  end
+
+  def test_tlsplaintext_serialize_alert
+    alert = Raiha::TLS::Alert::ErrorAlert.new(kind: :illegal_parameter)
+    record = Raiha::TLS::Record::TLSPlaintext.serialize(alert)
     assert_equal 1, record.size
   end
 
