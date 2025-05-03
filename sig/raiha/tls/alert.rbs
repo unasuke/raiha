@@ -2,6 +2,8 @@ module Raiha
   module TLS
     class Alert
       class Base
+        KINDS: Hash[Symbol, Integer]
+
         attr_reader kind: Symbol
         attr_reader level: Symbol
 
