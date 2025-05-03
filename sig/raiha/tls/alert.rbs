@@ -5,7 +5,7 @@ module Raiha
         attr_reader kind: Symbol
         attr_reader level: Symbol
 
-        def initialize: (kind: Symbol, level: Symbol) -> void
+        def initialize: (kind: Symbol, ?level: Symbol) -> void
       end
 
       class ClosureAlert < Base
