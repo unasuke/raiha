@@ -55,14 +55,12 @@ module Raiha
         attr_reader :kind
         attr_reader :level
 
-        # @param error_message [String] Message of the error
         # @param kind [Symbol] Alert kind.
         # @param level [Symbol] Alert level. Accepts +:warning+ or +:fatal+
         # @raise [ArgumentError] if kind or level are unexpected, raises +ArgumentError+
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#section-6
         # @see https://www.rfc-editor.org/rfc/rfc8446.html#appendix-B.2
-        def initialize(error_message, kind:, level:)
-          super(error_message)
+        def initialize(kind:, level:)
           raise ArgumentError, "Unknown error kind #{kind}" unless KINDS.keys.include?(kind)
           raise ArgumentError, "Unknown alert level #{kind}" unless %i(warning fatal).include?(level)
           @kind = kind
