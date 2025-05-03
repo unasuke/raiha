@@ -44,4 +44,13 @@ class RaihaTLSHandshakeClientHelloTest < Minitest::Test
     serialized = ch.serialize_extensions
     assert_equal String, serialized.class
   end
+
+  def test_valid_legacy_version?
+    valid_ch = Raiha::TLS::Handshake::ClientHello.build
+    assert valid_ch.valid_legacy_version?
+
+    invalid_ch = Raiha::TLS::Handshake::ClientHello.build
+    invalid_ch.legacy_version = "\x03\x04"
+    refute invalid_ch.valid_legacy_version?
+  end
 end
