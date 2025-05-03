@@ -12,7 +12,7 @@ module Raiha
       #   @return [Symbol] Alert kind
       # @!attribute [r] level
       #   @return [Symbol] Alert level. +:warning+ or +:fatal+
-      class Base < ::Raiha::TLS::TLSError
+      class Base
         attr_reader :kind
         attr_reader :level
 
