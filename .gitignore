@@ -9,3 +9,5 @@
 
 .ruby-version
 .gem_rbs_collection/
+
+*.pcap
