@@ -1,0 +1,20 @@
+module Raiha
+  module TLS
+    class Alert
+      class Base
+        attr_reader kind: Symbol
+        attr_reader level: Symbol
+
+        def initialize: (kind: Symbol, level: Symbol) -> void
+      end
+
+      class ClosureAlert < Base
+        KINDS: Hash[Symbol, Integer]
+      end
+
+      class ErrorAlert < Base
+        KINDS: Hash[Symbol, Integer]
+      end
+    end
+  end
+end 
