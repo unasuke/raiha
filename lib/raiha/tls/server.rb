@@ -271,7 +271,7 @@ module Raiha
       end
 
       private def transition_state(state)
-        if state == State::ERROR_OCCURED
+        if state == State::ERROR_OCCURED || @state == State::ERROR_OCCURED
           @state = state
           return
         end
