@@ -11,6 +11,7 @@ module Raiha
         WAIT_CV: :WAIT_CV
         WAIT_FINISHED: :WAIT_FINISHED
         CONNECTED: :CONNECTED
+        ERROR_OCCURED: :ERROR_OCCURED
       end
 
       @state: Symbol

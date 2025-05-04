@@ -7,6 +7,7 @@ require_relative "key_schedule"
 require_relative "aead"
 require_relative "transcript_hash"
 require_relative "../crypto_util"
+require_relative "alert"
 
 module Raiha
   module TLS
@@ -21,6 +22,7 @@ module Raiha
         WAIT_CV = :WAIT_CV
         WAIT_FINISHED = :WAIT_FINISHED
         CONNECTED = :CONNECTED
+        ERROR_OCCURED = :ERROR_OCCURED
       end
 
       attr_reader :state
@@ -63,9 +65,15 @@ module Raiha
             build_certificate_verify,
             build_finished,
           ].flatten
+        when State::ERROR_OCCURED
+          @buffer.tap do
+            transition_state(State::START)
+          end
         else
           # TODO: WIP
         end
+      ensure
+        @buffer = []
       end
 
       def receive_client_hello
@@ -82,7 +90,15 @@ module Raiha
             # TODO: not a client hello
           end
         end
-        transition_state(State::RECVD_CH)
+        if @client_hello
+          if !@client_hello.valid_legacy_version?
+            @buffer << build_error_alert(Alert::ErrorAlert.new(kind: :illegal_parameter))
+            transition_state(State::ERROR_OCCURED)
+          else
+            # valid client hello
+            transition_state(State::RECVD_CH)
+          end
+        end
       end
 
       def choose_cipher_suite
@@ -108,6 +124,10 @@ module Raiha
         end
 
         choose_group
+      end
+
+      def build_error_alert(alert)
+        Record::TLSPlaintext.serialize(alert)
       end
 
       def build_server_hello
@@ -251,6 +271,11 @@ module Raiha
       end
 
       private def transition_state(state)
+        if state == State::ERROR_OCCURED
+          @state = state
+          return
+        end
+
         if @state == State::START && state == State::RECVD_CH
           @state = state
         elsif @state == State::RECVD_CH && state == State::NEGOTIATED
