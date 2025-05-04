@@ -19,5 +19,7 @@ class RaihaTLSServerTest < Minitest::Test
     client_request[0][9..10] = "\x03\x04" # Replace clienthello version to invalid legacy version, too hardcorded...
     server.receive(client_request.join)
     assert_equal Raiha::TLS::Server::State::ERROR_OCCURED, server.state
+    _response = server.datagrams_to_send
+    assert_equal Raiha::TLS::Server::State::START, server.state
   end
 end
