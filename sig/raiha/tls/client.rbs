@@ -1,6 +1,6 @@
 module Raiha
   module TLS
-    class Client
+    class Client < Peer
       module State
         START: :START
         WAIT_SH: :WAIT_SH

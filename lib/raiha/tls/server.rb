@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "context"
+require_relative "peer"
 require_relative "record"
 require_relative "handshake"
 require_relative "key_schedule"
@@ -11,7 +12,7 @@ require_relative "alert"
 
 module Raiha
   module TLS
-    class Server < Context
+    class Server < Peer
       module State
         START = :START
         RECVD_CH = :RECVD_CH
