@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "context"
+require_relative "peer"
 require_relative "record"
 require_relative "handshake"
 require_relative "key_schedule"
@@ -10,7 +11,7 @@ require_relative "../crypto_util"
 
 module Raiha
   module TLS
-    class Client < Context
+    class Client < Peer
       module State
         START = :START
         WAIT_SH = :WAIT_SH
