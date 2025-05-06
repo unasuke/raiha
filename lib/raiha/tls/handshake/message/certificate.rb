@@ -36,10 +36,23 @@ module Raiha
         attr_accessor :certificate_request_context
         attr_accessor :opaque_certificate_data
         attr_accessor :extensions
+        attr_accessor :certificate_entries
+
+        # TODO: use Hash or Data?
+        class CertificateEntry
+          attr_accessor :opaque_certificate_data
+          attr_accessor :extensions
+
+          def initialize(opaque_certificate_data:, extensions:)
+            @opaque_certificate_data = opaque_certificate_data
+            @extensions = extensions
+          end
+        end
 
         def initialize
           @certificate_request_context = ""
-          @extensions = []
+          @certificate_entries = []
+          @certificates = []
         end
 
         def self.deserialize(data)
@@ -52,10 +65,16 @@ module Raiha
           certificate_list = buf.read(certificate_list_length)
 
           certificate_list_buf = StringIO.new(certificate_list)
-          cert_length = ("\x00" + certificate_list_buf.read(3)).unpack1("L>")
-          cert.opaque_certificate_data = certificate_list_buf.read(cert_length)
-          extension_length = certificate_list_buf.read(2).unpack1("n")
-          cert.extensions = Handshake::Extension.deserialize_extensions(certificate_list_buf.read(extension_length), type: :server)
+          loop do
+            break if certificate_list_buf.eof?
+
+            cert_length = ("\x00" + certificate_list_buf.read(3)).unpack1("L>")
+            opaque_certificate_data = certificate_list_buf.read(cert_length)
+            extension_length = certificate_list_buf.read(2).unpack1("n")
+            extensions = Handshake::Extension.deserialize_extensions(certificate_list_buf.read(extension_length), type: :server)
+            cert.certificate_entries << CertificateEntry.new(opaque_certificate_data: opaque_certificate_data, extensions: extensions)
+          end
+
           raise if !certificate_list_buf.eof? || !buf.eof?
 
           cert
@@ -65,22 +84,30 @@ module Raiha
           buf = String.new(encoding: "BINARY")
           buf << [certificate_request_context.bytesize].pack("C")
           buf << certificate_request_context
+
           certificate_list = ""
-          certificate_list += [opaque_certificate_data.bytesize].pack("L>")[1..]
-          certificate_list += opaque_certificate_data
-          certificate_list += serialize_extensions
+          @certificate_entries.each do |entry|
+            certificate_list += [entry.opaque_certificate_data.bytesize].pack("L>")[1..]
+            certificate_list += entry.opaque_certificate_data
+            certificate_list += serialize_extensions(entry.extensions)
+          end
+
           buf << [certificate_list.bytesize].pack("L>")[1..]
           buf << certificate_list
         end
 
-        def serialize_extensions
+        def serialize_extensions(extensions)
           # TODO: move to abstract class?
           buf = extensions.map(&:serialize).join
           [buf.bytesize].pack("n") + buf
         end
 
-        def certificate
-          @certificate ||= OpenSSL::X509::Certificate.new(opaque_certificate_data)
+        def certificates
+          if @certificates.length != @certificate_entries.length
+            @certificates = @certificate_entries.map { |entry| OpenSSL::X509::Certificate.new(entry.opaque_certificate_data) }
+          else
+            @certificates
+          end
         end
       end
     end

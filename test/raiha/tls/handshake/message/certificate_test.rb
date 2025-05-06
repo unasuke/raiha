@@ -8,8 +8,9 @@ class RaihaTLSHandshakeCertificateTest < Minitest::Test
     handshake = Raiha::TLS::Handshake.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_CERTIFICATE)
     assert_equal Raiha::TLS::Handshake::Certificate, handshake.message.class
     assert_equal "", handshake.message.certificate_request_context
-    assert_equal 0, handshake.message.extensions.length
-    assert_equal OpenSSL::X509::Certificate, OpenSSL::X509::Certificate.new(handshake.message.opaque_certificate_data).class
+    assert_equal 1, handshake.message.certificate_entries.length
+    assert_equal 0, handshake.message.certificate_entries.first.extensions.length
+    assert_equal OpenSSL::X509::Certificate, OpenSSL::X509::Certificate.new(handshake.message.certificates.first).class
   end
 
   def test_serialize_rfc8448
@@ -22,14 +23,17 @@ class RaihaTLSHandshakeCertificateTest < Minitest::Test
     handshake = Raiha::TLS::Handshake.new.tap do |hs|
       hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:certificate]
       hs.message = Raiha::TLS::Handshake::Certificate.new.tap do |cv|
-        cv.opaque_certificate_data = cert.to_der
+        cv.certificate_entries << Raiha::TLS::Handshake::Certificate::CertificateEntry.new(
+          opaque_certificate_data: cert.to_der,
+          extensions: []
+        )
       end
     end
 
     serialized = handshake.serialize
     deserialized = Raiha::TLS::Handshake.deserialize(serialized)
     assert_equal Raiha::TLS::Handshake::Certificate, deserialized.message.class
-    assert_equal cert.to_der, deserialized.message.opaque_certificate_data
+    assert_equal cert.to_der, deserialized.message.certificate_entries.first.opaque_certificate_data
     assert_equal_bin deserialized.serialize, serialized
   end
 
