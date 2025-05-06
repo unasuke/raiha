@@ -180,7 +180,10 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:certificate]
           hs.message = Handshake::Certificate.new.tap do |cert|
-            cert.opaque_certificate_data = @server_certificate.to_der
+            cert.certificate_entries << Handshake::Certificate::CertificateEntry.new(
+              opaque_certificate_data: @server_certificate.to_der,
+              extensions: []
+            )
           end
         end
         @transcript_hash[:certificate] = handshake.serialize

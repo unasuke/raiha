@@ -150,7 +150,7 @@ module Raiha
           # certificate_request = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateRequest) }
           certificate = handshakes.find { |hs| hs.message.is_a?(Handshake::Certificate) }
           if certificate
-            @peer_certificate = certificate.message.certificate
+            @peer_certificates = certificate.message.certificates
             @transcript_hash[:certificate] = certificate.serialize
             transition_state(State::WAIT_CV)
             break
@@ -315,7 +315,7 @@ module Raiha
 
       private def verify_certificate_verify(certificate_verify)
         raise unless certificate_verify.message.verify_signature(
-          @peer_certificate,
+          @peer_certificates.first, # TODO: Check certificate common name
           @transcript_hash.hash,
           "TLS 1.3, server CertificateVerify"
         )
