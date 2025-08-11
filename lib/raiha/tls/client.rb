@@ -40,6 +40,7 @@ module Raiha
         @pkeys = @groups.map { |group| { group: group, pkey: OpenSSL::PKey::EC.generate(group) } }
         @server_cipher = nil
         @client_cipher = nil
+        @current_phase = :handshake
       end
 
       def datagrams_to_send
@@ -59,6 +60,7 @@ module Raiha
 
       def receive(datagram)
         @received = Record.deserialize(datagram)
+        buf = nil
 
         loop do
           case @state
@@ -81,6 +83,52 @@ module Raiha
         end
       end
 
+      def receive2(datagram)
+        @received_records = Record.deserialize(datagram)
+        buf = nil
+
+        loop do
+          pp @state
+          received_record = @received_records.shift
+          break if received_record.nil?
+
+          # record = received_record.plaintext? ? received_record : @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
+          if received_record.plaintext? && received_record.handshake?
+            case received_record.fragment.message
+            when Handshake::ServerHello
+              receive_server_hello2(received_record.fragment)
+            when Handshake::EncryptedExtensions
+              # receive_encrypted_extensions
+            when Handshake::CertificateRequest, Handshake::Certificate
+              # receive_certificate_or_certificate_request
+            when Handshake::CertificateVerify
+              # receive_certificate_verify
+            when Handshake::Finished
+              # receive_finished
+            else
+            end
+          elsif received_record.ciphertext?
+            inner_plaintext = @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
+            puts inner_plaintext.content if inner_plaintext.application_data?
+            handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
+            handshakes.each do |handshake|
+              case handshake.message
+              when Handshake::EncryptedExtensions
+                receive_encrypted_extensions2(handshake)
+              when Handshake::CertificateRequest, Handshake::Certificate
+                receive_certificate_or_certificate_request2(handshake)
+              when Handshake::CertificateVerify
+                receive_certificate_verify2(handshake)
+              when Handshake::Finished
+                receive_finished2(handshake)
+              else
+                receive_anything_elese(handshake)
+              end
+            end
+          end
+        end
+      end
+
       # Accepts ServerHello message (or HelloRetryRequest message)
       def receive_server_hello
         loop do
@@ -98,6 +146,20 @@ module Raiha
             break
           end
         end
+        if valid_server_hello?
+          setup_key_schedule
+          setup_cipher
+          transition_state(State::WAIT_EE)
+        else
+          # TODO: error handling
+        end
+      end
+
+      def receive_server_hello2(handshake)
+        return unless handshake.message.is_a?(Handshake::ServerHello)
+
+        @server_hello = handshake.message
+        @transcript_hash[:server_hello] = handshake.serialize
         if valid_server_hello?
           setup_key_schedule
           setup_cipher
@@ -136,6 +198,19 @@ module Raiha
         end
       end
 
+      def receive_encrypted_extensions2(handshake)
+        # handshakes = Handshake.deserialize_multiple(record.content)
+        return unless handshake.message.is_a?(Handshake::EncryptedExtensions)
+
+        encrypted_extensions = handshake.message
+
+        if encrypted_extensions
+          @transcript_hash[:encrypted_extensions] = handshake.serialize
+          transition_state(State::WAIT_CERT_CR)
+          # break
+        end
+      end
+
       # Accepts CertificateRequest message or Certificate message
       def receive_certificate_or_certificate_request
         loop do
@@ -155,6 +230,19 @@ module Raiha
             transition_state(State::WAIT_CV)
             break
           end
+        end
+      end
+
+      def receive_certificate_or_certificate_request2(handshake)
+        return unless handshake.message.is_a?(Handshake::Certificate) ||
+                      handshake.message.is_a?(Handshake::CertificateRequest)
+
+        if handshake.message.is_a?(Handshake::Certificate)
+          @peer_certificates = handshake.message.certificates
+          @transcript_hash[:certificate] = handshake.serialize
+          transition_state(State::WAIT_CV)
+        elsif handshake.message.is_a?(Handshake::CertificateRequest)
+          # TODO:
         end
       end
 
@@ -179,6 +267,14 @@ module Raiha
         end
       end
 
+      def receive_certificate_verify2(handshake)
+        return unless handshake.message.is_a?(Handshake::CertificateVerify)
+
+        verify_certificate_verify(handshake)
+        @transcript_hash[:certificate_verify] = handshake.serialize
+        transition_state(State::WAIT_FINISHED)
+      end
+
       def receive_finished
         loop do
           received = @received.shift
@@ -199,6 +295,25 @@ module Raiha
             break
           end
         end
+      end
+
+      def receive_finished2(handshake)
+        return unless handshake.message.is_a?(Handshake::Finished)
+
+        verify_finished(handshake)
+        @transcript_hash[:finished] = handshake.serialize
+        derive_application_traffic_secrets
+        transition_state(State::WAIT_SEND_FINISHED)
+        respond_to_finished
+        @current_phase = :application
+      end
+
+      def receive_anything_elese(handshake)
+        # pp handshake
+      end
+
+      def receive_new_session_ticket
+        # noop
       end
 
       def build_client_hello
@@ -248,6 +363,7 @@ module Raiha
       end
 
       def receive_application_data
+        buf = ""
         loop do
           received = @received.shift
           break if received.nil?
@@ -255,9 +371,13 @@ module Raiha
           next if received.plaintext?
 
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :application)
-          pp received
-          pp inner_plaintext
+          inner_plaintext.content
         end
+        buf
+      end
+
+      def receive_application_data2
+        # TODO
       end
 
       private def transition_state(state)
