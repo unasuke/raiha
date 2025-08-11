@@ -20,8 +20,10 @@ module Raiha
             CertificateVerify.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:finished]
             Finished.deserialize(data)
+          when Handshake::HANDSHAKE_TYPE[:new_session_ticket]
+            # TODO
           else
-            raise "unknown message type: #{type}"
+            puts "unknown message type: #{type}"
           end
         end
       end
