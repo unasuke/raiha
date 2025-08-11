@@ -92,38 +92,36 @@ module Raiha
           received_record = @received_records.shift
           break if received_record.nil?
 
-          # record = received_record.plaintext? ? received_record : @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
-          if received_record.plaintext? && received_record.handshake?
-            case received_record.fragment.message
-            when Handshake::ServerHello
-              receive_server_hello2(received_record.fragment)
-            when Handshake::EncryptedExtensions
-              # receive_encrypted_extensions
-            when Handshake::CertificateRequest, Handshake::Certificate
-              # receive_certificate_or_certificate_request
-            when Handshake::CertificateVerify
-              # receive_certificate_verify
-            when Handshake::Finished
-              # receive_finished
+          handshakes = if received_record.plaintext?
+            if received_record.handshake?
+              [received_record.fragment]
             else
+              []
             end
-          elsif received_record.ciphertext?
+          else
             inner_plaintext = @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
-            puts inner_plaintext.content if inner_plaintext.application_data?
-            handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
-            handshakes.each do |handshake|
-              case handshake.message
-              when Handshake::EncryptedExtensions
-                receive_encrypted_extensions2(handshake)
-              when Handshake::CertificateRequest, Handshake::Certificate
-                receive_certificate_or_certificate_request2(handshake)
-              when Handshake::CertificateVerify
-                receive_certificate_verify2(handshake)
-              when Handshake::Finished
-                receive_finished2(handshake)
-              else
-                receive_anything_elese(handshake)
-              end
+            if inner_plaintext.application_data?
+              pp inner_plaintext
+              [] # TODO: look @current_phase
+            else
+              Handshake.deserialize_multiple(inner_plaintext.content)
+            end
+          end
+
+          handshakes&.each do |handshake|
+            case handshake.message
+            when Handshake::ServerHello
+              receive_server_hello2(handshake)
+            when Handshake::EncryptedExtensions
+              receive_encrypted_extensions2(handshake)
+            when Handshake::CertificateRequest, Handshake::Certificate
+              receive_certificate_or_certificate_request2(handshake)
+            when Handshake::CertificateVerify
+              receive_certificate_verify2(handshake)
+            when Handshake::Finished
+              receive_finished2(handshake)
+            else
+              receive_anything_elese(handshake)
             end
           end
         end
