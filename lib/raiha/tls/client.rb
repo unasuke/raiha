@@ -29,6 +29,7 @@ module Raiha
       def initialize
         super
         @state = State::START
+        @receive_buffer = ""
         @buffer = []
         @supported_groups = []
         @transcript_hash = TranscriptHash.new
@@ -84,8 +85,15 @@ module Raiha
       end
 
       def receive2(datagram)
-        @received_records = Record.deserialize(datagram)
-        buf = nil
+        @receive_buffer += datagram
+        buf = ""
+
+        begin
+          @received_records = Record.deserialize(@receive_buffer)
+        rescue
+          return "" # wait desetializable datagram passed
+        end
+        @receive_buffer = "" # reset buffer if deserialized successfully
 
         loop do
           pp @state
@@ -128,6 +136,7 @@ module Raiha
             end
           end
         end
+        buf
       end
 
       def receive_alert(alert)
