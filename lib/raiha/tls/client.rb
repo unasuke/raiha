@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "alert"
 require_relative "context"
 require_relative "peer"
 require_relative "record"
