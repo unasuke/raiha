@@ -109,7 +109,7 @@ module Raiha
           else
             inner_plaintext = @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
             if inner_plaintext.application_data?
-              pp inner_plaintext
+              buf += inner_plaintext.content
               [] # TODO: look @current_phase
             elsif inner_plaintext.alert?
               receive_alert(Alert.deserialize(inner_plaintext.content))
