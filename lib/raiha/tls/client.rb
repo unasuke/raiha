@@ -103,6 +103,9 @@ module Raiha
             if inner_plaintext.application_data?
               pp inner_plaintext
               [] # TODO: look @current_phase
+            elsif inner_plaintext.alert?
+              receive_alert(Alert.deserialize(inner_plaintext.content))
+              []
             else
               Handshake.deserialize_multiple(inner_plaintext.content)
             end
@@ -125,6 +128,10 @@ module Raiha
             end
           end
         end
+      end
+
+      def receive_alert(alert)
+        pp "Received alert: #{alert.inspect}"
       end
 
       # Accepts ServerHello message (or HelloRetryRequest message)
