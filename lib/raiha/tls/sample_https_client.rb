@@ -14,7 +14,7 @@ module Raiha
             Connection: close\r
 
           HTTPGET
-          pp client.read
+          puts client.read
         ensure
           client.close
         end
@@ -44,13 +44,16 @@ module Raiha
       end
 
       def read
+        buf = ""
         loop do
           response = @socket.recvmsg_nonblock
-          # pp "response:" + response.first
-          @client.receive2(response.first)
+          break if !response || response.first.nil?
+
+          buf += @client.receive2(response.first)
         rescue IO::WaitReadable
           next
         end
+        buf
       end
 
       def close
