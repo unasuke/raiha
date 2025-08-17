@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../tls"
+require "stringio"
 
 module Raiha
   module TLS
@@ -46,78 +47,80 @@ module Raiha
     #
     # @see https://datatracker.ietf.org/doc/html/rfc8446#section-6
     class Alert
-      # Abstract base class for all alerts.
-      # @!attribute [r] kind
-      #   @return [Symbol] Alert kind
-      # @!attribute [r] level
-      #   @return [Symbol] Alert level. +:warning+ or +:fatal+
-      class Base
-        attr_reader :kind
-        attr_reader :level
+      attr_accessor :level
+      attr_accessor :description
 
-        # @param kind [Symbol] Alert kind.
-        # @param level [Symbol] Alert level. Accepts +:warning+ or +:fatal+
-        # @raise [ArgumentError] if kind or level are unexpected, raises +ArgumentError+
-        # @see https://www.rfc-editor.org/rfc/rfc8446.html#section-6
-        # @see https://www.rfc-editor.org/rfc/rfc8446.html#appendix-B.2
-        def initialize(kind:, level: :fatal)
-          raise ArgumentError, "Unknown error kind #{kind}" unless self.class::KINDS.keys.include?(kind)
-          raise ArgumentError, "Unknown alert level #{level}" unless %i(warning fatal).include?(level)
+      DESCRIPTIONS = {
+        0 => :close_notify,
+        10 => :unexpected_message,
+        20 => :bad_record_mac,
+        22 => :record_overflow,
+        40 => :handshake_failure,
+        42 => :bad_certificate,
+        43 => :unsupported_certificate,
+        44 => :certificate_revoked,
+        45 => :certificate_expired,
+        46 => :certificate_unknown,
+        47 => :illegal_parameter,
+        48 => :unknown_ca,
+        49 => :access_denied,
+        50 => :decode_error,
+        51 => :decrypt_error,
+        70 => :protocol_version,
+        71 => :insufficient_security,
+        80 => :internal_error,
+        86 => :inappropriate_fallback,
+        90 => :user_canceled,
+        109 => :missing_extension,
+        110 => :unsupported_extension,
+        112 => :unrecognized_name,
+        113 => :bad_certificate_status_response,
+        115 => :unknown_psk_identity,
+        116 => :certificate_required,
+        120 => :no_application_protocol,
+      }
 
-          @kind = kind
-          @level = level
-        end
-
-        def serialize
-          buf = String.new(encoding: "BINARY")
-          buf << [(@level == :warning ? 1 : 2)].pack("C")
-          buf << [self.class::KINDS[@kind]].pack("C")
-          buf
+      def self.lavel_num_to_sym(level_num)
+        case level_num
+        when 1
+          :warning
+        when 2
+          :fatal
+        else
+          :unknown
         end
       end
 
-      class ClosureAlert < Base
-        KINDS = {
-          close_notify: 0,
-          user_canceled: 90,
-        }
+      def self.description_num_to_sym(description_num)
+        DESCRIPTIONS[description_num] || :unknown
       end
 
-      class ErrorAlert < Base
-        KINDS = {
-          bad_record_mac: 20,
-          decryption_failed_reserved: 21,
-          record_overflow: 22,
-          decompression_failure_reserved: 30,
-          handshake_failure: 40,
-          no_certificate_reserved: 41,
-          bad_certificate: 42,
-          unsupported_certificate: 43,
-          certificate_revoked: 44,
-          certificate_expired: 45,
-          certificate_unknown: 46,
-          illegal_parameter: 47,
-          unknown_ca: 48,
-          access_denied: 49,
-          decode_error: 50,
-          decrypt_error: 51,
-          export_restriction_reserved: 60,
-          protocol_version: 70,
-          insufficient_security: 71,
-          internal_error: 80,
-          inappropriate_fallback: 86,
-          no_renegotiation_reserved: 100,
-          missing_extension: 109,
-          unsupported_extension: 110,
-          certificate_unobtainable_reserved: 111,
-          unrecognized_name: 112,
-          bad_certificate_status_response: 113,
-          bad_certificate_hash_value_reserved: 114,
-          unknown_psk_identity: 115,
-          certificate_required: 116,
-          general_error: 117,
-          no_application_protocol: 120,
-        }
+      def self.deserialize(data)
+        buf = StringIO.new(data)
+
+        level = buf.read(1).unpack1("C")
+        desc = buf.read(1).unpack1("C")
+        self.new(level: level, description: desc)
+      end
+
+      def initialize(level:, description:)
+        @level = level
+        @description = description
+      end
+
+      def serialize
+        buf = String.new(encoding: "BINARY")
+        buf << [@level].pack("C*")
+        buf << [@description].pack("C*")
+        buf
+      end
+
+      def warning?
+        @level == 1
+      end
+
+      def fatal?
+        @level == 2
       end
     end
   end
