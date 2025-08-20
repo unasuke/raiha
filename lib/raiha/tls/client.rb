@@ -112,7 +112,7 @@ module Raiha
         when Handshake::Finished
           receive_finished(handshake)
         else
-          receive_anything_elese(handshake)
+          receive_anything_else(handshake)
         end
       end
 
@@ -187,7 +187,7 @@ module Raiha
         @current_phase = :application
       end
 
-      def receive_anything_elese(handshake)
+      def receive_anything_else(handshake)
         pp "receive unhandled handshake message: #{handshake.inspect}"
       end
 
