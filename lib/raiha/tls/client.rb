@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "alert"
+require_relative "application_data"
 require_relative "context"
 require_relative "peer"
 require_relative "record"
@@ -101,47 +102,51 @@ module Raiha
           received_record = @received_records.shift
           break if received_record.nil?
 
-          handshakes = if received_record.plaintext?
-            if received_record.handshake?
-              [received_record.fragment]
-            else
-              []
-            end
+          records = if received_record.plaintext?
+            handle_plaintext_record(received_record)
           else
-            inner_plaintext = @server_cipher.decrypt(ciphertext: received_record, phase: @current_phase)
-            if inner_plaintext.application_data?
-              buf += inner_plaintext.content
-              [] # TODO: look @current_phase
-            elsif inner_plaintext.alert?
-              receive_alert(Alert.deserialize(inner_plaintext.content))
-              []
-            else
-              Handshake.deserialize_multiple(inner_plaintext.content)
-            end
+            handle_ciphertext_record(received_record)
           end
 
-          handshakes&.each do |handshake|
-            case handshake.message
-            when Handshake::ServerHello
-              receive_server_hello2(handshake)
-            when Handshake::EncryptedExtensions
-              receive_encrypted_extensions2(handshake)
-            when Handshake::CertificateRequest, Handshake::Certificate
-              receive_certificate_or_certificate_request2(handshake)
-            when Handshake::CertificateVerify
-              receive_certificate_verify2(handshake)
-            when Handshake::Finished
-              receive_finished2(handshake)
-            else
-              receive_anything_elese(handshake)
+          records.each do |record|
+            case record
+            when Handshake
+              handle_handshake_message(record)
+            when Alert
+              handle_alert_message(record)
+            when ApplicationData
+              buf += handle_application_data_message(record)
+            else # ApplicationData
+              pp "Received unknown message: #{record.class}"
             end
           end
         end
         buf
       end
 
-      def receive_alert(alert)
-        pp "Received alert: #{alert.inspect}"
+      def handle_handshake_message(handshake)
+        case handshake.message
+        when Handshake::ServerHello
+          receive_server_hello2(handshake)
+        when Handshake::EncryptedExtensions
+          receive_encrypted_extensions2(handshake)
+        when Handshake::CertificateRequest, Handshake::Certificate
+          receive_certificate_or_certificate_request2(handshake)
+        when Handshake::CertificateVerify
+          receive_certificate_verify2(handshake)
+        when Handshake::Finished
+          receive_finished2(handshake)
+        else
+          receive_anything_elese(handshake)
+        end
+      end
+
+      def handle_alert_message(alert)
+        pp alert
+      end
+
+      def handle_application_data_message(application_data)
+        application_data.content
       end
 
       # Accepts ServerHello message (or HelloRetryRequest message)
@@ -324,7 +329,7 @@ module Raiha
       end
 
       def receive_anything_elese(handshake)
-        # pp handshake
+        pp "receive unhandled handshake message: #{handshake.inspect}"
       end
 
       def receive_new_session_ticket
@@ -378,7 +383,6 @@ module Raiha
       end
 
       def receive_application_data
-        buf = ""
         loop do
           received = @received.shift
           break if received.nil?
@@ -388,7 +392,6 @@ module Raiha
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :application)
           inner_plaintext.content
         end
-        buf
       end
 
       def receive_application_data2
@@ -471,6 +474,28 @@ module Raiha
         # TODO: don't hardcode hash algorithm
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
         OpenSSL::HMAC.digest("sha256", finished_key, @transcript_hash.hash)
+      end
+
+      private def handle_plaintext_record(record)
+        if record.handshake?
+          [record.fragment]
+        else
+          # TODO: maybe alert
+          []
+        end
+      end
+
+      private def handle_ciphertext_record(record)
+        inner_plaintext = @server_cipher.decrypt(ciphertext: record, phase: @current_phase)
+        if inner_plaintext.handshake?
+          Handshake.deserialize_multiple(inner_plaintext.content)
+        elsif inner_plaintext.application_data?
+          [ApplicationData.deserialize(inner_plaintext.content)]
+        elsif inner_plaintext.alert?
+          [Alert.deserialize(inner_plaintext.content)]
+        else
+          []
+        end
       end
     end
   end
