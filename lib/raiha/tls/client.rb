@@ -91,7 +91,7 @@ module Raiha
               handle_alert_message(record)
             when ApplicationData
               buf += handle_application_data_message(record)
-            else # ApplicationData
+            else
               pp "Received unknown message: #{record.class}"
             end
           end
