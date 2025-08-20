@@ -15,6 +15,7 @@ module Raiha
 
       @state: Symbol
       @buffer: Array[String]
+      @receive_buffer: String
       @supported_groups: Array[untyped]
       @transcript_hash: untyped
       @received: Array[Record::TLSPlaintext|Record::TLSCiphertext]
@@ -24,8 +25,18 @@ module Raiha
       def initialize: -> void
       def build_client_hello: -> Array[String]
       def datagrams_to_send: -> Array[String]
-      def receive: (String datagram) -> void
-      def receive_server_hello: -> void
+      def receive: (String datagram) -> String
+      def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake|Alert|ApplicationData]
+      def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[Handshake|Alert|ApplicationData]
+      def handle_handshake_message: (Handshake handshake) -> void
+      def handle_alert_message: (Alert alert) -> void
+      def handle_application_data_message: (ApplicationData data) -> String
+      def receive_server_hello: (Handshake handshake) -> void
+      def receive_encrypted_extensions: (Handshake handshake) -> void
+      def receive_certificate_or_certificate_request: (Handshake handshake) -> void # TODO: certificate request
+      def receive_certificate_verify: (Handshake handshake) -> void
+      def receive_finished: (Handshake handshake) -> void
+      def receive_anything_else: (Handshake handshake) -> void # TODO: remove
       private def transition_state: (Symbol state) -> void
     end
   end
