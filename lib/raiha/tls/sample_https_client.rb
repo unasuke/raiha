@@ -36,7 +36,7 @@ module Raiha
               @socket.sendmsg(datagram)
             end
             response = @socket.recvmsg_nonblock
-            @client.receive2(response.first)
+            @client.receive(response.first)
           rescue IO::WaitReadable
             next
           end
@@ -49,7 +49,7 @@ module Raiha
           response = @socket.recvmsg_nonblock
           break if !response || response.first.nil?
 
-          buf += @client.receive2(response.first)
+          buf += @client.receive(response.first)
         rescue IO::WaitReadable
           next
         end

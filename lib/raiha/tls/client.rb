@@ -62,31 +62,6 @@ module Raiha
       end
 
       def receive(datagram)
-        @received = Record.deserialize(datagram)
-        buf = nil
-
-        loop do
-          case @state
-          when State::WAIT_SH
-            receive_server_hello
-          when State::WAIT_EE
-            receive_encrypted_extensions
-          when State::WAIT_CERT_CR
-            receive_certificate_or_certificate_request
-          when State::WAIT_CV
-            receive_certificate_verify
-          when State::WAIT_FINISHED
-            receive_finished
-          when State::CONNECTED
-            receive_application_data
-          else
-            # TODO: WIP
-          end
-          break if @received.empty?
-        end
-      end
-
-      def receive2(datagram)
         @receive_buffer += datagram
         buf = ""
 
@@ -127,15 +102,15 @@ module Raiha
       def handle_handshake_message(handshake)
         case handshake.message
         when Handshake::ServerHello
-          receive_server_hello2(handshake)
+          receive_server_hello(handshake)
         when Handshake::EncryptedExtensions
-          receive_encrypted_extensions2(handshake)
+          receive_encrypted_extensions(handshake)
         when Handshake::CertificateRequest, Handshake::Certificate
-          receive_certificate_or_certificate_request2(handshake)
+          receive_certificate_or_certificate_request(handshake)
         when Handshake::CertificateVerify
-          receive_certificate_verify2(handshake)
+          receive_certificate_verify(handshake)
         when Handshake::Finished
-          receive_finished2(handshake)
+          receive_finished(handshake)
         else
           receive_anything_elese(handshake)
         end
@@ -150,32 +125,7 @@ module Raiha
       end
 
       # Accepts ServerHello message (or HelloRetryRequest message)
-      def receive_server_hello
-        loop do
-          received = @received.shift
-          break if received.nil?
-
-          if received.plaintext? && received.change_cipher_spec?
-            next
-          end
-
-          # TODO: HelloRetryRequest
-          if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ServerHello)
-            @server_hello = received.fragment.message
-            @transcript_hash[:server_hello] = received.fragment.serialize
-            break
-          end
-        end
-        if valid_server_hello?
-          setup_key_schedule
-          setup_cipher
-          transition_state(State::WAIT_EE)
-        else
-          # TODO: error handling
-        end
-      end
-
-      def receive_server_hello2(handshake)
+      def receive_server_hello(handshake)
         return unless handshake.message.is_a?(Handshake::ServerHello)
 
         @server_hello = handshake.message
@@ -190,35 +140,7 @@ module Raiha
       end
 
       # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
-      def receive_encrypted_extensions
-        loop do
-          received = @received.shift
-          break if received.nil?
-
-          # verify timing
-          if received.plaintext? &&
-            received.handshake? &&
-            received.fragment.message.is_a?(Handshake::ChangeCipherSpec)
-            next
-          end
-
-          next unless received.ciphertext?
-
-          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
-          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
-
-          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
-          encrypted_extensions = handshakes.find { |hs| hs.message.is_a?(Handshake::EncryptedExtensions) }
-
-          if encrypted_extensions
-            @transcript_hash[:encrypted_extensions] = encrypted_extensions.serialize
-            transition_state(State::WAIT_CERT_CR)
-            break
-          end
-        end
-      end
-
-      def receive_encrypted_extensions2(handshake)
+      def receive_encrypted_extensions(handshake)
         # handshakes = Handshake.deserialize_multiple(record.content)
         return unless handshake.message.is_a?(Handshake::EncryptedExtensions)
 
@@ -232,28 +154,7 @@ module Raiha
       end
 
       # Accepts CertificateRequest message or Certificate message
-      def receive_certificate_or_certificate_request
-        loop do
-          received = @received.shift
-          break if received.nil?
-          next unless received.ciphertext?
-
-          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
-          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
-
-          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
-          # certificate_request = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateRequest) }
-          certificate = handshakes.find { |hs| hs.message.is_a?(Handshake::Certificate) }
-          if certificate
-            @peer_certificates = certificate.message.certificates
-            @transcript_hash[:certificate] = certificate.serialize
-            transition_state(State::WAIT_CV)
-            break
-          end
-        end
-      end
-
-      def receive_certificate_or_certificate_request2(handshake)
+      def receive_certificate_or_certificate_request(handshake)
         return unless handshake.message.is_a?(Handshake::Certificate) ||
                       handshake.message.is_a?(Handshake::CertificateRequest)
 
@@ -267,27 +168,7 @@ module Raiha
       end
 
       # Accepts CertificateVerify message
-      def receive_certificate_verify
-        loop do
-          received = @received.shift
-          break if received.nil?
-          next unless received.ciphertext?
-
-          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
-          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
-
-          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
-          certificate_verify = handshakes.find { |hs| hs.message.is_a?(Handshake::CertificateVerify) }
-          if certificate_verify
-            verify_certificate_verify(certificate_verify)
-            @transcript_hash[:certificate_verify] = certificate_verify.serialize
-            transition_state(State::WAIT_FINISHED)
-            break
-          end
-        end
-      end
-
-      def receive_certificate_verify2(handshake)
+      def receive_certificate_verify(handshake)
         return unless handshake.message.is_a?(Handshake::CertificateVerify)
 
         verify_certificate_verify(handshake)
@@ -295,29 +176,7 @@ module Raiha
         transition_state(State::WAIT_FINISHED)
       end
 
-      def receive_finished
-        loop do
-          received = @received.shift
-          break if received.nil?
-          next unless received.ciphertext?
-
-          inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :handshake)
-          next unless inner_plaintext.is_a?(Record::TLSInnerPlaintext)
-
-          handshakes = Handshake.deserialize_multiple(inner_plaintext.content)
-          finished = handshakes.find { |hs| hs.message.is_a?(Handshake::Finished) }
-          if finished
-            verify_finished(finished)
-            @transcript_hash[:finished] = finished.serialize
-            derive_application_traffic_secrets
-            transition_state(State::WAIT_SEND_FINISHED)
-            respond_to_finished
-            break
-          end
-        end
-      end
-
-      def receive_finished2(handshake)
+      def receive_finished(handshake)
         return unless handshake.message.is_a?(Handshake::Finished)
 
         verify_finished(handshake)
@@ -392,10 +251,6 @@ module Raiha
           inner_plaintext = @server_cipher.decrypt(ciphertext: received, phase: :application)
           inner_plaintext.content
         end
-      end
-
-      def receive_application_data2
-        # TODO
       end
 
       private def transition_state(state)
