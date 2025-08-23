@@ -80,7 +80,7 @@ module Raiha
         120 => :no_application_protocol,
       }
 
-      def self.lavel_num_to_sym(level_num)
+      def self.level_num_to_sym(level_num)
         case level_num
         when 1
           :warning

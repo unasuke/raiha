@@ -1,23 +1,19 @@
 module Raiha
   module TLS
     class Alert
-      class Base
-        KINDS: Hash[Symbol, Integer]
+      attr_accessor level: Integer
+      attr_accessor description: Integer
 
-        attr_reader kind: Symbol
-        attr_reader level: Symbol
+      DESCRIPTIONS: Hash[Integer, Symbol]
 
-        def initialize: (kind: Symbol, ?level: Symbol) -> void
-        def serialize: () -> String
-      end
+      def self.level_num_to_sym: (Integer level_num) -> Symbol
+      def self.description_num_to_sym: (Integer description_num) -> Symbol
+      def self.deserialize: (String data) -> Alert
 
-      class ClosureAlert < Base
-        KINDS: Hash[Symbol, Integer]
-      end
-
-      class ErrorAlert < Base
-        KINDS: Hash[Symbol, Integer]
-      end
+      def initialize: (level: Integer, description: Integer) -> void
+      def serialize: -> String
+      def warning?: -> bool
+      def fatal?: -> bool
     end
   end
-end 
+end
