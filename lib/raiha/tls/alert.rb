@@ -51,7 +51,7 @@ module Raiha
       attr_accessor :description
 
       DESCRIPTIONS = {
-        0 => :close_notify,
+        0 => :close_notify, # usually warning
         10 => :unexpected_message,
         20 => :bad_record_mac,
         22 => :record_overflow,
@@ -70,7 +70,7 @@ module Raiha
         71 => :insufficient_security,
         80 => :internal_error,
         86 => :inappropriate_fallback,
-        90 => :user_canceled,
+        90 => :user_canceled, # usually warning
         109 => :missing_extension,
         110 => :unsupported_extension,
         112 => :unrecognized_name,
