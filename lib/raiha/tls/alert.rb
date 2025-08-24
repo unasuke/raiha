@@ -47,8 +47,8 @@ module Raiha
     #
     # @see https://datatracker.ietf.org/doc/html/rfc8446#section-6
     class Alert
-      attr_accessor :level
-      attr_accessor :description
+      attr_accessor :level_num
+      attr_accessor :description_num
 
       DESCRIPTIONS = {
         0 => :close_notify, # usually warning
@@ -100,31 +100,54 @@ module Raiha
 
         level = buf.read(1).unpack1("C")
         desc = buf.read(1).unpack1("C")
-        self.new(level: level, description: desc)
+        self.new(level_num: level, description_num: desc)
       end
 
-      def initialize(level:, description:)
-        @level = level
-        @description = description
+      def initialize(level_num: nil, description_num: nil, level: nil, description: nil)
+        if level_num.nil? && level.nil?
+          raise ArgumentError, "Either level_num or level must be provided"
+        end
+
+        if description_num.nil? && description.nil?
+          raise ArgumentError, "Either description_num or description must be provided"
+        end
+
+        @level_num = level_num || (level == :warning ? 1 : 2)
+        @description_num = description_num || DESCRIPTIONS.key(description)
+      end
+
+      def level
+        case @level_num
+        when 1
+          :warning
+        when 2
+          :fatal
+        else
+          :unknown
+        end
+      end
+
+      def description
+        DESCRIPTIONS[@description_num]
       end
 
       def serialize
         buf = String.new(encoding: "BINARY")
-        buf << [@level].pack("C*")
-        buf << [@description].pack("C*")
+        buf << [@level_num].pack("C*")
+        buf << [@description_num].pack("C*")
         buf
       end
 
       def warning?
-        @level == 1
+        @level_num == 1
       end
 
       def fatal?
-        @level == 2
+        @level_num == 2
       end
 
       def humanize
-        { level: self.class.level_num_to_sym(@level), description: self.class.description_num_to_sym(@description) }
+        { level: level, description: DESCRIPTIONS[@description_num] }
       end
     end
   end

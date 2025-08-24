@@ -1,8 +1,8 @@
 module Raiha
   module TLS
     class Alert
-      attr_accessor level: Integer
-      attr_accessor description: Integer
+      attr_accessor level_num: Integer
+      attr_accessor description_num: Integer
 
       DESCRIPTIONS: Hash[Integer, Symbol]
 
@@ -10,10 +10,12 @@ module Raiha
       def self.description_num_to_sym: (Integer description_num) -> Symbol
       def self.deserialize: (String data) -> Alert
 
-      def initialize: (level: Integer, description: Integer) -> void
+      def initialize: (?level_num: Integer, ?description_num: Integer, ?level: Symbol, ?description: Symbol) -> void
       def serialize: -> String
       def warning?: -> bool
       def fatal?: -> bool
+      def level: -> Symbol
+      def description: -> Symbol
       def humanize: -> { level: Symbol, description: Symbol }
     end
   end
