@@ -21,7 +21,7 @@ module Raiha
           when Handshake::HANDSHAKE_TYPE[:finished]
             Finished.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:new_session_ticket]
-            # TODO
+            NewSessionTicket.deserialize(data)
           else
             puts "unknown message type: #{type}"
           end
@@ -37,4 +37,5 @@ require_relative "message/encrypted_extensions"
 require_relative "message/certificate"
 require_relative "message/certificate_request"
 require_relative "message/certificate_verify"
+require_relative "message/new_session_ticket"
 require_relative "message/finished"

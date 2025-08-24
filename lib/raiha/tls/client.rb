@@ -111,6 +111,8 @@ module Raiha
           receive_certificate_verify(handshake)
         when Handshake::Finished
           receive_finished(handshake)
+        when Handshake::NewSessionTicket
+          receive_new_session_ticket(handshake)
         else
           receive_anything_else(handshake)
         end
@@ -187,12 +189,15 @@ module Raiha
         @current_phase = :application
       end
 
-      def receive_anything_else(handshake)
-        pp "receive unhandled handshake message: #{handshake.inspect}"
+      def receive_new_session_ticket(handshake)
+        return unless handshake.message.is_a?(Handshake::NewSessionTicket)
+
+        # Do nothing. raiha client does not support session resumption.
+        return
       end
 
-      def receive_new_session_ticket
-        # noop
+      def receive_anything_else(handshake)
+        pp "receive unhandled handshake message: #{handshake.inspect}"
       end
 
       def build_client_hello

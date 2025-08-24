@@ -77,6 +77,17 @@ module Raiha
         private def signed_data: (String transcript_hash, String context) -> String # TODO: move to somewhere
       end
 
+      class NewSessionTicket < Message
+        attr_accessor ticket_lifetime: Integer
+        attr_accessor ticket_age_add: Integer
+        attr_accessor ticket_nonce: String
+        attr_accessor ticket: String
+        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension::AbstractExtension|::Raiha::TLS::Handshake::Extension]
+
+        def self.deserialize: (String data) -> NewSessionTicket
+        def serialize: -> String
+      end
+
       class Finished < Message
         attr_accessor verify_data: String
 
