@@ -117,7 +117,7 @@ module Raiha
       end
 
       def handle_alert_message(alert)
-        pp alert
+        pp alert.humanize
       end
 
       def handle_application_data_message(application_data)

@@ -122,6 +122,10 @@ module Raiha
       def fatal?
         @level == 2
       end
+
+      def humanize
+        { level: self.class.level_num_to_sym(@level), description: self.class.description_num_to_sym(@description) }
+      end
     end
   end
 end
