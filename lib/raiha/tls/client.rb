@@ -3,6 +3,7 @@
 require_relative "alert"
 require_relative "application_data"
 require_relative "context"
+require_relative "config"
 require_relative "peer"
 require_relative "record"
 require_relative "handshake"
@@ -28,18 +29,19 @@ module Raiha
 
       attr_reader :state
 
-      def initialize
-        super
+      def initialize(config: nil)
+        super()
+        @config = config || Config.client_default
         @state = State::START
         @receive_buffer = ""
         @buffer = []
-        @supported_groups = []
+        @supported_groups = @config.supported_groups
         @transcript_hash = TranscriptHash.new
         @client_hello = nil
         @server_hello = nil
         @received = []
         @key_schedule = KeySchedule.new(mode: :client)
-        @groups = ["prime256v1"]
+        @groups = @config.supported_groups
         @pkeys = @groups.map { |group| { group: group, pkey: OpenSSL::PKey::EC.generate(group) } }
         @server_cipher = nil
         @client_cipher = nil
