@@ -1,0 +1,14 @@
+module Raiha
+  module TLS
+    class Config
+      DEFAULT_CIPHER_SUITES: Array[CipherSuite]
+      DEFAULT_SUPPORTED_GROUPS: Array[String]
+
+      attr_reader cipher_suites: Array[CipherSuite]
+      attr_reader supported_groups: Array[String]
+
+      def self.client_default: -> Config
+      def initialize: (cipher_suites: Array[CipherSuite], supported_groups: Array[String]) -> void
+    end
+  end
+end
