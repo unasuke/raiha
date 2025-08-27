@@ -23,6 +23,7 @@ module Raiha
         def serialize_cipher_suites: -> String
         def serialize_extensions: -> String
         def setup_key_share: (Array[{ group: String, key_exchange: String }] group_and_pkeys) -> void
+        def server_name: (String server_name) -> void
       end
 
       class ServerHello < Message

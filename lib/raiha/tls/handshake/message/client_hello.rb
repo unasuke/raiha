@@ -109,6 +109,17 @@ module Raiha
         def valid_legacy_version?
           legacy_version == LEGACY_VERSION
         end
+
+        def server_name=(server_name)
+          ext = @extensions.find { |e| e.is_a?(Extension::ServerName) }
+          if ext
+            ext.server_name = server_name
+          else
+            ext = Extension::ServerName.new(on: :client_hello)
+            ext.server_name = server_name
+            @extensions << ext
+          end
+        end
       end
     end
   end

@@ -21,10 +21,10 @@ module Raiha
       end
 
       def initialize
-        @client = Raiha::TLS::Client.new
         @host = "www.example.com"
         @port = 443
         @socket = TCPSocket.new(@host, @port)
+        @client = Raiha::TLS::Client.new(server_name: @host)
       end
 
       def connect!
