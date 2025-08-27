@@ -29,7 +29,7 @@ module Raiha
 
       attr_reader :state
 
-      def initialize(config: nil)
+      def initialize(config: nil, server_name: nil)
         super()
         @config = config || Config.client_default
         @state = State::START
@@ -46,6 +46,7 @@ module Raiha
         @server_cipher = nil
         @client_cipher = nil
         @current_phase = :handshake
+        @server_name = server_name
       end
 
       def datagrams_to_send
@@ -205,7 +206,11 @@ module Raiha
       def build_client_hello
         hs_clienthello = Raiha::TLS::Handshake.new.tap do |hs|
           hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
-          hs.message = Raiha::TLS::Handshake::ClientHello.build
+          hs.message = Raiha::TLS::Handshake::ClientHello.build.tap do |ch|
+            if @server_name
+              ch.server_name = @server_name
+            end
+          end
         end
         hs_clienthello.message.setup_key_share(@pkeys)
         @client_hello = hs_clienthello.message
