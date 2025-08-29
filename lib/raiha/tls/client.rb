@@ -189,6 +189,7 @@ module Raiha
         derive_application_traffic_secrets
         transition_state(State::WAIT_SEND_FINISHED)
         respond_to_finished
+        save_to_sslkeylogfile
         @current_phase = :application
       end
 
@@ -362,6 +363,19 @@ module Raiha
           [Alert.deserialize(inner_plaintext.content)]
         else
           []
+        end
+      end
+
+      private def save_to_sslkeylogfile
+        body = <<~SSLKEYLOGFILE
+          SERVER_HANDSHAKE_TRAFFIC_SECRET #{@client_hello.random.unpack1("H*")} #{@key_schedule.server_handshake_traffic_secret.unpack1("H*")}
+          SERVER_TRAFFIC_SECRET_0 #{@client_hello.random.unpack1("H*")} #{@key_schedule.server_application_traffic_secret[0].unpack1("H*")}
+          CLIENT_HANDSHAKE_TRAFFIC_SECRET #{@client_hello.random.unpack1("H*")} #{@key_schedule.client_handshake_traffic_secret.unpack1("H*")}
+          CLIENT_TRAFFIC_SECRET_0 #{@client_hello.random.unpack1("H*")} #{@key_schedule.client_application_traffic_secret[0].unpack1("H*")}
+        SSLKEYLOGFILE
+
+        File.open("SSLKEYLOGFILE", "a") do |f|
+          f.write(body)
         end
       end
     end
