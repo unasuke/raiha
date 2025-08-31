@@ -69,7 +69,8 @@ module Raiha
               ext.groups = ["prime256v1"]
             end,
             Extension::SignatureAlgorithms.new(on: :client_hello).tap do |ext|
-              ext.signature_schemes = ["rsa_pss_rsae_sha256"]
+              # ext.signature_schemes = ["rsa_pss_rsae_sha256"]
+              ext.signature_schemes = ["ecdsa_secp256r1_sha256", "rsa_pss_rsae_sha256"]
             end,
           ]
         end

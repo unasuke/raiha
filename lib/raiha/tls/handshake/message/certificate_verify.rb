@@ -81,6 +81,8 @@ module Raiha
           case algorithm
           when "rsa_pss_rsae_sha256"
             certificate.public_key.verify_pss("sha256", signature, signed_data(transcript_hash, context), salt_length: :auto, mgf1_hash: "sha256")
+          when "ecdsa_secp256r1_sha256"
+            certificate.public_key.verify("sha256", signature, signed_data(transcript_hash, context))
           else
             raise "TODO: #{algorithm} is not supported (yet)"
           end
