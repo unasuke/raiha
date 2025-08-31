@@ -33,10 +33,15 @@ module Raiha
           end
 
           def serialize
-            server_name = [0].pack("C") + # host_name(0)
-              [@server_name.bytesize].pack("n") + @server_name # HostName
-            server_name_list = [server_name.bytesize].pack("n") + server_name
-            [EXTENSION_TYPE_NUMBER].pack("n") + [server_name_list.bytesize].pack("n") + server_name_list
+            if @server_name.nil? || @server_name.empty?
+              # On EncryptedExtensions, the server_name is empty
+              [EXTENSION_TYPE_NUMBER].pack("n") + [0].pack("n")
+            else
+              server_name = [0].pack("C") + # host_name(0)
+                [@server_name.bytesize].pack("n") + @server_name # HostName
+              server_name_list = [server_name.bytesize].pack("n") + server_name
+              [EXTENSION_TYPE_NUMBER].pack("n") + [server_name_list.bytesize].pack("n") + server_name_list
+            end
           end
         end
       end
