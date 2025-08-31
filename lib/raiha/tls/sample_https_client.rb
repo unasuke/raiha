@@ -4,13 +4,13 @@ require_relative "client"
 module Raiha
   module TLS
     class SampleHttpsClient
-      def self.start
-        client = self.new
+      def self.start(host: "localhost.unasuke.dev", port: 4433)
+        client = self.new(host: host, port: port)
         begin
           client.connect!
           client.send(<<~HTTPGET)
             GET / HTTP/1.1\r
-            Host: www.example.com\r
+            Host: #{host}\r
             Connection: close\r
 
           HTTPGET
@@ -20,9 +20,9 @@ module Raiha
         end
       end
 
-      def initialize
-        @host = "www.example.com"
-        @port = 443
+      def initialize(host:, port:)
+        @host = host
+        @port = port
         @socket = TCPSocket.new(@host, @port)
         @client = Raiha::TLS::Client.new(server_name: @host)
       end
