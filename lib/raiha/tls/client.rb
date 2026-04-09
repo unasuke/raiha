@@ -395,9 +395,9 @@ module Raiha
       end
 
       private def finished_verify_data(key)
-        # TODO: don't hardcode hash algorithm
-        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
-        OpenSSL::HMAC.digest("sha256", finished_key, @transcript_hash.hash)
+        hash_alg = @server_hello.cipher_suite.hash_algorithm
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(hash_alg).digest_length)
+        OpenSSL::HMAC.digest(hash_alg, finished_key, @transcript_hash.hash)
       end
 
       private def handle_plaintext_record(record)
