@@ -21,9 +21,8 @@ module Raiha
       end
 
       def verify(cert, chain: [])
-        store = @store.dup
-        chain.each { |c| store.add_cert(c) }
-        store.verify(cert)
+        ctx = OpenSSL::X509::StoreContext.new(@store, cert, chain)
+        ctx.verify
       end
     end
   end

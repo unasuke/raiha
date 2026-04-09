@@ -109,6 +109,57 @@ module Raiha
             @certificates
           end
         end
+
+        def valid?(hostname: nil, trust_store: nil)
+          return false if certificate_entries.empty?
+          return false unless valid_chain?(trust_store)
+          return false unless valid_time?
+          return false if hostname && !valid_hostname?(hostname)
+
+          true
+        end
+
+        private def valid_chain?(trust_store)
+          store = trust_store || default_trust_store
+          leaf = certificates.first
+          chain = certificates[1..]
+          store.verify(leaf, chain: chain)
+        end
+
+        private def default_trust_store
+          TrustStore.new
+        end
+
+        private def valid_time?
+          now = Time.now
+          certificates.all? do |cert|
+            cert.not_before <= now && now <= cert.not_after
+          end
+        end
+
+        private def valid_hostname?(hostname)
+          leaf = certificates.first
+
+          san = leaf.extensions.find { |ext| ext.oid == "subjectAltName" }
+          if san
+            names = san.value.split(",").map(&:strip)
+            return true if names.any? { |name| match_hostname?(name.sub(/\ADNS:/, ""), hostname) }
+          end
+
+          cn = leaf.subject.to_a.find { |attr| attr[0] == "CN" }&.dig(1)
+          return match_hostname?(cn, hostname) if cn
+
+          false
+        end
+
+        private def match_hostname?(pattern, hostname)
+          if pattern.start_with?("*.")
+            suffix = pattern[2..]
+            hostname.end_with?(suffix) && hostname.count(".") == pattern.count(".")
+          else
+            pattern == hostname
+          end
+        end
       end
     end
   end
