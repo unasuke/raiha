@@ -21,17 +21,29 @@ module Raiha
         @digest.digest
       end
 
+      # RFC 8446 Section 4.4.1
+      # Replace the original ClientHello with a synthetic message_hash construct
+      # for HelloRetryRequest transcript hash calculation.
+      def replace_client_hello_with_message_hash
+        original_ch = self[:client_hello]
+        @digest.reset
+        hash_of_ch1 = @digest.update(original_ch).digest
+
+        length_bytes = [hash_of_ch1.bytesize].pack("N").byteslice(1..) # uint24
+        self[:client_hello] = "\xfe" + length_bytes + hash_of_ch1
+      end
+
       private def values_for_hash
-        # TODO: hello_retry_request
-        %i(
-          client_hello
-          server_hello
+        keys = %i(client_hello server_hello)
+        keys << :client_hello_retry if self[:client_hello_retry]
+        keys.concat %i(
           encrypted_extensions
           certificate
           certificate_request
           certificate_verify
           finished
-        ).map { |key| self[key] }.compact
+        )
+        keys.map { |key| self[key] }.compact
       end
     end
   end

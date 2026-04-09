@@ -25,6 +25,7 @@ module Raiha
         WAIT_FINISHED = :WAIT_FINISHED
         WAIT_SEND_FINISHED = :WAIT_SEND_FINISHED
         CONNECTED = :CONNECTED
+        WAIT_SH_RETRY = :WAIT_SH_RETRY
       end
 
       attr_reader :state
@@ -55,6 +56,10 @@ module Raiha
           build_client_hello.tap do
             transition_state(State::WAIT_SH)
           end
+        when State::WAIT_SH_RETRY
+          @retry_client_hello_record.tap do
+            transition_state(State::WAIT_SH)
+          end
         when State::WAIT_SEND_FINISHED
           respond_to_finished.tap do
             transition_state(State::CONNECTED)
@@ -76,7 +81,6 @@ module Raiha
         @receive_buffer = "" # reset buffer if deserialized successfully
 
         loop do
-          pp @state
           received_record = @received_records.shift
           break if received_record.nil?
 
@@ -133,15 +137,33 @@ module Raiha
       def receive_server_hello(handshake)
         return unless handshake.message.is_a?(Handshake::ServerHello)
 
-        @server_hello = handshake.message
-        @transcript_hash[:server_hello] = handshake.serialize
-        if valid_server_hello?
-          setup_key_schedule
-          setup_cipher
-          transition_state(State::WAIT_EE)
+        if handshake.message.hello_retry_request?
+          receive_hello_retry_request(handshake)
         else
-          # TODO: error handling
+          @server_hello = handshake.message
+          @transcript_hash[:server_hello] = handshake.serialize
+          if valid_server_hello?
+            setup_key_schedule
+            setup_cipher
+            transition_state(State::WAIT_EE)
+          else
+            # TODO: error handling
+          end
         end
+      end
+
+      def receive_hello_retry_request(handshake)
+        hrr = handshake.message
+
+        # Replace ClientHello1 with message_hash in transcript
+        @transcript_hash.replace_client_hello_with_message_hash
+        @transcript_hash[:server_hello] = handshake.serialize
+
+        # Rebuild ClientHello with requested key share group
+        requested_group = hrr.key_share&.groups&.first&.dig(:group)
+        rebuild_client_hello_for_retry(hrr, requested_group: requested_group)
+
+        transition_state(State::WAIT_SH_RETRY)
       end
 
       # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
@@ -266,8 +288,42 @@ module Raiha
         end
       end
 
+      private def rebuild_client_hello_for_retry(hrr, requested_group:)
+        # Generate new key pair for the requested group if needed
+        if requested_group && !@pkeys.any? { |pk| pk[:group] == requested_group }
+          @pkeys << { group: requested_group, pkey: OpenSSL::PKey::EC.generate(requested_group) }
+        end
+
+        retry_pkeys = if requested_group
+          @pkeys.select { |pk| pk[:group] == requested_group }
+        else
+          @pkeys
+        end
+
+        hs_clienthello = Raiha::TLS::Handshake.new.tap do |hs|
+          hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
+          hs.message = Raiha::TLS::Handshake::ClientHello.build.tap do |ch|
+            ch.server_name = @server_name if @server_name
+
+            # Add Cookie extension if present in HRR
+            cookie_ext = hrr.extensions.find { |e| e.is_a?(Handshake::Extension::Cookie) }
+            if cookie_ext
+              ch.extensions << cookie_ext
+            end
+          end
+        end
+        hs_clienthello.message.setup_key_share(retry_pkeys)
+        @client_hello = hs_clienthello.message
+        @transcript_hash[:client_hello_retry] = hs_clienthello.serialize
+        @retry_client_hello_record = Record::TLSPlaintext.serialize(hs_clienthello)
+      end
+
       private def transition_state(state)
         if @state == State::START && state == State::WAIT_SH
+          @state = state
+        elsif @state == State::WAIT_SH && state == State::WAIT_SH_RETRY
+          @state = state
+        elsif @state == State::WAIT_SH_RETRY && state == State::WAIT_SH
           @state = state
         elsif @state == State::WAIT_SH && state == State::WAIT_EE
           @state = state
