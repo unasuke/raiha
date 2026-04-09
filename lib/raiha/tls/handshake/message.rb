@@ -16,6 +16,8 @@ module Raiha
             EncryptedExtensions.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:certificate]
             Certificate.deserialize(data)
+          when Handshake::HANDSHAKE_TYPE[:certificate_request]
+            CertificateRequest.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:certificate_verify]
             CertificateVerify.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:finished]
