@@ -157,10 +157,38 @@ module Raiha
       #   @resumption_secret ||= derive_secret(secret: :handshake_secret, label: "res master", messages: messages.map(&:serialize))
       # end
 
+      def update_client_application_traffic_secret
+        current = @client_application_traffic_secret.last
+        next_secret = derive_next_application_traffic_secret(current)
+        @client_application_traffic_secret << next_secret
+        @client_application_write_key = nil
+        @client_application_write_iv = nil
+        next_secret
+      end
+
+      def update_server_application_traffic_secret
+        current = @server_application_traffic_secret.last
+        next_secret = derive_next_application_traffic_secret(current)
+        @server_application_traffic_secret << next_secret
+        @server_application_write_key = nil
+        @server_application_write_iv = nil
+        next_secret
+      end
+
       def finished_verify_data(transcript_hash, from: :server)
         key = from == :server ? @server_handshake_traffic_secret : @client_handshake_traffic_secret
         finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(@hash_algorithm).digest_length)
         OpenSSL::HMAC.digest(@hash_algorithm, finished_key, transcript_hash)
+      end
+
+      # @see https://datatracker.ietf.org/doc/html/rfc8446#section-7.2
+      private def derive_next_application_traffic_secret(current_secret)
+        digest_length = OpenSSL::Digest.new(@hash_algorithm).digest_length
+        hkdf_expand(
+          prk: current_secret,
+          info: hkdf_label(digest_length, "traffic upd", ""),
+          length: digest_length
+        )
       end
 
       # @see https://www.rfc-editor.org/rfc/rfc5869#section-2.3
