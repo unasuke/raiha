@@ -120,6 +120,8 @@ module Raiha
           receive_finished(handshake)
         when Handshake::NewSessionTicket
           receive_new_session_ticket(handshake)
+        when Handshake::KeyUpdate
+          receive_key_update(handshake)
         else
           receive_anything_else(handshake)
         end
@@ -220,6 +222,42 @@ module Raiha
 
         # Do nothing. raiha client does not support session resumption.
         return
+      end
+
+      def receive_key_update(handshake)
+        return unless handshake.message.is_a?(Handshake::KeyUpdate)
+
+        key_update = handshake.message
+
+        # Update the server (peer) application traffic secret and reset sequence number
+        @key_schedule.update_server_application_traffic_secret
+        @server_cipher.reset_sequence_number
+
+        # If the server requested an update, respond with our own KeyUpdate
+        if key_update.request_update == :update_requested
+          @buffer.concat(send_key_update(request_update: :update_not_requested))
+        end
+      end
+
+      def send_key_update(request_update: :update_not_requested)
+        key_update = Handshake::KeyUpdate.new
+        key_update.request_update = request_update
+
+        hs = Handshake.new
+        hs.handshake_type = Handshake::HANDSHAKE_TYPE[:key_update]
+        hs.message = key_update
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = hs.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :application)
+
+        # Update our own application traffic secret and reset sequence number
+        @key_schedule.update_client_application_traffic_secret
+        @client_cipher.reset_sequence_number
+
+        [ciphertext.serialize]
       end
 
       def receive_anything_else(handshake)
