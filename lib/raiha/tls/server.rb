@@ -117,8 +117,12 @@ module Raiha
         supported_groups = @extensions[:client_hello].find { |ext| ext.is_a?(Handshake::Extension::SupportedGroups) }
         raise unless supported_groups
 
-        if supported_groups.groups.include?("x25519") # TODO: select supported group correctly
+        if supported_groups.groups.include?("x25519")
           @pkey = { group: "x25519", pkey: OpenSSL::PKey.generate_key("x25519") }
+        elsif supported_groups.groups.include?("prime256v1")
+          @pkey = { group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }
+        else
+          raise "No supported group found in client hello"
         end
       end
 
