@@ -51,6 +51,8 @@ module Raiha
         @current_phase = :handshake
         @server_name = server_name
         @close_notify_sent = false
+        @client_auth_required = false
+        @certificate_request = nil
       end
 
       def datagrams_to_send
@@ -198,12 +200,15 @@ module Raiha
         return unless handshake.message.is_a?(Handshake::Certificate) ||
                       handshake.message.is_a?(Handshake::CertificateRequest)
 
-        if handshake.message.is_a?(Handshake::Certificate)
+        if handshake.message.is_a?(Handshake::CertificateRequest)
+          @certificate_request = handshake.message
+          @transcript_hash[:certificate_request] = handshake.serialize
+          @client_auth_required = true
+          transition_state(State::WAIT_CERT)
+        elsif handshake.message.is_a?(Handshake::Certificate)
           @peer_certificates = handshake.message.certificates
           @transcript_hash[:certificate] = handshake.serialize
           transition_state(State::WAIT_CV)
-        elsif handshake.message.is_a?(Handshake::CertificateRequest)
-          # TODO:
         end
       end
 
@@ -309,6 +314,12 @@ module Raiha
       end
 
       def respond_to_finished
+        records = []
+
+        if @client_auth_required
+          records.concat(send_client_certificate)
+        end
+
         finished = Handshake::Finished.new.tap do |fin|
           fin.verify_data = finished_verify_data(@key_schedule.client_handshake_traffic_secret)
         end
@@ -323,6 +334,30 @@ module Raiha
         ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
         @client_cipher.reset_sequence_number
         @server_cipher.reset_sequence_number
+        records << ciphertext.serialize
+      end
+
+      private def send_client_certificate
+        cert_msg = Handshake::Certificate.new
+        cert_msg.certificate_request_context = @certificate_request&.certificate_request_context || ""
+
+        if @config.client_certificate
+          cert_msg.certificate_entries << Handshake::Certificate::CertificateEntry.new(
+            opaque_certificate_data: @config.client_certificate.to_der,
+            extensions: []
+          )
+        end
+        # If no client certificate is configured, send empty Certificate
+
+        hs = Handshake.new
+        hs.handshake_type = Handshake::HANDSHAKE_TYPE[:certificate]
+        hs.message = cert_msg
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = hs.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :handshake)
         [ciphertext.serialize]
       end
 
@@ -393,6 +428,10 @@ module Raiha
         elsif @state == State::WAIT_SH && state == State::WAIT_EE
           @state = state
         elsif @state == State::WAIT_EE && state == State::WAIT_CERT_CR
+          @state = state
+        elsif @state == State::WAIT_CERT_CR && state == State::WAIT_CERT
+          @state = state
+        elsif @state == State::WAIT_CERT && state == State::WAIT_CV
           @state = state
         elsif @state == State::WAIT_CERT_CR && state == State::WAIT_CV
           @state = state

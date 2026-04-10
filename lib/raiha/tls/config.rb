@@ -17,6 +17,10 @@ module Raiha
       attr_reader :supported_groups
       attr_reader :server_certificate
       attr_reader :server_private_key
+      attr_accessor :client_certificate
+      attr_accessor :client_private_key
+      attr_accessor :client_ca_store
+      attr_accessor :request_client_certificate
 
       def self.client_default
         self.new(
