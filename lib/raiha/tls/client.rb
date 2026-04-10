@@ -26,6 +26,8 @@ module Raiha
         WAIT_SEND_FINISHED = :WAIT_SEND_FINISHED
         CONNECTED = :CONNECTED
         WAIT_SH_RETRY = :WAIT_SH_RETRY
+        ERROR = :ERROR
+        CLOSED = :CLOSED
       end
 
       attr_reader :state
@@ -48,6 +50,7 @@ module Raiha
         @client_cipher = nil
         @current_phase = :handshake
         @server_name = server_name
+        @close_notify_sent = false
       end
 
       def datagrams_to_send
@@ -128,7 +131,15 @@ module Raiha
       end
 
       def handle_alert_message(alert)
-        pp alert.humanize
+        if alert.fatal?
+          @state = State::ERROR
+        end
+
+        case alert.description
+        when :close_notify
+          @buffer.concat(send_alert(:warning, :close_notify)) unless @close_notify_sent
+          @state = State::CLOSED
+        end
       end
 
       def handle_application_data_message(application_data)
@@ -258,6 +269,22 @@ module Raiha
         @client_cipher.reset_sequence_number
 
         [ciphertext.serialize]
+      end
+
+      def send_alert(level, description)
+        alert = Alert.new(level: level, description: description)
+        @close_notify_sent = true if description == :close_notify
+
+        if @client_cipher
+          innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+            inner.content = alert.serialize
+            inner.content_type = Record::CONTENT_TYPE[:alert]
+          end
+          ciphertext = @client_cipher.encrypt(plaintext: innerplaintext, phase: :application)
+          [ciphertext.serialize]
+        else
+          Record::TLSPlaintext.serialize(alert)
+        end
       end
 
       def receive_anything_else(handshake)

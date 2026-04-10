@@ -93,7 +93,7 @@ module Raiha
         end
         if @client_hello
           if !@client_hello.valid_legacy_version?
-            @buffer << build_error_alert(Alert::ErrorAlert.new(kind: :illegal_parameter))
+            @buffer << build_error_alert(Alert.new(level: :fatal, description: :illegal_parameter))
             transition_state(State::ERROR_OCCURED)
           else
             # valid client hello

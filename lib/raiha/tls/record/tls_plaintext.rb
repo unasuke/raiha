@@ -43,7 +43,7 @@ module Raiha
             case content
             when Handshake
               buf << [CONTENT_TYPE[:handshake]].pack("C")
-            when Alert::ErrorAlert, Alert::ClosureAlert
+            when Alert
               buf << [CONTENT_TYPE[:alert]].pack("C")
             else
               raise "TODO #{content.class}"
