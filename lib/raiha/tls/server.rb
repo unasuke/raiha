@@ -28,7 +28,8 @@ module Raiha
 
       attr_reader :state
 
-      def initialize
+      def initialize(config: nil)
+        @config = config
         @state = State::START
         @cipher_suite = nil
         @client_hello = nil
@@ -40,6 +41,7 @@ module Raiha
         @transcript_hash = TranscriptHash.new
         @server_certificate = OpenSSL::X509::Certificate.load_file(File.expand_path("../../../tmp/server.crt", __dir__)).first # TODO
         @server_private_key = OpenSSL::PKey::RSA.new(File.read(File.expand_path("../../../tmp/server.key", __dir__))) # TODO
+        @client_auth_required = @config&.request_client_certificate || false
       end
 
       def receive(datagram)
@@ -59,13 +61,17 @@ module Raiha
       def datagrams_to_send
         case @state
         when State::RECVD_CH
-          [
+          messages = [
             build_server_hello,
             build_encrypted_extensions,
+          ]
+          messages << build_certificate_request if @client_auth_required
+          messages.concat [
             build_certificate,
             build_certificate_verify,
             build_finished,
-          ].flatten
+          ]
+          messages.flatten
         when State::ERROR_OCCURED
           @buffer.tap do
             transition_state(State::START)
@@ -125,6 +131,33 @@ module Raiha
         end
 
         choose_group
+      end
+
+      def build_certificate_request
+        handshake = Handshake.new.tap do |hs|
+          hs.handshake_type = Handshake::HANDSHAKE_TYPE[:certificate_request]
+          hs.message = Handshake::CertificateRequest.new.tap do |cr|
+            cr.certificate_request_context = ""
+            cr.extensions = [
+              Handshake::Extension::SignatureAlgorithms.new(on: :certificate_request).tap do |sa|
+                sa.signature_schemes = %w[
+                  rsa_pss_rsae_sha256
+                  rsa_pss_rsae_sha384
+                  rsa_pss_rsae_sha512
+                  ecdsa_secp256r1_sha256
+                  ecdsa_secp384r1_sha384
+                  ecdsa_secp521r1_sha512
+                ]
+              end
+            ]
+          end
+        end
+        @transcript_hash[:certificate_request] = handshake.serialize
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = handshake.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        @server_cipher.encrypt(plaintext: innerplaintext, phase: :handshake).serialize
       end
 
       def build_error_alert(alert)
@@ -235,13 +268,26 @@ module Raiha
 
           next if received.plaintext? && received.change_cipher_spec?
           inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :handshake)
-          finished = Handshake.deserialize_multiple(inner_plaintext.content).find { |hs| hs.message.is_a?(Handshake::Finished) }
+          messages = Handshake.deserialize_multiple(inner_plaintext.content)
 
-          if finished
-            verify_finished(finished)
-            transition_state(State::CONNECTED)
-            @server_cipher.reset_sequence_number
-            @client_cipher.reset_sequence_number
+          messages.each do |hs|
+            case hs.message
+            when Handshake::Certificate
+              @client_certificates = hs.message.certificates
+            when Handshake::CertificateVerify
+              if @client_certificates&.any?
+                raise unless hs.message.verify_signature(
+                  @client_certificates.first,
+                  @transcript_hash.hash,
+                  "TLS 1.3, client CertificateVerify"
+                )
+              end
+            when Handshake::Finished
+              verify_finished(hs)
+              transition_state(State::CONNECTED)
+              @server_cipher.reset_sequence_number
+              @client_cipher.reset_sequence_number
+            end
           end
         end
       end
@@ -308,9 +354,9 @@ module Raiha
       end
 
       private def finished_verify_data(key)
-        # TODO: don't hardcode hash algorithm
-        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new("sha256").digest_length)
-        OpenSSL::HMAC.digest("sha256", finished_key, @transcript_hash.hash)
+        hash_alg = @cipher_suite.hash_algorithm
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(hash_alg).digest_length)
+        OpenSSL::HMAC.digest(hash_alg, finished_key, @transcript_hash.hash)
       end
 
       private def verify_finished(finished)
