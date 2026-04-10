@@ -20,10 +20,9 @@ class RaihaTLSHandshakeExtensionKeyShareTest < Minitest::Test
     key_share = Raiha::TLS::Handshake::Extension::KeyShare.setup(group_and_pkeys)
     assert_equal "prime256v1", key_share.groups.first[:group]
 
-    unsupported_group_and_pkeys = [{ group: "x25519", pkey: OpenSSL::PKey.generate_key("x25519") }]
-    assert_raises do
-      Raiha::TLS::Handshake::Extension::KeyShare.setup(unsupported_group_and_pkeys)
-    end
+    x25519_group_and_pkeys = [{ group: "x25519", pkey: OpenSSL::PKey.generate_key("x25519") }]
+    x25519_key_share = Raiha::TLS::Handshake::Extension::KeyShare.setup(x25519_group_and_pkeys)
+    assert_equal "x25519", x25519_key_share.groups.first[:group]
   end
 
   def test_serialize_client_hello

@@ -45,7 +45,7 @@ module Raiha
         @received = []
         @key_schedule = KeySchedule.new(mode: :client)
         @groups = @config.supported_groups
-        @pkeys = @groups.map { |group| { group: group, pkey: OpenSSL::PKey::EC.generate(group) } }
+        @pkeys = @groups.map { |group| { group: group, pkey: generate_pkey(group) } }
         @server_cipher = nil
         @client_cipher = nil
         @current_phase = :handshake
@@ -391,7 +391,7 @@ module Raiha
       private def rebuild_client_hello_for_retry(hrr, requested_group:)
         # Generate new key pair for the requested group if needed
         if requested_group && !@pkeys.any? { |pk| pk[:group] == requested_group }
-          @pkeys << { group: requested_group, pkey: OpenSSL::PKey::EC.generate(requested_group) }
+          @pkeys << { group: requested_group, pkey: generate_pkey(requested_group) }
         end
 
         retry_pkeys = if requested_group
@@ -404,6 +404,12 @@ module Raiha
           hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:client_hello]
           hs.message = Raiha::TLS::Handshake::ClientHello.build.tap do |ch|
             ch.server_name = @server_name if @server_name
+
+            # Update supported_groups to include requested group
+            sg_ext = ch.extensions.find { |e| e.is_a?(Handshake::Extension::SupportedGroups) }
+            if sg_ext && requested_group && !sg_ext.groups.include?(requested_group)
+              sg_ext.groups.unshift(requested_group)
+            end
 
             # Add Cookie extension if present in HRR
             cookie_ext = hrr.extensions.find { |e| e.is_a?(Handshake::Extension::Cookie) }
@@ -460,6 +466,17 @@ module Raiha
           # TODO: check pre_shared_key or key_share
         }
         # TODO: check returned extensions and send setensions
+      end
+
+      private def generate_pkey(group)
+        case group
+        when "x25519"
+          OpenSSL::PKey.generate_key("x25519")
+        when "x448"
+          OpenSSL::PKey.generate_key("x448")
+        else
+          OpenSSL::PKey::EC.generate(group)
+        end
       end
 
       private def setup_key_schedule

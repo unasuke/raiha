@@ -61,6 +61,9 @@ module Raiha
               key_share.groups = []
               group_and_pkeys.each do |group_and_pkey|
                 case group_and_pkey[:group]
+                when "x25519", "x448"
+                  key_share.groups << { group: group_and_pkey[:group],
+                                        key_exchange: group_and_pkey[:pkey].raw_public_key }
                 when "prime256v1", "secp384r1", "secp521r1"
                   key_share.groups << { group: group_and_pkey[:group],
                                         key_exchange: group_and_pkey[:pkey].public_key.to_octet_string(:uncompressed) }
@@ -96,9 +99,14 @@ module Raiha
               end
             when :server_hello
               group_name = NAMED_GROUPS.key(buf.read(2))
-              key_exchange_length = buf.read(2).unpack1("n")
-              key_exchange = buf.read(key_exchange_length)
-              @groups << validate_group_and_key_exchange(group_name, key_exchange)
+              if buf.eof?
+                # HelloRetryRequest: only selected_group, no key_exchange
+                @groups << { group: group_name, key_exchange: "" }
+              else
+                key_exchange_length = buf.read(2).unpack1("n")
+                key_exchange = buf.read(key_exchange_length)
+                @groups << validate_group_and_key_exchange(group_name, key_exchange)
+              end
             else
               # TODO
             end
@@ -136,7 +144,10 @@ module Raiha
           end
 
           private def serialize_for_hello_retry_request
-            raise NoMethodError
+            raise "on hello_retry_request, only one group is supported" unless @groups.size == 1
+
+            selected_group = NAMED_GROUPS[@groups.first[:group]]
+            [EXTENSION_TYPE_NUMBER].pack("n") + [selected_group.bytesize].pack("n") + selected_group
           end
 
           private def validate_group_and_key_exchange(group_name, key_exchange)

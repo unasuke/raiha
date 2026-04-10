@@ -30,7 +30,7 @@ module Raiha
         hash_of_ch1 = @digest.update(original_ch).digest
 
         length_bytes = [hash_of_ch1.bytesize].pack("N").byteslice(1..) # uint24
-        self[:client_hello] = "\xfe" + length_bytes + hash_of_ch1
+        self[:client_hello] = "\xfe".b + length_bytes + hash_of_ch1
       end
 
       private def values_for_hash

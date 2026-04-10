@@ -23,6 +23,7 @@ module Raiha
         WAIT_CV = :WAIT_CV
         WAIT_FINISHED = :WAIT_FINISHED
         CONNECTED = :CONNECTED
+        WAIT_CH_RETRY = :WAIT_CH_RETRY
         ERROR_OCCURED = :ERROR_OCCURED
       end
 
@@ -51,6 +52,9 @@ module Raiha
         when State::START
           receive_client_hello
           select_parameters
+        when State::WAIT_CH_RETRY
+          receive_retry_client_hello
+          select_parameters
         when State::NEGOTIATED
           receive_finished
         when State::CONNECTED
@@ -61,17 +65,23 @@ module Raiha
       def datagrams_to_send
         case @state
         when State::RECVD_CH
-          messages = [
-            build_server_hello,
-            build_encrypted_extensions,
-          ]
-          messages << build_certificate_request if @client_auth_required
-          messages.concat [
-            build_certificate,
-            build_certificate_verify,
-            build_finished,
-          ]
-          messages.flatten
+          if @needs_hello_retry
+            @needs_hello_retry = false
+            transition_state(State::WAIT_CH_RETRY)
+            build_hello_retry_request.flatten
+          else
+            messages = [
+              build_server_hello,
+              build_encrypted_extensions,
+            ]
+            messages << build_certificate_request if @client_auth_required
+            messages.concat [
+              build_certificate,
+              build_certificate_verify,
+              build_finished,
+            ]
+            messages.flatten
+          end
         when State::ERROR_OCCURED
           @buffer.tap do
             transition_state(State::START)
@@ -128,13 +138,23 @@ module Raiha
 
       def select_parameters
         raise unless @client_hello
-        # TODO: select parameters
 
         unless choose_cipher_suite
           raise "TODO: alert? cannot choose cipher suite"
         end
 
         choose_group
+        check_key_share_or_retry
+      end
+
+      private def check_key_share_or_retry
+        client_key_share = @client_hello.key_share
+        return unless client_key_share
+
+        has_matching_share = client_key_share.groups.any? { |g| g[:group] == @pkey[:group] }
+        unless has_matching_share
+          @needs_hello_retry = true
+        end
       end
 
       def build_certificate_request
@@ -162,6 +182,44 @@ module Raiha
           inner.content_type = Record::CONTENT_TYPE[:handshake]
         end
         @server_cipher.encrypt(plaintext: innerplaintext, phase: :handshake).serialize
+      end
+
+      def build_hello_retry_request
+        hrr = Handshake::ServerHello.new
+        hrr.random = Handshake::ServerHello::HELLO_RETRY_REQUEST_RANDOM
+        hrr.legacy_session_id_echo = @client_hello.legacy_session_id
+        hrr.cipher_suite = @cipher_suite
+        hrr.extensions = [
+          Handshake::Extension::SupportedVersions.generate_for_tls13(on: :server_hello),
+          Handshake::Extension::KeyShare.new(on: :hello_retry_request).tap do |ks|
+            ks.groups = [{ group: @pkey[:group], key_exchange: "" }]
+          end
+        ]
+
+        handshake = Handshake.new
+        handshake.handshake_type = Handshake::HANDSHAKE_TYPE[:server_hello]
+        handshake.message = hrr
+
+        # Replace ClientHello1 with message_hash in transcript
+        @transcript_hash.replace_client_hello_with_message_hash
+        @transcript_hash[:server_hello] = handshake.serialize
+
+        Record::TLSPlaintext.serialize(handshake)
+      end
+
+      private def receive_retry_client_hello
+        loop do
+          received = @received.shift
+          break if received.nil?
+
+          if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ClientHello)
+            @client_hello = received.fragment.message
+            @transcript_hash[:client_hello_retry] = received.fragment.serialize
+            @extensions[:client_hello] = received.fragment.message.extensions
+            transition_state(State::RECVD_CH)
+            break
+          end
+        end
       end
 
       def build_error_alert(alert)
@@ -331,6 +389,10 @@ module Raiha
         end
 
         if @state == State::START && state == State::RECVD_CH
+          @state = state
+        elsif @state == State::RECVD_CH && state == State::WAIT_CH_RETRY
+          @state = state
+        elsif @state == State::WAIT_CH_RETRY && state == State::RECVD_CH
           @state = state
         elsif @state == State::RECVD_CH && state == State::NEGOTIATED
           @state = state
