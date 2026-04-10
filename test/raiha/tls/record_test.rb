@@ -66,7 +66,7 @@ class RaihaTLSRecordTest < Minitest::Test
   end
 
   def test_tlsplaintext_serialize_alert
-    alert = Raiha::TLS::Alert::ErrorAlert.new(kind: :illegal_parameter)
+    alert = Raiha::TLS::Alert.new(level: :fatal, description: :illegal_parameter)
     record = Raiha::TLS::Record::TLSPlaintext.serialize(alert)
     assert_equal 1, record.size
   end
