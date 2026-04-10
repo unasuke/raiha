@@ -77,12 +77,24 @@ module Raiha
           @signature = private_key.sign_pss("sha256", signed_data(transcript_hash, context), salt_length: :digest, mgf1_hash: "sha256")
         end
 
-        def verify_signature(certificate, transcript_hash, context)
+        def verify_signature(certificate, transcript_hash, context, allowed_algorithms: nil)
+          if allowed_algorithms && !allowed_algorithms.include?(algorithm)
+            return false
+          end
+
           case algorithm
           when "rsa_pss_rsae_sha256"
             certificate.public_key.verify_pss("sha256", signature, signed_data(transcript_hash, context), salt_length: :auto, mgf1_hash: "sha256")
+          when "rsa_pss_rsae_sha384"
+            certificate.public_key.verify_pss("sha384", signature, signed_data(transcript_hash, context), salt_length: :auto, mgf1_hash: "sha384")
+          when "rsa_pss_rsae_sha512"
+            certificate.public_key.verify_pss("sha512", signature, signed_data(transcript_hash, context), salt_length: :auto, mgf1_hash: "sha512")
           when "ecdsa_secp256r1_sha256"
             certificate.public_key.verify("sha256", signature, signed_data(transcript_hash, context))
+          when "ecdsa_secp384r1_sha384"
+            certificate.public_key.verify("sha384", signature, signed_data(transcript_hash, context))
+          when "ecdsa_secp521r1_sha512"
+            certificate.public_key.verify("sha512", signature, signed_data(transcript_hash, context))
           else
             raise "TODO: #{algorithm} is not supported (yet)"
           end
