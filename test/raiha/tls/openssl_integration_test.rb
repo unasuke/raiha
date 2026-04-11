@@ -70,7 +70,6 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
         "-connect", "localhost:#{port}",
         "-tls1_3",
         "-no_ticket",
-        "-ciphersuites", "TLS_AES_128_GCM_SHA256",
         "-groups", "prime256v1",
         in: File::NULL, out: File::NULL, err: File::NULL
       )
@@ -110,10 +109,7 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
     key = OpenSSL::PKey::RSA.generate(2048)
     cert = generate_server_cert(key, "localhost")
 
-    config = Raiha::TLS::Config.new(
-      cipher_suites: [Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)],
-      supported_groups: Raiha::TLS::Config::DEFAULT_SUPPORTED_GROUPS
-    )
+    config = Raiha::TLS::Config.server_default
     config.server_certificate = cert
     config.server_private_key = key
     config

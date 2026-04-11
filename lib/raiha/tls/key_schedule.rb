@@ -177,7 +177,7 @@ module Raiha
 
       def finished_verify_data(transcript_hash, from: :server)
         key = from == :server ? @server_handshake_traffic_secret : @client_handshake_traffic_secret
-        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(@hash_algorithm).digest_length)
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(@hash_algorithm).digest_length, hash: @hash_algorithm)
         OpenSSL::HMAC.digest(@hash_algorithm, finished_key, transcript_hash)
       end
 

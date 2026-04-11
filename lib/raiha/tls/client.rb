@@ -517,7 +517,7 @@ module Raiha
 
       private def finished_verify_data(key)
         hash_alg = @server_hello.cipher_suite.hash_algorithm
-        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(hash_alg).digest_length)
+        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(hash_alg).digest_length, hash: hash_alg)
         OpenSSL::HMAC.digest(hash_alg, finished_key, @transcript_hash.hash)
       end
 
