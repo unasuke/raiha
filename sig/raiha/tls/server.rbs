@@ -11,19 +11,47 @@ module Raiha
         WAIT_CV: :WAIT_CV
         WAIT_FINISHED: :WAIT_FINISHED
         CONNECTED: :CONNECTED
+        WAIT_CH_RETRY: :WAIT_CH_RETRY
         ERROR_OCCURED: :ERROR_OCCURED
       end
 
       @state: Symbol
       @cipher_suite: CipherSuite?
+      @config: Config
+      @client_auth_required: bool
 
       attr_reader state: Symbol
 
-      def initialize: -> void
-      def datagrams_to_send: -> Array[String]
+      def initialize: (?config: Config) -> void
+      def datagrams_to_send: -> Array[String]?
       def receive: (String datagram) -> void
-      def choose_cipher_suite: (Array[CipherSuite] cipher_suites) -> CipherSuite?
+      def receive_client_hello: -> void
+      def choose_cipher_suite: -> CipherSuite?
+      def choose_group: -> void
+      def select_parameters: -> void
+      def connected?: -> bool
+      def encrypt_application_data: (String data) -> String
+
+      def build_change_cipher_spec: -> Array[String]
+      def build_hello_retry_request: -> Array[String]
+      def build_error_alert: (Alert alert) -> Array[String]
+      def build_server_hello: -> Array[String]
+      def build_encrypted_extensions: -> String
+      def build_certificate_request: -> String
+      def build_certificate: -> String
+      def build_certificate_verify: -> String
+      def build_finished: -> String
+      def receive_finished: -> void
+      def receive_application_data: -> void
+
+      private def receive_retry_client_hello: -> void
+      private def check_key_share_or_retry: -> void
       private def transition_state: (Symbol state) -> void
+      private def setup_key_schedule: -> void
+      private def setup_cipher: -> void
+      private def finished_verify_data: (String key) -> String
+      private def verify_finished: (Handshake finished) -> void
+      private def derive_application_traffic_secrets: -> void
     end
   end
 end

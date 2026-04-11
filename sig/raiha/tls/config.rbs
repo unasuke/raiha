@@ -6,8 +6,15 @@ module Raiha
 
       attr_reader cipher_suites: Array[CipherSuite]
       attr_reader supported_groups: Array[String]
+      attr_accessor server_certificate: OpenSSL::X509::Certificate?
+      attr_accessor server_private_key: (OpenSSL::PKey::RSA | OpenSSL::PKey::EC)?
+      attr_accessor client_certificate: OpenSSL::X509::Certificate?
+      attr_accessor client_private_key: (OpenSSL::PKey::RSA | OpenSSL::PKey::EC)?
+      attr_accessor client_ca_store: TrustStore?
+      attr_accessor request_client_certificate: bool?
 
       def self.client_default: -> Config
+      def self.server_default: -> Config
       def initialize: (cipher_suites: Array[CipherSuite], supported_groups: Array[String]) -> void
     end
   end

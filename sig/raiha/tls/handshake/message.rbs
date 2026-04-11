@@ -27,14 +27,17 @@ module Raiha
       end
 
       class ServerHello < Message
+        HELLO_RETRY_REQUEST_RANDOM: String
+
         attr_accessor random: String
-        attr_accessor legacy_session_id_echo: Integer
+        attr_accessor legacy_session_id_echo: String
         attr_accessor cipher_suite: CipherSuite
-        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension]
+        attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension::AbstractExtension | ::Raiha::TLS::Handshake::Extension]
         attr_accessor legacy_compression_method: Integer
 
         def self.deserialize: (String data) -> ServerHello
         def self.build_from_client_hello: (ClientHello client_hello) -> ServerHello
+        def hello_retry_request?: -> bool
         def serialize_cipher_suite: -> String
         def serialize_extensions: -> String
       end
@@ -63,6 +66,13 @@ module Raiha
         def self.deserialize: (String data) -> Certificate
         def serialize: -> String
         def certificates: -> Array[OpenSSL::X509::Certificate]
+        def valid?: (?hostname: String?, ?trust_store: TrustStore?) -> bool
+
+        private def valid_chain?: (TrustStore? trust_store) -> bool
+        private def default_trust_store: -> TrustStore
+        private def valid_time?: -> bool
+        private def valid_hostname?: (String hostname) -> bool
+        private def match_hostname?: (String pattern, String hostname) -> bool
       end
 
       class CertificateVerify < Message
@@ -74,7 +84,7 @@ module Raiha
         def self.deserialize: (String data) -> CertificateVerify
         def serialize: -> String
         def sign: (OpenSSL::PKey::RSA private_key, String transcript_hash, String context) -> void
-        def verify_signature: (OpenSSL::X509::Certificate certificate, String transcript_hash, String context) -> String
+        def verify_signature: (OpenSSL::X509::Certificate certificate, String transcript_hash, String context, ?allowed_algorithms: Array[String]?) -> bool
         private def signed_data: (String transcript_hash, String context) -> String # TODO: move to somewhere
       end
 

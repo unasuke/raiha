@@ -1,0 +1,15 @@
+module Raiha
+  module TLS
+    class Handshake
+      class KeyUpdate < Message
+        REQUEST_UPDATE: Hash[Symbol, Integer]
+
+        attr_accessor request_update: Symbol
+
+        def initialize: -> void
+        def self.deserialize: (String data) -> KeyUpdate
+        def serialize: -> String
+      end
+    end
+  end
+end

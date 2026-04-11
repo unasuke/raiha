@@ -1,8 +1,14 @@
 module Raiha
   module TLS
     class TranscriptHash < Hash[Symbol, String]
-      def digest_algorithm: (String) -> void
-      def hash: () -> String
+      @digest: OpenSSL::Digest
+
+      def digest_algorithm=: (String algorithm) -> void
+      def hash: -> String
+      def empty_digest: -> String
+      def replace_client_hello_with_message_hash: -> void
+
+      private def values_for_hash: -> Array[String]
     end
   end
 end

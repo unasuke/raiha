@@ -1,0 +1,12 @@
+module Raiha
+  module TLS
+    class TrustStore
+      @store: OpenSSL::X509::Store
+
+      def initialize: -> void
+      def add_cert: (OpenSSL::X509::Certificate cert) -> self
+      def add_file: (String path) -> self
+      def verify: (OpenSSL::X509::Certificate cert, ?chain: Array[OpenSSL::X509::Certificate]) -> bool
+    end
+  end
+end

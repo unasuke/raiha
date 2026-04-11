@@ -11,33 +11,59 @@ module Raiha
         WAIT_FINISHED: :WAIT_FINISHED
         WAIT_SEND_FINISHED: :WAIT_SEND_FINISHED
         CONNECTED: :CONNECTED
+        WAIT_SH_RETRY: :WAIT_SH_RETRY
+        ERROR: :ERROR
+        CLOSED: :CLOSED
       end
 
       @state: Symbol
       @buffer: Array[String]
       @receive_buffer: String
       @supported_groups: Array[untyped]
-      @transcript_hash: untyped
-      @received: Array[Record::TLSPlaintext|Record::TLSCiphertext]
+      @transcript_hash: TranscriptHash
+      @received: Array[Record::TLSPlaintext | Record::TLSCiphertext]
+      @close_notify_sent: bool
+      @client_auth_required: bool
+      @certificate_request: Handshake::CertificateRequest?
 
       attr_reader state: Symbol
 
-      def initialize: -> void
+      def initialize: (?config: Config?, ?server_name: String?) -> void
       def build_client_hello: -> Array[String]
-      def datagrams_to_send: -> Array[String]
+      def datagrams_to_send: -> Array[String]?
       def receive: (String datagram) -> String
-      def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake|Alert|ApplicationData]
-      def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[Handshake|Alert|ApplicationData]
+      def finished?: -> bool
+      def encrypt_application_data: (String data) -> String
       def handle_handshake_message: (Handshake handshake) -> void
       def handle_alert_message: (Alert alert) -> void
       def handle_application_data_message: (ApplicationData data) -> String
       def receive_server_hello: (Handshake handshake) -> void
+      def receive_hello_retry_request: (Handshake handshake) -> void
       def receive_encrypted_extensions: (Handshake handshake) -> void
-      def receive_certificate_or_certificate_request: (Handshake handshake) -> void # TODO: certificate request
+      def receive_certificate_or_certificate_request: (Handshake handshake) -> void
       def receive_certificate_verify: (Handshake handshake) -> void
       def receive_finished: (Handshake handshake) -> void
-      def receive_anything_else: (Handshake handshake) -> void # TODO: remove
+      def receive_new_session_ticket: (Handshake handshake) -> void
+      def receive_key_update: (Handshake handshake) -> void
+      def send_key_update: (?request_update: Symbol) -> Array[String]
+      def send_alert: (Symbol level, Symbol description) -> Array[String]
+      def receive_anything_else: (Handshake handshake) -> void
+      def respond_to_finished: -> Array[String]
+
+      private def generate_pkey: (String group) -> (OpenSSL::PKey::PKey | OpenSSL::PKey::EC)
+      private def rebuild_client_hello_for_retry: (Handshake::ServerHello hrr, requested_group: String?) -> void
       private def transition_state: (Symbol state) -> void
+      private def valid_server_hello?: -> bool
+      private def setup_key_schedule: -> void
+      private def setup_cipher: -> void
+      private def verify_certificate_verify: (Handshake certificate_verify) -> void
+      private def verify_finished: (Handshake finished) -> void
+      private def derive_application_traffic_secrets: -> void
+      private def finished_verify_data: (String key) -> String
+      private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake | Alert | ApplicationData]
+      private def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[Handshake | Alert | ApplicationData]
+      private def send_client_certificate: -> Array[String]
+      private def save_to_sslkeylogfile: -> void
     end
   end
 end

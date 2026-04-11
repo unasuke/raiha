@@ -1,0 +1,14 @@
+module Raiha
+  module TLS
+    class Handshake
+      class CertificateRequest < Message
+        attr_accessor certificate_request_context: String
+        attr_accessor extensions: Array[Handshake::Extension::AbstractExtension | Handshake::Extension]
+
+        def initialize: -> void
+        def self.deserialize: (String data) -> CertificateRequest
+        def serialize: -> String
+      end
+    end
+  end
+end

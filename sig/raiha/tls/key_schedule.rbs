@@ -48,6 +48,10 @@ module Raiha
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
 
+      def update_client_application_traffic_secret: -> String
+      def update_server_application_traffic_secret: -> String
+
+      private def derive_next_application_traffic_secret: (String current_secret) -> String
       private def hkdf_expand: (prk: String, info: String, length: Integer) -> String
     end
   end
