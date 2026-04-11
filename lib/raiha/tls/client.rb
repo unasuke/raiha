@@ -11,6 +11,7 @@ require_relative "key_schedule"
 require_relative "aead"
 require_relative "transcript_hash"
 require_relative "../crypto_util"
+require_relative "session_ticket_store"
 
 module Raiha
   module TLS
@@ -53,6 +54,7 @@ module Raiha
         @close_notify_sent = false
         @client_auth_required = false
         @certificate_request = nil
+        @session_ticket_store = SessionTicketStore.new
       end
 
       def datagrams_to_send
@@ -227,6 +229,7 @@ module Raiha
         verify_finished(handshake)
         @transcript_hash[:finished] = handshake.serialize
         derive_application_traffic_secrets
+        @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
         transition_state(State::WAIT_SEND_FINISHED)
         respond_to_finished
         save_to_sslkeylogfile
@@ -236,8 +239,9 @@ module Raiha
       def receive_new_session_ticket(handshake)
         return unless handshake.message.is_a?(Handshake::NewSessionTicket)
 
-        # Do nothing. raiha client does not support session resumption.
-        return
+        new_session_ticket = handshake.message
+        psk = @key_schedule.derive_resumption_psk(new_session_ticket.ticket_nonce)
+        @session_ticket_store&.store(@server_name || "", new_session_ticket, psk)
       end
 
       def receive_key_update(handshake)

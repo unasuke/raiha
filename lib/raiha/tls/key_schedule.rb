@@ -121,6 +121,28 @@ module Raiha
         @server_application_traffic_secret[0] = derive_secret(secret: :main_secret, label: "s ap traffic", transcript_hash: transcript_hash)
       end
 
+      def derive_resumption_master_secret(transcript_hash)
+        digest_length = OpenSSL::Digest.new(@hash_algorithm).digest_length
+        @resumption_master_secret = OpenSSL::KDF.hkdf(
+          @ikm[:main_secret],
+          salt: @salt[:main_secret],
+          info: hkdf_label(digest_length, "res master", transcript_hash),
+          length: digest_length,
+          hash: @hash_algorithm
+        )
+      end
+
+      def derive_resumption_psk(nonce)
+        digest_length = OpenSSL::Digest.new(@hash_algorithm).digest_length
+        CryptoUtil.hkdf_expand_label(
+          @resumption_master_secret,
+          "resumption",
+          nonce,
+          digest_length,
+          hash: @hash_algorithm
+        )
+      end
+
       def client_application_write_key
         @client_application_write_key ||= hkdf_expand(prk: @client_application_traffic_secret.last, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
