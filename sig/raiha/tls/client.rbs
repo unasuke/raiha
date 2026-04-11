@@ -45,11 +45,14 @@ module Raiha
       def receive_finished: (Handshake handshake) -> void
       def receive_new_session_ticket: (Handshake handshake) -> void
       def receive_key_update: (Handshake handshake) -> void
+      def send_early_data: (String data) -> String?
+      def send_end_of_early_data: -> String?
       def send_key_update: (?request_update: Symbol) -> Array[String]
       def send_alert: (Symbol level, Symbol description) -> Array[String]
       def receive_anything_else: (Handshake handshake) -> void
       def respond_to_finished: -> Array[String]
 
+      private def setup_early_data_cipher: (untyped psk_entry) -> void
       private def add_psk_to_client_hello: (Handshake hs_clienthello, untyped psk_entry) -> void
       private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String
       private def generate_pkey: (String group) -> (OpenSSL::PKey::PKey | OpenSSL::PKey::EC)

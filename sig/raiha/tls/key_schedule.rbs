@@ -39,6 +39,10 @@ module Raiha
       # def derive_binder_key: -> String
       def client_early_traffic_secret: (Raiha::TLS::Handshake client_hello) -> String
       def early_exporter_secret: (Raiha::TLS::Handshake client_hello) -> String
+      def derive_client_early_traffic_secret: (String transcript_hash) -> String
+      def derive_early_exporter_master_secret: (String transcript_hash) -> String
+      def client_early_write_key: -> String
+      def client_early_write_iv: -> String
       def derive_client_handshake_traffic_secret: (String transcript_hash) -> String
       def derive_server_handshake_traffic_secret: (String transcript_hash) -> String
       def server_handshake_write_key: -> String

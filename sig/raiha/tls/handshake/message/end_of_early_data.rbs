@@ -1,0 +1,10 @@
+module Raiha
+  module TLS
+    class Handshake
+      class EndOfEarlyData < Message
+        def self.deserialize: (String data) -> EndOfEarlyData
+        def serialize: -> String
+      end
+    end
+  end
+end
