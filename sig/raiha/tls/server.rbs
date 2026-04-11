@@ -19,6 +19,8 @@ module Raiha
       @cipher_suite: CipherSuite?
       @config: Config
       @client_auth_required: bool
+      @psk_mode: bool
+      @selected_psk: { index: Integer, psk: String }?
 
       attr_reader state: Symbol
 
@@ -32,6 +34,7 @@ module Raiha
       def connected?: -> bool
       def encrypt_application_data: (String data) -> String
 
+      def build_new_session_ticket: -> String
       def build_change_cipher_spec: -> Array[String]
       def build_hello_retry_request: -> Array[String]
       def build_error_alert: (Alert alert) -> Array[String]
@@ -45,6 +48,10 @@ module Raiha
       def receive_application_data: -> void
 
       private def receive_retry_client_hello: -> void
+      private def check_psk: -> void
+      private def verify_psk_binder: (String psk, String binder, Integer identity_index) -> bool
+      private def compute_binders_size: (Integer target_index) -> Integer
+      private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String
       private def check_key_share_or_retry: -> void
       private def transition_state: (Symbol state) -> void
       private def setup_key_schedule: -> void

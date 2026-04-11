@@ -6,6 +6,7 @@ module Raiha
       def initialize: -> void
       def store: (String server_name, Handshake::NewSessionTicket ticket_message, String psk) -> void
       def get: (String server_name) -> ({ ticket: String, ticket_nonce: String, psk: String, received_at: Time, lifetime: Integer, age_add: Integer, extensions: Array[untyped] } | nil)
+      def get_by_ticket: (String ticket_data) -> ({ ticket: String, ticket_nonce: String, psk: String, received_at: Time, lifetime: Integer, age_add: Integer, extensions: Array[untyped] } | nil)
       def delete: (String server_name) -> void
 
       private def expired?: ({ received_at: Time, lifetime: Integer } entry) -> bool
