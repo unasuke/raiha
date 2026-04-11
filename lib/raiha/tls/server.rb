@@ -72,6 +72,7 @@ module Raiha
           else
             messages = [
               build_server_hello,
+              build_change_cipher_spec,
               build_encrypted_extensions,
             ]
             messages << build_certificate_request if @client_auth_required
@@ -119,7 +120,8 @@ module Raiha
       end
 
       def choose_cipher_suite
-        @cipher_suite = @client_hello.cipher_suites.find(&:supported?)
+        client_suite_names = @client_hello.cipher_suites.select(&:supported?).map(&:name)
+        @cipher_suite = @config.cipher_suites.find { |cs| client_suite_names.include?(cs.name) }
         @transcript_hash.digest_algorithm = @cipher_suite.hash_algorithm
       end
 
@@ -220,6 +222,10 @@ module Raiha
             break
           end
         end
+      end
+
+      def build_change_cipher_spec
+        Record::TLSPlaintext.serialize(ChangeCipherSpec.new)
       end
 
       def build_error_alert(alert)

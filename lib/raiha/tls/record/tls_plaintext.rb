@@ -45,6 +45,8 @@ module Raiha
               buf << [CONTENT_TYPE[:handshake]].pack("C")
             when Alert
               buf << [CONTENT_TYPE[:alert]].pack("C")
+            when ChangeCipherSpec
+              buf << [CONTENT_TYPE[:change_cipher_spec]].pack("C")
             else
               raise "TODO #{content.class}"
             end

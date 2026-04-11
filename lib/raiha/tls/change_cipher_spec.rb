@@ -8,6 +8,10 @@ module Raiha
           change_cipher_spec.content = buf
         end
       end
+
+      def serialize
+        "\x01"
+      end
     end
   end
 end

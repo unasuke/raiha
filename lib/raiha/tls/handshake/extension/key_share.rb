@@ -90,7 +90,8 @@ module Raiha
               client_shares_length = buf.read(2).unpack1("n")
               read_client_shares_length = 0
               loop do
-                group_name = NAMED_GROUPS.key(buf.read(2))
+                raw_group = buf.read(2)
+                group_name = NAMED_GROUPS.key(raw_group) || raw_group
                 read_client_shares_length += 2
                 key_exchange_length = buf.read(2).unpack1("n")
                 read_client_shares_length += 2
@@ -105,7 +106,8 @@ module Raiha
                 end
               end
             when :server_hello
-              group_name = NAMED_GROUPS.key(buf.read(2))
+              raw_group = buf.read(2)
+              group_name = NAMED_GROUPS.key(raw_group) || raw_group
               if buf.eof?
                 # HelloRetryRequest: only selected_group, no key_exchange
                 @groups << { group: group_name, key_exchange: "" }
@@ -132,9 +134,13 @@ module Raiha
             end
           end
 
+          private def encode_group_id(group_name)
+            NAMED_GROUPS[group_name] || group_name
+          end
+
           private def serialize_for_client_hello
             key_share_entries = @groups.map do |group|
-              NAMED_GROUPS[group[:group]] + [group[:key_exchange].bytesize].pack("n") + group[:key_exchange]
+              encode_group_id(group[:group]) + [group[:key_exchange].bytesize].pack("n") + group[:key_exchange]
             end.join
 
             key_share_data = [key_share_entries.bytesize].pack("n") + key_share_entries
@@ -145,7 +151,7 @@ module Raiha
           private def serialize_for_server_hello
             raise "on server_hello, only one group is supported" unless @groups.size == 1
 
-            key_share_data = NAMED_GROUPS[@groups.first[:group]] + [@groups.first[:key_exchange].bytesize].pack("n") + @groups.first[:key_exchange]
+            key_share_data = encode_group_id(@groups.first[:group]) + [@groups.first[:key_exchange].bytesize].pack("n") + @groups.first[:key_exchange]
 
             [EXTENSION_TYPE_NUMBER].pack("n") + [key_share_data.bytesize].pack("n") + key_share_data
           end
@@ -153,25 +159,25 @@ module Raiha
           private def serialize_for_hello_retry_request
             raise "on hello_retry_request, only one group is supported" unless @groups.size == 1
 
-            selected_group = NAMED_GROUPS[@groups.first[:group]]
+            selected_group = encode_group_id(@groups.first[:group])
             [EXTENSION_TYPE_NUMBER].pack("n") + [selected_group.bytesize].pack("n") + selected_group
           end
 
           private def validate_group_and_key_exchange(group_name, key_exchange)
             case group_name
             when "x25519"
-              pkey = OpenSSL::PKey.new_raw_public_key(group_name, key_exchange) # verify given key_exchange is valid
+              pkey = OpenSSL::PKey.new_raw_public_key(group_name, key_exchange)
               { group: group_name, key_exchange: pkey.raw_public_key }
             when "x448"
-              # TODO: I need test vector...
-              raise "x448"
+              pkey = OpenSSL::PKey.new_raw_public_key(group_name, key_exchange)
+              { group: group_name, key_exchange: pkey.raw_public_key }
             when "prime256v1", "secp384r1", "secp521r1"
               group = OpenSSL::PKey::EC::Group.new(group_name)
-              point = OpenSSL::PKey::EC::Point.new(group, key_exchange) # verify given key_exchange is valid
+              point = OpenSSL::PKey::EC::Point.new(group, key_exchange)
               { group: group_name, key_exchange: point.to_octet_string(:uncompressed) }
             else
-              # TODO:
-              raise NoMethodError
+              # Preserve unknown groups (e.g. post-quantum hybrids) as raw data
+              { group: group_name, key_exchange: key_exchange }
             end
           end
         end

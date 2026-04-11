@@ -34,7 +34,7 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
           break if client.finished?
 
           datagrams = client.datagrams_to_send
-          datagrams&.each { |d| socket.sendmsg(d) }
+          datagrams&.each { |d| socket.write(d) }
 
           if IO.select([socket], nil, nil, 1)
             data = socket.recv(16384)
@@ -56,63 +56,67 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
   end
 
   def test_server_against_openssl_s_client
-    skip "raiha server cannot handle openssl s_client ClientHello yet"
-
-    config = create_server_config
-    port = find_available_port
+    config = create_server_config_for_openssl
+    tcp_server = TCPServer.new("localhost", 0)
+    port = tcp_server.addr[1]
     server_state = nil
     server_error = nil
+    client_pid = nil
 
-    tcp_server = TCPServer.new("localhost", port)
-    server_thread = Thread.new do
+    Timeout.timeout(10) do
+      # Launch openssl s_client in background
+      client_pid = Process.spawn(
+        "openssl", "s_client",
+        "-connect", "localhost:#{port}",
+        "-tls1_3",
+        "-no_ticket",
+        "-ciphersuites", "TLS_AES_128_GCM_SHA256",
+        "-groups", "prime256v1",
+        in: File::NULL, out: File::NULL, err: File::NULL
+      )
+
       server = Raiha::TLS::Server.new(config: config)
       conn = tcp_server.accept
+      conn.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
 
       begin
-        loop do
-          break if server.connected?
+        until server.connected?
+          datagrams = server.datagrams_to_send
+          if datagrams && !datagrams.empty?
+            datagrams.flatten.each { |d| conn.write(d) }
+            conn.flush
+          end
 
           if IO.select([conn], nil, nil, 1)
             data = conn.recv(16384)
-            break if data.nil? || data.empty?
+            next if data.nil? || data.empty?
             server.receive(data)
-          end
-
-          server.datagrams_to_send&.each do |datagram|
-            conn.sendmsg(datagram)
           end
         end
         server_state = server.state
-      rescue => e
-        server_error = e
       ensure
         conn.close
       end
     end
 
-    Timeout.timeout(10) do
-      wait_for_port(port)
-
-      IO.popen(
-        ["openssl", "s_client",
-         "-connect", "localhost:#{port}",
-         "-tls1_3",
-         "-groups", "prime256v1",
-         "-no_ticket"],
-        "r+",
-        err: File::NULL
-      ) do |io|
-        io.close_write
-        io.read
-      end
-
-      server_thread.join(5)
-      raise server_error if server_error
-      assert_equal Raiha::TLS::Server::State::CONNECTED, server_state
-    end
+    assert_equal Raiha::TLS::Server::State::CONNECTED, server_state
   ensure
+    Process.kill("TERM", client_pid) if client_pid rescue nil
+    Process.wait(client_pid) if client_pid rescue nil
     tcp_server&.close
-    server_thread&.kill if server_thread&.alive?
+  end
+
+  private def create_server_config_for_openssl
+    key = OpenSSL::PKey::RSA.generate(2048)
+    cert = generate_server_cert(key, "localhost")
+
+    config = Raiha::TLS::Config.new(
+      cipher_suites: [Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)],
+      supported_groups: Raiha::TLS::Config::DEFAULT_SUPPORTED_GROUPS
+    )
+    config.server_certificate = cert
+    config.server_private_key = key
+    config
   end
 
   private def write_cert_files
