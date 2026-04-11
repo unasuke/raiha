@@ -26,6 +26,8 @@ module Raiha
             NewSessionTicket.deserialize(data)
           when Handshake::HANDSHAKE_TYPE[:key_update]
             KeyUpdate.deserialize(data)
+          when Handshake::HANDSHAKE_TYPE[:end_of_early_data]
+            EndOfEarlyData.deserialize(data)
           else
             puts "unknown message type: #{type}"
           end
@@ -44,3 +46,4 @@ require_relative "message/certificate_verify"
 require_relative "message/new_session_ticket"
 require_relative "message/finished"
 require_relative "message/key_update"
+require_relative "message/end_of_early_data"
