@@ -48,6 +48,8 @@ module Raiha
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
 
+      def derive_resumption_master_secret: (String transcript_hash) -> String
+      def derive_resumption_psk: (String nonce) -> String
       def update_client_application_traffic_secret: -> String
       def update_server_application_traffic_secret: -> String
 
