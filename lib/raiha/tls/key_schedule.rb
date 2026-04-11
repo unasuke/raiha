@@ -77,15 +77,21 @@ module Raiha
         [length].pack("n") + ["tls13 #{label}".length].pack("C") + "tls13 #{label}" + [context.length].pack("C") + context
       end
 
-      # TODO: not tested yet
-      # def client_early_traffic_secret(client_hello)
-      #   @client_early_traffic_secret ||= derive_secret(secret: :early_secret, label: "c e traffic", messages: [client_hello.serialize])
-      # end
+      def derive_client_early_traffic_secret(transcript_hash)
+        @client_early_traffic_secret = derive_secret(secret: :early_secret, label: "c e traffic", transcript_hash: transcript_hash)
+      end
 
-      # TODO: not tested yet
-      # def early_exporter_secret(client_hello)
-      #   @early_exporter_secret ||= derive_secret(secret: :early_secret, label: "e exp master", messages: [client_hello.serialize])
-      # end
+      def derive_early_exporter_master_secret(transcript_hash)
+        @early_exporter_master_secret = derive_secret(secret: :early_secret, label: "e exp master", transcript_hash: transcript_hash)
+      end
+
+      def client_early_write_key
+        @client_early_write_key ||= hkdf_expand(prk: @client_early_traffic_secret, info: hkdf_label(@key_length, "key", ""), length: @key_length)
+      end
+
+      def client_early_write_iv
+        @client_early_write_iv ||= hkdf_expand(prk: @client_early_traffic_secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
+      end
 
       def derive_client_handshake_traffic_secret(transcript_hash)
         @client_handshake_traffic_secret = derive_secret(secret: :handshake_secret, label: "c hs traffic", transcript_hash: transcript_hash)

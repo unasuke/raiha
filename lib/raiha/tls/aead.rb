@@ -77,6 +77,11 @@ module Raiha
 
       private def key_and_iv_client(phase)
         case phase
+        when :early
+          [
+            @key_schedule.client_early_write_key,
+            @key_schedule.client_early_write_iv,
+          ]
         when :handshake
           [
             @key_schedule.client_handshake_write_key,

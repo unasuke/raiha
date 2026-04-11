@@ -55,6 +55,8 @@ module Raiha
         @client_auth_required = false
         @certificate_request = nil
         @session_ticket_store = SessionTicketStore.new
+        @early_data_available = false
+        @early_cipher = nil
       end
 
       def datagrams_to_send
@@ -316,10 +318,63 @@ module Raiha
         psk_entry = @session_ticket_store.get(@server_name || "")
         if psk_entry
           add_psk_to_client_hello(hs_clienthello, psk_entry)
+          @early_data_available = true
         end
 
         @transcript_hash[:client_hello] = hs_clienthello.serialize
+
+        if @early_data_available
+          setup_early_data_cipher(psk_entry)
+        end
+
         Record::TLSPlaintext.serialize(hs_clienthello)
+      end
+
+      def send_early_data(data)
+        return nil unless @early_data_available && @early_cipher
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = ApplicationData.new.tap { |appdata| appdata.content = data }.serialize
+          inner.content_type = Record::CONTENT_TYPE[:application_data]
+        end
+        ciphertext = @early_cipher.encrypt(plaintext: innerplaintext, phase: :early)
+        ciphertext.serialize
+      end
+
+      def send_end_of_early_data
+        return nil unless @early_data_available
+
+        @early_data_available = false
+
+        handshake = Handshake.new
+        handshake.handshake_type = Handshake::HANDSHAKE_TYPE[:end_of_early_data]
+        handshake.message = Handshake::EndOfEarlyData.new
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = handshake.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        ciphertext = @early_cipher.encrypt(plaintext: innerplaintext, phase: :early)
+        ciphertext.serialize
+      end
+
+      private def setup_early_data_cipher(psk_entry)
+        cipher_suite = @client_hello.cipher_suites.first
+        hash_alg = cipher_suite.hash_algorithm
+        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        # Set cipher suite on key_schedule so hash_algorithm is available
+        @key_schedule.cipher_suite = cipher_suite
+
+        # Derive early_secret from PSK
+        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk_entry[:psk])
+        @key_schedule.instance_variable_set(:@ikm, { early_secret: early_secret, handshake_secret: nil, main_secret: nil })
+
+        # Derive client_early_traffic_secret
+        @key_schedule.derive_client_early_traffic_secret(@transcript_hash.hash)
+
+        # Create early data cipher
+        @early_cipher = AEAD.new(cipher_suite: cipher_suite, key_schedule: @key_schedule, mode: :client)
       end
 
       private def add_psk_to_client_hello(hs_clienthello, psk_entry)
