@@ -50,6 +50,8 @@ module Raiha
       def receive_anything_else: (Handshake handshake) -> void
       def respond_to_finished: -> Array[String]
 
+      private def add_psk_to_client_hello: (Handshake hs_clienthello, untyped psk_entry) -> void
+      private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String
       private def generate_pkey: (String group) -> (OpenSSL::PKey::PKey | OpenSSL::PKey::EC)
       private def rebuild_client_hello_for_retry: (Handshake::ServerHello hrr, requested_group: String?) -> void
       private def transition_state: (Symbol state) -> void
