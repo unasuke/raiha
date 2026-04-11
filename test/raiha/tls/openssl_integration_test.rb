@@ -10,8 +10,6 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
   include TestCertificate
 
   def test_client_against_openssl_s_server
-    skip "openssl interop requires investigation - ClientHello compatibility"
-
     cert_file, key_file = write_cert_files
     port = find_available_port
 
@@ -21,7 +19,7 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
       "-cert", cert_file.path,
       "-key", key_file.path,
       "-tls1_3",
-      "-groups", "prime256v1",
+      "-www",
       out: File::NULL, err: File::NULL
     )
 
@@ -58,7 +56,7 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
   end
 
   def test_server_against_openssl_s_client
-    skip "openssl interop requires investigation - server handshake compatibility"
+    skip "raiha server cannot handle openssl s_client ClientHello yet"
 
     config = create_server_config
     port = find_available_port
