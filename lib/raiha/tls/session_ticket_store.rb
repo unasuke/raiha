@@ -27,6 +27,13 @@ module Raiha
         entry
       end
 
+      def get_by_ticket(ticket_data)
+        @tickets.each_value do |entry|
+          return entry if entry[:ticket] == ticket_data && !expired?(entry)
+        end
+        nil
+      end
+
       def delete(server_name)
         @tickets.delete(server_name)
       end

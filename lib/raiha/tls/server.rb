@@ -9,6 +9,8 @@ require_relative "aead"
 require_relative "transcript_hash"
 require_relative "../crypto_util"
 require_relative "alert"
+require_relative "session_ticket_store"
+require "securerandom"
 
 module Raiha
   module TLS
@@ -43,6 +45,9 @@ module Raiha
         @server_certificate = @config.server_certificate
         @server_private_key = @config.server_private_key
         @client_auth_required = @config.request_client_certificate || false
+        @session_ticket_store = SessionTicketStore.new
+        @psk_mode = false
+        @selected_psk = nil
       end
 
       def receive(datagram)
@@ -75,12 +80,12 @@ module Raiha
               build_change_cipher_spec,
               build_encrypted_extensions,
             ]
-            messages << build_certificate_request if @client_auth_required
-            messages.concat [
-              build_certificate,
-              build_certificate_verify,
-              build_finished,
-            ]
+            unless @psk_mode
+              messages << build_certificate_request if @client_auth_required
+              messages << build_certificate
+              messages << build_certificate_verify
+            end
+            messages << build_finished
             messages.flatten
           end
         when State::ERROR_OCCURED
@@ -145,8 +150,60 @@ module Raiha
           raise "TODO: alert? cannot choose cipher suite"
         end
 
+        check_psk
         choose_group
         check_key_share_or_retry
+      end
+
+      private def check_psk
+        psk_ext = @extensions[:client_hello].find { |ext| ext.is_a?(Handshake::Extension::PreSharedKey) }
+        return unless psk_ext
+        return if psk_ext.identities.empty?
+
+        psk_modes_ext = @extensions[:client_hello].find { |ext| ext.is_a?(Handshake::Extension::PskKeyExchangeModes) }
+        return unless psk_modes_ext&.modes&.include?(:psk_dhe_ke)
+
+        psk_ext.identities.each_with_index do |identity, index|
+          psk_entry = @session_ticket_store.get_by_ticket(identity.identity)
+          next unless psk_entry
+
+          if verify_psk_binder(psk_entry[:psk], psk_ext.binders[index], index)
+            @psk_mode = true
+            @selected_psk = { index: index, psk: psk_entry[:psk] }
+            return
+          end
+        end
+      end
+
+      private def verify_psk_binder(psk, binder, identity_index)
+        hash_alg = @cipher_suite.hash_algorithm
+        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        # Reconstruct truncated ClientHello for binder verification
+        client_hello_serialized = @transcript_hash[:client_hello]
+        binders_size = compute_binders_size(identity_index)
+        truncated = client_hello_serialized[0...(client_hello_serialized.bytesize - binders_size)]
+
+        expected_binder = compute_psk_binder(psk, truncated, hash_alg)
+        binder == expected_binder
+      end
+
+      private def compute_binders_size(target_index)
+        psk_ext = @extensions[:client_hello].find { |ext| ext.is_a?(Handshake::Extension::PreSharedKey) }
+        binder_entries_size = psk_ext.binders.sum { |b| 1 + b.bytesize }
+        2 + binder_entries_size # binders_length(2) + all binder entries
+      end
+
+      private def compute_psk_binder(psk, truncated_client_hello, hash_alg)
+        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk)
+        empty_hash = OpenSSL::Digest.new(hash_alg).digest
+        binder_key = CryptoUtil.hkdf_expand_label(early_secret, "res binder", empty_hash, digest_length, hash: hash_alg)
+        finished_key = CryptoUtil.hkdf_expand_label(binder_key, "finished", "", digest_length, hash: hash_alg)
+
+        transcript_hash = OpenSSL::Digest.new(hash_alg).digest(truncated_client_hello)
+        OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash)
       end
 
       private def check_key_share_or_retry
@@ -224,6 +281,31 @@ module Raiha
         end
       end
 
+      def build_new_session_ticket
+        ticket_nonce = SecureRandom.random_bytes(8)
+        ticket_data = SecureRandom.random_bytes(32)
+
+        new_session_ticket = Handshake::NewSessionTicket.new
+        new_session_ticket.ticket_lifetime = 7200
+        new_session_ticket.ticket_age_add = SecureRandom.random_number(0xFFFFFFFF)
+        new_session_ticket.ticket_nonce = ticket_nonce
+        new_session_ticket.ticket = ticket_data
+        new_session_ticket.extensions = []
+
+        psk = @key_schedule.derive_resumption_psk(ticket_nonce)
+        @session_ticket_store.store(ticket_data, new_session_ticket, psk)
+
+        handshake = Handshake.new
+        handshake.handshake_type = Handshake::HANDSHAKE_TYPE[:new_session_ticket]
+        handshake.message = new_session_ticket
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = handshake.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        @server_cipher.encrypt(plaintext: innerplaintext, phase: :application).serialize
+      end
+
       def build_change_cipher_spec
         Record::TLSPlaintext.serialize(ChangeCipherSpec.new)
       end
@@ -236,11 +318,10 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:server_hello]
           hs.message = Handshake::ServerHello.build_from_client_hello(@client_hello).tap do |sh|
-            sh.extensions += [
+            additional_extensions = [
               Handshake::Extension::KeyShare.new(on: :server_hello).tap do |ks|
-                # TODO: ugly
                 if @pkey[:group] == "x25519"
-                  ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].raw_public_key }] # TODO: x25519 (OpenSSL::PKey::PKey) only
+                  ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].raw_public_key }]
                 elsif @pkey[:group] == "prime256v1"
                   ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].public_key.to_octet_string(:uncompressed) }]
                 else
@@ -248,6 +329,14 @@ module Raiha
                 end
               end
             ]
+
+            if @psk_mode && @selected_psk
+              additional_extensions << Handshake::Extension::PreSharedKey.new(on: :server_hello).tap do |psk|
+                psk.selected_identity = @selected_psk[:index]
+              end
+            end
+
+            sh.extensions += additional_extensions
           end
         end
         @transcript_hash[:server_hello] = handshake.serialize
@@ -352,6 +441,7 @@ module Raiha
               end
             when Handshake::Finished
               verify_finished(hs)
+              @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
               transition_state(State::CONNECTED)
               @server_cipher.reset_sequence_number
               @client_cipher.reset_sequence_number
