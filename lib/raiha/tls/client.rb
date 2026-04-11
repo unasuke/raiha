@@ -312,9 +312,61 @@ module Raiha
         hs_clienthello.message.setup_key_share(@pkeys)
         @client_hello = hs_clienthello.message
         @transcript_hash.digest_algorithm = @client_hello.cipher_suites.first.hash_algorithm
+
+        psk_entry = @session_ticket_store.get(@server_name || "")
+        if psk_entry
+          add_psk_to_client_hello(hs_clienthello, psk_entry)
+        end
+
         @transcript_hash[:client_hello] = hs_clienthello.serialize
-        # hs_clienthello.serialize
         Record::TLSPlaintext.serialize(hs_clienthello)
+      end
+
+      private def add_psk_to_client_hello(hs_clienthello, psk_entry)
+        client_hello = hs_clienthello.message
+
+        # Add PskKeyExchangeModes extension
+        client_hello.extensions << Handshake::Extension::PskKeyExchangeModes.new(on: :client_hello).tap do |modes|
+          modes.modes = [:psk_dhe_ke]
+        end
+
+        # Build PreSharedKey extension with placeholder binder
+        hash_alg = client_hello.cipher_suites.first.hash_algorithm
+        binder_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        ticket_age = ((Time.now - psk_entry[:received_at]) * 1000).to_i + psk_entry[:age_add]
+        psk_ext = Handshake::Extension::PreSharedKey.new(on: :client_hello)
+        psk_ext.identities = [
+          Handshake::Extension::PreSharedKey::PskIdentity.new(psk_entry[:ticket], ticket_age & 0xFFFFFFFF)
+        ]
+        psk_ext.binders = ["\x00" * binder_length]
+        client_hello.extensions << psk_ext
+
+        # Compute binder over truncated ClientHello (everything except the binder values)
+        serialized = hs_clienthello.serialize
+        binders_size = 2 + 1 + binder_length # binders_length(2) + binder_entry_length(1) + binder
+        truncated = serialized[0...(serialized.bytesize - binders_size)]
+
+        binder = compute_psk_binder(psk_entry[:psk], truncated, hash_alg)
+        psk_ext.binders = [binder]
+      end
+
+      private def compute_psk_binder(psk, truncated_client_hello, hash_alg)
+        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        # early_secret = HKDF-Extract(0, PSK)
+        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk)
+
+        # binder_key = Derive-Secret(early_secret, "res binder", "")
+        empty_hash = OpenSSL::Digest.new(hash_alg).digest
+        binder_key = CryptoUtil.hkdf_expand_label(early_secret, "res binder", empty_hash, digest_length, hash: hash_alg)
+
+        # finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
+        finished_key = CryptoUtil.hkdf_expand_label(binder_key, "finished", "", digest_length, hash: hash_alg)
+
+        # binder = HMAC(finished_key, Transcript-Hash(truncated_client_hello))
+        transcript_hash = OpenSSL::Digest.new(hash_alg).digest(truncated_client_hello)
+        OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash)
       end
 
       def respond_to_finished
