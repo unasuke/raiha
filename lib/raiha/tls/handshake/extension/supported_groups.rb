@@ -32,16 +32,23 @@ module Raiha
         class SupportedGroups < AbstractExtension
           EXTENSION_TYPE_NUMBER = 10
           NAMED_GROUPS = { # TODO: Move to somewhere (define on specific class)
+            # Elliptic Curve Groups (ECDHE)
             "prime256v1" => "\x00\x17", # secp256r1
             "secp384r1" => "\x00\x18",
             "secp521r1" => "\x00\x19",
             "x25519" => "\x00\x1D",
             "x448" => "\x00\x1E",
+
+            # Finite Field Groups (DHE)
             "ffdhe2048" => "\x01\x00",
             "ffdhe3072" => "\x01\x01",
             "ffdhe4096" => "\x01\x02",
             "ffdhe6144" => "\x01\x03",
             "ffdhe8192" => "\x01\x04",
+
+            # Hybrid post-quantum key agreements
+            "X25519MLKEM768" => "\x11\xEC",
+            "SecP256r1MLKEM768" => "\x11\xED",
           }.freeze
 
           FFDHE_PRIVATE_USE = (0x01FC..0x01FF)
@@ -56,19 +63,33 @@ module Raiha
             buf = StringIO.new(data)
             group_count = buf.read(2).unpack1("n") / 2
             group_count.times do
-              value = buf.read(2)
-              group = NAMED_GROUPS.key(value)
+              raw = buf.read(2)
+              value = raw.unpack1("n")
+              group = NAMED_GROUPS.key(raw)
               if group
                 @groups << group
+              elsif FFDHE_PRIVATE_USE.include?(value)
+                @groups << "ffdhe_private_use"
+              elsif ECDHE_PRIVATE_USE.include?(value)
+                @groups << "ecdhe_private_use"
               else
-                @groups << "ffdhe_private_use" if FFDHE_PRIVATE_USE.include?(value.unpack1("n"))
-                @groups << "ecdhe_private_use" if ECDHE_PRIVATE_USE.include?(value.unpack1("n"))
+                @groups << raw
               end
             end
           end
 
           def serialize
-            data = [@groups.length * 2].pack("n") + @groups.map { |group| NAMED_GROUPS[group] }.join
+            encoded_groups = @groups.map { |group|
+              case group
+              when "ffdhe_private_use"
+                [FFDHE_PRIVATE_USE.first].pack("n")
+              when "ecdhe_private_use"
+                [ECDHE_PRIVATE_USE.first].pack("n")
+              else
+                NAMED_GROUPS[group] || group
+              end
+            }.join
+            data = [encoded_groups.bytesize].pack("n") + encoded_groups
             [EXTENSION_TYPE_NUMBER].pack("n") + [data.bytesize].pack("n") + data
           end
         end

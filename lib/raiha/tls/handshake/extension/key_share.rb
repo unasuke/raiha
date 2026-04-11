@@ -29,16 +29,23 @@ module Raiha
           EXTENSION_TYPE_NUMBER = 51
 
           NAMED_GROUPS = { # TODO: Move to somewhere (define on specific class)
+            # Elliptic Curve Groups (ECDHE)
             "prime256v1" => "\x00\x17", # secp256r1
             "secp384r1" => "\x00\x18",
             "secp521r1" => "\x00\x19",
             "x25519" => "\x00\x1D",
             "x448" => "\x00\x1E",
+
+            # Finite Field Groups (DHE)
             "ffdhe2048" => "\x01\x00",
             "ffdhe3072" => "\x01\x01",
             "ffdhe4096" => "\x01\x02",
             "ffdhe6144" => "\x01\x03",
             "ffdhe8192" => "\x01\x04",
+
+            # Hybrid post-quantum key agreements
+            "X25519MLKEM768" => "\x11\xEC",
+            "SecP256r1MLKEM768" => "\x11\xED",
           }.freeze
 
           # attr_accessor :private_key
