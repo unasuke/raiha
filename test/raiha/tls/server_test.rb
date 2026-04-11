@@ -4,7 +4,8 @@ require "raiha/tls/server"
 
 class RaihaTLSServerTest < Minitest::Test
   def test_receive_client_hello
-    server = Raiha::TLS::Server.new
+    config = Raiha::TLS::Config.server_default
+    server = Raiha::TLS::Server.new(config: config)
     client = Raiha::TLS::Client.new
 
     server.receive(client.datagrams_to_send.join)
@@ -13,7 +14,8 @@ class RaihaTLSServerTest < Minitest::Test
 
   def test_receive_invalid_client_hello
     # invalid legacy version
-    server = Raiha::TLS::Server.new
+    config = Raiha::TLS::Config.server_default
+    server = Raiha::TLS::Server.new(config: config)
     client = Raiha::TLS::Client.new
     client_request = client.datagrams_to_send
     client_request[0][9..10] = "\x03\x04" # Replace clienthello version to invalid legacy version, too hardcorded...

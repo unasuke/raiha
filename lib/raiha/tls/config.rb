@@ -15,8 +15,8 @@ module Raiha
 
       attr_reader :cipher_suites
       attr_reader :supported_groups
-      attr_reader :server_certificate
-      attr_reader :server_private_key
+      attr_accessor :server_certificate
+      attr_accessor :server_private_key
       attr_accessor :client_certificate
       attr_accessor :client_private_key
       attr_accessor :client_ca_store
@@ -30,6 +30,10 @@ module Raiha
       end
 
       def self.server_default
+        self.new(
+          cipher_suites: DEFAULT_CIPHER_SUITES,
+          supported_groups: DEFAULT_SUPPORTED_GROUPS,
+        )
       end
 
       def initialize(cipher_suites:, supported_groups:)

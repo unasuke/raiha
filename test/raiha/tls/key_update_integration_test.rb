@@ -1,8 +1,10 @@
 require "test_helper"
+require "support/test_certificate"
 require "raiha/tls/client"
 require "raiha/tls/server"
 
 class RaihaTLSKeyUpdateIntegrationTest < Minitest::Test
+  include TestCertificate
   def test_key_update_after_handshake
     client, server = establish_connection
 
@@ -35,7 +37,7 @@ class RaihaTLSKeyUpdateIntegrationTest < Minitest::Test
 
   private def establish_connection
     client = Raiha::TLS::Client.new
-    server = Raiha::TLS::Server.new
+    server = Raiha::TLS::Server.new(config: create_server_config)
 
     client_first = client.datagrams_to_send
     server.receive(client_first.join)

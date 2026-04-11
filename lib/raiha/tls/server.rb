@@ -29,7 +29,7 @@ module Raiha
 
       attr_reader :state
 
-      def initialize(config: nil)
+      def initialize(config: Config.server_default)
         @config = config
         @state = State::START
         @cipher_suite = nil
@@ -40,9 +40,9 @@ module Raiha
         @extensions = {}
         @key_schedule = KeySchedule.new(mode: :server)
         @transcript_hash = TranscriptHash.new
-        @server_certificate = OpenSSL::X509::Certificate.load_file(File.expand_path("../../../tmp/server.crt", __dir__)).first # TODO
-        @server_private_key = OpenSSL::PKey::RSA.new(File.read(File.expand_path("../../../tmp/server.key", __dir__))) # TODO
-        @client_auth_required = @config&.request_client_certificate || false
+        @server_certificate = @config.server_certificate
+        @server_private_key = @config.server_private_key
+        @client_auth_required = @config.request_client_certificate || false
       end
 
       def receive(datagram)

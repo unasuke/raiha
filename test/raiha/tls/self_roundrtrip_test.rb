@@ -1,11 +1,14 @@
 require "test_helper"
+require "support/test_certificate"
 require "raiha/tls/client"
 require "raiha/tls/server"
 
 class RaihaTLSRoundtripTest < Minitest::Test
+  include TestCertificate
+
   def test_roundtrip1
     client = Raiha::TLS::Client.new
-    server = Raiha::TLS::Server.new
+    server = Raiha::TLS::Server.new(config: create_server_config)
 
     client_first_request = client.datagrams_to_send
     assert_equal Raiha::TLS::Client::State::WAIT_SH, client.state
