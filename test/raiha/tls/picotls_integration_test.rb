@@ -63,8 +63,6 @@ class RaihaTLSPicotlsIntegrationTest < Minitest::Test
   end
 
   def test_server_against_picotls_client
-    skip "raiha server decryption fails with picotls client - under investigation"
-
     config = create_server_config
     tcp_server = TCPServer.new("localhost", 0)
     port = tcp_server.addr[1]

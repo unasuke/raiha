@@ -422,6 +422,7 @@ module Raiha
         loop do
           received = @received.shift
           break if received.nil?
+          break if connected?
 
           next if received.plaintext? && received.change_cipher_spec?
           inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :handshake)
