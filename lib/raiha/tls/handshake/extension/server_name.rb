@@ -29,7 +29,13 @@ module Raiha
 
           def extension_data=(data)
             super
-            @server_name = @extension_data
+            buf = StringIO.new(data)
+            _list_length = buf.read(2).unpack1("n")
+            name_type = buf.read(1).unpack1("C")
+            if name_type == 0 # host_name
+              name_length = buf.read(2).unpack1("n")
+              @server_name = buf.read(name_length)
+            end
           end
 
           def serialize
