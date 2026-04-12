@@ -1,0 +1,14 @@
+module Raiha::Quic
+  module Protocol
+    module Version
+      V1: Integer
+      V2: Integer
+      VERSION_NEGOTIATION: Integer
+
+      SUPPORTED_VERSIONS: Array[Integer]
+
+      def self.supported?: (Integer version) -> bool
+      def self.to_s: (Integer version) -> String
+    end
+  end
+end
