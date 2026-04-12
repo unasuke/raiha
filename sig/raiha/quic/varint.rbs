@@ -1,0 +1,12 @@
+module Raiha::Quic
+  module Varint
+    MAX_VALUE: Integer
+    MAX_1_BYTE: Integer
+    MAX_2_BYTE: Integer
+    MAX_4_BYTE: Integer
+
+    def self.encode: (Integer value) -> String
+    def self.decode: (StringIO io) -> Integer
+    def self.byte_size: (Integer value) -> Integer
+  end
+end
