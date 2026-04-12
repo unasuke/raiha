@@ -1,0 +1,12 @@
+module Raiha::Quic
+  module Protocol
+    module Perspective
+      CLIENT: Symbol
+      SERVER: Symbol
+
+      def self.opposite: (Symbol perspective) -> Symbol
+      def self.client?: (Symbol perspective) -> bool
+      def self.server?: (Symbol perspective) -> bool
+    end
+  end
+end
