@@ -474,8 +474,7 @@ module Raiha
           next if received.plaintext?
 
           inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :application)
-          pp received
-          pp inner_plaintext
+          # TODO: handle received application data
         end
       end
 

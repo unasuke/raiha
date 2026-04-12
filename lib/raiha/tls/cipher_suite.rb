@@ -58,7 +58,17 @@ module Raiha
       end
 
       def self.deserialize(data)
-        self.new(CIPHER_SUITES.find { |c| c[:value] == data }[:name])
+        entry = CIPHER_SUITES.find { |c| c[:value] == data }
+        if entry
+          self.new(entry[:name])
+        else
+          # Preserve unknown cipher suites for roundtrip fidelity
+          cs = allocate
+          cs.instance_variable_set(:@name, :"unknown_#{data.unpack1("H4")}")
+          cs.instance_variable_set(:@value, data)
+          cs.instance_variable_set(:@supported, false)
+          cs
+        end
       end
     end
   end
