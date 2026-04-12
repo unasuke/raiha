@@ -1,0 +1,25 @@
+module Raiha::Quic
+  module Wire
+    class Buffer
+      @io: StringIO
+
+      def initialize: (?String? data) -> void
+      def read: (Integer length) -> String?
+      def write: (String data) -> Integer
+      def pos: -> Integer
+      def seek: (Integer pos) -> Integer
+      def eof?: -> bool
+      def read_uint8: -> Integer
+      def read_uint16: -> Integer
+      def read_uint32: -> Integer
+      def read_varint: -> Integer
+      def write_uint8: (Integer value) -> Integer
+      def write_uint16: (Integer value) -> Integer
+      def write_uint32: (Integer value) -> Integer
+      def write_varint: (Integer value) -> Integer
+      def remaining: -> Integer
+      def to_s: -> String
+      def bytesize: -> Integer
+    end
+  end
+end
