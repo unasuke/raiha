@@ -1,0 +1,19 @@
+module Raiha::Quic
+  module Protocol
+    class StreamID
+      attr_reader value: Integer
+
+      def initialize: (Integer value) -> void
+      def client_initiated?: -> bool
+      def server_initiated?: -> bool
+      def bidirectional?: -> bool
+      def unidirectional?: -> bool
+      def initiator: -> Symbol
+      def self.next_bidirectional: (Symbol perspective, Integer? current_max) -> StreamID
+      def self.next_unidirectional: (Symbol perspective, Integer? current_max) -> StreamID
+      def ==: (untyped other) -> bool
+      def hash: -> Integer
+      def to_i: -> Integer
+    end
+  end
+end
