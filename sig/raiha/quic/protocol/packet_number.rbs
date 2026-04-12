@@ -1,0 +1,28 @@
+module Raiha::Quic
+  module Protocol
+    class PacketNumber
+      include Comparable
+
+      MAX_VALUE: Integer
+
+      attr_reader value: Integer
+
+      def initialize: (Integer value) -> void
+      def increment: -> PacketNumber
+      def -: (PacketNumber other) -> Integer
+      def <=>: (PacketNumber other) -> Integer?
+      def encode: (Integer? largest_acked) -> { bytes: Integer, encoded: String }
+      def self.decode: (Integer truncated_pn, Integer pn_nbits, Integer largest_pn) -> PacketNumber
+
+      private def validate!: -> void
+    end
+
+    module PacketNumberSpace
+      INITIAL: Symbol
+      HANDSHAKE: Symbol
+      APPLICATION_DATA: Symbol
+
+      ALL: Array[Symbol]
+    end
+  end
+end
