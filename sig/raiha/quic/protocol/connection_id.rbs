@@ -1,0 +1,20 @@
+module Raiha::Quic
+  module Protocol
+    class ConnectionID
+      MAX_LENGTH: Integer
+
+      attr_reader bytes: String
+
+      def initialize: (?String? bytes) -> void
+      def self.generate: (?length: Integer) -> ConnectionID
+      def self.from_bytes: (String bytes) -> ConnectionID
+      def length: -> Integer
+      def ==: (untyped other) -> bool
+      def hash: -> Integer
+      def to_s: -> String
+      def serialize: -> String
+
+      private def validate!: -> void
+    end
+  end
+end
