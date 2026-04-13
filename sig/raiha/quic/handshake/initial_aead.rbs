@@ -1,0 +1,28 @@
+module Raiha::Quic
+  module Handshake
+    class InitialAEAD
+      ALGORITHM: String
+      KEY_LENGTH: Integer
+      IV_LENGTH: Integer
+      HP_KEY_LENGTH: Integer
+      TAG_LENGTH: Integer
+      INITIAL_SALT_V1: String
+      INITIAL_SALT_V2: String
+
+      attr_reader client_hp_key: String
+      attr_reader server_hp_key: String
+
+      def initialize: (connection_id: Protocol::ConnectionID, perspective: Symbol, ?version: Integer) -> void
+      def ready?: -> bool
+      def encrypt: (String plaintext, packet_number: Integer, aad: String) -> String
+      def decrypt: (String ciphertext_with_tag, packet_number: Integer, aad: String) -> String
+      def header_protection_mask: (String sample, ?direction: Symbol) -> String
+
+      private def send_key_iv: -> [String, String]
+      private def receive_key_iv: -> [String, String]
+      private def send_hp_key: -> String
+      private def receive_hp_key: -> String
+      private def compute_nonce: (String iv, Integer packet_number) -> String
+    end
+  end
+end
