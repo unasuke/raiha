@@ -1,0 +1,53 @@
+module Raiha::Quic
+  module Wire
+    class Header
+      LONG_HEADER_FORM: Integer
+
+      attr_reader destination_connection_id: Protocol::ConnectionID?
+      attr_reader packet_number: Integer?
+
+      def self.parse: (Buffer buffer) -> Header
+      def long_header?: -> bool
+      def short_header?: -> bool
+    end
+
+    class LongHeader < Header
+      module PacketType
+        INITIAL: Integer
+        ZERO_RTT: Integer
+        HANDSHAKE: Integer
+        RETRY: Integer
+      end
+
+      attr_accessor packet_type: Integer
+      attr_accessor version: Integer
+      attr_accessor destination_connection_id: Protocol::ConnectionID
+      attr_accessor source_connection_id: Protocol::ConnectionID
+      attr_accessor packet_number: Integer?
+      attr_accessor packet_number_length: Integer?
+      attr_accessor payload_length: Integer?
+      attr_accessor token: String
+      attr_accessor retry_token: String?
+      attr_accessor retry_integrity_tag: String?
+
+      def initialize: -> void
+      def self.parse: (Buffer buffer) -> LongHeader
+      def serialize: -> String
+      def initial?: -> bool
+      def zero_rtt?: -> bool
+      def handshake?: -> bool
+      def retry?: -> bool
+    end
+
+    class ShortHeader < Header
+      attr_accessor destination_connection_id: Protocol::ConnectionID
+      attr_accessor packet_number: Integer?
+      attr_accessor packet_number_length: Integer?
+      attr_accessor key_phase: bool
+      attr_accessor spin_bit: bool
+
+      def self.parse: (Buffer buffer, connection_id_length: Integer) -> ShortHeader
+      def serialize: -> String
+    end
+  end
+end
