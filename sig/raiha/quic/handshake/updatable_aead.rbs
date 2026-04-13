@@ -1,0 +1,25 @@
+module Raiha::Quic
+  module Handshake
+    class UpdatableAEAD
+      TAG_LENGTH: Integer
+
+      attr_reader key_phase: bool
+
+      def initialize: (client_secret: String, server_secret: String, perspective: Symbol, cipher_suite: Raiha::TLS::CipherSuite) -> void
+      def ready?: -> bool
+      def rotate_keys: -> void
+      def encrypt: (String plaintext, packet_number: Integer, aad: String) -> String
+      def decrypt: (String ciphertext_with_tag, packet_number: Integer, aad: String) -> String
+      def header_protection_mask: (String sample, ?direction: Symbol) -> String
+
+      private def derive_keys: -> void
+      private def derive_next_secret: (String current_secret) -> String
+      private def send_secret: -> String
+      private def receive_secret: -> String
+      private def send_key_iv: -> [String, String]
+      private def receive_key_iv: -> [String, String]
+      private def compute_nonce: (String iv, Integer packet_number) -> String
+      private def hp_cipher_name: -> String
+    end
+  end
+end
