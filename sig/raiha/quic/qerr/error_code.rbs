@@ -1,0 +1,29 @@
+module Raiha::Quic
+  module Qerr
+    module TransportErrorCode
+      NO_ERROR: Integer
+      INTERNAL_ERROR: Integer
+      CONNECTION_REFUSED: Integer
+      FLOW_CONTROL_ERROR: Integer
+      STREAM_LIMIT_ERROR: Integer
+      STREAM_STATE_ERROR: Integer
+      FINAL_SIZE_ERROR: Integer
+      FRAME_ENCODING_ERROR: Integer
+      TRANSPORT_PARAMETER_ERROR: Integer
+      CONNECTION_ID_LIMIT_ERROR: Integer
+      PROTOCOL_VIOLATION: Integer
+      INVALID_TOKEN: Integer
+      APPLICATION_ERROR: Integer
+      CRYPTO_BUFFER_EXCEEDED: Integer
+      KEY_UPDATE_ERROR: Integer
+      AEAD_LIMIT_REACHED: Integer
+      NO_VIABLE_PATH: Integer
+      CRYPTO_ERROR_BASE: Integer
+
+      DESCRIPTIONS: Hash[Integer, String]
+
+      def self.description: (Integer code) -> String
+      def self.crypto_error: (Integer tls_alert_code) -> Integer
+    end
+  end
+end
