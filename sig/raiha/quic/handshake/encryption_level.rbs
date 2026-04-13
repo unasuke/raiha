@@ -1,0 +1,12 @@
+module Raiha::Quic
+  module Handshake
+    module EncryptionLevel
+      INITIAL: Symbol
+      HANDSHAKE: Symbol
+      ONE_RTT: Symbol
+      ZERO_RTT: Symbol
+
+      ALL: Array[Symbol]
+    end
+  end
+end
