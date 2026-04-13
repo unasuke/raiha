@@ -1,0 +1,50 @@
+module Raiha::Quic
+  module Qerr
+    class TransportError < StandardError
+      attr_reader error_code: Integer
+      attr_reader frame_type: Integer?
+      attr_reader reason_phrase: String
+
+      def initialize: (Integer error_code, ?frame_type: Integer?, ?reason_phrase: String) -> void
+      def to_connection_close_frame: -> Wire::Frames::ConnectionCloseFrame
+
+      private def build_message: -> String
+    end
+
+    class InternalError < TransportError
+      def initialize: (?String reason_phrase) -> void
+    end
+
+    class FlowControlError < TransportError
+      def initialize: (?String reason_phrase) -> void
+    end
+
+    class StreamLimitError < TransportError
+      def initialize: (?String reason_phrase) -> void
+    end
+
+    class StreamStateError < TransportError
+      def initialize: (?frame_type: Integer?, ?reason_phrase: String) -> void
+    end
+
+    class FinalSizeError < TransportError
+      def initialize: (?String reason_phrase) -> void
+    end
+
+    class FrameEncodingError < TransportError
+      def initialize: (?frame_type: Integer?, ?reason_phrase: String) -> void
+    end
+
+    class TransportParameterError < TransportError
+      def initialize: (?String reason_phrase) -> void
+    end
+
+    class ProtocolViolation < TransportError
+      def initialize: (?frame_type: Integer?, ?reason_phrase: String) -> void
+    end
+
+    class CryptoError < TransportError
+      def initialize: (Integer tls_alert_code, ?reason_phrase: String) -> void
+    end
+  end
+end
