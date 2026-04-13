@@ -1,0 +1,17 @@
+module Raiha::Quic::Wire::Frames
+  class AckFrame < Raiha::Quic::Wire::Frame
+    AckRange: untyped
+
+    attr_accessor largest_acknowledged: Integer
+    attr_accessor ack_delay: Integer
+    attr_accessor ack_ranges: Array[untyped]
+    attr_accessor ecn_counts: { ect0: Integer, ect1: Integer, ecn_ce: Integer }?
+
+    def initialize: -> void
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer, ?ecn: bool) -> AckFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+
+    private def ecn?: -> bool
+  end
+end

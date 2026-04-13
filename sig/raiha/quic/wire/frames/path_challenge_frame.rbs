@@ -1,0 +1,9 @@
+module Raiha::Quic::Wire::Frames
+  class PathChallengeFrame < Raiha::Quic::Wire::Frame
+    attr_accessor data: String
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> PathChallengeFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

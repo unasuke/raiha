@@ -1,0 +1,7 @@
+module Raiha::Quic::Wire::Frames
+  class HandshakeDoneFrame < Raiha::Quic::Wire::Frame
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> HandshakeDoneFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

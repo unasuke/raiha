@@ -1,0 +1,12 @@
+module Raiha::Quic::Wire::Frames
+  class NewConnectionIdFrame < Raiha::Quic::Wire::Frame
+    attr_accessor sequence_number: Integer
+    attr_accessor retire_prior_to: Integer
+    attr_accessor connection_id: Raiha::Quic::Protocol::ConnectionID
+    attr_accessor stateless_reset_token: String
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> NewConnectionIdFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

@@ -1,0 +1,9 @@
+module Raiha::Quic::Wire::Frames
+  class RetireConnectionIdFrame < Raiha::Quic::Wire::Frame
+    attr_accessor sequence_number: Integer
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> RetireConnectionIdFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

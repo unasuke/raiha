@@ -1,0 +1,37 @@
+module Raiha::Quic
+  module Wire
+    class Frame
+      module Type
+        PADDING: Integer
+        PING: Integer
+        ACK: Integer
+        ACK_ECN: Integer
+        RESET_STREAM: Integer
+        STOP_SENDING: Integer
+        CRYPTO: Integer
+        NEW_TOKEN: Integer
+        STREAM: Range[Integer]
+        MAX_DATA: Integer
+        MAX_STREAM_DATA: Integer
+        MAX_STREAMS_BIDI: Integer
+        MAX_STREAMS_UNI: Integer
+        DATA_BLOCKED: Integer
+        STREAM_DATA_BLOCKED: Integer
+        STREAMS_BLOCKED_BIDI: Integer
+        STREAMS_BLOCKED_UNI: Integer
+        NEW_CONNECTION_ID: Integer
+        RETIRE_CONNECTION_ID: Integer
+        PATH_CHALLENGE: Integer
+        PATH_RESPONSE: Integer
+        CONNECTION_CLOSE: Integer
+        CONNECTION_CLOSE_APP: Integer
+        HANDSHAKE_DONE: Integer
+      end
+
+      def self.parse: (Buffer buffer) -> Frame
+      def serialize: -> String
+      def frame_type: -> (Integer | Range[Integer])
+      def ack_eliciting?: -> bool
+    end
+  end
+end

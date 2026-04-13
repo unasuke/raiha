@@ -1,0 +1,11 @@
+module Raiha::Quic::Wire::Frames
+  class ResetStreamFrame < Raiha::Quic::Wire::Frame
+    attr_accessor stream_id: Integer
+    attr_accessor application_protocol_error_code: Integer
+    attr_accessor final_size: Integer
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> ResetStreamFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

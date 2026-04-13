@@ -1,0 +1,10 @@
+module Raiha::Quic::Wire::Frames
+  class MaxStreamsFrame < Raiha::Quic::Wire::Frame
+    attr_accessor maximum_streams: Integer
+    attr_accessor bidirectional: bool
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer, bidirectional: bool) -> MaxStreamsFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

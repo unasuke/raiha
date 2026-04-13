@@ -1,0 +1,7 @@
+module Raiha::Quic
+  module Wire
+    class FrameParser
+      def self.parse: (Buffer buffer) -> Array[Frame]
+    end
+  end
+end

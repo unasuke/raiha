@@ -1,0 +1,9 @@
+module Raiha::Quic::Wire::Frames
+  class DataBlockedFrame < Raiha::Quic::Wire::Frame
+    attr_accessor maximum_data: Integer
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> DataBlockedFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

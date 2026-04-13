@@ -1,0 +1,7 @@
+module Raiha::Quic::Wire::Frames
+  class PingFrame < Raiha::Quic::Wire::Frame
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> PingFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

@@ -1,0 +1,13 @@
+module Raiha::Quic::Wire::Frames
+  class ConnectionCloseFrame < Raiha::Quic::Wire::Frame
+    attr_accessor error_code: Integer
+    attr_accessor trigger_frame_type: Integer?
+    attr_accessor reason_phrase: String
+    attr_accessor application_error: bool
+
+    def initialize: -> void
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer, ?app: bool) -> ConnectionCloseFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

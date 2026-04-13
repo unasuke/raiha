@@ -1,0 +1,9 @@
+module Raiha::Quic::Wire::Frames
+  class MaxDataFrame < Raiha::Quic::Wire::Frame
+    attr_accessor maximum_data: Integer
+
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> MaxDataFrame
+    def serialize: -> String
+    def frame_type: -> Integer
+  end
+end

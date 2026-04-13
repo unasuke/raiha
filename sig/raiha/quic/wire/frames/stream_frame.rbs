@@ -1,0 +1,13 @@
+module Raiha::Quic::Wire::Frames
+  class StreamFrame < Raiha::Quic::Wire::Frame
+    attr_accessor stream_id: Integer
+    attr_accessor offset: Integer
+    attr_accessor data: String
+    attr_accessor fin: bool
+
+    def initialize: -> void
+    def self.parse: (Raiha::Quic::Wire::Buffer buffer, Integer type_byte) -> StreamFrame
+    def serialize: -> String
+    def frame_type: -> Range[Integer]
+  end
+end
