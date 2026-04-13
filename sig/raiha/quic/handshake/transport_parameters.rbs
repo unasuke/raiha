@@ -1,0 +1,32 @@
+module Raiha::Quic
+  module Handshake
+    class TransportParameters
+      PARAM_IDS: Hash[Symbol, Integer]
+
+      attr_accessor original_destination_connection_id: String?
+      attr_accessor max_idle_timeout: Integer
+      attr_accessor stateless_reset_token: String?
+      attr_accessor max_udp_payload_size: Integer
+      attr_accessor initial_max_data: Integer
+      attr_accessor initial_max_stream_data_bidi_local: Integer
+      attr_accessor initial_max_stream_data_bidi_remote: Integer
+      attr_accessor initial_max_stream_data_uni: Integer
+      attr_accessor initial_max_streams_bidi: Integer
+      attr_accessor initial_max_streams_uni: Integer
+      attr_accessor ack_delay_exponent: Integer
+      attr_accessor max_ack_delay: Integer
+      attr_accessor disable_active_migration: bool
+      attr_accessor preferred_address: String?
+      attr_accessor active_connection_id_limit: Integer
+      attr_accessor initial_source_connection_id: String?
+      attr_accessor retry_source_connection_id: String?
+
+      def initialize: -> void
+      def serialize: -> String
+      def self.deserialize: (String data) -> TransportParameters
+
+      private def serialize_varint_param: (Wire::Buffer buf, Symbol name, Integer? value) -> void
+      private def serialize_bytes_param: (Wire::Buffer buf, Symbol name, String? value) -> void
+    end
+  end
+end
