@@ -1,0 +1,31 @@
+module Raiha::Quic
+  module Qerr
+    class ApplicationError < StandardError
+      attr_reader error_code: Integer
+      attr_reader reason_phrase: String
+
+      def initialize: (Integer error_code, ?reason_phrase: String) -> void
+      def to_connection_close_frame: -> Wire::Frames::ConnectionCloseFrame
+    end
+
+    module Http3ErrorCode
+      H3_NO_ERROR: Integer
+      H3_GENERAL_PROTOCOL_ERROR: Integer
+      H3_INTERNAL_ERROR: Integer
+      H3_STREAM_CREATION_ERROR: Integer
+      H3_CLOSED_CRITICAL_STREAM: Integer
+      H3_FRAME_UNEXPECTED: Integer
+      H3_FRAME_ERROR: Integer
+      H3_EXCESSIVE_LOAD: Integer
+      H3_ID_ERROR: Integer
+      H3_SETTINGS_ERROR: Integer
+      H3_MISSING_SETTINGS: Integer
+      H3_REQUEST_REJECTED: Integer
+      H3_REQUEST_CANCELLED: Integer
+      H3_REQUEST_INCOMPLETE: Integer
+      H3_MESSAGE_ERROR: Integer
+      H3_CONNECT_ERROR: Integer
+      H3_VERSION_FALLBACK: Integer
+    end
+  end
+end
