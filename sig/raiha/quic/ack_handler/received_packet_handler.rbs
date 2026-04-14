@@ -1,0 +1,16 @@
+module Raiha::Quic
+  module AckHandler
+    class ReceivedPacketHandler
+      MAX_ACK_DELAY: Integer
+
+      def initialize: -> void
+      def received_packet: (packet_number: Integer, pn_space: Symbol, ack_eliciting: bool) -> bool
+      def should_send_ack?: (Symbol pn_space) -> bool
+      def get_ack_frame: (Symbol pn_space) -> Wire::Frames::AckFrame?
+      def get_alarm_timeout: -> Time?
+
+      private def compute_ack_ranges: (Array[Integer] sorted_packet_numbers) -> Array[Wire::Frames::AckFrame::AckRange]
+      private def compute_ack_delay: (untyped space) -> Integer
+    end
+  end
+end
