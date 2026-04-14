@@ -1,0 +1,14 @@
+module Raiha::Quic
+  module FlowControl
+    class StreamLimitController
+      def initialize: (max_bidi: Integer, max_uni: Integer) -> void
+      def can_open_bidi?: -> bool
+      def can_open_uni?: -> bool
+      def open_bidi: -> void
+      def open_uni: -> void
+      def update_peer_max_bidi: (Integer max) -> void
+      def update_peer_max_uni: (Integer max) -> void
+      def accept_stream: (Protocol::StreamID stream_id) -> void
+    end
+  end
+end
