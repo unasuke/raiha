@@ -1,0 +1,13 @@
+module Raiha::Quic
+  module FlowControl
+    class StreamFlowController < BaseFlowController
+      attr_reader stream_id: Protocol::StreamID
+      attr_reader connection_flow_controller: ConnectionFlowController
+
+      def initialize: (stream_id: Protocol::StreamID, receive_window: Integer, send_window: Integer, connection_flow_controller: ConnectionFlowController) -> void
+      def set_final_size: (Integer size) -> void
+      def has_final_size?: -> bool
+      def fully_received?: -> bool
+    end
+  end
+end

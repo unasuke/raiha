@@ -1,0 +1,77 @@
+require "test_helper"
+require "raiha/quic/flow_control"
+require "raiha/quic/protocol/stream_id"
+
+class RaihaQuicFlowControlStreamFlowControllerTest < Minitest::Test
+  def setup
+    @connection_controller = Raiha::Quic::FlowControl::ConnectionFlowController.new(
+      receive_window: 1_000_000, send_window: 1_000_000
+    )
+    @stream_controller = Raiha::Quic::FlowControl::StreamFlowController.new(
+      stream_id: Raiha::Quic::Protocol::StreamID.new(0),
+      receive_window: 100_000,
+      send_window: 100_000,
+      connection_flow_controller: @connection_controller
+    )
+  end
+
+  def test_send_window_limited_by_stream
+    assert_equal 100_000, @stream_controller.send_window_size
+  end
+
+  def test_send_window_limited_by_connection
+    small_connection = Raiha::Quic::FlowControl::ConnectionFlowController.new(
+      receive_window: 1_000_000, send_window: 30_000
+    )
+    stream_controller = Raiha::Quic::FlowControl::StreamFlowController.new(
+      stream_id: Raiha::Quic::Protocol::StreamID.new(0),
+      receive_window: 100_000,
+      send_window: 100_000,
+      connection_flow_controller: small_connection
+    )
+    assert_equal 30_000, stream_controller.send_window_size
+  end
+
+  def test_add_bytes_sent_updates_connection
+    @stream_controller.add_bytes_sent(500)
+    assert_equal 99_500, @stream_controller.send_window_size
+    assert_equal 999_500, @connection_controller.send_window_size
+  end
+
+  def test_receive_window_exceeded
+    assert_raises(Raiha::Quic::Qerr::FlowControlError) do
+      @stream_controller.update_highest_received(0, 200_000)
+    end
+  end
+
+  def test_final_size
+    @stream_controller.set_final_size(5000)
+    assert @stream_controller.has_final_size?
+  end
+
+  def test_final_size_changed_raises
+    @stream_controller.set_final_size(5000)
+    assert_raises(Raiha::Quic::Qerr::FinalSizeError) do
+      @stream_controller.set_final_size(6000)
+    end
+  end
+
+  def test_final_size_less_than_received_raises
+    @stream_controller.update_highest_received(0, 5000)
+    assert_raises(Raiha::Quic::Qerr::FinalSizeError) do
+      @stream_controller.set_final_size(3000)
+    end
+  end
+
+  def test_fully_received
+    @stream_controller.update_highest_received(0, 5000)
+    @stream_controller.set_final_size(5000)
+    assert @stream_controller.fully_received?
+  end
+
+  def test_not_fully_received
+    @stream_controller.update_highest_received(0, 3000)
+    @stream_controller.set_final_size(5000)
+    refute @stream_controller.fully_received?
+  end
+end
