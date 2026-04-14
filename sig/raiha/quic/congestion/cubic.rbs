@@ -1,0 +1,28 @@
+module Raiha::Quic
+  module Congestion
+    class Cubic
+      INITIAL_WINDOW_PACKETS: Integer
+      MIN_WINDOW_PACKETS: Integer
+      BETA_CUBIC: Float
+      C_CUBIC: Float
+      MAX_DATAGRAM_SIZE: Integer
+
+      attr_reader congestion_window: Integer
+      attr_reader bytes_in_flight: Integer
+      attr_reader slow_start_threshold: (Integer | Float)
+
+      def initialize: (?max_datagram_size: Integer, ?rtt_stats: RTTStats?) -> void
+      def on_packet_sent: (Integer bytes) -> void
+      def on_packets_acked: (Array[untyped] packets) -> void
+      def on_packet_lost: (untyped packet) -> void
+      def can_send?: -> bool
+      def available_congestion_window: -> Integer
+      def in_slow_start?: -> bool
+      def in_congestion_avoidance?: -> bool
+
+      private def on_packet_acked: (Integer acked_bytes) -> void
+      private def cubic_increase: (Integer acked_bytes) -> void
+      private def min_congestion_window: -> Integer
+    end
+  end
+end
