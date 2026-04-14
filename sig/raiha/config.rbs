@@ -1,0 +1,22 @@
+module Raiha
+  class Config
+    attr_accessor max_idle_timeout: Integer
+    attr_accessor max_udp_payload_size: Integer
+    attr_accessor handshake_timeout: Integer
+    attr_accessor initial_max_data: Integer
+    attr_accessor initial_max_stream_data_bidi_local: Integer
+    attr_accessor initial_max_stream_data_bidi_remote: Integer
+    attr_accessor initial_max_stream_data_uni: Integer
+    attr_accessor initial_max_streams_bidi: Integer
+    attr_accessor initial_max_streams_uni: Integer
+    attr_accessor max_ack_delay: Integer
+    attr_accessor ack_delay_exponent: Integer
+    attr_accessor alpn_protocols: Array[String]
+    attr_accessor versions: Array[Integer]
+
+    def initialize: -> void
+    def self.client_default: -> Config
+    def self.server_default: -> Config
+    def to_transport_parameters: -> Quic::Handshake::TransportParameters
+  end
+end
