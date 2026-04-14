@@ -1,0 +1,20 @@
+module Raiha::Quic
+  module Congestion
+    class RTTStats
+      INITIAL_RTT: Float
+
+      attr_reader min_rtt: Float
+      attr_reader latest_rtt: Float
+      attr_reader smoothed_rtt: Float
+      attr_reader rtt_var: Float
+      attr_reader max_ack_delay: Float
+
+      def initialize: (?max_ack_delay: Float) -> void
+      def update_rtt: (Float rtt_sample, Float ack_delay) -> void
+      def pto: -> Float
+      def loss_delay: -> Float
+      def reset: -> void
+      def has_samples?: -> bool
+    end
+  end
+end
