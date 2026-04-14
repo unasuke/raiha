@@ -1,0 +1,27 @@
+module Raiha::Quic
+  module FlowControl
+    class BaseFlowController
+      WINDOW_UPDATE_THRESHOLD: Float
+
+      attr_reader send_window: Integer
+      attr_reader receive_window: Integer
+      attr_reader bytes_sent: Integer
+      attr_reader bytes_read: Integer
+      attr_reader highest_received: Integer
+
+      def initialize: (receive_window: Integer, ?send_window: Integer) -> void
+      def send_window_size: -> Integer
+      def receive_window_size: -> Integer
+      def add_bytes_sent: (Integer count) -> void
+      def update_highest_received: (Integer offset, Integer length) -> void
+      def add_bytes_read: (Integer count) -> void
+      def update_send_window: (Integer new_window) -> void
+      def should_send_window_update?: -> bool
+      def get_window_update: -> Integer
+      def blocked?: -> bool
+      def can_send?: (Integer count) -> bool
+
+      private def initial_receive_window: -> Integer
+    end
+  end
+end
