@@ -1,0 +1,18 @@
+module Raiha::Quic
+  module Handshake
+    class TLSAdapter
+      attr_reader tls: (Raiha::TLS::Client | Raiha::TLS::Server)
+
+      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?) -> void
+      def start: -> void
+      def receive_crypto_data: (String data, level: Symbol) -> void
+      def handshake_complete?: -> bool
+
+      private def extract_handshake_from_record: (String record) -> void
+      private def wrap_in_record: (String handshake_data) -> String
+      private def flush_to_crypto_setup: (Symbol level) -> void
+      private def check_key_derivation: -> void
+      private def collect_response_data: (Symbol current_level) -> void
+    end
+  end
+end
