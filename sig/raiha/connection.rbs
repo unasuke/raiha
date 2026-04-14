@@ -1,0 +1,34 @@
+module Raiha
+  class Connection
+    module State
+      HANDSHAKING: Symbol
+      CONNECTED: Symbol
+      DRAINING: Symbol
+      CLOSED: Symbol
+    end
+
+    attr_reader perspective: Symbol
+    attr_reader src_connection_id: Quic::Protocol::ConnectionID
+    attr_reader dest_connection_id: Quic::Protocol::ConnectionID
+    attr_reader state: Symbol
+    attr_reader streams: StreamsMap
+
+    def initialize: (perspective: Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?) -> void
+    def handle_frames: (Array[Quic::Wire::Frame] frames) -> void
+    def open_stream: (?bidirectional: bool) -> Stream
+    def accept_stream: -> Stream
+    def accept_stream_nonblock: -> Stream?
+    def close: (?error_code: Integer, ?reason: String) -> void
+    def complete_handshake: -> void
+    def handshake_complete?: -> bool
+    def closed?: -> bool
+    def draining?: -> bool
+
+    private def setup_components: -> void
+    private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame) -> void
+    private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame) -> void
+    private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void
+    private def enter_draining_state: -> void
+    private def reset_idle_timer: -> void
+  end
+end

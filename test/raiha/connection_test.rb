@@ -1,0 +1,90 @@
+require "test_helper"
+require "raiha/connection"
+
+class RaihaConnectionTest < Minitest::Test
+  def test_initial_state
+    connection = create_connection
+    assert_equal Raiha::Connection::State::HANDSHAKING, connection.state
+    refute connection.handshake_complete?
+    refute connection.closed?
+  end
+
+  def test_complete_handshake
+    connection = create_connection
+    connection.complete_handshake
+    assert_equal Raiha::Connection::State::CONNECTED, connection.state
+    assert connection.handshake_complete?
+  end
+
+  def test_handle_handshake_done_frame
+    connection = create_connection
+    frame = Raiha::Quic::Wire::Frames::HandshakeDoneFrame.new
+    connection.handle_frames([frame])
+    assert connection.handshake_complete?
+  end
+
+  def test_handle_stream_frame
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.initial_max_streams_bidi = 10
+    transport_parameters.initial_max_data = 1_000_000
+    connection = create_connection(transport_parameters: transport_parameters)
+    connection.complete_handshake
+
+    stream_frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    stream_frame.stream_id = 1  # Server-initiated bidi
+    stream_frame.offset = 0
+    stream_frame.data = "hello".b
+    stream_frame.fin = false
+
+    connection.handle_frames([stream_frame])
+
+    stream = connection.streams.get_stream(1)
+    refute_nil stream
+    assert stream.data_available?
+    assert_equal "hello".b, stream.read
+  end
+
+  def test_handle_connection_close_frame
+    connection = create_connection
+    frame = Raiha::Quic::Wire::Frames::ConnectionCloseFrame.new
+    connection.handle_frames([frame])
+    assert connection.draining?
+  end
+
+  def test_handle_max_streams_frame
+    connection = create_connection
+    connection.complete_handshake
+
+    frame = Raiha::Quic::Wire::Frames::MaxStreamsFrame.new
+    frame.maximum_streams = 10
+    frame.bidirectional = true
+    connection.handle_frames([frame])
+
+    # Should now be able to open streams
+    stream = connection.open_stream(bidirectional: true)
+    refute_nil stream
+  end
+
+  def test_close
+    connection = create_connection
+    connection.close
+    assert connection.draining?
+  end
+
+  def test_perspective
+    client_connection = create_connection(perspective: :client)
+    assert_equal :client, client_connection.perspective
+
+    server_connection = create_connection(perspective: :server)
+    assert_equal :server, server_connection.perspective
+  end
+
+  private def create_connection(perspective: :client, transport_parameters: nil)
+    Raiha::Connection.new(
+      perspective: perspective,
+      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      transport_parameters: transport_parameters
+    )
+  end
+end
