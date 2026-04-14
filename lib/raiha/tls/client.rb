@@ -2,7 +2,6 @@
 
 require_relative "alert"
 require_relative "application_data"
-require_relative "context"
 require_relative "config"
 require_relative "peer"
 require_relative "record"
