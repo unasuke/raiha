@@ -1,0 +1,14 @@
+module Raiha::Quic
+  class Timer
+    attr_reader deadline: Time?
+
+    def initialize: -> void
+    def set: (Float duration) -> void
+    def set_at: (Time time) -> void
+    def reset: -> void
+    def stop: -> void
+    def expired?: -> bool
+    def active?: -> bool
+    def remaining: -> Float?
+  end
+end
