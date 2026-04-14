@@ -7,8 +7,9 @@ require_relative "quic/wire/frame_parser"
 require_relative "quic/wire/long_header"
 require_relative "quic/wire/short_header"
 require_relative "quic/handshake/encryption_level"
-require_relative "quic/handshake/initial_aead"
+require_relative "quic/handshake/crypto_setup"
 require_relative "quic/handshake/transport_parameters"
+require_relative "quic/wire/buffer"
 require_relative "quic/ack_handler"
 require_relative "quic/congestion"
 require_relative "quic/flow_control"
@@ -131,8 +132,80 @@ module Raiha
         max_streams_uni: @transport_parameters.initial_max_streams_uni
       )
 
+      @crypto_setup = Quic::Handshake::CryptoSetup.new(
+        perspective: @perspective,
+        connection_id: @dest_connection_id
+      )
+
       @idle_timer = Quic::Timer.new
       reset_idle_timer
+    end
+
+    # Process a raw QUIC packet (with header protection and encryption)
+    def handle_packet(data)
+      return if @state == State::CLOSED
+
+      buffer = Quic::Wire::Buffer.new(data)
+      first_byte = buffer.read_uint8
+      buffer.seek(0)
+
+      if (first_byte & 0x80) != 0
+        handle_long_header_packet(data, buffer)
+      else
+        handle_short_header_packet(data, buffer)
+      end
+    rescue => error
+      # Log error but don't crash the connection
+      $stderr.puts "Connection error handling packet: #{error.class}: #{error.message}" if $DEBUG
+    end
+
+    private def handle_long_header_packet(data, buffer)
+      header = Quic::Wire::LongHeader.parse(buffer)
+
+      level = case header.packet_type
+      when Quic::Wire::LongHeader::PacketType::INITIAL
+        Quic::Handshake::EncryptionLevel::INITIAL
+      when Quic::Wire::LongHeader::PacketType::HANDSHAKE
+        Quic::Handshake::EncryptionLevel::HANDSHAKE
+      when Quic::Wire::LongHeader::PacketType::ZERO_RTT
+        Quic::Handshake::EncryptionLevel::ZERO_RTT
+      else
+        return
+      end
+
+      return unless @crypto_setup.available?(level)
+
+      # Read packet number (after header, before payload)
+      packet_number_offset = buffer.pos
+      packet_number_bytes = buffer.read(header.packet_number_length)
+      packet_number = decode_packet_number(packet_number_bytes)
+
+      # Decrypt payload
+      payload_data = buffer.read(header.payload_length - header.packet_number_length)
+      aad = data[0...packet_number_offset] + packet_number_bytes
+
+      begin
+        decrypted = @crypto_setup.decrypt(payload_data, packet_number: packet_number, aad: aad, level: level)
+        frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
+        handle_frames(frames)
+      rescue OpenSSL::Cipher::CipherError
+        # Decryption failed, drop packet
+      end
+    end
+
+    private def handle_short_header_packet(data, buffer)
+      # Short header processing requires knowing connection ID length
+      # For now, just parse what we can
+    end
+
+    private def decode_packet_number(bytes)
+      case bytes.bytesize
+      when 1 then bytes.unpack1("C")
+      when 2 then bytes.unpack1("n")
+      when 3 then ("\x00" + bytes).unpack1("N")
+      when 4 then bytes.unpack1("N")
+      else 0
+      end
     end
 
     private def handle_ack_frame(frame)
@@ -140,7 +213,7 @@ module Raiha
     end
 
     private def handle_crypto_frame(frame)
-      # Crypto data is handled by CryptoSetup (to be integrated)
+      @crypto_setup.queue_crypto_data(frame.data, level: Quic::Handshake::EncryptionLevel::INITIAL)
     end
 
     private def handle_stream_frame(frame)
