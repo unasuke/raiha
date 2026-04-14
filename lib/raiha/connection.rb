@@ -185,7 +185,28 @@ module Raiha
         end
       end
 
+      # Check for pending stream data
+      if @crypto_setup.available?(Quic::Handshake::EncryptionLevel::ONE_RTT)
+        @pending_stream_frames&.each do |frame|
+          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          packets << packet if packet
+        end
+        @pending_stream_frames = []
+      end
+
       packets
+    end
+
+    # Queue stream data for sending as a 1-RTT STREAM frame
+    def send_stream_data(stream_id, data, offset: 0, fin: false)
+      stream_frame = Quic::Wire::Frames::StreamFrame.new
+      stream_frame.stream_id = stream_id.is_a?(Integer) ? stream_id : stream_id.value
+      stream_frame.offset = offset
+      stream_frame.data = data
+      stream_frame.fin = fin
+
+      @pending_stream_frames ||= []
+      @pending_stream_frames << stream_frame
     end
 
     def complete_handshake
@@ -331,8 +352,49 @@ module Raiha
     end
 
     private def handle_short_header_packet(data, buffer)
-      # Short header processing requires knowing connection ID length
-      # For now, just parse what we can
+      connection_id_length = @src_connection_id.length
+      level = Quic::Handshake::EncryptionLevel::ONE_RTT
+
+      return unless @crypto_setup.available?(level)
+      # 1: first byte, connection_id_length: DCID, 1: minimum packet number, 16: AEAD tag
+      return if data.bytesize < 1 + connection_id_length + 1 + 16
+
+      # Packet number starts after first byte and Destination Connection ID
+      packet_number_offset = 1 + connection_id_length
+
+      # Sample is 4 bytes after the start of the packet number field (RFC 9001 Section 5.4.2)
+      sample_offset = packet_number_offset + 4
+      return if sample_offset + 16 > data.bytesize
+
+      sample = data[sample_offset, 16]
+      mask = @crypto_setup.header_protection_mask(sample, level: level, direction: :receive)
+
+      unprotected_data = data.dup
+
+      # Short header uses 0x1f mask for first byte
+      unprotected_data.setbyte(0, unprotected_data.getbyte(0) ^ (mask.getbyte(0) & 0x1f))
+
+      packet_number_length = (unprotected_data.getbyte(0) & 0x03) + 1
+
+      packet_number_length.times do |i|
+        offset = packet_number_offset + i
+        unprotected_data.setbyte(offset, unprotected_data.getbyte(offset) ^ mask.getbyte(1 + i))
+      end
+
+      packet_number_bytes = unprotected_data[packet_number_offset, packet_number_length]
+      packet_number = decode_packet_number(packet_number_bytes)
+
+      aad = unprotected_data[0, packet_number_offset + packet_number_length]
+
+      encrypted_payload = data[(packet_number_offset + packet_number_length)..]
+
+      begin
+        decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
+        frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
+        handle_frames(frames, level: level)
+      rescue OpenSSL::Cipher::CipherError
+        # Decryption failed, drop packet
+      end
     end
 
     private def decode_packet_number(bytes)

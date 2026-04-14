@@ -48,12 +48,15 @@ module Raiha::Quic
       def initialize
         @max_idle_timeout = 30_000
         @max_udp_payload_size = 65527
-        @initial_max_data = 0
-        @initial_max_stream_data_bidi_local = 0
-        @initial_max_stream_data_bidi_remote = 0
-        @initial_max_stream_data_uni = 0
-        @initial_max_streams_bidi = 0
-        @initial_max_streams_uni = 0
+        # Connection-level flow control window (1MB)
+        @initial_max_data = 1_048_576
+        # Per-stream flow control window (256KB)
+        @initial_max_stream_data_bidi_local = 262_144
+        @initial_max_stream_data_bidi_remote = 262_144
+        @initial_max_stream_data_uni = 262_144
+        # Maximum number of streams the peer can open concurrently
+        @initial_max_streams_bidi = 100
+        @initial_max_streams_uni = 100
         @ack_delay_exponent = 3
         @max_ack_delay = 25
         @disable_active_migration = false

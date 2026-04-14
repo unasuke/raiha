@@ -13,22 +13,40 @@ module Raiha
     attr_reader state: Symbol
     attr_reader streams: StreamsMap
 
-    def initialize: (perspective: Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?) -> void
-    def handle_frames: (Array[Quic::Wire::Frame] frames) -> void
+    MIN_INITIAL_PACKET_SIZE: Integer
+
+    def initialize: (perspective: Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?, ?tls_config: Raiha::TLS::Config?, ?server_name: String?) -> void
+    def handle_frames: (Array[Quic::Wire::Frame] frames, ?level: Symbol) -> void
     def open_stream: (?bidirectional: bool) -> Stream
     def accept_stream: -> Stream
     def accept_stream_nonblock: -> Stream?
+    def start_handshake: -> void
     def close: (?error_code: Integer, ?reason: String) -> void
+    def build_packet: (Array[Quic::Wire::Frame] frames, level: Symbol, ?pad_to_min: bool) -> String?
+    def build_initial_packet: (String crypto_data) -> String?
+    def get_packets_to_send: -> Array[String]
+    def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
+    def handle_packet: (String data) -> void
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool
     def draining?: -> bool
 
     private def setup_components: -> void
+    private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
+    private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
+    private def decode_packet_number: (String bytes) -> Integer
     private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame) -> void
-    private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame) -> void
+    private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void
     private def enter_draining_state: -> void
     private def reset_idle_timer: -> void
+    private def build_header: (Symbol level, String encoded_packet_number, Integer payload_length) -> String?
+    private def build_initial_header: (String encoded_packet_number, Integer payload_length) -> String
+    private def build_handshake_header: (String encoded_packet_number, Integer payload_length) -> String
+    private def build_short_header: (String encoded_packet_number) -> String
+    private def encode_packet_number: (Integer packet_number) -> String
+    private def apply_header_protection: (String packet, Integer header_length, Integer packet_number_length, Symbol level) -> String
+    private def level_to_pn_space: (Symbol level) -> Symbol
   end
 end
