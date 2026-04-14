@@ -1,0 +1,14 @@
+module Raiha
+  class Server
+    attr_reader connections: Hash[String, Connection]
+
+    def initialize: (?config: Config?) -> void
+    def listen: (String host, Integer port) -> self
+    def accept: -> Connection
+    def accept_nonblock: -> Connection?
+    def close: -> void
+    def handle_packet: (String data, untyped addr) -> Connection?
+
+    private def create_connection: (Quic::Wire::LongHeader header) -> Connection
+  end
+end
