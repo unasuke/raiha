@@ -1,0 +1,16 @@
+module Raiha
+  class StreamsMap
+    def initialize: (perspective: Symbol, connection_flow_controller: Quic::FlowControl::ConnectionFlowController, ?max_streams_bidi: Integer, ?max_streams_uni: Integer, ?stream_receive_window: Integer) -> void
+    def open_bidirectional_stream: -> Stream
+    def open_unidirectional_stream: -> Stream
+    def accept_stream: -> Stream
+    def accept_stream_nonblock: -> Stream?
+    def get_or_create_stream: (Integer | Quic::Protocol::StreamID stream_id_value) -> Stream
+    def get_stream: (Integer | Quic::Protocol::StreamID stream_id) -> Stream?
+    def active_streams_count: -> Integer
+    def update_peer_max_streams_bidi: (Integer max) -> void
+    def update_peer_max_streams_uni: (Integer max) -> void
+
+    private def create_stream: (Quic::Protocol::StreamID stream_id) -> Stream
+  end
+end
