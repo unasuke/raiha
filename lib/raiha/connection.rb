@@ -8,6 +8,7 @@ require_relative "quic/wire/long_header"
 require_relative "quic/wire/short_header"
 require_relative "quic/handshake/encryption_level"
 require_relative "quic/handshake/crypto_setup"
+require_relative "quic/handshake/tls_adapter"
 require_relative "quic/handshake/transport_parameters"
 require_relative "quic/wire/buffer"
 require_relative "quic/ack_handler"
@@ -30,23 +31,25 @@ module Raiha
     attr_reader :state
     attr_reader :streams
 
-    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil)
+    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil)
       @perspective = perspective
       @src_connection_id = src_connection_id
       @dest_connection_id = dest_connection_id
       @state = State::HANDSHAKING
       @transport_parameters = transport_parameters || Quic::Handshake::TransportParameters.new
+      @tls_config = tls_config
+      @server_name = server_name
 
       setup_components
     end
 
-    def handle_frames(frames)
+    def handle_frames(frames, level: Quic::Handshake::EncryptionLevel::INITIAL)
       frames.each do |frame|
         case frame
         when Quic::Wire::Frames::AckFrame
           handle_ack_frame(frame)
         when Quic::Wire::Frames::CryptoFrame
-          handle_crypto_frame(frame)
+          handle_crypto_frame(frame, level: level)
         when Quic::Wire::Frames::StreamFrame
           handle_stream_frame(frame)
         when Quic::Wire::Frames::MaxDataFrame
@@ -84,6 +87,11 @@ module Raiha
 
     def accept_stream_nonblock
       @streams.accept_stream_nonblock
+    end
+
+    # Start the handshake (client-initiated)
+    def start_handshake
+      @tls_adapter.start
     end
 
     def close(error_code: 0, reason: "")
@@ -212,6 +220,13 @@ module Raiha
         connection_id: @dest_connection_id
       )
 
+      @tls_adapter = Quic::Handshake::TLSAdapter.new(
+        perspective: @perspective,
+        crypto_setup: @crypto_setup,
+        tls_config: @tls_config,
+        server_name: @server_name
+      )
+
       @idle_timer = Quic::Timer.new
       reset_idle_timer
     end
@@ -262,7 +277,7 @@ module Raiha
       begin
         decrypted = @crypto_setup.decrypt(payload_data, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
-        handle_frames(frames)
+        handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
         # Decryption failed, drop packet
       end
@@ -287,8 +302,12 @@ module Raiha
       @sent_packet_handler.received_ack(frame, pn_space: :application_data)
     end
 
-    private def handle_crypto_frame(frame)
-      @crypto_setup.queue_crypto_data(frame.data, level: Quic::Handshake::EncryptionLevel::INITIAL)
+    private def handle_crypto_frame(frame, level: Quic::Handshake::EncryptionLevel::INITIAL)
+      @tls_adapter.receive_crypto_data(frame.data, level: level)
+
+      if @tls_adapter.handshake_complete? && @state == State::HANDSHAKING
+        complete_handshake
+      end
     end
 
     private def handle_stream_frame(frame)
