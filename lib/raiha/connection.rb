@@ -98,8 +98,11 @@ module Raiha
       enter_draining_state
     end
 
+    # Minimum Initial packet size per RFC 9000 Section 14.1
+    MIN_INITIAL_PACKET_SIZE = 1200
+
     # Build a QUIC packet containing the given frames at the specified encryption level
-    def build_packet(frames, level:)
+    def build_packet(frames, level:, pad_to_min: false)
       return nil if frames.empty?
 
       packet_number = @sent_packet_handler.get_next_packet_number(level_to_pn_space(level))
@@ -112,7 +115,19 @@ module Raiha
       # Encode packet number
       encoded_packet_number = encode_packet_number(packet_number.value)
 
-      # Build header
+      # For Initial packets from client, pad to minimum size
+      should_pad = pad_to_min || (level == Quic::Handshake::EncryptionLevel::INITIAL && @perspective == :client)
+      if should_pad
+        header_bytes_estimate = build_header(level, encoded_packet_number, 0)
+        overhead = header_bytes_estimate.bytesize + encoded_packet_number.bytesize + 16 # AEAD tag
+        padding_needed = MIN_INITIAL_PACKET_SIZE - overhead - payload.bytesize
+        if padding_needed > 0
+          padding_frame = Quic::Wire::Frames::PaddingFrame.new
+          payload += padding_frame.serialize * padding_needed
+        end
+      end
+
+      # Build header with actual payload size
       header_bytes = build_header(level, encoded_packet_number, payload.bytesize)
 
       # AAD = header bytes including packet number
