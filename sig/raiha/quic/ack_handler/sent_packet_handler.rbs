@@ -1,0 +1,32 @@
+module Raiha::Quic
+  module AckHandler
+    class SentPacketHandler
+      class PacketNumberSpace
+        attr_reader encryption_level: Symbol
+        attr_reader sent_packets: Hash[Integer, untyped]
+        attr_reader largest_acked: Integer?
+        attr_reader loss_time: Time?
+
+        def initialize: (Symbol encryption_level) -> void
+        def next_packet_number: -> Protocol::PacketNumber
+        def add_sent_packet: (untyped packet) -> void
+        def remove_sent_packet: (Integer packet_number) -> untyped
+        def update_largest_acked: (Integer value) -> void
+      end
+
+      SentPacket: untyped
+
+      attr_reader bytes_in_flight: Integer
+
+      def initialize: (?congestion_controller: untyped?, ?rtt_stats: untyped?) -> void
+      def get_next_packet_number: (Symbol pn_space) -> Protocol::PacketNumber
+      def sent_packet: (packet_number: Protocol::PacketNumber, frames: Array[untyped], size: Integer, ack_eliciting: bool, pn_space: Symbol, ?sent_time: Time) -> void
+      def received_ack: (Wire::Frames::AckFrame ack_frame, pn_space: Symbol, ?ack_delay: Float) -> void
+      def get_alarm_timeout: -> Time?
+
+      private def detect_and_remove_acked_packets: (Wire::Frames::AckFrame ack_frame, PacketNumberSpace space) -> Array[untyped]
+      private def acknowledged_packet_numbers: (Wire::Frames::AckFrame ack_frame) -> Array[Integer]
+      private def detect_lost_packets: (PacketNumberSpace space) -> Array[untyped]
+    end
+  end
+end
