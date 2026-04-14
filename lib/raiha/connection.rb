@@ -265,17 +265,49 @@ module Raiha
 
       return unless @crypto_setup.available?(level)
 
-      # Read packet number (after header, before payload)
+      # Packet number starts at current buffer position
       packet_number_offset = buffer.pos
-      packet_number_bytes = buffer.read(header.packet_number_length)
+
+      # Remove header protection (RFC 9001 Section 5.4.2)
+      # Sample is 4 bytes after the start of the packet number field
+      sample_offset = packet_number_offset + 4
+      return if sample_offset + 16 > data.bytesize
+
+      sample = data[sample_offset, 16]
+      mask = @crypto_setup.header_protection_mask(sample, level: level, direction: :receive)
+
+      # Make a mutable copy of the data for unmasking
+      unprotected_data = data.dup
+
+      # Unmask first byte to get packet number length
+      if unprotected_data.getbyte(0) & 0x80 != 0
+        unprotected_data.setbyte(0, unprotected_data.getbyte(0) ^ (mask.getbyte(0) & 0x0f))
+      else
+        unprotected_data.setbyte(0, unprotected_data.getbyte(0) ^ (mask.getbyte(0) & 0x1f))
+      end
+
+      packet_number_length = (unprotected_data.getbyte(0) & 0x03) + 1
+
+      # Unmask packet number bytes
+      packet_number_length.times do |i|
+        offset = packet_number_offset + i
+        unprotected_data.setbyte(offset, unprotected_data.getbyte(offset) ^ mask.getbyte(1 + i))
+      end
+
+      # Read packet number from unprotected data
+      packet_number_bytes = unprotected_data[packet_number_offset, packet_number_length]
       packet_number = decode_packet_number(packet_number_bytes)
 
-      # Decrypt payload
-      payload_data = buffer.read(header.payload_length - header.packet_number_length)
-      aad = data[0...packet_number_offset] + packet_number_bytes
+      # AAD is the unprotected header including packet number
+      aad = unprotected_data[0, packet_number_offset + packet_number_length]
+
+      # Encrypted payload starts after packet number
+      encrypted_payload_offset = packet_number_offset + packet_number_length
+      encrypted_payload_length = header.payload_length - packet_number_length
+      encrypted_payload = data[encrypted_payload_offset, encrypted_payload_length]
 
       begin
-        decrypted = @crypto_setup.decrypt(payload_data, packet_number: packet_number, aad: aad, level: level)
+        decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
@@ -411,7 +443,7 @@ module Raiha
 
     private def apply_header_protection(packet, header_length, packet_number_length, level)
       # Sample starts 4 bytes after the packet number
-      sample_offset = header_length + packet_number_length + 4
+      sample_offset = header_length + 4
       return packet if sample_offset + 16 > packet.bytesize
 
       sample = packet[sample_offset, 16]
