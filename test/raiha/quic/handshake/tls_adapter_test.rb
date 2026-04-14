@@ -45,17 +45,37 @@ class RaihaQuicHandshakeTLSAdapterTest < Minitest::Test
     client_hello_data = client_crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
     refute_nil client_hello_data
 
-    # 2. Server processes ClientHello
+    # 2. Server processes ClientHello, produces ServerHello + flight
     server_adapter.receive_crypto_data(client_hello_data, level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
-    assert server_crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
+    assert server_crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE),
+      "Server should have handshake keys"
 
-    # Server should have response data
     server_initial_data = server_crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
     server_handshake_data = server_crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
 
-    has_server_response = (server_initial_data && !server_initial_data.empty?) ||
-                          (server_handshake_data && !server_handshake_data.empty?)
-    assert has_server_response, "Server should produce response handshake data"
+    refute_nil server_initial_data, "Server should produce ServerHello at Initial level"
+    refute_nil server_handshake_data, "Server should produce encrypted flight at Handshake level"
+
+    # 3. Client processes ServerHello (Initial level)
+    client_adapter.receive_crypto_data(server_initial_data, level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
+    assert client_crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE),
+      "Client should have handshake keys after ServerHello"
+
+    # 4. Client processes EE + Cert + CertVerify + Finished (Handshake level)
+    client_adapter.receive_crypto_data(server_handshake_data, level: Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
+    assert client_crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT),
+      "Client should have application keys after server Finished"
+
+    # 5. Client should have produced Finished at Handshake level
+    client_finished_data = client_crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
+    refute_nil client_finished_data, "Client should produce Finished at Handshake level"
+
+    # 6. Server processes client Finished
+    server_adapter.receive_crypto_data(client_finished_data, level: Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
+
+    # Both sides should have completed the handshake
+    assert client_crypto_setup.handshake_complete?, "Client handshake should be complete"
+    assert server_crypto_setup.handshake_complete?, "Server handshake should be complete"
   end
 
   private def create_client
