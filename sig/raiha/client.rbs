@@ -1,0 +1,12 @@
+module Raiha
+  class Client
+    attr_reader connection: Connection?
+
+    def initialize: (?config: Config?) -> void
+    def connect: (String host, Integer port) -> self
+    def open_stream: (?bidirectional: bool) -> Stream
+    def accept_stream: -> Stream
+    def close: (?error_code: Integer, ?reason: String) -> void
+    def connected?: -> bool
+  end
+end
