@@ -1,0 +1,56 @@
+module Raiha
+  class Stream
+    module SendState
+      READY: Symbol
+      SEND: Symbol
+      DATA_SENT: Symbol
+      RESET_SENT: Symbol
+    end
+
+    module ReceiveState
+      RECV: Symbol
+      SIZE_KNOWN: Symbol
+      DATA_RECVD: Symbol
+      DATA_READ: Symbol
+      RESET_RECVD: Symbol
+    end
+
+    attr_reader stream_id: Quic::Protocol::StreamID
+    attr_reader send_state: Symbol
+    attr_reader receive_state: Symbol
+
+    def initialize: (stream_id: Quic::Protocol::StreamID, flow_controller: Quic::FlowControl::StreamFlowController) -> void
+    def write: (String data) -> void
+    def close_write: -> void
+    def read: (?Integer? max_bytes) -> String
+    def data_available?: -> bool
+    def writable?: -> bool
+    def readable?: -> bool
+    def receive_data: (Integer offset, String data, ?fin: bool) -> void
+    def get_data_to_send: (Integer max_bytes) -> { offset: Integer, data: String, fin: bool }?
+    def on_data: -> void
+  end
+
+  class Stream::SendBuffer
+    attr_reader sent_offset: Integer
+
+    def initialize: -> void
+    def push: (String data, Integer offset) -> void
+    def pop: (Integer max_bytes) -> String
+    def has_data?: -> bool
+    def pending_bytes: -> Integer
+    def empty?: -> bool
+  end
+
+  class Stream::ReceiveBuffer
+    attr_reader final_offset: Integer?
+
+    def initialize: -> void
+    def push: (String data, Integer offset) -> void
+    def read: (Integer offset, Integer? max_bytes) -> String
+    def has_data_at?: (Integer offset) -> bool
+    def set_final_offset: (Integer offset) -> void
+
+    private def merge_chunks: -> void
+  end
+end
