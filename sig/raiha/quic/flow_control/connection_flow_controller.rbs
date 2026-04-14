@@ -1,0 +1,8 @@
+module Raiha::Quic
+  module FlowControl
+    class ConnectionFlowController < BaseFlowController
+      def initialize: (receive_window: Integer, send_window: Integer) -> void
+      def update_highest_received: (Integer length) -> void
+    end
+  end
+end
