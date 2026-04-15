@@ -3,16 +3,21 @@ module Raiha::Quic
     class TLSAdapter
       attr_reader tls: (Raiha::TLS::Client | Raiha::TLS::Server)
 
-      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?) -> void
+      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?transport_parameters: Raiha::Quic::Handshake::TransportParameters?) -> void
       def start: -> void
       def receive_crypto_data: (String data, level: Symbol) -> void
       def handshake_complete?: -> bool
 
-      private def extract_handshake_from_record: (String record) -> void
-      private def wrap_in_record: (String handshake_data) -> String
-      private def flush_to_crypto_setup: (Symbol level) -> void
+      private def receive_as_server: (String data, Symbol level) -> void
+      private def receive_as_client: (String data, Symbol level) -> void
+      private def verify_client_finished: (Raiha::TLS::Handshake handshake) -> void
+      private def collect_server_response: -> void
+      private def collect_client_finished: -> void
+      private def extract_handshake_fragment: (String record) -> String?
+      private def wrap_in_plaintext_record: (String handshake_data) -> String
       private def check_key_derivation: -> void
-      private def collect_response_data: (Symbol current_level) -> void
+      private def update_transport_parameters_extension: -> void
+      private def inject_transport_parameters_extension: -> void
     end
   end
 end

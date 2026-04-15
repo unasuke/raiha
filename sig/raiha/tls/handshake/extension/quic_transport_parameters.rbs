@@ -1,0 +1,17 @@
+module Raiha
+  module TLS
+    class Handshake
+      class Extension
+        class QuicTransportParameters < AbstractExtension
+          EXTENSION_TYPE_NUMBER: Integer
+
+          attr_accessor transport_parameters_data: String
+
+          def initialize: (on: Symbol) -> void
+          def extension_data=: (String data) -> void
+          def serialize: -> String
+        end
+      end
+    end
+  end
+end
