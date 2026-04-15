@@ -29,6 +29,7 @@ module Raiha
       end
 
       attr_reader :state
+      attr_accessor :additional_extensions
 
       def initialize(config: Config.server_default)
         @config = config
@@ -47,6 +48,7 @@ module Raiha
         @session_ticket_store = SessionTicketStore.new
         @psk_mode = false
         @selected_psk = nil
+        @additional_extensions = []
       end
 
       def receive(datagram)
@@ -352,7 +354,8 @@ module Raiha
             ee.extensions = [
               Handshake::Extension::SupportedGroups.new(on: :encrypted_extensions).tap do |sg|
                 sg.groups = [@pkey[:group]]
-              end
+              end,
+              *@additional_extensions
             ]
           end
         end

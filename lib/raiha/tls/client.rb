@@ -31,6 +31,7 @@ module Raiha
       end
 
       attr_reader :state
+      attr_accessor :additional_extensions
 
       def initialize(config: nil, server_name: nil)
         super()
@@ -56,6 +57,7 @@ module Raiha
         @session_ticket_store = SessionTicketStore.new
         @early_data_available = false
         @early_cipher = nil
+        @additional_extensions = []
       end
 
       def datagrams_to_send
@@ -311,6 +313,7 @@ module Raiha
           end
         end
         hs_clienthello.message.setup_key_share(@pkeys)
+        @additional_extensions.each { |ext| hs_clienthello.message.extensions << ext }
         @client_hello = hs_clienthello.message
         @transcript_hash.digest_algorithm = @client_hello.cipher_suites.first.hash_algorithm
 

@@ -19,15 +19,18 @@ module Raiha::Quic
     class TLSAdapter
       attr_reader :tls
 
-      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil)
+      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil)
         @perspective = perspective
         @crypto_setup = crypto_setup
+        @transport_parameters = transport_parameters
 
         if perspective == Protocol::Perspective::CLIENT
           @tls = Raiha::TLS::Client.new(config: tls_config, server_name: server_name)
         else
           @tls = Raiha::TLS::Server.new(config: tls_config || Raiha::TLS::Config.server_default)
         end
+
+        inject_transport_parameters_extension
 
         @server_hello_sent = false
         @server_flight_sent = false
@@ -200,6 +203,21 @@ module Raiha::Quic
         buf << [handshake_data.bytesize].pack("n")
         buf << handshake_data
         buf
+      end
+
+      private def inject_transport_parameters_extension
+        return unless @transport_parameters
+
+        ext = Raiha::TLS::Handshake::Extension::QuicTransportParameters.new(
+          on: @perspective == Protocol::Perspective::CLIENT ? :client_hello : :encrypted_extensions
+        )
+        ext.transport_parameters_data = @transport_parameters.serialize
+
+        if @perspective == Protocol::Perspective::CLIENT
+          @tls.additional_extensions << ext
+        else
+          @tls.additional_extensions << ext
+        end
       end
 
       private def check_key_derivation

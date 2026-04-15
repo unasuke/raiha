@@ -28,7 +28,8 @@ module Raiha
           oid_filters: 48,
           post_handshake_auth: 49,
           signature_algorithms_cert: 50,
-          key_share: 51
+          key_share: 51,
+          quic_transport_parameters: 0x0039
         }.freeze
 
         attr_accessor :extension_type
@@ -93,6 +94,7 @@ end
   post_handshake_auth
   signature_algorithms_cert
   key_share
+  quic_transport_parameters
 ].each do |file|
   require_relative "extension/#{file}"
 end

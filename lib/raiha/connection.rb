@@ -40,6 +40,8 @@ module Raiha
       @tls_config = tls_config
       @server_name = server_name
 
+      @transport_parameters.initial_source_connection_id = @src_connection_id.serialize
+
       setup_components
     end
 
@@ -225,6 +227,48 @@ module Raiha
       @state == State::DRAINING
     end
 
+    # Reassembles CRYPTO frame data arriving at different offsets.
+    # Only returns data when complete TLS handshake messages are available.
+    class CryptoStreamBuffer
+      def initialize
+        @buffer = String.new(encoding: "BINARY")
+        @write_end = 0
+        @read_offset = 0
+      end
+
+      def push(offset, data)
+        end_pos = offset + data.bytesize
+        if end_pos > @buffer.bytesize
+          @buffer << ("\x00" * (end_pos - @buffer.bytesize))
+        end
+        @buffer[offset, data.bytesize] = data
+        @write_end = [@write_end, end_pos].max
+      end
+
+      # Returns complete TLS handshake messages from the read offset, or nil if incomplete
+      def read
+        available = @buffer[@read_offset, @write_end - @read_offset]
+        return nil if available.nil? || available.bytesize < 4
+
+        # Try to read complete handshake messages (type[1] + length[3] + body[length])
+        result = String.new(encoding: "BINARY")
+        pos = 0
+        while pos + 4 <= available.bytesize
+          message_length = ("\x00" + available[pos + 1, 3]).unpack1("N")
+          total_length = 4 + message_length
+          break if pos + total_length > available.bytesize
+
+          result << available[pos, total_length]
+          pos += total_length
+        end
+
+        return nil if result.empty?
+
+        @read_offset += pos
+        result
+      end
+    end
+
     private def setup_components
       @rtt_stats = Quic::Congestion::RTTStats.new(
         max_ack_delay: @transport_parameters.max_ack_delay / 1000.0
@@ -260,31 +304,41 @@ module Raiha
         perspective: @perspective,
         crypto_setup: @crypto_setup,
         tls_config: @tls_config,
-        server_name: @server_name
+        server_name: @server_name,
+        transport_parameters: @transport_parameters
       )
+
+      @crypto_stream_buffers = {}
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer
     end
 
     # Process a raw QUIC packet (with header protection and encryption)
+    # A single UDP datagram may contain multiple coalesced QUIC packets (RFC 9000 Section 12.2)
     def handle_packet(data)
       return if @state == State::CLOSED
 
-      buffer = Quic::Wire::Buffer.new(data)
-      first_byte = buffer.read_uint8
-      buffer.seek(0)
+      offset = 0
+      while offset < data.bytesize
+        remaining = data[offset..]
+        first_byte = remaining.getbyte(0)
 
-      if (first_byte & 0x80) != 0
-        handle_long_header_packet(data, buffer)
-      else
-        handle_short_header_packet(data, buffer)
+        if (first_byte & 0x80) != 0
+          consumed = handle_long_header_packet(remaining, Quic::Wire::Buffer.new(remaining))
+          break unless consumed && consumed > 0
+          offset += consumed
+        else
+          handle_short_header_packet(remaining, Quic::Wire::Buffer.new(remaining))
+          break # Short header packets are always last in a coalesced datagram
+        end
       end
     rescue => error
       # Log error but don't crash the connection
       $stderr.puts "Connection error handling packet: #{error.class}: #{error.message}" if $DEBUG
     end
 
+    # Returns the number of bytes consumed, or nil on failure
     private def handle_long_header_packet(data, buffer)
       header = Quic::Wire::LongHeader.parse(buffer)
 
@@ -296,18 +350,21 @@ module Raiha
       when Quic::Wire::LongHeader::PacketType::ZERO_RTT
         Quic::Handshake::EncryptionLevel::ZERO_RTT
       else
-        return
+        return nil
       end
-
-      return unless @crypto_setup.available?(level)
 
       # Packet number starts at current buffer position
       packet_number_offset = buffer.pos
 
+      # Total packet size: header + payload_length (which includes PN + encrypted data)
+      total_packet_size = packet_number_offset + header.payload_length
+
+      return nil unless @crypto_setup.available?(level)
+
       # Remove header protection (RFC 9001 Section 5.4.2)
       # Sample is 4 bytes after the start of the packet number field
       sample_offset = packet_number_offset + 4
-      return if sample_offset + 16 > data.bytesize
+      return nil if sample_offset + 16 > data.bytesize
 
       sample = data[sample_offset, 16]
       mask = @crypto_setup.header_protection_mask(sample, level: level, direction: :receive)
@@ -349,6 +406,8 @@ module Raiha
       rescue OpenSSL::Cipher::CipherError
         # Decryption failed, drop packet
       end
+
+      total_packet_size
     end
 
     private def handle_short_header_packet(data, buffer)
@@ -412,7 +471,14 @@ module Raiha
     end
 
     private def handle_crypto_frame(frame, level: Quic::Handshake::EncryptionLevel::INITIAL)
-      @tls_adapter.receive_crypto_data(frame.data, level: level)
+      @crypto_stream_buffers[level] ||= CryptoStreamBuffer.new
+      buffer = @crypto_stream_buffers[level]
+      buffer.push(frame.offset, frame.data)
+
+      data = buffer.read
+      return unless data
+
+      @tls_adapter.receive_crypto_data(data, level: level)
 
       if @tls_adapter.handshake_complete? && @state == State::HANDSHAKING
         complete_handshake
