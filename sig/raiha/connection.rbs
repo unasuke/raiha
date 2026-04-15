@@ -12,6 +12,7 @@ module Raiha
     attr_reader dest_connection_id: Quic::Protocol::ConnectionID
     attr_reader state: Symbol
     attr_reader streams: StreamsMap
+    attr_reader qlog_writer: Qlog::Writer?
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
@@ -20,6 +21,8 @@ module Raiha
     def open_stream: (?bidirectional: bool) -> Stream
     def accept_stream: -> Stream
     def accept_stream_nonblock: -> Stream?
+    def enable_qlog: (output: (IO | StringIO | String), ?title: String?) -> void
+    def flush_qlog: -> void
     def start_handshake: -> void
     def close: (?error_code: Integer, ?reason: String) -> void
     def build_packet: (Array[Quic::Wire::Frame] frames, level: Symbol, ?pad_to_min: bool) -> String?
@@ -49,5 +52,11 @@ module Raiha
     private def encode_packet_number: (Integer packet_number) -> String
     private def apply_header_protection: (String packet, Integer header_length, Integer packet_number_length, Symbol level) -> String
     private def level_to_pn_space: (Symbol level) -> Symbol
+    private def level_to_packet_type: (Symbol level) -> Symbol?
+    private def log_event: (Qlog::Event event) -> void
+    private def log_packet_sent: (level: Symbol, packet_number: Integer, frames: Array[untyped]) -> void
+    private def log_packet_received: (level: Symbol, packet_number: Integer, frames: Array[untyped]) -> void
+    private def log_packet_dropped: (level: Symbol, trigger: Symbol) -> void
+    private def log_state_updated: (old_state: Symbol, new_state: Symbol) -> void
   end
 end

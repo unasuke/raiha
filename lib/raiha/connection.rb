@@ -15,6 +15,7 @@ require_relative "quic/ack_handler"
 require_relative "quic/congestion"
 require_relative "quic/flow_control"
 require_relative "quic/timer"
+require_relative "qlog"
 
 module Raiha
   class Connection
@@ -30,6 +31,7 @@ module Raiha
     attr_reader :dest_connection_id
     attr_reader :state
     attr_reader :streams
+    attr_reader :qlog_writer
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil)
       @perspective = perspective
@@ -89,6 +91,22 @@ module Raiha
 
     def accept_stream_nonblock
       @streams.accept_stream_nonblock
+    end
+
+    def enable_qlog(output:, title: nil)
+      @qlog_writer = Qlog::Writer.new(output: output, title: title)
+      @qlog_writer.start_trace(
+        vantage_point: @perspective,
+        connection_id: @src_connection_id.serialize.unpack1("H*")
+      )
+      log_event(Qlog::ConnectionEvents::ConnectionStarted.new(
+        src_cid: @src_connection_id.serialize.unpack1("H*"),
+        dest_cid: @dest_connection_id.serialize.unpack1("H*")
+      ))
+    end
+
+    def flush_qlog
+      @qlog_writer&.flush
     end
 
     # Start the handshake (client-initiated)
@@ -153,6 +171,8 @@ module Raiha
         pn_space: level_to_pn_space(level)
       )
 
+      log_packet_sent(level: level, packet_number: packet_number.value, frames: frames)
+
       raw_packet
     end
 
@@ -212,7 +232,9 @@ module Raiha
     end
 
     def complete_handshake
+      old_state = @state
       @state = State::CONNECTED
+      log_state_updated(old_state: old_state, new_state: @state)
     end
 
     def handshake_complete?
@@ -404,9 +426,10 @@ module Raiha
       begin
         decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
+        log_packet_received(level: level, packet_number: packet_number, frames: frames)
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
-        # Decryption failed, drop packet
+        log_packet_dropped(level: level, trigger: :decryption_failure)
       end
 
       total_packet_size
@@ -452,9 +475,10 @@ module Raiha
       begin
         decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
+        log_packet_received(level: level, packet_number: packet_number, frames: frames)
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
-        # Decryption failed, drop packet
+        log_packet_dropped(level: level, trigger: :decryption_failure)
       end
     end
 
@@ -508,7 +532,9 @@ module Raiha
     end
 
     private def enter_draining_state
+      old_state = @state
       @state = State::DRAINING
+      log_state_updated(old_state: old_state, new_state: @state)
 
       drain_timeout = 3 * @rtt_stats.pto
       @drain_timer = Quic::Timer.new
@@ -634,6 +660,57 @@ module Raiha
       else
         Quic::Protocol::PacketNumberSpace::APPLICATION_DATA
       end
+    end
+
+    private def level_to_packet_type(level)
+      case level
+      when Quic::Handshake::EncryptionLevel::INITIAL then :initial
+      when Quic::Handshake::EncryptionLevel::HANDSHAKE then :handshake
+      when Quic::Handshake::EncryptionLevel::ZERO_RTT then :"0RTT"
+      when Quic::Handshake::EncryptionLevel::ONE_RTT then :"1RTT"
+      end
+    end
+
+    private def log_event(event)
+      @qlog_writer&.log(event)
+    end
+
+    private def log_packet_sent(level:, packet_number:, frames:)
+      return unless @qlog_writer
+
+      log_event(Qlog::TransportEvents::PacketSent.new(
+        packet_type: level_to_packet_type(level),
+        packet_number: packet_number,
+        frames: frames
+      ))
+    end
+
+    private def log_packet_received(level:, packet_number:, frames:)
+      return unless @qlog_writer
+
+      log_event(Qlog::TransportEvents::PacketReceived.new(
+        packet_type: level_to_packet_type(level),
+        packet_number: packet_number,
+        frames: frames
+      ))
+    end
+
+    private def log_packet_dropped(level:, trigger:)
+      return unless @qlog_writer
+
+      log_event(Qlog::TransportEvents::PacketDropped.new(
+        packet_type: level_to_packet_type(level),
+        trigger: trigger
+      ))
+    end
+
+    private def log_state_updated(old_state:, new_state:)
+      return unless @qlog_writer
+
+      log_event(Qlog::ConnectionEvents::ConnectionStateUpdated.new(
+        old_state: old_state,
+        new_state: new_state
+      ))
     end
   end
 end
