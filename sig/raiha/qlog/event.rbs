@@ -1,0 +1,84 @@
+module Raiha
+  module Qlog
+    class Event
+      attr_reader time: Time
+      attr_reader category: Symbol
+      attr_reader event_type: Symbol
+      attr_reader data: Hash[Symbol, untyped]
+
+      def initialize: (category: Symbol, event_type: Symbol, ?data: Hash[Symbol, untyped]) -> void
+      def to_h: -> Hash[Symbol, untyped]
+      def to_json: (*untyped args) -> String
+    end
+
+    module ConnectionEvents
+      class ConnectionStarted < Event
+        def initialize: (src_cid: String, dest_cid: String) -> void
+      end
+
+      class ConnectionStateUpdated < Event
+        def initialize: (old_state: Symbol, new_state: Symbol) -> void
+      end
+
+      class ConnectionClosed < Event
+        def initialize: (owner: Symbol, trigger: Symbol, ?error_code: Integer?, ?reason: String?) -> void
+      end
+
+      class ConnectionIdUpdated < Event
+        def initialize: (owner: Symbol, old_id: String, new_id: String) -> void
+      end
+    end
+
+    module TransportEvents
+      class PacketSent < Event
+        def initialize: (packet_type: (Symbol | String), packet_number: Integer, ?frames: Array[untyped]) -> void
+        private def frame_to_h: (untyped frame) -> Hash[Symbol, untyped]
+      end
+
+      class PacketReceived < Event
+        def initialize: (packet_type: (Symbol | String), packet_number: Integer, ?frames: Array[untyped]) -> void
+        private def frame_to_h: (untyped frame) -> Hash[Symbol, untyped]
+      end
+
+      class PacketDropped < Event
+        def initialize: (?packet_type: (Symbol | String)?, ?trigger: (Symbol | String)?) -> void
+      end
+
+      class ParametersSet < Event
+        def initialize: (owner: Symbol, parameters: Hash[Symbol, untyped]) -> void
+      end
+
+      class StreamStateUpdated < Event
+        def initialize: (stream_id: Integer, stream_type: Symbol, ?old_state: Symbol?, new_state: Symbol) -> void
+      end
+    end
+
+    module SecurityEvents
+      class KeyUpdated < Event
+        def initialize: (key_type: Symbol, ?generation: Integer?, ?trigger: Symbol?) -> void
+      end
+
+      class KeyDiscarded < Event
+        def initialize: (key_type: Symbol, ?generation: Integer?, ?trigger: Symbol?) -> void
+      end
+    end
+
+    module RecoveryEvents
+      class MetricsUpdated < Event
+        def initialize: (?min_rtt: Numeric?, ?smoothed_rtt: Numeric?, ?latest_rtt: Numeric?, ?rtt_variance: Numeric?, ?congestion_window: Integer?, ?bytes_in_flight: Integer?) -> void
+      end
+
+      class CongestionStateUpdated < Event
+        def initialize: (?old_state: Symbol?, new_state: Symbol) -> void
+      end
+
+      class PacketLost < Event
+        def initialize: (packet_type: (Symbol | String), packet_number: Integer, ?trigger: Symbol?) -> void
+      end
+    end
+
+    module FrameSerializer
+      def self.to_h: (untyped frame) -> Hash[Symbol, untyped]
+    end
+  end
+end

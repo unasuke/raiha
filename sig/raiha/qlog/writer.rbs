@@ -1,0 +1,26 @@
+module Raiha
+  module Qlog
+    class Writer
+      QLOG_VERSION: String
+
+      attr_reader reference_time: Time
+
+      def initialize: (output: (IO | StringIO | String), ?title: String?, ?description: String?) -> void
+      def start_trace: (vantage_point: Symbol, connection_id: String) -> void
+      def log: (Event event) -> void
+      def flush: -> void
+      def self.to_file: (String path, ?title: String?) { (Writer) -> void } -> void
+    end
+
+    class StreamingWriter
+      attr_reader reference_time: Time
+
+      def initialize: (output: (IO | StringIO)) -> void
+      def start_trace: (vantage_point: Symbol, connection_id: String) -> void
+      def log: (Event event) -> void
+      def flush: -> void
+
+      private def write_header: -> void
+    end
+  end
+end
