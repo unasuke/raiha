@@ -19,7 +19,7 @@ module Raiha::Quic
     class TLSAdapter
       attr_reader :tls
 
-      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil)
+      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil, alpn_protocols: nil)
         @perspective = perspective
         @crypto_setup = crypto_setup
         @transport_parameters = transport_parameters
@@ -31,6 +31,7 @@ module Raiha::Quic
         end
 
         inject_transport_parameters_extension
+        inject_alpn_extension(alpn_protocols) if alpn_protocols
 
         @server_hello_sent = false
         @server_flight_sent = false
@@ -217,6 +218,14 @@ module Raiha::Quic
         return unless ext
 
         ext.transport_parameters_data = @transport_parameters.serialize
+      end
+
+      private def inject_alpn_extension(protocols)
+        ext = Raiha::TLS::Handshake::Extension::ApplicationLayerProtocolNegotiation.new(
+          on: @perspective == Protocol::Perspective::CLIENT ? :client_hello : :encrypted_extensions
+        )
+        ext.protocol_names = protocols
+        @tls.additional_extensions << ext
       end
 
       private def inject_transport_parameters_extension

@@ -33,7 +33,7 @@ module Raiha
     attr_reader :streams
     attr_reader :qlog_writer
 
-    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil)
+    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
       @perspective = perspective
       @src_connection_id = src_connection_id
       @dest_connection_id = dest_connection_id
@@ -41,6 +41,7 @@ module Raiha
       @transport_parameters = transport_parameters || Quic::Handshake::TransportParameters.new
       @tls_config = tls_config
       @server_name = server_name
+      @alpn_protocols = alpn_protocols
 
       @transport_parameters.initial_source_connection_id = @src_connection_id.serialize
 
@@ -327,7 +328,8 @@ module Raiha
         crypto_setup: @crypto_setup,
         tls_config: @tls_config,
         server_name: @server_name,
-        transport_parameters: @transport_parameters
+        transport_parameters: @transport_parameters,
+        alpn_protocols: @alpn_protocols
       )
 
       @crypto_stream_buffers = {}
