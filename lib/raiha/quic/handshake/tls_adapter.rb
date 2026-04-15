@@ -69,6 +69,9 @@ module Raiha::Quic
           wrapped = wrap_in_plaintext_record(data)
           @tls.receive(wrapped)
 
+          # Update transport parameters extension with latest values (e.g., original_destination_connection_id)
+          update_transport_parameters_extension
+
           # Trigger server to build response flight
           @tls.datagrams_to_send
 
@@ -203,6 +206,17 @@ module Raiha::Quic
         buf << [handshake_data.bytesize].pack("n")
         buf << handshake_data
         buf
+      end
+
+      private def update_transport_parameters_extension
+        return unless @transport_parameters
+
+        ext = @tls.additional_extensions.find { |e|
+          e.is_a?(Raiha::TLS::Handshake::Extension::QuicTransportParameters)
+        }
+        return unless ext
+
+        ext.transport_parameters_data = @transport_parameters.serialize
       end
 
       private def inject_transport_parameters_extension

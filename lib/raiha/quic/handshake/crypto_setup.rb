@@ -47,6 +47,17 @@ module Raiha::Quic
         @handshake_complete
       end
 
+      # Re-derive Initial AEAD keys from a new connection ID.
+      # Used by the server when it receives the client's Initial packet
+      # with a DCID that differs from the one used at construction.
+      def rederive_initial_keys(connection_id:)
+        @initial_aead = InitialAEAD.new(
+          connection_id: connection_id,
+          perspective: @perspective,
+          version: @version
+        )
+      end
+
       # Set handshake keys derived from TLS key schedule
       def set_handshake_keys(client_secret:, server_secret:, cipher_suite:)
         @handshake_aead = UpdatableAEAD.new(

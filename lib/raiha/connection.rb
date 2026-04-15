@@ -353,6 +353,8 @@ module Raiha
         return nil
       end
 
+      update_connection_ids_from_initial(header) if level == Quic::Handshake::EncryptionLevel::INITIAL
+
       # Packet number starts at current buffer position
       packet_number_offset = buffer.pos
 
@@ -453,6 +455,21 @@ module Raiha
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
         # Decryption failed, drop packet
+      end
+    end
+
+    # Update connection IDs when receiving the first Initial packet from the peer.
+    private def update_connection_ids_from_initial(header)
+      if @perspective == :client && header.source_connection_id
+        # RFC 9000 Section 7.2: client updates DCID to server's SCID
+        @dest_connection_id = header.source_connection_id
+      elsif @perspective == :server && !@initial_keys_rederived
+        @dest_connection_id = header.source_connection_id if header.source_connection_id
+        # RFC 9000 Section 7.3: record original DCID for transport parameters validation
+        @transport_parameters.original_destination_connection_id = header.destination_connection_id.serialize
+        # RFC 9001 Section 5.2: derive Initial keys from client's chosen DCID
+        @crypto_setup.rederive_initial_keys(connection_id: header.destination_connection_id)
+        @initial_keys_rederived = true
       end
     end
 
