@@ -319,6 +319,10 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:server_hello]
           hs.message = Handshake::ServerHello.build_from_client_hello(@client_hello).tap do |sh|
+            # Use the cipher suite selected by choose_cipher_suite (server preference),
+            # not the first one supported by the client (ServerHello default)
+            sh.cipher_suite = @cipher_suite
+
             additional_extensions = [
               Handshake::Extension::KeyShare.new(on: :server_hello).tap do |ks|
                 if @pkey[:group] == "x25519"
