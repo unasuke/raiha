@@ -68,6 +68,9 @@ func main() {
 	}
 	stream.Close()
 	fmt.Printf("SENT_DATA:%x\n", echo)
+
+	// Wait for client to receive and acknowledge the data before closing
+	<-conn.Context().Done()
 }
 
 func generateTLSConfig() *tls.Config {

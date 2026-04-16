@@ -4,6 +4,12 @@ module Raiha
       class Extension
         class ApplicationLayerProtocolNegotiation < AbstractExtension
           EXTENSION_TYPE_NUMBER: 16
+
+          attr_accessor protocol_names: Array[String]
+
+          def initialize: (on: Symbol) -> void
+          def extension_data=: (String data) -> void
+          def serialize: -> String
         end
       end
     end

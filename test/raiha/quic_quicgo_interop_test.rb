@@ -3,6 +3,7 @@ require "raiha/connection"
 require "support/test_certificate"
 require "socket"
 require "timeout"
+require "securerandom"
 
 class RaihaQuicQuicgoInteropTest < Minitest::Test
   include TestCertificate
@@ -15,7 +16,7 @@ class RaihaQuicQuicgoInteropTest < Minitest::Test
     skip "quic-go client not found" unless File.executable?(QUICGO_CLIENT)
   end
 
-  def test_raiha_client_to_quicgo_server
+  def test_raiha_client_handshake_and_stream_with_quicgo_server
     port = find_available_udp_port
 
     server_rd, server_wr = IO.pipe
@@ -37,15 +38,31 @@ class RaihaQuicQuicgoInteropTest < Minitest::Test
       alpn_protocols: ["quic-echo"]
     )
 
-    Timeout.timeout(10) do
+    Timeout.timeout(30) do
       client_connection.start_handshake
 
       until client_connection.handshake_complete?
         send_packets(client_connection, client_socket, "127.0.0.1", port)
         receive_packets(client_socket, client_connection)
+        # Send any pending ACKs/Finished immediately after receiving
+        send_packets(client_connection, client_socket, "127.0.0.1", port)
       end
 
       assert client_connection.handshake_complete?, "Handshake with quic-go should complete"
+
+      # Send stream data along with any pending frames (e.g., client Finished)
+      payload = SecureRandom.random_bytes(64)
+      client_connection.send_stream_data(0, payload, fin: true)
+      send_packets(client_connection, client_socket, "127.0.0.1", port)
+
+      # Receive echo response (quic-go may send HANDSHAKE_DONE and keepalive before stream data)
+      receive_until_stream_data(client_socket, client_connection, "127.0.0.1", port, stream_id: 0)
+
+      stream = client_connection.streams.get_stream(0)
+      refute_nil stream, "Client should have received response on stream 0"
+      assert stream.data_available?, "Stream should have data"
+      received = stream.read
+      assert_equal "ECHO:".b + payload, received, "Should receive echoed data"
     end
   ensure
     Process.kill("TERM", server_pid) if server_pid rescue nil
@@ -53,7 +70,7 @@ class RaihaQuicQuicgoInteropTest < Minitest::Test
     client_socket&.close
   end
 
-  def test_quicgo_client_to_raiha_server
+  def test_quicgo_client_handshake_with_raiha_server
     port = find_available_udp_port
 
     server_socket = UDPSocket.new
@@ -134,8 +151,30 @@ class RaihaQuicQuicgoInteropTest < Minitest::Test
 
       data, = socket.recvfrom_nonblock(65535)
       connection.handle_packet(data)
+      # Break if handshake just completed so we can respond quickly
+      break if connection.handshake_complete?
     rescue IO::WaitReadable
       break
+    end
+  end
+
+  # Receive packets and send ACKs back until the specified stream has data or max iterations
+  private def receive_until_stream_data(socket, connection, host, port, stream_id:, max_iterations: 40, timeout: 0.5)
+    max_iterations.times do
+      readable = IO.select([socket], nil, nil, timeout)
+      unless readable
+        send_packets(connection, socket, host, port)
+        next
+      end
+
+      data, = socket.recvfrom_nonblock(65535)
+      connection.handle_packet(data)
+      send_packets(connection, socket, host, port)
+
+      stream = connection.streams.get_stream(stream_id)
+      return if stream&.data_available?
+    rescue IO::WaitReadable
+      next
     end
   end
 end

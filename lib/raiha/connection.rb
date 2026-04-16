@@ -192,20 +192,29 @@ module Raiha
     def get_packets_to_send
       packets = []
 
-      # Check for pending crypto data at each level
+      # Check for pending crypto data or ACK at each level
       [Quic::Handshake::EncryptionLevel::INITIAL,
        Quic::Handshake::EncryptionLevel::HANDSHAKE,
        Quic::Handshake::EncryptionLevel::ONE_RTT].each do |level|
         next unless @crypto_setup.available?(level)
+
+        frames = []
+
+        ack_frame = pending_ack_frame(level)
+        frames << ack_frame if ack_frame
 
         crypto_data = @crypto_setup.get_crypto_data(level: level)
         if crypto_data
           crypto_frame = Quic::Wire::Frames::CryptoFrame.new
           crypto_frame.offset = 0
           crypto_frame.data = crypto_data
-          packet = build_packet([crypto_frame], level: level)
-          packets << packet if packet
+          frames << crypto_frame
         end
+
+        next if frames.empty?
+
+        packet = build_packet(frames, level: level)
+        packets << packet if packet
       end
 
       # Check for pending stream data
@@ -218,6 +227,14 @@ module Raiha
       end
 
       packets
+    end
+
+    # Returns an AckFrame for the given encryption level, or nil if none needed
+    private def pending_ack_frame(level)
+      pn_space = level_to_pn_space(level)
+      return nil unless @received_packet_handler.should_send_ack?(pn_space)
+
+      @received_packet_handler.get_ack_frame(pn_space)
     end
 
     # Queue stream data for sending as a 1-RTT STREAM frame
@@ -429,6 +446,11 @@ module Raiha
         decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
         log_packet_received(level: level, packet_number: packet_number, frames: frames)
+        @received_packet_handler.received_packet(
+          packet_number: packet_number,
+          pn_space: level_to_pn_space(level),
+          ack_eliciting: frames.any?(&:ack_eliciting?)
+        )
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
         log_packet_dropped(level: level, trigger: :decryption_failure)
@@ -478,6 +500,11 @@ module Raiha
         decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
         log_packet_received(level: level, packet_number: packet_number, frames: frames)
+        @received_packet_handler.received_packet(
+          packet_number: packet_number,
+          pn_space: level_to_pn_space(level),
+          ack_eliciting: frames.any?(&:ack_eliciting?)
+        )
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
         log_packet_dropped(level: level, trigger: :decryption_failure)

@@ -3,7 +3,7 @@ module Raiha::Quic
     class TLSAdapter
       attr_reader tls: (Raiha::TLS::Client | Raiha::TLS::Server)
 
-      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?transport_parameters: Raiha::Quic::Handshake::TransportParameters?) -> void
+      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?transport_parameters: Raiha::Quic::Handshake::TransportParameters?, ?alpn_protocols: Array[String]?) -> void
       def start: -> void
       def receive_crypto_data: (String data, level: Symbol) -> void
       def handshake_complete?: -> bool
@@ -18,6 +18,7 @@ module Raiha::Quic
       private def check_key_derivation: -> void
       private def update_transport_parameters_extension: -> void
       private def inject_transport_parameters_extension: -> void
+      private def inject_alpn_extension: (Array[String] protocols) -> void
     end
   end
 end

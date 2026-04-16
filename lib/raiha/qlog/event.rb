@@ -258,7 +258,9 @@ module Raiha
         when Quic::Wire::Frames::AckFrame
           {
             frame_type: "ack",
-            acked_ranges: frame.ack_ranges&.map { |r| [r.gap, r.length] }
+            largest_acknowledged: frame.largest_acknowledged,
+            ack_delay: frame.ack_delay,
+            acked_ranges: frame.ack_ranges&.map { |r| [r.gap, r.ack_range_length] }
           }.compact
         when Quic::Wire::Frames::CryptoFrame
           {

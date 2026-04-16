@@ -71,6 +71,11 @@ module Raiha::Quic
       end
 
       def should_send_ack?(pn_space)
+        # RFC 9002 Section 6.2: ack-eliciting Initial and Handshake packets must be acknowledged immediately
+        if pn_space == Protocol::PacketNumberSpace::INITIAL || pn_space == Protocol::PacketNumberSpace::HANDSHAKE
+          return @spaces[pn_space].ack_eliciting_count > 0
+        end
+
         @spaces[pn_space].should_send_ack?
       end
 
