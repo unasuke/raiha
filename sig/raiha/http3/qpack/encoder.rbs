@@ -1,0 +1,13 @@
+module Raiha
+  module HTTP3
+    module QPACK
+      class Encoder
+        def initialize: -> void
+        def encode: (Array[[String, String]] headers) -> String
+
+        private def encode_field_line: (Raiha::Quic::Wire::Buffer buf, String name, String value) -> void
+        private def write_string: (Raiha::Quic::Wire::Buffer buf, String str, huffman: bool) -> void
+      end
+    end
+  end
+end

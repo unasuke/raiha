@@ -1,0 +1,14 @@
+module Raiha
+  module HTTP3
+    module QPACK
+      module StaticTable
+        ENTRIES: Array[[String, String]]
+
+        def self.[]: (Integer index) -> [String, String]?
+        def self.size: -> Integer
+        def self.find: (String name, String value) -> Integer?
+        def self.find_name: (String name) -> Integer?
+      end
+    end
+  end
+end

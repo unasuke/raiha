@@ -1,0 +1,10 @@
+module Raiha
+  module HTTP3
+    module QPACK
+      module Integer
+        def self.encode: (::Integer value, ::Integer prefix_bits, ?::Integer prefix_flags) -> String
+        def self.decode: (Raiha::Quic::Wire::Buffer buffer, ::Integer prefix_bits) -> ::Integer
+      end
+    end
+  end
+end

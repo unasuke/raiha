@@ -1,0 +1,20 @@
+module Raiha
+  module HTTP3
+    module QPACK
+      class DecodingError < StandardError
+      end
+
+      class Decoder
+        def initialize: -> void
+        def decode: (String encoded) -> Array[[String, String]]
+
+        private def decode_field_line: (Raiha::Quic::Wire::Buffer buf) -> [String, String]
+        private def decode_indexed_field_line: (Raiha::Quic::Wire::Buffer buf) -> [String, String]
+        private def decode_literal_field_line_with_name_reference: (Raiha::Quic::Wire::Buffer buf) -> [String, String]
+        private def decode_literal_field_line_with_literal_name: (Raiha::Quic::Wire::Buffer buf) -> [String, String]
+        private def peek_uint8: (Raiha::Quic::Wire::Buffer buf) -> Integer
+        private def read_string: (Raiha::Quic::Wire::Buffer buf) -> String
+      end
+    end
+  end
+end
