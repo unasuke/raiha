@@ -1,0 +1,76 @@
+module Raiha
+  module HTTP3
+    class Frame
+      module Type
+        DATA: Integer
+        HEADERS: Integer
+        CANCEL_PUSH: Integer
+        SETTINGS: Integer
+        PUSH_PROMISE: Integer
+        GOAWAY: Integer
+        MAX_PUSH_ID: Integer
+      end
+
+      attr_reader frame_type: Integer
+
+      def self.parse: (Raiha::Quic::Wire::Buffer buffer) -> Frame
+      def serialize: -> String
+
+      private def serialize_payload: -> String
+    end
+
+    class DataFrame < Frame
+      attr_accessor data: String
+      def initialize: (?String data) -> void
+      def self.deserialize: (String payload) -> DataFrame
+    end
+
+    class HeadersFrame < Frame
+      attr_accessor encoded_field_section: String
+      def initialize: (?String encoded) -> void
+      def self.deserialize: (String payload) -> HeadersFrame
+    end
+
+    class CancelPushFrame < Frame
+      attr_accessor push_id: Integer
+      def initialize: (?Integer push_id) -> void
+      def self.deserialize: (String payload) -> CancelPushFrame
+    end
+
+    class SettingsFrame < Frame
+      SETTINGS: Hash[Symbol, Integer]
+
+      attr_accessor settings: Hash[Integer, Integer]
+
+      def initialize: -> void
+      def self.deserialize: (String payload) -> SettingsFrame
+      def max_field_section_size: -> Integer?
+      def qpack_max_table_capacity: -> Integer
+      def qpack_blocked_streams: -> Integer
+    end
+
+    class PushPromiseFrame < Frame
+      attr_accessor push_id: Integer
+      attr_accessor encoded_field_section: String
+      def initialize: (?Integer push_id, ?String encoded) -> void
+      def self.deserialize: (String payload) -> PushPromiseFrame
+    end
+
+    class GoawayFrame < Frame
+      attr_accessor stream_id: Integer
+      def initialize: (?Integer stream_id) -> void
+      def self.deserialize: (String payload) -> GoawayFrame
+    end
+
+    class MaxPushIdFrame < Frame
+      attr_accessor push_id: Integer
+      def initialize: (?Integer push_id) -> void
+      def self.deserialize: (String payload) -> MaxPushIdFrame
+    end
+
+    class UnknownFrame < Frame
+      attr_reader payload: String
+      def initialize: (Integer frame_type, String payload) -> void
+    end
+  end
+end
