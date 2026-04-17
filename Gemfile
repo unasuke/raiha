@@ -10,7 +10,6 @@ group :development do
   gem "bindata"
   gem "rubocop"
   gem "debug"
-  gem "mutex_m"
 end
 
 group :test do
