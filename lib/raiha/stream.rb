@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../raiha"
+
 module Raiha
   class Stream
     module SendState
@@ -50,7 +52,7 @@ module Raiha
     end
 
     def write(data)
-      raise "Stream not writable" unless writable?
+      raise Raiha::Error, "Stream not writable" unless writable?
 
       @send_buffer.push(data, @send_offset)
       @send_offset += data.bytesize
@@ -63,7 +65,7 @@ module Raiha
     end
 
     def read(max_bytes = nil)
-      raise "Stream not readable" unless readable?
+      raise Raiha::Error, "Stream not readable" unless readable?
 
       data = @receive_buffer.read(@read_offset, max_bytes)
       @read_offset += data.bytesize

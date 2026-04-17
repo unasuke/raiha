@@ -17,12 +17,12 @@ class RaihaClientTest < Minitest::Test
 
   def test_open_stream_before_connect_raises
     client = Raiha::Client.new
-    assert_raises(RuntimeError) { client.open_stream }
+    assert_raises(Raiha::Error) { client.open_stream }
   end
 
   def test_accept_stream_before_connect_raises
     client = Raiha::Client.new
-    assert_raises(RuntimeError) { client.accept_stream }
+    assert_raises(Raiha::Error) { client.accept_stream }
   end
 
   def test_close_before_connect

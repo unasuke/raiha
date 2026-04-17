@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "socket"
+require_relative "../raiha"
 require_relative "connection"
 require_relative "config"
 require_relative "quic/protocol"
@@ -17,7 +18,7 @@ module Raiha
     end
 
     def connect(host, port)
-      raise "Already connected" if @connection
+      raise Raiha::Error, "Already connected" if @connection
 
       @socket = UDPSocket.new
       @socket.connect(host, port)
@@ -36,13 +37,13 @@ module Raiha
     end
 
     def open_stream(bidirectional: true)
-      raise "Not connected" unless @connection
+      raise Raiha::Error, "Not connected" unless @connection
 
       @connection.open_stream(bidirectional: bidirectional)
     end
 
     def accept_stream
-      raise "Not connected" unless @connection
+      raise Raiha::Error, "Not connected" unless @connection
 
       @connection.accept_stream
     end
