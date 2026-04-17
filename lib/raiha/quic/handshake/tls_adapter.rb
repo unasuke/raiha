@@ -70,10 +70,9 @@ module Raiha::Quic
 
         extensions =
           if @perspective == Protocol::Perspective::CLIENT
-            ee = @tls.instance_variable_get(:@encrypted_extensions)
-            ee&.extensions
+            @tls.encrypted_extensions&.extensions
           else
-            @tls.instance_variable_get(:@client_hello)&.extensions
+            @tls.client_hello&.extensions
           end
         return nil unless extensions
 
@@ -115,9 +114,9 @@ module Raiha::Quic
       end
 
       private def verify_client_finished(handshake)
-        key_schedule = @tls.instance_variable_get(:@key_schedule)
-        server_hello = @tls.instance_variable_get(:@server_hello)
-        transcript_hash = @tls.instance_variable_get(:@transcript_hash)
+        key_schedule = @tls.key_schedule
+        server_hello = @tls.server_hello
+        transcript_hash = @tls.transcript_hash
 
         return unless key_schedule && server_hello
 
@@ -155,7 +154,7 @@ module Raiha::Quic
       end
 
       private def collect_server_response
-        transcript = @tls.instance_variable_get(:@transcript_hash)
+        transcript = @tls.transcript_hash
 
         # ServerHello → Initial level
         if transcript[:server_hello] && !@server_hello_sent
@@ -180,9 +179,9 @@ module Raiha::Quic
       private def collect_client_finished
         return if @client_finished_sent
 
-        key_schedule = @tls.instance_variable_get(:@key_schedule)
-        server_hello = @tls.instance_variable_get(:@server_hello)
-        transcript_hash = @tls.instance_variable_get(:@transcript_hash)
+        key_schedule = @tls.key_schedule
+        server_hello = @tls.server_hello
+        transcript_hash = @tls.transcript_hash
 
         return unless key_schedule && server_hello && transcript_hash
         return unless key_schedule.client_handshake_traffic_secret
@@ -264,8 +263,8 @@ module Raiha::Quic
       end
 
       private def check_key_derivation
-        key_schedule = @tls.instance_variable_get(:@key_schedule)
-        server_hello = @tls.instance_variable_get(:@server_hello)
+        key_schedule = @tls.key_schedule
+        server_hello = @tls.server_hello
 
         return unless key_schedule && server_hello
 
