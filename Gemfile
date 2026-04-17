@@ -7,7 +7,6 @@ group :development do
   gem "steep"
   gem "rbs"
   gem "rake"
-  gem "bindata"
   gem "rubocop"
   gem "debug"
 end
