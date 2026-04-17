@@ -156,7 +156,7 @@ class RaihaQuicHandshakeCryptoSetupTest < Minitest::Test
   def test_encrypt_unavailable_level_raises
     crypto_setup = create_crypto_setup(:client)
 
-    assert_raises(RuntimeError) do
+    assert_raises(Raiha::Quic::Error) do
       crypto_setup.encrypt("data".b, packet_number: 0, aad: "".b, level: Raiha::Quic::Handshake::EncryptionLevel::HANDSHAKE)
     end
   end
