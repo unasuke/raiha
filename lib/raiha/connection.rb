@@ -60,8 +60,7 @@ module Raiha
         when Quic::Wire::Frames::MaxDataFrame
           @connection_flow_controller.update_send_window(frame.maximum_data)
         when Quic::Wire::Frames::MaxStreamDataFrame
-          stream = @streams.get_stream(frame.stream_id)
-          stream&.flow_controller&.update_send_window(frame.maximum_stream_data)
+          @streams.get_stream(frame.stream_id)&.update_send_window(frame.maximum_stream_data)
         when Quic::Wire::Frames::MaxStreamsFrame
           if frame.bidirectional
             @streams.update_peer_max_streams_bidi(frame.maximum_streams)

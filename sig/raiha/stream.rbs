@@ -18,8 +18,11 @@ module Raiha
     attr_reader stream_id: Quic::Protocol::StreamID
     attr_reader send_state: Symbol
     attr_reader receive_state: Symbol
+    attr_reader flow_controller: Quic::FlowControl::StreamFlowController
 
     def initialize: (stream_id: Quic::Protocol::StreamID, flow_controller: Quic::FlowControl::StreamFlowController) -> void
+    def fin_received?: -> bool
+    def update_send_window: (Integer max) -> void
     def write: (String data) -> void
     def close_write: -> void
     def read: (?Integer? max_bytes) -> String

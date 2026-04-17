@@ -83,13 +83,10 @@ module Raiha
 
       # Return the first client-initiated bidirectional stream that has completed
       # receiving a full request (i.e. peer closed write-side), or nil.
-      # Client-initiated bidirectional streams have stream_id % 4 == 0.
       def pending_request_stream
-        @connection.streams.instance_variable_get(:@streams).each_value do |stream|
-          next unless stream.stream_id.bidirectional? && stream.stream_id.client_initiated?
-          return stream if stream.instance_variable_get(:@fin_received)
+        @connection.streams.each_stream.find do |stream|
+          stream.stream_id.bidirectional? && stream.stream_id.client_initiated? && stream.fin_received?
         end
-        nil
       end
     end
   end

@@ -7,6 +7,8 @@ module Raiha
     def accept_stream_nonblock: -> Stream?
     def get_or_create_stream: (Integer | Quic::Protocol::StreamID stream_id_value) -> Stream
     def get_stream: (Integer | Quic::Protocol::StreamID stream_id) -> Stream?
+    def each_stream: () { (Stream) -> void } -> void
+                   | () -> Enumerator[Stream, void]
     def active_streams_count: -> Integer
     def update_peer_max_streams_bidi: (Integer max) -> void
     def update_peer_max_streams_uni: (Integer max) -> void

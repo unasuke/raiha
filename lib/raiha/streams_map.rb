@@ -67,6 +67,12 @@ module Raiha
       @streams[stream_id.is_a?(Integer) ? stream_id : stream_id.value]
     end
 
+    def each_stream(&block)
+      return enum_for(:each_stream) unless block_given?
+
+      @streams.each_value(&block)
+    end
+
     def active_streams_count
       @streams.size
     end

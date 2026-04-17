@@ -20,6 +20,16 @@ module Raiha
     attr_reader :stream_id
     attr_reader :send_state
     attr_reader :receive_state
+    attr_reader :flow_controller
+
+    def fin_received?
+      @fin_received
+    end
+
+    # Tell the flow controller to raise the send window limit (e.g. from MAX_STREAM_DATA).
+    def update_send_window(max)
+      @flow_controller.update_send_window(max)
+    end
 
     def initialize(stream_id:, flow_controller:)
       @stream_id = stream_id
