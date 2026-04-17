@@ -436,7 +436,7 @@ module Raiha
         end
 
         finished = Handshake::Finished.new.tap do |fin|
-          fin.verify_data = finished_verify_data(@key_schedule.client_handshake_traffic_secret)
+          fin.verify_data = @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
         end
         hs_finished = Raiha::TLS::Handshake.new.tap do |hs|
           hs.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:finished]
@@ -622,13 +622,7 @@ module Raiha
       private def verify_finished(finished)
         # CryptoUtil.hkdf_expand_label("secret", "finished", context, length)
         # finished_key  = @key_schedule.hkdf_expand()
-        raise unless finished.message.verify_data == finished_verify_data(@key_schedule.server_handshake_traffic_secret)
-      end
-
-      private def finished_verify_data(key)
-        hash_alg = @server_hello.cipher_suite.hash_algorithm
-        finished_key = CryptoUtil.hkdf_expand_label(key, "finished", "", OpenSSL::Digest.new(hash_alg).digest_length, hash: hash_alg)
-        OpenSSL::HMAC.digest(hash_alg, finished_key, @transcript_hash.hash)
+        raise unless finished.message.verify_data == @key_schedule.finished_verify_data(@transcript_hash.hash, from: :server)
       end
 
       private def handle_plaintext_record(record)

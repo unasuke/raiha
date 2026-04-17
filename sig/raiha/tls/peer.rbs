@@ -1,6 +1,8 @@
 module Raiha
   module TLS
     class Peer
+      private def derive_application_traffic_secrets: -> void
+      private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String
     end
   end
 end

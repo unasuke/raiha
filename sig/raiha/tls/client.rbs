@@ -69,8 +69,6 @@ module Raiha
       private def setup_cipher: -> void
       private def verify_certificate_verify: (Handshake certificate_verify) -> void
       private def verify_finished: (Handshake finished) -> void
-      private def derive_application_traffic_secrets: -> void
-      private def finished_verify_data: (String key) -> String
       private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake | Alert | ApplicationData]
       private def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[Handshake | Alert | ApplicationData]
       private def send_client_certificate: -> Array[String]
