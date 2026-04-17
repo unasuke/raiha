@@ -413,24 +413,6 @@ module Raiha
         psk_ext.binders = [binder]
       end
 
-      private def compute_psk_binder(psk, truncated_client_hello, hash_alg)
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
-
-        # early_secret = HKDF-Extract(0, PSK)
-        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk)
-
-        # binder_key = Derive-Secret(early_secret, "res binder", "")
-        empty_hash = OpenSSL::Digest.new(hash_alg).digest
-        binder_key = CryptoUtil.hkdf_expand_label(early_secret, "res binder", empty_hash, digest_length, hash: hash_alg)
-
-        # finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
-        finished_key = CryptoUtil.hkdf_expand_label(binder_key, "finished", "", digest_length, hash: hash_alg)
-
-        # binder = HMAC(finished_key, Transcript-Hash(truncated_client_hello))
-        transcript_hash = OpenSSL::Digest.new(hash_alg).digest(truncated_client_hello)
-        OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash)
-      end
-
       # Build a Handshake{Finished} message bound to the current key schedule
       # and transcript. Returns nil if the schedule is not yet ready (no
       # client_handshake_traffic_secret or no server_hello to pick the hash).
@@ -641,11 +623,6 @@ module Raiha
         # CryptoUtil.hkdf_expand_label("secret", "finished", context, length)
         # finished_key  = @key_schedule.hkdf_expand()
         raise unless finished.message.verify_data == finished_verify_data(@key_schedule.server_handshake_traffic_secret)
-      end
-
-      private def derive_application_traffic_secrets
-        @key_schedule.derive_client_application_traffic_secret(@transcript_hash.hash)
-        @key_schedule.derive_server_application_traffic_secret(@transcript_hash.hash)
       end
 
       private def finished_verify_data(key)

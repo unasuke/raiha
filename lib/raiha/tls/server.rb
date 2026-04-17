@@ -199,18 +199,6 @@ module Raiha
         2 + binder_entries_size # binders_length(2) + all binder entries
       end
 
-      private def compute_psk_binder(psk, truncated_client_hello, hash_alg)
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
-
-        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk)
-        empty_hash = OpenSSL::Digest.new(hash_alg).digest
-        binder_key = CryptoUtil.hkdf_expand_label(early_secret, "res binder", empty_hash, digest_length, hash: hash_alg)
-        finished_key = CryptoUtil.hkdf_expand_label(binder_key, "finished", "", digest_length, hash: hash_alg)
-
-        transcript_hash = OpenSSL::Digest.new(hash_alg).digest(truncated_client_hello)
-        OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash)
-      end
-
       private def check_key_share_or_retry
         client_key_share = @client_hello.key_share
         return unless client_key_share
@@ -563,11 +551,6 @@ module Raiha
 
       private def verify_finished(finished)
         raise unless finished.message.verify_data == finished_verify_data(@key_schedule.client_handshake_traffic_secret)
-      end
-
-      private def derive_application_traffic_secrets
-        @key_schedule.derive_client_application_traffic_secret(@transcript_hash.hash)
-        @key_schedule.derive_server_application_traffic_secret(@transcript_hash.hash)
       end
     end
   end
