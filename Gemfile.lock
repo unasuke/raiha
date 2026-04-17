@@ -39,6 +39,7 @@ GEM
       rb-inotify (~> 0.9, >= 0.9.10)
     logger (1.5.3)
     minitest (5.18.0)
+    mutex_m (0.3.0)
     openssl (3.3.0)
     parallel (1.23.0)
     parser (3.2.2.3)
@@ -110,6 +111,7 @@ DEPENDENCIES
   bindata
   debug
   minitest
+  mutex_m
   raiha!
   rake
   rbs
@@ -117,4 +119,4 @@ DEPENDENCIES
   steep
 
 BUNDLED WITH
-   2.6.8
+   4.0.10
