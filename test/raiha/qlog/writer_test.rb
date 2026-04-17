@@ -16,20 +16,25 @@ class RaihaQlogWriterTest < Minitest::Test
     writer.flush
 
     json = JSON.parse(output.string)
-    assert_equal "0.4", json["qlog_version"]
-    assert_equal "JSON", json["qlog_format"]
+    assert_equal "urn:ietf:params:qlog:file:contained", json["file_schema"]
+    assert_equal "application/qlog+json", json["serialization_format"]
     assert_equal "Test", json["title"]
     assert_equal 1, json["traces"].size
 
     trace = json["traces"][0]
     assert_equal "Connection abc123", trace["title"]
     assert_equal "client", trace["vantage_point"]["type"]
-    assert_equal "QUIC", trace["common_fields"]["protocol_type"]
-    assert_equal "relative", trace["common_fields"]["time_format"]
+    assert_equal ["urn:ietf:params:qlog:events:quic"], trace["event_schemas"]
+    assert_equal "relative_to_epoch", trace["common_fields"]["time_format"]
+    refute trace["common_fields"].key?("protocol_type")
+
+    ref_time = trace["common_fields"]["reference_time"]
+    assert_equal "system", ref_time["clock_type"]
+    assert_equal "1970-01-01T00:00:00.000Z", ref_time["epoch"]
 
     assert_equal 1, trace["events"].size
     event_data = trace["events"][0]
-    assert_equal "connectivity:connection_started", event_data["name"]
+    assert_equal "quic:connection_started", event_data["name"]
     assert_kind_of Numeric, event_data["time"]
   end
 
@@ -48,7 +53,7 @@ class RaihaQlogWriterTest < Minitest::Test
     writer = Raiha::Qlog::Writer.new(output: output)
     writer.start_trace(vantage_point: :client, connection_id: "test")
 
-    event = Raiha::Qlog::Event.new(category: :test, event_type: :test)
+    event = Raiha::Qlog::Event.new(event_type: :test)
     writer.log(event)
     writer.flush
 
@@ -62,7 +67,7 @@ class RaihaQlogWriterTest < Minitest::Test
     tempfile = Tempfile.new(["qlog", ".json"])
     Raiha::Qlog::Writer.to_file(tempfile.path, title: "File Test") do |writer|
       writer.start_trace(vantage_point: :client, connection_id: "file_test")
-      writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :test))
+      writer.log(Raiha::Qlog::Event.new(event_type: :test))
     end
 
     json = JSON.parse(File.read(tempfile.path))
@@ -75,7 +80,7 @@ class RaihaQlogWriterTest < Minitest::Test
   def test_writer_no_trace_ignores_log
     output = StringIO.new
     writer = Raiha::Qlog::Writer.new(output: output)
-    writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :test))
+    writer.log(Raiha::Qlog::Event.new(event_type: :test))
     writer.flush
 
     json = JSON.parse(output.string)
@@ -88,47 +93,48 @@ class RaihaQlogWriterTest < Minitest::Test
     writer.start_trace(vantage_point: :client, connection_id: "multi")
 
     3.times do |i|
-      writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :"event_#{i}"))
+      writer.log(Raiha::Qlog::Event.new(event_type: :"event_#{i}"))
     end
     writer.flush
 
     json = JSON.parse(output.string)
     events = json["traces"][0]["events"]
     assert_equal 3, events.size
-    assert_equal "test:event_0", events[0]["name"]
-    assert_equal "test:event_2", events[2]["name"]
+    assert_equal "quic:event_0", events[0]["name"]
+    assert_equal "quic:event_2", events[2]["name"]
   end
 
-  def test_streaming_writer_ndjson_output
+  def test_streaming_writer_json_seq_output
     output = StringIO.new
     writer = Raiha::Qlog::StreamingWriter.new(output: output)
     writer.start_trace(vantage_point: :client, connection_id: "stream_test")
-    writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :first))
-    writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :second))
+    writer.log(Raiha::Qlog::Event.new(event_type: :first))
+    writer.log(Raiha::Qlog::Event.new(event_type: :second))
 
     lines = output.string.lines
     assert_equal 4, lines.size
 
     header = JSON.parse(lines[0])
-    assert_equal "0.4", header["qlog_version"]
-    assert_equal "JSON-SEQ", header["qlog_format"]
+    assert_equal "urn:ietf:params:qlog:file:sequential", header["file_schema"]
+    assert_equal "application/qlog+json-seq", header["serialization_format"]
 
     trace = JSON.parse(lines[1])
     assert_equal "Connection stream_test", trace["title"]
     assert_equal "client", trace["vantage_point"]["type"]
+    assert_equal ["urn:ietf:params:qlog:events:quic"], trace["event_schemas"]
 
     event1 = JSON.parse(lines[2])
-    assert_equal "test:first", event1["name"]
+    assert_equal "quic:first", event1["name"]
 
     event2 = JSON.parse(lines[3])
-    assert_equal "test:second", event2["name"]
+    assert_equal "quic:second", event2["name"]
   end
 
   def test_streaming_writer_relative_time
     output = StringIO.new
     writer = Raiha::Qlog::StreamingWriter.new(output: output)
     writer.start_trace(vantage_point: :server, connection_id: "t")
-    writer.log(Raiha::Qlog::Event.new(category: :test, event_type: :t))
+    writer.log(Raiha::Qlog::Event.new(event_type: :t))
 
     lines = output.string.lines
     event = JSON.parse(lines.last)

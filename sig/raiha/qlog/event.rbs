@@ -1,12 +1,13 @@
 module Raiha
   module Qlog
     class Event
+      NAMESPACE: String
+
       attr_reader time: Time
-      attr_reader category: Symbol
       attr_reader event_type: Symbol
       attr_reader data: Hash[Symbol, untyped]
 
-      def initialize: (category: Symbol, event_type: Symbol, ?data: Hash[Symbol, untyped]) -> void
+      def initialize: (event_type: Symbol, ?data: Hash[Symbol, untyped]) -> void
       def to_h: -> Hash[Symbol, untyped]
       def to_json: (*untyped args) -> String
     end
@@ -32,12 +33,10 @@ module Raiha
     module TransportEvents
       class PacketSent < Event
         def initialize: (packet_type: (Symbol | String), packet_number: Integer, ?frames: Array[untyped]) -> void
-        private def frame_to_h: (untyped frame) -> Hash[Symbol, untyped]
       end
 
       class PacketReceived < Event
         def initialize: (packet_type: (Symbol | String), packet_number: Integer, ?frames: Array[untyped]) -> void
-        private def frame_to_h: (untyped frame) -> Hash[Symbol, untyped]
       end
 
       class PacketDropped < Event
@@ -45,7 +44,7 @@ module Raiha
       end
 
       class ParametersSet < Event
-        def initialize: (owner: Symbol, parameters: Hash[Symbol, untyped]) -> void
+        def initialize: (initiator: Symbol, parameters: Hash[Symbol, untyped]) -> void
       end
 
       class StreamStateUpdated < Event
@@ -64,8 +63,8 @@ module Raiha
     end
 
     module RecoveryEvents
-      class MetricsUpdated < Event
-        def initialize: (?min_rtt: Numeric?, ?smoothed_rtt: Numeric?, ?latest_rtt: Numeric?, ?rtt_variance: Numeric?, ?congestion_window: Integer?, ?bytes_in_flight: Integer?) -> void
+      class RecoveryMetricsUpdated < Event
+        def initialize: (?min_rtt: Numeric?, ?smoothed_rtt: Numeric?, ?latest_rtt: Numeric?, ?rtt_variance: Numeric?, ?pto_count: Integer?, ?congestion_window: Integer?, ?bytes_in_flight: Integer?, ?ssthresh: Integer?, ?packets_in_flight: Integer?, ?pacing_rate: Integer?) -> void
       end
 
       class CongestionStateUpdated < Event
@@ -79,6 +78,7 @@ module Raiha
 
     module FrameSerializer
       def self.to_h: (untyped frame) -> Hash[Symbol, untyped]
+      def self.compute_acked_ranges: (untyped frame) -> Array[[Integer, Integer]]?
     end
   end
 end

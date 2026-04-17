@@ -4,10 +4,19 @@ require "json"
 
 module Raiha
   module Qlog
-    # JSON format qlog writer per draft-ietf-quic-qlog-main-schema
-    class Writer
-      QLOG_VERSION = "0.4"
+    # Top-level constants per draft-ietf-quic-qlog-main-schema-13
+    FILE_SCHEMA_CONTAINED = "urn:ietf:params:qlog:file:contained"
+    FILE_SCHEMA_SEQUENTIAL = "urn:ietf:params:qlog:file:sequential"
+    SERIALIZATION_JSON = "application/qlog+json"
+    SERIALIZATION_JSON_SEQ = "application/qlog+json-seq"
 
+    # Per draft-ietf-quic-qlog-quic-events-12
+    QUIC_EVENT_SCHEMA = "urn:ietf:params:qlog:events:quic"
+
+    EPOCH_DEFAULT = "1970-01-01T00:00:00.000Z"
+
+    # JSON format qlog writer per draft-ietf-quic-qlog-main-schema-13
+    class Writer
       attr_reader :reference_time
 
       def initialize(output:, title: nil, description: nil)
@@ -26,10 +35,13 @@ module Raiha
             name: vantage_point.to_s,
             type: vantage_point == :client ? "client" : "server"
           },
+          event_schemas: [QUIC_EVENT_SCHEMA],
           common_fields: {
-            protocol_type: "QUIC",
-            time_format: "relative",
-            reference_time: (@reference_time.to_f * 1000).to_i
+            time_format: "relative_to_epoch",
+            reference_time: {
+              clock_type: "system",
+              epoch: EPOCH_DEFAULT
+            }
           },
           events: []
         }
@@ -46,8 +58,8 @@ module Raiha
 
       def flush
         qlog = {
-          qlog_version: QLOG_VERSION,
-          qlog_format: "JSON",
+          file_schema: FILE_SCHEMA_CONTAINED,
+          serialization_format: SERIALIZATION_JSON,
           title: @title,
           description: @description,
           traces: @traces
@@ -68,7 +80,7 @@ module Raiha
       end
     end
 
-    # NDJSON format streaming writer per draft-ietf-quic-qlog-main-schema
+    # JSON-SEQ streaming writer per draft-ietf-quic-qlog-main-schema-13 §5
     class StreamingWriter
       attr_reader :reference_time
 
@@ -85,10 +97,13 @@ module Raiha
             name: vantage_point.to_s,
             type: vantage_point == :client ? "client" : "server"
           },
+          event_schemas: [QUIC_EVENT_SCHEMA],
           common_fields: {
-            protocol_type: "QUIC",
-            time_format: "relative",
-            reference_time: (@reference_time.to_f * 1000).to_i
+            time_format: "relative_to_epoch",
+            reference_time: {
+              clock_type: "system",
+              epoch: EPOCH_DEFAULT
+            }
           }
         }
         @output.puts(JSON.generate(trace_header))
@@ -108,8 +123,8 @@ module Raiha
 
       private def write_header
         header = {
-          qlog_version: Writer::QLOG_VERSION,
-          qlog_format: "JSON-SEQ"
+          file_schema: FILE_SCHEMA_SEQUENTIAL,
+          serialization_format: SERIALIZATION_JSON_SEQ
         }
         @output.puts(JSON.generate(header))
         @output.flush

@@ -34,7 +34,8 @@ class RaihaQlogConnectionIntegrationTest < Minitest::Test
     client.flush_qlog
 
     json = JSON.parse(output.string)
-    assert_equal "0.4", json["qlog_version"]
+    assert_equal "urn:ietf:params:qlog:file:contained", json["file_schema"]
+    assert_equal "application/qlog+json", json["serialization_format"]
     assert_equal "Handshake Test", json["title"]
 
     trace = json["traces"][0]
@@ -44,10 +45,10 @@ class RaihaQlogConnectionIntegrationTest < Minitest::Test
     refute_empty events
 
     event_names = events.map { |e| e["name"] }
-    assert_includes event_names, "connectivity:connection_started"
-    assert_includes event_names, "transport:packet_sent"
-    assert_includes event_names, "transport:packet_received"
-    assert_includes event_names, "connectivity:connection_state_updated"
+    assert_includes event_names, "quic:connection_started"
+    assert_includes event_names, "quic:packet_sent"
+    assert_includes event_names, "quic:packet_received"
+    assert_includes event_names, "quic:connection_state_updated"
   end
 
   def test_qlog_not_enabled_does_not_error
@@ -89,7 +90,7 @@ class RaihaQlogConnectionIntegrationTest < Minitest::Test
     client.flush_qlog
 
     json = JSON.parse(output.string)
-    sent_events = json["traces"][0]["events"].select { |e| e["name"] == "transport:packet_sent" }
+    sent_events = json["traces"][0]["events"].select { |e| e["name"] == "quic:packet_sent" }
     refute_empty sent_events
 
     first_sent = sent_events.first
@@ -127,7 +128,7 @@ class RaihaQlogConnectionIntegrationTest < Minitest::Test
     client.flush_qlog
 
     json = JSON.parse(output.string)
-    state_events = json["traces"][0]["events"].select { |e| e["name"] == "connectivity:connection_state_updated" }
+    state_events = json["traces"][0]["events"].select { |e| e["name"] == "quic:connection_state_updated" }
     refute_empty state_events
 
     completed = state_events.find { |e| e["data"]["new"] == "connected" }
