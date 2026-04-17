@@ -29,6 +29,9 @@ module Raiha
 
           def extension_data=(data)
             super
+            # RFC 8446 Section 4.3.1: server_name in EncryptedExtensions carries no data
+            return if data.nil? || data.empty?
+
             buf = StringIO.new(data)
             _list_length = buf.read(2).unpack1("n")
             name_type = buf.read(1).unpack1("C")
