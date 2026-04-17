@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../crypto_util"
+require_relative "error"
 require_relative "cipher_suite"
 require "openssl"
 
@@ -40,7 +41,7 @@ module Raiha
         when "x25519" # TODO: x448
           @pkey.derive(OpenSSL::PKey.new_raw_public_key("x25519", @public_key))
         else
-          raise "TODO: #{@group} is not supported (yet)"
+          raise Raiha::TLS::Error, "TODO: #{@group} is not supported (yet)"
         end
       end
 

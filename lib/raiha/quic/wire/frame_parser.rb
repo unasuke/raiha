@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "../error"
 require_relative "buffer"
 require_relative "frame"
 require_relative "frames/padding_frame"
@@ -82,7 +83,7 @@ module Raiha::Quic
           when Frame::Type::HANDSHAKE_DONE
             Frames::HandshakeDoneFrame.parse(buffer)
           else
-            raise "Unknown frame type: 0x#{frame_type.to_s(16)}"
+            raise Raiha::Quic::Error, "Unknown frame type: 0x#{frame_type.to_s(16)}"
           end
 
           frames << frame

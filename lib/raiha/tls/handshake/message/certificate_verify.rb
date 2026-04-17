@@ -1,5 +1,6 @@
 require "stringio"
 require "openssl"
+require_relative "../../error"
 
 module Raiha
   module TLS
@@ -96,7 +97,7 @@ module Raiha
           when "ecdsa_secp521r1_sha512"
             certificate.public_key.verify("sha512", signature, signed_data(transcript_hash, context))
           else
-            raise "TODO: #{algorithm} is not supported (yet)"
+            raise Raiha::TLS::Error, "TODO: #{algorithm} is not supported (yet)"
           end
         end
 

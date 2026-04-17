@@ -2,6 +2,7 @@
 
 require "openssl"
 require_relative "../../crypto_util"
+require_relative "../error"
 require_relative "../protocol/perspective"
 
 module Raiha::Quic
@@ -129,7 +130,7 @@ module Raiha::Quic
         when "aes-128-gcm" then "aes-128-ecb"
         when "aes-256-gcm" then "aes-256-ecb"
         when "chacha20-poly1305" then "chacha20"
-        else raise "Unsupported algorithm for header protection: #{@algorithm}"
+        else raise Raiha::Quic::Error, "Unsupported algorithm for header protection: #{@algorithm}"
         end
       end
     end

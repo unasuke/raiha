@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "buffer"
+require_relative "../error"
 require_relative "../protocol/connection_id"
 
 module Raiha::Quic
@@ -18,7 +19,7 @@ module Raiha::Quic
         if (first_byte & LONG_HEADER_FORM) != 0
           LongHeader.parse(buffer)
         else
-          raise "ShortHeader.parse requires connection_id_length"
+          raise Raiha::Quic::Error, "ShortHeader.parse requires connection_id_length"
         end
       end
 

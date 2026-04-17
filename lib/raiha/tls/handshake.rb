@@ -3,6 +3,7 @@
 require "securerandom"
 require "stringio"
 require_relative "cipher_suite"
+require_relative "error"
 
 module Raiha
   module TLS
@@ -41,7 +42,7 @@ module Raiha
         hs = self.new
         buf = StringIO.new(data)
         type = buf.read(1).unpack1("C")
-        raise "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
+        raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
 
         hs.handshake_type = type
         hs.length = ("\x00" + buf.read(3)).unpack1("N")
@@ -59,7 +60,7 @@ module Raiha
         loop do
           start_pos = buf.pos
           type = buf.read(1).unpack1("C")
-          raise "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
+          raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
 
           hs = self.new
           hs.handshake_type = type

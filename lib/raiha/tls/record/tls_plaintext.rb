@@ -1,4 +1,5 @@
 require "stringio"
+require_relative "../error"
 require_relative "../record"
 require_relative "../change_cipher_spec"
 require_relative "../application_data"
@@ -48,7 +49,7 @@ module Raiha
             when ChangeCipherSpec
               buf << [CONTENT_TYPE[:change_cipher_spec]].pack("C")
             else
-              raise "TODO #{content.class}"
+              raise Raiha::TLS::Error, "TODO #{content.class}"
             end
             buf << (@legacy_record_version || LEGACY_RECORD_VERSION)
             buf << [fragment.bytesize].pack("n")
@@ -67,7 +68,7 @@ module Raiha
           when Handshake
             buf << [CONTENT_TYPE[:handshake]].pack("C")
           else
-            raise "TODO #{@fragment.class}"
+            raise Raiha::TLS::Error, "TODO #{@fragment.class}"
           end
           buf << (@legacy_record_version || LEGACY_RECORD_VERSION)
           buf << [serialized.bytesize].pack("n")

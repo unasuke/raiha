@@ -1,3 +1,5 @@
+require_relative "error"
+
 module Raiha
   module TLS
     class CipherSuite
@@ -13,7 +15,7 @@ module Raiha
       attr_reader :value
 
       def initialize(cipher_name)
-        raise "unknown cipher suite: #{cipher_name.inspect}" unless CIPHER_SUITES.any? { |c| c[:name] == cipher_name }
+        raise Raiha::TLS::Error, "unknown cipher suite: #{cipher_name.inspect}" unless CIPHER_SUITES.any? { |c| c[:name] == cipher_name }
 
         cipher_suite = CIPHER_SUITES.find { |c| c[:name] == cipher_name }
         @name = cipher_suite[:name]
@@ -36,7 +38,7 @@ module Raiha
         when :TLS_AES_256_GCM_SHA384
           "SHA384"
         else
-          raise "TODO: hash algorithm for #{@name} is not supported" # TODO: really not supported?
+          raise Raiha::TLS::Error, "TODO: hash algorithm for #{@name} is not supported" # TODO: really not supported?
         end
       end
 
@@ -51,9 +53,9 @@ module Raiha
         when :TLS_AES_128_CCM_SHA256
           "aes-128-ccm"
         when :TLS_AES_128_CCM_8_SHA256
-          raise "TODO: aead algorithm for #{@name} is not supported" # TODO: really not supported?
+          raise Raiha::TLS::Error, "TODO: aead algorithm for #{@name} is not supported" # TODO: really not supported?
         else
-          raise "TODO: aead algorithm for #{@name} is not supported"
+          raise Raiha::TLS::Error, "TODO: aead algorithm for #{@name} is not supported"
         end
       end
 

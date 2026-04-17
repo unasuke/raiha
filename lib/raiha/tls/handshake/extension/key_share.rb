@@ -1,4 +1,5 @@
 require_relative "abstract_extension"
+require_relative "../../error"
 require "openssl"
 
 module Raiha
@@ -75,7 +76,7 @@ module Raiha
                   key_share.groups << { group: group_and_pkey[:group],
                                         key_exchange: group_and_pkey[:pkey].public_key.to_octet_string(:uncompressed) }
                 else
-                  raise "TODO: #{group_and_pkey[:group]}"
+                  raise Raiha::TLS::Error, "TODO: #{group_and_pkey[:group]}"
                 end
               end
             end
@@ -100,7 +101,7 @@ module Raiha
                 @groups << validate_group_and_key_exchange(group_name, key_exchange)
 
                 if client_shares_length == read_client_shares_length
-                  raise "TODO: mismatch length" unless buf.eof?
+                  raise Raiha::TLS::Error, "TODO: mismatch length" unless buf.eof?
 
                   break
                 end
@@ -149,7 +150,7 @@ module Raiha
           end
 
           private def serialize_for_server_hello
-            raise "on server_hello, only one group is supported" unless @groups.size == 1
+            raise Raiha::TLS::Error, "on server_hello, only one group is supported" unless @groups.size == 1
 
             key_share_data = encode_group_id(@groups.first[:group]) + [@groups.first[:key_exchange].bytesize].pack("n") + @groups.first[:key_exchange]
 
@@ -157,7 +158,7 @@ module Raiha
           end
 
           private def serialize_for_hello_retry_request
-            raise "on hello_retry_request, only one group is supported" unless @groups.size == 1
+            raise Raiha::TLS::Error, "on hello_retry_request, only one group is supported" unless @groups.size == 1
 
             selected_group = encode_group_id(@groups.first[:group])
             [EXTENSION_TYPE_NUMBER].pack("n") + [selected_group.bytesize].pack("n") + selected_group

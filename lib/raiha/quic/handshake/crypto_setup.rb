@@ -4,6 +4,7 @@ require_relative "encryption_level"
 require_relative "initial_aead"
 require_relative "updatable_aead"
 require_relative "transport_parameters"
+require_relative "../error"
 require_relative "../protocol/perspective"
 require_relative "../protocol/version"
 require_relative "../protocol/connection_id"
@@ -82,7 +83,7 @@ module Raiha::Quic
       # Encrypt a packet payload
       def encrypt(plaintext, packet_number:, aad:, level:)
         aead = aead_for_level(level)
-        raise "Encryption not available for level #{level}" unless aead
+        raise Raiha::Quic::Error, "Encryption not available for level #{level}" unless aead
 
         aead.encrypt(plaintext, packet_number: packet_number, aad: aad)
       end
@@ -90,7 +91,7 @@ module Raiha::Quic
       # Decrypt a packet payload
       def decrypt(ciphertext, packet_number:, aad:, level:)
         aead = aead_for_level(level)
-        raise "Decryption not available for level #{level}" unless aead
+        raise Raiha::Quic::Error, "Decryption not available for level #{level}" unless aead
 
         aead.decrypt(ciphertext, packet_number: packet_number, aad: aad)
       end
@@ -98,7 +99,7 @@ module Raiha::Quic
       # Get header protection mask for applying/removing header protection
       def header_protection_mask(sample, level:, direction: :send)
         aead = aead_for_level(level)
-        raise "Header protection not available for level #{level}" unless aead
+        raise Raiha::Quic::Error, "Header protection not available for level #{level}" unless aead
 
         aead.header_protection_mask(sample, direction: direction)
       end
@@ -127,7 +128,7 @@ module Raiha::Quic
 
       # Rotate 1-RTT keys
       def update_keys
-        raise "1-RTT keys not available" unless @one_rtt_aead
+        raise Raiha::Quic::Error, "1-RTT keys not available" unless @one_rtt_aead
 
         @one_rtt_aead.rotate_keys
       end

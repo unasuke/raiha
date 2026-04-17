@@ -3,6 +3,7 @@
 require_relative "alert"
 require_relative "application_data"
 require_relative "config"
+require_relative "error"
 require_relative "peer"
 require_relative "record"
 require_relative "handshake"
@@ -548,7 +549,7 @@ module Raiha
         elsif @state == State::WAIT_SEND_FINISHED && state == State::CONNECTED
           @state = state
         else
-          raise "TODO: #{@state} -> #{state} is wrong state transition"
+          raise Raiha::TLS::Error, "TODO: #{@state} -> #{state} is wrong state transition"
         end
       end
 

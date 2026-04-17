@@ -1,4 +1,5 @@
 require_relative "abstract_extension"
+require_relative "../../error"
 
 module Raiha
   module TLS
@@ -12,7 +13,7 @@ module Raiha
 
           def self.generate_padding_with_length(length)
             if length < 0 || length > 65535
-              raise "Padding length must be between 0 and 65535"
+              raise Raiha::TLS::Error, "Padding length must be between 0 and 65535"
             end
 
             # padding extension is only available in client hello

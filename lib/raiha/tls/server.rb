@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "error"
 require_relative "peer"
 require_relative "record"
 require_relative "handshake"
@@ -139,7 +140,7 @@ module Raiha
         elsif supported_groups.groups.include?("prime256v1")
           @pkey = { group: "prime256v1", pkey: OpenSSL::PKey::EC.generate("prime256v1") }
         else
-          raise "No supported group found in client hello"
+          raise Raiha::TLS::Error, "No supported group found in client hello"
         end
       end
 
@@ -147,7 +148,7 @@ module Raiha
         raise unless @client_hello
 
         unless choose_cipher_suite
-          raise "TODO: alert? cannot choose cipher suite"
+          raise Raiha::TLS::Error, "TODO: alert? cannot choose cipher suite"
         end
 
         check_psk
@@ -317,7 +318,7 @@ module Raiha
                 elsif @pkey[:group] == "prime256v1"
                   ks.groups = [{ group: @pkey[:group], key_exchange: @pkey[:pkey].public_key.to_octet_string(:uncompressed) }]
                 else
-                  raise "TODO: #{@pkey[:group]}"
+                  raise Raiha::TLS::Error, "TODO: #{@pkey[:group]}"
                 end
               end
             ]
@@ -468,7 +469,7 @@ module Raiha
 
         expected = @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
         unless handshake.message.verify_data == expected
-          raise "Client Finished verification failed"
+          raise Raiha::TLS::Error, "Client Finished verification failed"
         end
         true
       end
@@ -508,7 +509,7 @@ module Raiha
         elsif @state == State::NEGOTIATED && state == State::CONNECTED
           @state = state
         else
-          raise "Invalid state transition: #{@state} -> #{state}"
+          raise Raiha::TLS::Error, "Invalid state transition: #{@state} -> #{state}"
         end
       end
 
