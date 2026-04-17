@@ -1,6 +1,6 @@
 module Raiha
   module TLS
-    class TLSError < Raiha::Error
+    class Error < Raiha::Error
     end
 
     class Context

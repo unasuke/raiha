@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Raiha
-  module TLS
+  module Quic
     class Error < ::Raiha::Error
     end
   end

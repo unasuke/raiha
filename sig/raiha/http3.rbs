@@ -1,5 +1,5 @@
 module Raiha
-  module Quic
+  module HTTP3
     class Error < Raiha::Error
     end
   end
