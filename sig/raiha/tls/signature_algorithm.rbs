@@ -1,0 +1,34 @@
+module Raiha
+  module TLS
+    class SignatureAlgorithm
+      RSA_PKCS1_SHA256: Integer
+      RSA_PKCS1_SHA384: Integer
+      RSA_PKCS1_SHA512: Integer
+
+      ECDSA_SECP256R1_SHA256: Integer
+      ECDSA_SECP384R1_SHA384: Integer
+      ECDSA_SECP521R1_SHA512: Integer
+
+      RSA_PSS_RSAE_SHA256: Integer
+      RSA_PSS_RSAE_SHA384: Integer
+      RSA_PSS_RSAE_SHA512: Integer
+
+      ED25519: Integer
+      ED448: Integer
+
+      RSA_PSS_PSS_SHA256: Integer
+      RSA_PSS_PSS_SHA384: Integer
+      RSA_PSS_PSS_SHA512: Integer
+
+      RSA_PKCS1_SHA1: Integer
+      ECDSA_SHA1: Integer
+
+      OBSOLETE_RESERVED: Range[Integer]
+      DSA_SHA1_RESERVED: Integer
+      DSA_SHA256_RESERVED: Integer
+      DSA_SHA384_RESERVED: Integer
+      DSA_SHA512_RESERVED: Integer
+      PRIVATE_USE: Range[Integer]
+    end
+  end
+end

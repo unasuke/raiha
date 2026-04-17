@@ -4,6 +4,9 @@ module Raiha
       class Extension
         class PskKeyExchangeModes < AbstractExtension
           EXTENSION_TYPE_NUMBER: 45
+          MODES: Hash[Symbol, Integer]
+
+          attr_accessor modes: Array[Symbol]
         end
       end
     end

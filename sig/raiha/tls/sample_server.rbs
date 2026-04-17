@@ -1,0 +1,12 @@
+module Raiha
+  module TLS
+    class SampleServer
+      def self.start: -> void
+      def initialize: -> void
+      def connect!: -> void
+      def read: -> String?
+      def close: -> void
+      def send: (String data) -> Integer
+    end
+  end
+end

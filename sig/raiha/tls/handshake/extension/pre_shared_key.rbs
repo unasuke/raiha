@@ -4,6 +4,15 @@ module Raiha
       class Extension
         class PreSharedKey < AbstractExtension
           EXTENSION_TYPE_NUMBER: 41
+
+          class PskIdentity < Struct[untyped]
+            attr_accessor identity: String
+            attr_accessor obfuscated_ticket_age: Integer
+          end
+
+          attr_accessor identities: Array[PskIdentity]
+          attr_accessor binders: Array[String]
+          attr_accessor selected_identity: Integer?
         end
       end
     end

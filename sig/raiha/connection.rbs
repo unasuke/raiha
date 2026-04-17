@@ -58,5 +58,11 @@ module Raiha
     private def log_packet_received: (level: Symbol, packet_number: Integer, frames: Array[untyped]) -> void
     private def log_packet_dropped: (level: Symbol, trigger: Symbol) -> void
     private def log_state_updated: (old_state: Symbol, new_state: Symbol) -> void
+
+    class CryptoStreamBuffer
+      def initialize: -> void
+      def push: (Integer offset, String data) -> void
+      def read: -> String?
+    end
   end
 end

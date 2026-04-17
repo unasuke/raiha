@@ -36,6 +36,8 @@ module Raiha
       end
 
       class TLSInnerPlaintext
+        PROTOCOL_VERSION: String
+
         # attr_accessor content: Handshake # TODO
         attr_accessor content: String
         attr_accessor content_type: Integer

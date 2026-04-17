@@ -28,6 +28,8 @@ module Raiha
 
       class ServerHello < Message
         HELLO_RETRY_REQUEST_RANDOM: String
+        LEGACY_VERSION: Array[Integer]
+        TLS13_SUPPORTED_VERSION: Array[Integer]
 
         attr_accessor random: String
         attr_accessor legacy_session_id_echo: String

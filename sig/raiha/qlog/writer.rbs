@@ -1,5 +1,12 @@
 module Raiha
   module Qlog
+    FILE_SCHEMA_CONTAINED: String
+    FILE_SCHEMA_SEQUENTIAL: String
+    SERIALIZATION_JSON: String
+    SERIALIZATION_JSON_SEQ: String
+    QUIC_EVENT_SCHEMA: String
+    EPOCH_DEFAULT: String
+
     class Writer
       QLOG_VERSION: String
 
