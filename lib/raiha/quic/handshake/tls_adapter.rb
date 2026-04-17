@@ -114,30 +114,18 @@ module Raiha::Quic
       end
 
       private def verify_client_finished(handshake)
+        return unless @tls.verify_client_finished(handshake)
+
         key_schedule = @tls.key_schedule
         server_hello = @tls.server_hello
-        transcript_hash = @tls.transcript_hash
-
-        return unless key_schedule && server_hello
-
-        hash_alg = server_hello.cipher_suite.hash_algorithm
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
-        finished_key = Raiha::CryptoUtil.hkdf_expand_label(
-          key_schedule.client_handshake_traffic_secret,
-          "finished", "", digest_length, hash: hash_alg
-        )
-        expected_verify_data = OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash.hash)
-
-        unless handshake.message.verify_data == expected_verify_data
-          raise "Client Finished verification failed"
+        # Handshake complete on server side; install 1-RTT AEAD secrets.
+        unless @crypto_setup.available?(EncryptionLevel::ONE_RTT)
+          @crypto_setup.set_application_keys(
+            client_secret: key_schedule.client_application_traffic_secret.last,
+            server_secret: key_schedule.server_application_traffic_secret.last,
+            cipher_suite: server_hello.cipher_suite
+          )
         end
-
-        # Handshake complete on server side
-        @crypto_setup.set_application_keys(
-          client_secret: key_schedule.client_application_traffic_secret.last,
-          server_secret: key_schedule.server_application_traffic_secret.last,
-          cipher_suite: server_hello.cipher_suite
-        ) unless @crypto_setup.available?(EncryptionLevel::ONE_RTT)
       end
 
       private def receive_as_client(data, level)

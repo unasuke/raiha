@@ -488,6 +488,18 @@ module Raiha
         end
       end
 
+      # Verify a client Finished handshake message against the current transcript.
+      # Returns true on success, raises on mismatch. Safe to call repeatedly.
+      def verify_client_finished(handshake)
+        return false unless @key_schedule && @server_hello
+
+        expected = @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
+        unless handshake.message.verify_data == expected
+          raise "Client Finished verification failed"
+        end
+        true
+      end
+
       private def transition_state(state)
         if state == State::ERROR_OCCURED || @state == State::ERROR_OCCURED
           @state = state

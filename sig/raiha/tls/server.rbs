@@ -51,6 +51,7 @@ module Raiha
       def build_finished: -> String
       def receive_finished: -> void
       def receive_application_data: -> void
+      def verify_client_finished: (Handshake handshake) -> bool
 
       private def receive_retry_client_hello: -> void
       private def check_psk: -> void
