@@ -4,6 +4,7 @@ require "test_helper"
 require "raiha/quic/crypto"
 require "raiha/quic/crypto/header_protection"
 require "raiha/quic/crypto/aead"
+require "raiha/quic/handshake/initial_aead"
 require "raiha/crypto_util"
 
 class RaihaQuicCryptoHeaderProtectionTest < Minitest::Test
@@ -70,7 +71,7 @@ class RaihaQuicCryptoHeaderProtectionTest < Minitest::Test
   RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID = ["8394c8f03e515708"].pack("H*")
 
   def test_apply
-    initial_secret = OpenSSL::HMAC.digest("SHA256", Raiha::Quic::Crypto::INITIAL_SALT_VERSION_1, RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID)
+    initial_secret = OpenSSL::HMAC.digest("SHA256", Raiha::Quic::Handshake::InitialAEAD::INITIAL_SALT_V1, RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID)
     secret = Raiha::CryptoUtil.hkdf_expand_label(initial_secret, "client in", "", 32)
     quic_key = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic key", "", 16)
     quic_iv = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic iv", "", 12)
@@ -83,7 +84,7 @@ class RaihaQuicCryptoHeaderProtectionTest < Minitest::Test
   end
 
   def test_remove
-    initial_secret = OpenSSL::HMAC.digest("SHA256", Raiha::Quic::Crypto::INITIAL_SALT_VERSION_1, RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID)
+    initial_secret = OpenSSL::HMAC.digest("SHA256", Raiha::Quic::Handshake::InitialAEAD::INITIAL_SALT_V1, RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID)
     secret = Raiha::CryptoUtil.hkdf_expand_label(initial_secret, "client in", "", 32)
     quic_hp = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic hp", "", 16)
     hp = Raiha::Quic::Crypto::HeaderProtection.new(cipher_name: "aes-128-ecb", key: quic_hp)
