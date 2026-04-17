@@ -500,6 +500,24 @@ module Raiha
         true
       end
 
+      # Return the concatenated raw handshake bytes for the server flight at the
+      # given encryption level, or nil if there is nothing yet. Used by QUIC
+      # to queue CRYPTO data at the right level.
+      #   :initial    => ServerHello
+      #   :handshake  => EncryptedExtensions + Certificate + CertificateVerify + Finished
+      def response_flight_bytes(level)
+        case level
+        when :initial
+          @transcript_hash[:server_hello]
+        when :handshake
+          buf = String.new(encoding: "BINARY")
+          [:encrypted_extensions, :certificate, :certificate_verify, :finished].each do |key|
+            buf << @transcript_hash[key] if @transcript_hash[key]
+          end
+          buf.empty? ? nil : buf
+        end
+      end
+
       private def transition_state(state)
         if state == State::ERROR_OCCURED || @state == State::ERROR_OCCURED
           @state = state

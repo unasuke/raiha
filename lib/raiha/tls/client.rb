@@ -431,6 +431,21 @@ module Raiha
         OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash)
       end
 
+      # Build a Handshake{Finished} message bound to the current key schedule
+      # and transcript. Returns nil if the schedule is not yet ready (no
+      # client_handshake_traffic_secret or no server_hello to pick the hash).
+      def build_client_finished_handshake
+        return nil unless @key_schedule && @server_hello
+        return nil unless @key_schedule.client_handshake_traffic_secret
+
+        verify_data = @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
+
+        Handshake.new.tap do |hs|
+          hs.handshake_type = Handshake::HANDSHAKE_TYPE[:finished]
+          hs.message = Handshake::Finished.new.tap { |fin| fin.verify_data = verify_data }
+        end
+      end
+
       def respond_to_finished
         records = []
 

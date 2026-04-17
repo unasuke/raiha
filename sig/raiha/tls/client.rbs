@@ -35,6 +35,7 @@ module Raiha
 
       def initialize: (?config: Config?, ?server_name: String?) -> void
       def build_client_hello: -> Array[String]
+      def build_client_finished_handshake: -> Handshake?
       def datagrams_to_send: -> Array[String]?
       def receive: (String datagram) -> String
       def finished?: -> bool

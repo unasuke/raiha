@@ -142,56 +142,26 @@ module Raiha::Quic
       end
 
       private def collect_server_response
-        transcript = @tls.transcript_hash
-
-        # ServerHello → Initial level
-        if transcript[:server_hello] && !@server_hello_sent
-          @crypto_setup.queue_crypto_data(transcript[:server_hello], level: EncryptionLevel::INITIAL)
+        if !@server_hello_sent && (bytes = @tls.response_flight_bytes(:initial))
+          @crypto_setup.queue_crypto_data(bytes, level: EncryptionLevel::INITIAL)
           @server_hello_sent = true
         end
 
-        # EE + Cert + CertVerify + Finished → Handshake level
-        if @crypto_setup.available?(EncryptionLevel::HANDSHAKE) && !@server_flight_sent
-          handshake_data = String.new(encoding: "BINARY")
-          [:encrypted_extensions, :certificate, :certificate_verify, :finished].each do |key|
-            handshake_data << transcript[key] if transcript[key]
-          end
-
-          unless handshake_data.empty?
-            @crypto_setup.queue_crypto_data(handshake_data, level: EncryptionLevel::HANDSHAKE)
-            @server_flight_sent = true
-          end
+        if !@server_flight_sent && @crypto_setup.available?(EncryptionLevel::HANDSHAKE) &&
+            (bytes = @tls.response_flight_bytes(:handshake))
+          @crypto_setup.queue_crypto_data(bytes, level: EncryptionLevel::HANDSHAKE)
+          @server_flight_sent = true
         end
       end
 
       private def collect_client_finished
         return if @client_finished_sent
-
-        key_schedule = @tls.key_schedule
-        server_hello = @tls.server_hello
-        transcript_hash = @tls.transcript_hash
-
-        return unless key_schedule && server_hello && transcript_hash
-        return unless key_schedule.client_handshake_traffic_secret
-
-        # Check if client has processed server Finished (application keys available)
+        # Client Finished is transmitted at the Handshake level; emit it only
+        # after the server's Finished has been processed (1-RTT keys ready).
         return unless @crypto_setup.available?(EncryptionLevel::ONE_RTT)
 
-        # Build client Finished
-        hash_alg = server_hello.cipher_suite.hash_algorithm
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
-        finished_key = Raiha::CryptoUtil.hkdf_expand_label(
-          key_schedule.client_handshake_traffic_secret,
-          "finished", "", digest_length, hash: hash_alg
-        )
-        verify_data = OpenSSL::HMAC.digest(hash_alg, finished_key, transcript_hash.hash)
-
-        finished_message = Raiha::TLS::Handshake::Finished.new
-        finished_message.verify_data = verify_data
-
-        handshake = Raiha::TLS::Handshake.new
-        handshake.handshake_type = Raiha::TLS::Handshake::HANDSHAKE_TYPE[:finished]
-        handshake.message = finished_message
+        handshake = @tls.build_client_finished_handshake
+        return unless handshake
 
         @crypto_setup.queue_crypto_data(handshake.serialize, level: EncryptionLevel::HANDSHAKE)
         @client_finished_sent = true
