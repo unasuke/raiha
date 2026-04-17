@@ -37,7 +37,6 @@ module Raiha
       def choose_group: -> void
       def select_parameters: -> void
       def connected?: -> bool
-      def encrypt_application_data: (String data) -> String
 
       def build_new_session_ticket: -> String
       def build_change_cipher_spec: -> Array[String]
@@ -50,7 +49,6 @@ module Raiha
       def build_certificate_verify: -> String
       def build_finished: -> String
       def receive_finished: -> void
-      def receive_application_data: -> void
       def verify_client_finished: (Handshake handshake) -> bool
       def response_flight_bytes: (Symbol level) -> String?
 
@@ -61,7 +59,6 @@ module Raiha
       private def check_key_share_or_retry: -> void
       private def transition_state: (Symbol state) -> void
       private def setup_key_schedule: -> void
-      private def setup_cipher: -> void
       private def verify_finished: (Handshake finished) -> void
     end
   end

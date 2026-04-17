@@ -1,6 +1,13 @@
 module Raiha
   module TLS
     class Peer
+      def negotiated_cipher_suite: -> CipherSuite?
+      def own_cipher: -> AEAD?
+      def peer_cipher: -> AEAD?
+      def encrypt_application_data: (String data) -> String
+      def receive_application_data: -> String?
+
+      private def setup_cipher: -> void
       private def derive_application_traffic_secrets: -> void
       private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String
     end

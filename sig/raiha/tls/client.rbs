@@ -39,7 +39,6 @@ module Raiha
       def datagrams_to_send: -> Array[String]?
       def receive: (String datagram) -> String
       def finished?: -> bool
-      def encrypt_application_data: (String data) -> String
       def handle_handshake_message: (Handshake handshake) -> void
       def handle_alert_message: (Alert alert) -> void
       def handle_application_data_message: (ApplicationData data) -> String
@@ -66,7 +65,6 @@ module Raiha
       private def transition_state: (Symbol state) -> void
       private def valid_server_hello?: -> bool
       private def setup_key_schedule: -> void
-      private def setup_cipher: -> void
       private def verify_certificate_verify: (Handshake certificate_verify) -> void
       private def verify_finished: (Handshake finished) -> void
       private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake | Alert | ApplicationData]

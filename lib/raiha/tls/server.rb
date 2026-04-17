@@ -453,27 +453,17 @@ module Raiha
         @state == State::CONNECTED
       end
 
-      def encrypt_application_data(data)
-        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
-          inner.content = ApplicationData.new.tap do |appdata|
-            appdata.content = data
-          end.serialize
-          inner.content_type = Record::CONTENT_TYPE[:application_data]
-        end
-        ciphertext = @server_cipher.encrypt(plaintext: innerplaintext, phase: :application)
-        ciphertext.serialize
+      # Peer hooks
+      def negotiated_cipher_suite
+        @cipher_suite
       end
 
-      def receive_application_data
-        loop do
-          received = @received.shift
-          break if received.nil?
+      def own_cipher
+        @server_cipher
+      end
 
-          next if received.plaintext?
-
-          inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :application)
-          # TODO: handle received application data
-        end
+      def peer_cipher
+        @client_cipher
       end
 
       # Verify a client Finished handshake message against the current transcript.
@@ -536,11 +526,6 @@ module Raiha
         @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.empty_digest)
         @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
         @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)
-      end
-
-      private def setup_cipher
-        @server_cipher = AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule, mode: :server)
-        @client_cipher = AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule, mode: :client)
       end
 
       private def verify_finished(finished)
