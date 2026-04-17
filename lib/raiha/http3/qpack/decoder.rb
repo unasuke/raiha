@@ -3,6 +3,7 @@
 require_relative "../../quic/wire/buffer"
 require_relative "static_table"
 require_relative "integer"
+require_relative "huffman"
 
 module Raiha
   module HTTP3
@@ -83,10 +84,10 @@ module Raiha
         private def decode_literal_field_line_with_literal_name(buf)
           first_byte = peek_uint8(buf)
           huffman = (first_byte & 0x08) != 0
-          raise DecodingError, "Huffman decoding not supported" if huffman
 
           name_length = Integer.decode(buf, 3)
-          name = buf.read(name_length)
+          name_bytes = buf.read(name_length)
+          name = huffman ? Huffman.decode(name_bytes) : name_bytes
           value = read_string(buf)
           [name, value]
         end
@@ -101,10 +102,9 @@ module Raiha
         private def read_string(buf)
           first_byte = peek_uint8(buf)
           huffman = (first_byte & 0x80) != 0
-          raise DecodingError, "Huffman decoding not supported" if huffman
-
           length = Integer.decode(buf, 7)
-          buf.read(length)
+          bytes = buf.read(length)
+          huffman ? Huffman.decode(bytes) : bytes
         end
       end
     end

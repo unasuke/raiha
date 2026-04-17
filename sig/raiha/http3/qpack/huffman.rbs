@@ -1,0 +1,17 @@
+module Raiha
+  module HTTP3
+    module QPACK
+      module Huffman
+        class DecodingError < StandardError
+        end
+
+        TABLE: Array[[Integer, Integer]]
+        EOS_SYMBOL: Integer
+
+        def self.tree: -> untyped
+        def self.build_tree: -> untyped
+        def self.decode: (String data) -> String
+      end
+    end
+  end
+end
