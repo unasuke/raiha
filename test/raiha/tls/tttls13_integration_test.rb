@@ -100,7 +100,7 @@ class RaihaTLSTttls13IntegrationTest < Minitest::Test
       tttls_client = TTTLS13::Client.new(socket, "localhost", ca_file: ca_file.path)
       tttls_client.connect
       tttls_client.close
-    rescue => e
+    rescue
       # tttls1.3 may raise on close_notify timing
     end
 

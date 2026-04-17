@@ -35,7 +35,7 @@ class RaihaTLSSessionResumptionTest < Minitest::Test
     second_client.instance_variable_set(:@session_ticket_store, ticket_store)
 
     # Build ClientHello - should include PSK extension
-    datagrams = second_client.datagrams_to_send
+    second_client.datagrams_to_send
     client_hello = second_client.instance_variable_get(:@client_hello)
 
     psk_ext = client_hello.extensions.find { |e| e.is_a?(Raiha::TLS::Handshake::Extension::PreSharedKey) }

@@ -85,8 +85,6 @@ class RaihaQuicCryptoHeaderProtectionTest < Minitest::Test
   def test_remove
     initial_secret = OpenSSL::HMAC.digest("SHA256", Raiha::Quic::Crypto::INITIAL_SALT_VERSION_1, RFC9001_APPENDIX_A_DESTINATION_CONNECTION_ID)
     secret = Raiha::CryptoUtil.hkdf_expand_label(initial_secret, "client in", "", 32)
-    quic_key = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic key", "", 16)
-    quic_iv = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic iv", "", 12)
     quic_hp = Raiha::CryptoUtil.hkdf_expand_label(secret, "quic hp", "", 16)
     hp = Raiha::Quic::Crypto::HeaderProtection.new(cipher_name: "aes-128-ecb", key: quic_hp)
     removed = hp.remove(RFC9001_APPENDIX_A_INITIAL_PACKET_PROTECTED, 18)

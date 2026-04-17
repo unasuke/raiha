@@ -6,7 +6,7 @@ require "raiha/tls/server"
 class RaihaTLSKeyUpdateIntegrationTest < Minitest::Test
   include TestCertificate
   def test_key_update_after_handshake
-    client, server = establish_connection
+    client, _server = establish_connection
 
     # Client sends application data before key update
     encrypted = client.encrypt_application_data("hello before key update")
@@ -23,7 +23,7 @@ class RaihaTLSKeyUpdateIntegrationTest < Minitest::Test
   end
 
   def test_key_update_with_request
-    client, server = establish_connection
+    client, _server = establish_connection
 
     # Client sends KeyUpdate with update_requested
     key_update_records = client.send_key_update(request_update: :update_requested)

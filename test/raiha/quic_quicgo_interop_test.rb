@@ -53,7 +53,7 @@ class RaihaQuicQuicgoInteropTest < Minitest::Test
     port = server_socket.addr[1]
 
     payload = SecureRandom.random_bytes(16)
-    client_pid, client_rd = spawn_quicgo_client(port, payload)
+    client_pid, _client_rd = spawn_quicgo_client(port, payload)
 
     Timeout.timeout(15) do
       complete_handshake_as_server(server_connection, server_socket)

@@ -10,8 +10,7 @@ class RaihaConnectionPacketTest < Minitest::Test
     refute_nil packet
     assert packet.bytesize > 0
 
-    # First byte should be long header with Initial type
-    first_byte_before_hp = 0xc0 # Will be masked by header protection
+    # First byte should be long header with Initial type (0xc0 before header protection masking)
     assert packet.getbyte(0) & 0x80 != 0, "Should be long header"
   end
 
@@ -34,11 +33,11 @@ class RaihaConnectionPacketTest < Minitest::Test
 
   def test_client_server_initial_packet_roundtrip
     client_connection = create_client_connection
-    server_connection = create_server_connection
+    _server_connection = create_server_connection
 
     # Client builds an Initial packet
     crypto_data = "test crypto data".b
-    packet = client_connection.build_initial_packet(crypto_data)
+    _packet = client_connection.build_initial_packet(crypto_data)
 
     # Server should be able to process it (handle_packet includes decryption)
     # Note: Header protection makes direct handle_packet complex,

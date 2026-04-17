@@ -21,7 +21,7 @@ class RaihaHTTP3QuicheInteropTest < Minitest::Test
     cert_file, key_file = write_cert_files
     port = find_available_udp_port
 
-    server_rd, server_wr = IO.pipe
+    _server_rd, server_wr = IO.pipe
     server_pid = Process.spawn(
       QUICHE_SERVER,
       "--listen", "127.0.0.1:#{port}",

@@ -121,7 +121,7 @@ class RaihaHTTP3QuicheServerInteropTest < Minitest::Test
 
       readable = IO.select([socket], nil, nil, 0.3)
       if readable
-        data, addr = socket.recvfrom_nonblock(65535) rescue next
+        data, _addr = socket.recvfrom_nonblock(65535) rescue next
         connection.handle_packet(data)
       end
       flush(connection, socket, client_addr)

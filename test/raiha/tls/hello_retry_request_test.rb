@@ -55,7 +55,7 @@ class RaihaTLSHelloRetryRequestTest < Minitest::Test
     end
 
     def build_client_hello
-      result = super
+      super
       sg_ext = @client_hello.extensions.find { |e| e.is_a?(Raiha::TLS::Handshake::Extension::SupportedGroups) }
       sg_ext.groups = ["x25519", "prime256v1"] if sg_ext
 

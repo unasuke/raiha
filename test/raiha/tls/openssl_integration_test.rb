@@ -60,7 +60,6 @@ class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
     tcp_server = TCPServer.new("localhost", 0)
     port = tcp_server.addr[1]
     server_state = nil
-    server_error = nil
     client_pid = nil
 
     Timeout.timeout(10) do

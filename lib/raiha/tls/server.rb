@@ -178,7 +178,6 @@ module Raiha
 
       private def verify_psk_binder(psk, binder, identity_index)
         hash_alg = @cipher_suite.hash_algorithm
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
 
         # Reconstruct truncated ClientHello for binder verification
         client_hello_serialized = @transcript_hash[:client_hello]
