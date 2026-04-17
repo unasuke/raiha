@@ -1,6 +1,12 @@
 module Raiha
   module TLS
     class Peer
+      attr_reader state: Symbol
+      attr_reader key_schedule: KeySchedule
+      attr_reader server_hello: Handshake::ServerHello?
+      attr_reader transcript_hash: TranscriptHash
+      attr_accessor additional_extensions: Array[Handshake::Extension::AbstractExtension]
+
       def negotiated_cipher_suite: -> CipherSuite?
       def own_cipher: -> AEAD?
       def peer_cipher: -> AEAD?

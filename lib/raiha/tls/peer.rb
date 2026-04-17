@@ -14,6 +14,12 @@ module Raiha
     #   - #own_cipher              : the AEAD used to encrypt outgoing records
     #   - #peer_cipher             : the AEAD used to decrypt incoming records
     class Peer
+      attr_reader :state
+      attr_reader :key_schedule
+      attr_reader :server_hello
+      attr_reader :transcript_hash
+      attr_accessor :additional_extensions
+
       def negotiated_cipher_suite
         raise NotImplementedError, "#{self.class} must implement #negotiated_cipher_suite"
       end

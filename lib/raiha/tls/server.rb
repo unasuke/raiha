@@ -28,12 +28,7 @@ module Raiha
         ERROR_OCCURED = :ERROR_OCCURED
       end
 
-      attr_reader :state
-      attr_reader :key_schedule
       attr_reader :client_hello
-      attr_reader :server_hello
-      attr_reader :transcript_hash
-      attr_accessor :additional_extensions
 
       def initialize(config: Config.server_default)
         @config = config

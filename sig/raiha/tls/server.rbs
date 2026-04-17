@@ -15,19 +15,13 @@ module Raiha
         ERROR_OCCURED: :ERROR_OCCURED
       end
 
-      @state: Symbol
       @cipher_suite: CipherSuite?
       @config: Config
       @client_auth_required: bool
       @psk_mode: bool
       @selected_psk: { index: Integer, psk: String }?
 
-      attr_reader state: Symbol
-      attr_reader key_schedule: KeySchedule
       attr_reader client_hello: Handshake::ClientHello?
-      attr_reader server_hello: Handshake::ServerHello?
-      attr_reader transcript_hash: TranscriptHash
-      attr_accessor additional_extensions: Array[Handshake::Extension::AbstractExtension]
 
       def initialize: (?config: Config) -> void
       def datagrams_to_send: -> Array[String]?
