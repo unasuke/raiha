@@ -4,7 +4,7 @@ module Raiha::Quic
       @io: StringIO
 
       def initialize: (?String? data) -> void
-      def read: (Integer length) -> String?
+      def read: (Integer length) -> String
       def write: (String data) -> Integer
       def pos: -> Integer
       def seek: (Integer pos) -> Integer

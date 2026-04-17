@@ -5,8 +5,8 @@ module Raiha
         class DecodingError < StandardError
         end
 
-        TABLE: Array[[Integer, Integer]]
-        EOS_SYMBOL: Integer
+        TABLE: Array[[::Integer, ::Integer]]
+        EOS_SYMBOL: ::Integer
 
         def self.tree: -> untyped
         def self.build_tree: -> untyped

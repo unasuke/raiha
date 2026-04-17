@@ -8,7 +8,11 @@ module Raiha::Quic
     class Buffer
       extend Forwardable
 
-      def_delegators :@io, :read, :write, :pos, :seek, :eof?
+      def_delegators :@io, :write, :pos, :seek, :eof?
+
+      def read(length)
+        @io.read(length) or raise EOFError, "unexpected EOF reading #{length} bytes"
+      end
 
       def initialize(data = nil)
         if data

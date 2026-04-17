@@ -4,10 +4,10 @@ module Raiha
       module StaticTable
         ENTRIES: Array[[String, String]]
 
-        def self.[]: (Integer index) -> [String, String]?
-        def self.size: -> Integer
-        def self.find: (String name, String value) -> Integer?
-        def self.find_name: (String name) -> Integer?
+        def self.[]: (::Integer index) -> [String, String]?
+        def self.size: -> ::Integer
+        def self.find: (String name, String value) -> ::Integer?
+        def self.find_name: (String name) -> ::Integer?
       end
     end
   end
