@@ -178,7 +178,7 @@ module Raiha
 
     # Build an Initial packet with CRYPTO frame containing TLS data
     def build_initial_packet(crypto_data)
-      frames = []
+      frames = [] #: Array[Quic::Wire::Frame]
       frames << Quic::Wire::Frames::CryptoFrame.new.tap do |frame|
         frame.offset = 0
         frame.data = crypto_data
@@ -189,7 +189,7 @@ module Raiha
 
     # Get all packets ready to send
     def get_packets_to_send
-      packets = []
+      packets = [] #: Array[String]
 
       # Check for pending crypto data or ACK at each level
       [Quic::Handshake::EncryptionLevel::INITIAL,
@@ -197,7 +197,7 @@ module Raiha
        Quic::Handshake::EncryptionLevel::ONE_RTT].each do |level|
         next unless @crypto_setup.available?(level)
 
-        frames = []
+        frames = [] #: Array[Quic::Wire::Frame]
 
         ack_frame = pending_ack_frame(level)
         frames << ack_frame if ack_frame
@@ -222,7 +222,7 @@ module Raiha
           packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
           packets << packet if packet
         end
-        @pending_stream_frames = []
+        @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
       end
 
       packets
@@ -244,7 +244,7 @@ module Raiha
       stream_frame.data = data
       stream_frame.fin = fin
 
-      @pending_stream_frames ||= []
+      @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
       @pending_stream_frames << stream_frame
     end
 
@@ -358,7 +358,7 @@ module Raiha
         alpn_protocols: @alpn_protocols
       )
 
-      @crypto_stream_buffers = {}
+      @crypto_stream_buffers = {} #: Hash[Symbol, untyped]
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer

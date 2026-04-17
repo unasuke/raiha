@@ -425,7 +425,7 @@ module Raiha
       end
 
       def respond_to_finished
-        records = []
+        records = [] #: Array[String]
 
         if @client_auth_required
           records.concat(send_client_certificate)

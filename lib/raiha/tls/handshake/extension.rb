@@ -46,7 +46,7 @@ module Raiha
         }.freeze
 
         def self.deserialize_extensions(data, type:)
-          extensions = []
+          extensions = [] #: Array[AbstractExtension]
           buf = StringIO.new(data)
           until buf.eof?
             ext_type = buf.read(2).unpack1("n")

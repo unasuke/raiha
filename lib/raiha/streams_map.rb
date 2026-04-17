@@ -12,7 +12,7 @@ module Raiha
       @connection_flow_controller = connection_flow_controller
       @stream_receive_window = stream_receive_window
 
-      @streams = {}
+      @streams = {} #: Hash[Integer, Stream]
       @incoming_streams = Queue.new
 
       @stream_limit = Quic::FlowControl::StreamLimitController.new(

@@ -28,7 +28,7 @@ module Raiha::Quic
   module Wire
     class FrameParser
       def self.parse(buffer)
-        frames = []
+        frames = [] #: Array[Frame]
 
         until buffer.eof?
           frame_type = buffer.read_varint

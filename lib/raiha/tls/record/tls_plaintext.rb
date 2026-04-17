@@ -34,7 +34,7 @@ module Raiha
         attr_accessor :legacy_record_version
 
         def self.serialize(content)
-          bufs = []
+          bufs = [] #: Array[String]
           data = content.serialize
           count = 0
 

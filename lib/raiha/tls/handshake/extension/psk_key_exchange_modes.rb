@@ -25,7 +25,7 @@ module Raiha
 
           def initialize(on:)
             super
-            @modes = []
+            @modes = [] #: Array[Symbol]
           end
 
           def extension_data=(data)

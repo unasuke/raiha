@@ -55,7 +55,7 @@ module Raiha
       end
 
       def self.deserialize_multiple(data)
-        handshakes = []
+        handshakes = [] #: Array[Handshake]
         buf = StringIO.new(data)
         loop do
           start_pos = buf.pos

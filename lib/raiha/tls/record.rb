@@ -18,7 +18,7 @@ module Raiha
       LEGACY_RECORD_VERSION = [0x03, 0x03].pack("C*") # TLS v1.2
 
       def self.deserialize(buf)
-        deserialized = []
+        deserialized = [] #: Array[TLSPlaintext | TLSCiphertext]
         fragments = unwrap_fragments(buf)
 
         fragments.each do |fragment|
@@ -55,7 +55,7 @@ module Raiha
       end
 
       def self.unwrap_fragments(serialized_records)
-        fragments = []
+        fragments = [] #: Array[Hash[Symbol, untyped]]
         buf = StringIO.new(serialized_records)
         loop do
           content_type = buf.read(1).unpack1("C")

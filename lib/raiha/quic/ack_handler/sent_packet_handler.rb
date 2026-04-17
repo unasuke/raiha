@@ -117,7 +117,7 @@ module Raiha::Quic
       end
 
       private def detect_and_remove_acked_packets(ack_frame, space)
-        acked = []
+        acked = [] #: Array[untyped]
 
         acknowledged_packet_numbers(ack_frame).each do |packet_number|
           sent = space.remove_sent_packet(packet_number)
@@ -131,7 +131,7 @@ module Raiha::Quic
       end
 
       private def acknowledged_packet_numbers(ack_frame)
-        numbers = []
+        numbers = [] #: Array[Integer]
         largest = ack_frame.largest_acknowledged
 
         ack_frame.ack_ranges.each_with_index do |range, index|
@@ -154,7 +154,7 @@ module Raiha::Quic
         return unless space.largest_acked
 
         packet_threshold = 3
-        lost_packets = []
+        lost_packets = [] #: Array[untyped]
 
         space.sent_packets.each do |packet_number, sent|
           next unless packet_number < space.largest_acked

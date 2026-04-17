@@ -27,7 +27,7 @@ module Raiha
 
           raise DecodingError, "Dynamic table references not supported" if required_insert_count != 0
 
-          headers = []
+          headers = [] #: Array[[String, String]]
           until buf.eof?
             headers << decode_field_line(buf)
           end

@@ -37,9 +37,9 @@ module Raiha
         @cipher_suite = nil
         @client_hello = nil
         @server_hello = nil
-        @buffer = []
-        @received = []
-        @extensions = {}
+        @buffer = [] #: Array[String]
+        @received = [] #: Array[Record::TLSPlaintext | Record::TLSCiphertext]
+        @extensions = {} #: Hash[Symbol, Handshake::Extension::AbstractExtension]
         @key_schedule = KeySchedule.new(mode: :server)
         @transcript_hash = TranscriptHash.new
         @server_certificate = @config.server_certificate
@@ -97,7 +97,9 @@ module Raiha
           # TODO: WIP
         end
       ensure
-        @buffer = []
+        # @type var empty_buffer: Array[String]
+        empty_buffer = []
+        @buffer = empty_buffer
       end
 
       def receive_client_hello

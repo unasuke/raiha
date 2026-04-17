@@ -18,7 +18,7 @@ module Raiha
         stream_type = buffer.read_varint
         return [stream_type, []] if stream_type != StreamType::CONTROL
 
-        frames = []
+        frames = [] #: Array[Frame]
         frames << Frame.parse(buffer) until buffer.eof?
         [stream_type, frames]
       end

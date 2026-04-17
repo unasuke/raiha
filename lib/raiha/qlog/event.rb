@@ -297,7 +297,7 @@ module Raiha
       def self.compute_acked_ranges(frame)
         return nil unless frame.largest_acknowledged && frame.ack_ranges
 
-        ranges = []
+        ranges = [] #: Array[[Integer, Integer]]
         smallest_of_previous = nil
 
         frame.ack_ranges.each_with_index do |r, i|

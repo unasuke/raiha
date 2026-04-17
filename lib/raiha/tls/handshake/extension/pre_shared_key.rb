@@ -37,8 +37,8 @@ module Raiha
 
           def initialize(on:)
             super
-            @identities = []
-            @binders = []
+            @identities = [] #: Array[untyped]
+            @binders = [] #: Array[String]
             @selected_identity = nil
           end
 

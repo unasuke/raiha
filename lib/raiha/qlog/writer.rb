@@ -23,7 +23,7 @@ module Raiha
         @output = output
         @title = title
         @description = description
-        @traces = []
+        @traces = [] #: Array[Hash[Symbol, untyped]]
         @current_trace = nil
         @reference_time = Time.now
       end
@@ -43,7 +43,7 @@ module Raiha
               epoch: EPOCH_DEFAULT
             }
           },
-          events: []
+          events: [] #: Array[Hash[Symbol, untyped]]
         }
         @traces << @current_trace
       end

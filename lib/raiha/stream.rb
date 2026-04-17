@@ -135,7 +135,7 @@ module Raiha
     attr_reader :sent_offset
 
     def initialize
-      @chunks = []
+      @chunks = [] #: Array[Hash[Symbol, untyped]]
       @sent_offset = 0
     end
 
@@ -183,7 +183,7 @@ module Raiha
     attr_reader :final_offset
 
     def initialize
-      @chunks = {}
+      @chunks = {} #: Hash[Integer, String]
       @final_offset = nil
     end
 
@@ -215,7 +215,7 @@ module Raiha
 
     private def merge_chunks
       sorted = @chunks.sort_by { |start_offset, _| start_offset }
-      merged = {}
+      merged = {} #: Hash[Integer, String]
 
       sorted.each do |offset, data|
         if merged.empty?
