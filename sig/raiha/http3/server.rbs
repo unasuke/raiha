@@ -1,0 +1,9 @@
+module Raiha
+  module HTTP3
+    class Server
+      def initialize: (connection: Raiha::Connection) -> void
+      def receive_request: (Raiha::Stream stream) -> Request
+      def send_response: (Raiha::Stream stream, status: Integer, ?headers: Array[[String, String]], ?body: String?) -> void
+    end
+  end
+end

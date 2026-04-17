@@ -253,6 +253,16 @@ module Raiha
       old_state = @state
       @state = State::CONNECTED
       log_state_updated(old_state: old_state, new_state: @state)
+      apply_peer_transport_parameters
+    end
+
+    private def apply_peer_transport_parameters
+      peer_tp = @tls_adapter.peer_transport_parameters
+      return unless peer_tp
+
+      @streams.update_peer_max_streams_bidi(peer_tp.initial_max_streams_bidi) if peer_tp.initial_max_streams_bidi
+      @streams.update_peer_max_streams_uni(peer_tp.initial_max_streams_uni) if peer_tp.initial_max_streams_uni
+      @connection_flow_controller.update_send_window(peer_tp.initial_max_data) if peer_tp.initial_max_data
     end
 
     def handshake_complete?

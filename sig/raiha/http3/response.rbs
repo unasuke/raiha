@@ -1,0 +1,11 @@
+module Raiha
+  module HTTP3
+    class Response
+      attr_accessor headers: Array[[String, String]]
+      attr_accessor body: String
+
+      def initialize: (?headers: Array[[String, String]], ?body: String) -> void
+      def status: -> Integer?
+    end
+  end
+end

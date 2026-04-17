@@ -63,6 +63,26 @@ module Raiha::Quic
         @crypto_setup.handshake_complete?
       end
 
+      # Extract the peer's quic_transport_parameters TLS extension (RFC 9001 Section 8.2)
+      # and deserialize into a TransportParameters object, or nil if not yet received.
+      def peer_transport_parameters
+        return @peer_transport_parameters if defined?(@peer_transport_parameters) && @peer_transport_parameters
+
+        extensions =
+          if @perspective == Protocol::Perspective::CLIENT
+            ee = @tls.instance_variable_get(:@encrypted_extensions)
+            ee&.extensions
+          else
+            @tls.instance_variable_get(:@client_hello)&.extensions
+          end
+        return nil unless extensions
+
+        ext = extensions.find { |e| e.is_a?(Raiha::TLS::Handshake::Extension::QuicTransportParameters) }
+        return nil unless ext
+
+        @peer_transport_parameters = TransportParameters.deserialize(ext.extension_data)
+      end
+
       private def receive_as_server(data, level)
         case level
         when EncryptionLevel::INITIAL

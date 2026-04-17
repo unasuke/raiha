@@ -1,0 +1,16 @@
+module Raiha
+  module HTTP3
+    class Request
+      attr_accessor headers: Array[[String, String]]
+      attr_accessor body: String
+
+      def initialize: (?headers: Array[[String, String]], ?body: String) -> void
+      def method: -> String?
+      def path: -> String?
+      def scheme: -> String?
+      def authority: -> String?
+
+      private def find_pseudo_header: (String name) -> String?
+    end
+  end
+end

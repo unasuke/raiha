@@ -194,6 +194,7 @@ module Raiha
         encrypted_extensions = handshake.message
 
         if encrypted_extensions
+          @encrypted_extensions = encrypted_extensions
           @transcript_hash[:encrypted_extensions] = handshake.serialize
           transition_state(State::WAIT_CERT_CR)
           # break
