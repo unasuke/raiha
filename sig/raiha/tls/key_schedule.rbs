@@ -47,8 +47,15 @@ module Raiha
       def derive_server_handshake_traffic_secret: (String transcript_hash) -> String
       def server_handshake_write_key: -> String
       def server_handshake_write_iv: -> String
+      def client_handshake_write_key: -> String
+      def client_handshake_write_iv: -> String
+      def client_application_write_key: -> String
+      def client_application_write_iv: -> String
+      def server_application_write_key: -> String
+      def server_application_write_iv: -> String
       def derive_client_application_traffic_secret: (String transcript_hash) -> String
       def derive_server_application_traffic_secret: (String transcript_hash) -> String
+      def finished_verify_data: (String transcript_hash, ?from: Symbol) -> String
       def exporter_secret: (Array[Raiha::TLS::Handshake] messages) -> String
       def resumption_secret: (Array[Raiha::TLS::Handshake] messages) -> String
 

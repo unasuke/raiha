@@ -24,6 +24,7 @@ module Raiha::Quic
 
       def self.description: (Integer code) -> String
       def self.crypto_error: (Integer tls_alert_code) -> Integer
+      def self.tls_alert_description: (Integer tls_alert_code) -> String
     end
   end
 end

@@ -13,6 +13,9 @@ module Raiha
           attr_accessor identities: Array[PskIdentity]
           attr_accessor binders: Array[String]
           attr_accessor selected_identity: Integer?
+
+          private def deserialize_offered_psks: (StringIO buf) -> void
+          private def serialize_offered_psks: -> String
         end
       end
     end

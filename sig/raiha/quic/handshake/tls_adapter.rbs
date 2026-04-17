@@ -8,6 +8,7 @@ module Raiha::Quic
       def receive_crypto_data: (String data, level: Symbol) -> void
       def handshake_complete?: -> bool
 
+      private def peer_transport_parameters: -> Raiha::Quic::Handshake::TransportParameters?
       private def receive_as_server: (String data, Symbol level) -> void
       private def receive_as_client: (String data, Symbol level) -> void
       private def verify_client_finished: (Raiha::TLS::Handshake handshake) -> void

@@ -24,6 +24,9 @@ module Raiha
         def serialize_extensions: -> String
         def setup_key_share: (Array[{ group: String, key_exchange: String }] group_and_pkeys) -> void
         def server_name: (String server_name) -> void
+        def server_name=: (String server_name) -> void
+        def key_share: -> ::Raiha::TLS::Handshake::Extension::KeyShare?
+        def valid_legacy_version?: -> bool
       end
 
       class ServerHello < Message
@@ -42,6 +45,7 @@ module Raiha
         def hello_retry_request?: -> bool
         def serialize_cipher_suite: -> String
         def serialize_extensions: -> String
+        def key_share: -> ::Raiha::TLS::Handshake::Extension::KeyShare?
       end
 
       class EncryptedExtensions < Message
@@ -49,6 +53,7 @@ module Raiha
 
         def self.deserialize: (String data) -> EncryptedExtensions
         def serialize: -> String
+        def serialize_extensions: -> String
       end
 
       class Certificate < Message
@@ -67,6 +72,7 @@ module Raiha
 
         def self.deserialize: (String data) -> Certificate
         def serialize: -> String
+        def serialize_extensions: -> String
         def certificates: -> Array[OpenSSL::X509::Certificate]
         def valid?: (?hostname: String?, ?trust_store: TrustStore?) -> bool
 

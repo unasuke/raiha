@@ -16,6 +16,7 @@ module Raiha
         attr_accessor legacy_record_version: String
 
         def self.serialize: (Handshake content)-> Array[String]
+        def serialize: -> String
         def invalid?: -> bool
         def change_cipher_spec?: -> bool
         def handshake?: -> bool
@@ -31,6 +32,10 @@ module Raiha
         attr_accessor encrypted_record: String
         attr_accessor tls_inner_plaintext: TLSInnerPlaintext|nil
 
+        def serialize: -> String
+        def auth_tag: -> String
+        def encrypted_record_without_auth_tag: -> String
+        def additional_data: -> String
         def plaintext?: -> FalseClass
         def ciphertext?: -> TrueClass
       end
@@ -44,6 +49,13 @@ module Raiha
         attr_accessor zeros: Integer
 
         def self.deserialize: (String data) -> TLSInnerPlaintext
+        def serialize: -> String
+        def additional_data: -> String
+        def invalid?: -> bool
+        def change_cipher_spec?: -> bool
+        def handshake?: -> bool
+        def alert?: -> bool
+        def application_data?: -> bool
       end
     end
   end

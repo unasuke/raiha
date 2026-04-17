@@ -40,6 +40,8 @@ module Raiha
     private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
     private def decode_packet_number: (String bytes) -> Integer
     private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame) -> void
+    private def pending_ack_frame: (Symbol level) -> Quic::Wire::Frames::AckFrame?
+    private def apply_peer_transport_parameters: -> void
     private def update_connection_ids_from_initial: (Quic::Wire::LongHeader header) -> void
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void

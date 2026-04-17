@@ -4,6 +4,7 @@ module Raiha
       attr_accessor content: String
 
       def self.deserialize: (String buf) -> ApplicationData
+      def serialize: -> String
     end
   end
 end
