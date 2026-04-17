@@ -1,0 +1,8 @@
+module Raiha
+  module HTTP3
+    module ControlStream
+      def self.parse_incoming: (String data) -> [Integer?, Array[Frame]]
+      def self.extract_settings: (Array[Frame] frames) -> SettingsFrame?
+    end
+  end
+end

@@ -1,0 +1,10 @@
+module Raiha
+  module HTTP3
+    module StreamType
+      CONTROL: Integer
+      PUSH: Integer
+      QPACK_ENCODER: Integer
+      QPACK_DECODER: Integer
+    end
+  end
+end

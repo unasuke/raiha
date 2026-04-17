@@ -6,6 +6,8 @@ module Raiha
 end
 
 require_relative "http3/frame"
+require_relative "http3/stream_type"
+require_relative "http3/control_stream"
 require_relative "http3/qpack/static_table"
 require_relative "http3/qpack/integer"
 require_relative "http3/qpack/encoder"

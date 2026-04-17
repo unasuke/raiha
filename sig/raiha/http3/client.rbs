@@ -2,8 +2,12 @@ module Raiha
   module HTTP3
     class Client
       def initialize: (connection: Raiha::Connection) -> void
+      def setup_control_stream: (?settings: Hash[Integer, Integer]) -> Raiha::Stream
+      def receive_peer_control_stream: (Raiha::Stream stream) -> SettingsFrame?
       def send_request: (method: String, scheme: String, authority: String, path: String, ?headers: Array[[String, String]], ?body: String?) -> Raiha::Stream
       def receive_response: (Raiha::Stream stream) -> Response
+
+      private def default_settings: -> Hash[Integer, Integer]
     end
   end
 end
