@@ -3,6 +3,7 @@ module Raiha
     class Handshake
       class Extension
         EXTENSION_TYPE: Hash[Symbol, Integer]
+        LEGACY_EXTENSION_TYPE_ALIASES: Hash[Integer, Symbol]
 
         attr_accessor extension_type: Integer
         attr_accessor extension_data: String

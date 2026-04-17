@@ -6,6 +6,7 @@ module Raiha
       def receive_peer_control_stream: (Raiha::Stream stream) -> SettingsFrame?
       def receive_request: (Raiha::Stream stream) -> Request
       def send_response: (Raiha::Stream stream, status: Integer, ?headers: Array[[String, String]], ?body: String?) -> void
+      def pending_request_stream: -> Raiha::Stream?
 
       private def default_settings: -> Hash[Integer, Integer]
     end

@@ -39,6 +39,12 @@ module Raiha
           [extension_type].pack("n") + [extension_data.bytesize].pack("n") + extension_data
         end
 
+        # Alias extension IDs used by older QUIC drafts, still emitted by some
+        # implementations (e.g., quiche), mapped to their RFC-assigned names.
+        LEGACY_EXTENSION_TYPE_ALIASES = {
+          0xffa5 => :quic_transport_parameters  # pre-RFC 9001 draft value
+        }.freeze
+
         def self.deserialize_extensions(data, type:)
           extensions = []
           buf = StringIO.new(data)
@@ -47,7 +53,8 @@ module Raiha
             ext_data_length = buf.read(2).unpack1("n")
             ext_data = buf.read(ext_data_length)
 
-            if (ext_type_name = EXTENSION_TYPE.invert[ext_type])
+            ext_type_name = EXTENSION_TYPE.invert[ext_type] || LEGACY_EXTENSION_TYPE_ALIASES[ext_type]
+            if ext_type_name
               extension = self.const_get(ext_type_name.to_s.split("_").map(&:capitalize).join).new(on: type)
               extension.extension_data = ext_data
             else

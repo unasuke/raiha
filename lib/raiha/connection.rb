@@ -375,6 +375,11 @@ module Raiha
         remaining = data[offset..]
         first_byte = remaining.getbyte(0)
 
+        # RFC 9000 Section 17.2/17.3: the Fixed Bit (bit 6) MUST be 1 for both Long
+        # and Short Header packets. A first byte below 0x40 is datagram-level padding
+        # (some implementations pad coalesced datagrams with zero bytes to 1200).
+        break if first_byte < 0x40
+
         if (first_byte & 0x80) != 0
           consumed = handle_long_header_packet(remaining, Quic::Wire::Buffer.new(remaining))
           break unless consumed && consumed > 0
