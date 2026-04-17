@@ -1,6 +1,5 @@
 require "stringio"
 require_relative "../error"
-require_relative "../record"
 require_relative "../change_cipher_spec"
 require_relative "../application_data"
 require_relative "../handshake"
