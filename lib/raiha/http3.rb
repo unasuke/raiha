@@ -1,12 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha
-  module HTTP3
-    class Error < ::Raiha::Error
-    end
-  end
-end
-
+require_relative "http3/error"
 require_relative "http3/frame"
 require_relative "http3/stream_type"
 require_relative "http3/control_stream"

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 require_relative "error_code"
+require_relative "../error"
 require_relative "../wire/frames/connection_close_frame"
 
 module Raiha::Quic
   module Qerr
-    class TransportError < StandardError
+    class TransportError < ::Raiha::Quic::Error
       attr_reader :error_code
       attr_reader :frame_type
       attr_reader :reason_phrase

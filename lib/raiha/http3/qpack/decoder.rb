@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "../error"
 require_relative "../../quic/wire/buffer"
 require_relative "static_table"
 require_relative "integer"
@@ -8,7 +9,7 @@ require_relative "huffman"
 module Raiha
   module HTTP3
     module QPACK
-      class DecodingError < StandardError; end
+      class DecodingError < ::Raiha::HTTP3::Error; end
 
       # RFC 9204: QPACK Decoder (static-table only, no Huffman, no dynamic table)
       class Decoder

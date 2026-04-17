@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
+require_relative "../error"
+
 module Raiha
   module HTTP3
     module QPACK
       # RFC 7541 Appendix B: Huffman code used by HPACK and QPACK.
       # Decoder only (encoder not needed for interop reception).
       module Huffman
-        class DecodingError < StandardError; end
+        class DecodingError < ::Raiha::HTTP3::Error; end
 
         # (code, bit_length) for each symbol 0..256 (256 is EOS).
         TABLE = [
