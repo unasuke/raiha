@@ -1,0 +1,114 @@
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - run: bundle exec rake test:unit
+
+  interop-aioquic:
+    name: interop (aioquic, Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+      - run: bundle exec ruby -Ilib:test test/raiha/quic_aioquic_interop_test.rb
+
+  interop-quicgo:
+    name: interop (quic-go, Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.23'
+          cache-dependency-path: test/support/quicgo/go.sum
+      - name: Build quic-go interop binaries
+        working-directory: test/support/quicgo
+        run: |
+          go build -o client_bin client.go
+          go build -o server_bin server.go
+      - run: bundle exec ruby -Ilib:test test/raiha/quic_quicgo_interop_test.rb
+
+  interop-quiche:
+    name: interop (quiche, Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Clone quiche
+        run: git clone --depth 1 https://github.com/cloudflare/quiche.git /tmp/quiche
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: /tmp/quiche
+      - name: Build quiche-apps
+        run: cargo build --release --manifest-path /tmp/quiche/Cargo.toml --package quiche_apps
+      - name: Run quiche QUIC interop
+        run: bundle exec ruby -Ilib:test test/raiha/quic_quiche_interop_test.rb
+      - name: Run quiche HTTP/3 client interop
+        run: bundle exec ruby -Ilib:test test/raiha/http3/quiche_interop_test.rb
+      - name: Run quiche HTTP/3 server interop
+        run: bundle exec ruby -Ilib:test test/raiha/http3/quiche_server_interop_test.rb
+
+  interop-tls-openssl:
+    name: interop (TLS, openssl)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Check openssl version
+        run: openssl version
+      - run: bundle exec ruby -Ilib:test test/raiha/tls/openssl_integration_test.rb
+
+  interop-tls-picotls:
+    name: interop (TLS, picotls)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Cache picotls binary
+        id: picotls-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/picotls/cli/picotls
+          key: picotls-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+      - name: Build picotls
+        if: steps.picotls-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libssl-dev
+          git clone --depth 1 --recurse-submodules https://github.com/h2o/picotls.git /tmp/picotls
+          cd /tmp/picotls
+          cmake .
+          make cli
+      - name: Install picotls binary
+        run: sudo ln -sf /tmp/picotls/cli/picotls /usr/local/bin/picotls
+      - run: bundle exec ruby -Ilib:test test/raiha/tls/picotls_integration_test.rb
