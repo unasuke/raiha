@@ -11,3 +11,7 @@
 .gem_rbs_collection/
 
 *.pcap
+
+# Go build artifacts for interop test helpers
+/test/support/quicgo/client_bin
+/test/support/quicgo/server_bin
