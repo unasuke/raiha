@@ -229,6 +229,10 @@ module Raiha
         end
         @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
 
+        # Tell the peer about new flow-control credits when our receive
+        # windows have advanced enough to need updating (RFC 9000 §4).
+        emit_flow_control_updates(packets)
+
         # PATH_RESPONSE must echo back peer's PATH_CHALLENGE data (RFC 9000 §8.2.2).
         @pending_path_responses&.each do |response|
           packet = build_packet([response], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
@@ -245,6 +249,32 @@ module Raiha
       end
 
       packets
+    end
+
+    # Emit MAX_DATA / MAX_STREAM_DATA frames whenever the connection-level or
+    # any stream's receive window has fallen below the update threshold
+    # (BaseFlowController#should_send_window_update?). Each update frame
+    # goes out in its own 1-RTT packet.
+    private def emit_flow_control_updates(packets)
+      if @connection_flow_controller.should_send_window_update?
+        new_limit = @connection_flow_controller.get_window_update
+        frame = Quic::Wire::Frames::MaxDataFrame.new
+        frame.maximum_data = new_limit
+        packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+        emit_packet(packets, packet)
+      end
+
+      @streams.each_stream do |stream|
+        fc = stream.flow_controller
+        next unless fc.should_send_window_update?
+
+        new_limit = fc.get_window_update
+        frame = Quic::Wire::Frames::MaxStreamDataFrame.new
+        frame.stream_id = stream.stream_id.value
+        frame.maximum_stream_data = new_limit
+        packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+        emit_packet(packets, packet)
+      end
     end
 
     # Send a PATH_CHALLENGE with 8 bytes of fresh random data (RFC 9000 §8.2.1).

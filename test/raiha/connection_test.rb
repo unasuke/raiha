@@ -124,6 +124,35 @@ class RaihaConnectionTest < Minitest::Test
     refute connection.peer_path_validated?
   end
 
+  def test_no_max_data_frame_on_fresh_connection
+    # With no bytes received from the peer, we have no reason to advertise
+    # more receive credit yet.
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    packets = connection.get_packets_to_send
+    assert_empty packets
+  end
+
+  def test_max_data_frame_emitted_when_receive_window_runs_low
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    # Pretend the peer has filled most of our initial receive window and
+    # the application has consumed it. The new limit should advance.
+    fc = connection.instance_variable_get(:@connection_flow_controller)
+    initial = fc.receive_window
+    consumed = initial - 1000
+    fc.update_highest_received(consumed)
+    fc.add_bytes_read(consumed)
+
+    packets = connection.get_packets_to_send
+    refute_empty packets
+    assert_operator fc.receive_window, :>, initial
+  end
+
   def test_perspective
     client_connection = create_connection(perspective: :client)
     assert_equal :client, client_connection.perspective
@@ -138,6 +167,18 @@ class RaihaConnectionTest < Minitest::Test
       src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
       dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
       transport_parameters: transport_parameters
+    )
+  end
+
+  # Install synthetic 1-RTT AEAD keys on the connection's CryptoSetup so
+  # Connection#get_packets_to_send will consider the ONE_RTT level available.
+  private def enable_one_rtt(connection)
+    crypto_setup = connection.instance_variable_get(:@crypto_setup)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    crypto_setup.set_application_keys(
+      client_secret: OpenSSL::Random.random_bytes(32),
+      server_secret: OpenSSL::Random.random_bytes(32),
+      cipher_suite: cipher_suite
     )
   end
 end

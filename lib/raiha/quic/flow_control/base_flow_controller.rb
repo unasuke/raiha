@@ -60,10 +60,14 @@ module Raiha::Quic
         end
       end
 
+      # True when the peer is running low on send credit: our remaining
+      # receive-side capacity (@receive_window - @highest_received) has
+      # fallen below WINDOW_UPDATE_THRESHOLD of the initial window. In
+      # that case the caller should queue a MAX_DATA / MAX_STREAM_DATA
+      # frame carrying #get_window_update.
       def should_send_window_update?
-        consumed = @highest_received - @bytes_read
-        threshold = @receive_window * WINDOW_UPDATE_THRESHOLD
-        consumed < threshold
+        remaining_credit = @receive_window - @highest_received
+        remaining_credit < (initial_receive_window * WINDOW_UPDATE_THRESHOLD)
       end
 
       def get_window_update
