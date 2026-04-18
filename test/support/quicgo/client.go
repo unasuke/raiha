@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 )
 
 func main() {
@@ -30,7 +32,19 @@ func main() {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-echo"},
 	}
-	quicConfig := &quic.Config{}
+	// Enable qlog tracing for debugging interop issues
+	quicConfig := &quic.Config{
+		Tracer: func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+			dir := "/tmp/raiha-qlog"
+			os.MkdirAll(dir, 0755)
+			name := fmt.Sprintf("%s/client-%s.qlog", dir, connID)
+			f, err := os.Create(name)
+			if err != nil {
+				return nil
+			}
+			return qlog.NewConnectionTracer(f, p, connID)
+		},
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
