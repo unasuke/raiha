@@ -215,26 +215,44 @@ module Raiha
         next if frames.empty?
 
         packet = build_packet(frames, level: level)
-        packets << packet if packet
+        emit_packet(packets, packet)
       end
 
       # Check for pending stream data
       if @crypto_setup.available?(Quic::Handshake::EncryptionLevel::ONE_RTT)
         @pending_stream_frames&.each do |frame|
           packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          packets << packet if packet
+          emit_packet(packets, packet)
         end
         @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
 
         # PATH_RESPONSE must echo back peer's PATH_CHALLENGE data (RFC 9000 §8.2.2).
         @pending_path_responses&.each do |response|
           packet = build_packet([response], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          packets << packet if packet
+          emit_packet(packets, packet)
         end
         @pending_path_responses = [] #: Array[Quic::Wire::Frames::PathResponseFrame]
       end
 
       packets
+    end
+
+    # Accepts a built packet into the outgoing list if the server's
+    # anti-amplification budget permits (RFC 9000 §8.1): prior to address
+    # validation, cumulative bytes sent MUST NOT exceed 3x bytes received.
+    # Dropped packets are discarded here; they'll be rebuilt on the next
+    # get_packets_to_send after more peer data grows the budget, or after
+    # the handshake completes and the limit is lifted.
+    private def emit_packet(packets, packet)
+      return unless packet
+
+      if @perspective == Quic::Protocol::Perspective::SERVER && !@address_validated
+        budget = 3 * @bytes_received_from_peer - @bytes_sent_to_peer
+        return if packet.bytesize > budget
+      end
+
+      packets << packet
+      @bytes_sent_to_peer += packet.bytesize
     end
 
     # Queue a PATH_RESPONSE carrying the 8-byte challenge received from the peer.
@@ -269,6 +287,9 @@ module Raiha
     def complete_handshake
       old_state = @state
       @state = State::CONNECTED
+      # RFC 9000 §8.1.2: completing the handshake implicitly validates the
+      # peer's address, so the 3x anti-amplification limit is lifted.
+      @address_validated = true
       log_state_updated(old_state: old_state, new_state: @state)
       apply_peer_transport_parameters
     end
@@ -378,6 +399,13 @@ module Raiha
 
       @crypto_stream_buffers = {} #: Hash[Symbol, untyped]
 
+      # RFC 9000 §8.1: until the peer's address is validated, the server MUST
+      # NOT send more than three times the bytes it has received. These two
+      # counters plus @address_validated enforce that limit in get_packets_to_send.
+      @bytes_received_from_peer = 0
+      @bytes_sent_to_peer = 0
+      @address_validated = false
+
       @idle_timer = Quic::Timer.new
       reset_idle_timer
     end
@@ -386,6 +414,8 @@ module Raiha
     # A single UDP datagram may contain multiple coalesced QUIC packets (RFC 9000 Section 12.2)
     def handle_packet(data)
       return if @state == State::CLOSED
+
+      @bytes_received_from_peer += data.bytesize
 
       offset = 0
       while offset < data.bytesize
