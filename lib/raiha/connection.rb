@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "securerandom"
 require_relative "stream"
 require_relative "streams_map"
 require_relative "quic/protocol"
@@ -73,6 +74,8 @@ module Raiha
           complete_handshake if @state == State::HANDSHAKING
         when Quic::Wire::Frames::PathChallengeFrame
           queue_path_response(frame.data)
+        when Quic::Wire::Frames::PathResponseFrame
+          handle_path_response(frame.data)
         end
       end
 
@@ -232,9 +235,34 @@ module Raiha
           emit_packet(packets, packet)
         end
         @pending_path_responses = [] #: Array[Quic::Wire::Frames::PathResponseFrame]
+
+        # PATH_CHALLENGE initiated from this endpoint to probe the peer's path.
+        @pending_path_challenges.each do |challenge|
+          packet = build_packet([challenge], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+        @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
       end
 
       packets
+    end
+
+    # Send a PATH_CHALLENGE with 8 bytes of fresh random data (RFC 9000 §8.2.1).
+    # The data is tracked in @outstanding_path_challenges; a matching
+    # PATH_RESPONSE from the peer validates the current path and flips
+    # peer_path_validated? to true. Returns the challenge bytes so the caller
+    # can correlate it if needed.
+    def initiate_path_validation
+      data = SecureRandom.random_bytes(8)
+      challenge = Quic::Wire::Frames::PathChallengeFrame.new
+      challenge.data = data
+      @pending_path_challenges << challenge
+      @outstanding_path_challenges << data
+      data
+    end
+
+    def peer_path_validated?
+      @peer_path_validated
     end
 
     # Accepts a built packet into the outgoing list if the server's
@@ -262,6 +290,16 @@ module Raiha
 
       @pending_path_responses ||= [] #: Array[Quic::Wire::Frames::PathResponseFrame]
       @pending_path_responses << response
+    end
+
+    # Match a received PATH_RESPONSE against our outstanding challenges.
+    # RFC 9000 §8.2.3: a response with non-matching data is a PROTOCOL_VIOLATION.
+    # The RFC-correct reaction is a connection close; for now we just ignore
+    # mismatches. A matching response validates the current path.
+    private def handle_path_response(response_data)
+      return unless @outstanding_path_challenges.delete(response_data)
+
+      @peer_path_validated = true
     end
 
     # Returns an AckFrame for the given encryption level, or nil if none needed
@@ -405,6 +443,13 @@ module Raiha
       @bytes_received_from_peer = 0
       @bytes_sent_to_peer = 0
       @address_validated = false
+
+      # RFC 9000 §8.2: path validation. Endpoints may initiate a PATH_CHALLENGE
+      # and track outstanding 8-byte challenges until a matching PATH_RESPONSE
+      # comes back.
+      @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
+      @outstanding_path_challenges = [] #: Array[String]
+      @peer_path_validated = false
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer

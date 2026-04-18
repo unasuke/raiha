@@ -86,6 +86,44 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal challenge_data, queued.first.data
   end
 
+  def test_initiate_path_validation_queues_challenge
+    connection = create_connection
+    data = connection.initiate_path_validation
+    assert_equal 8, data.bytesize
+
+    queued = connection.instance_variable_get(:@pending_path_challenges)
+    assert_equal 1, queued.length
+    assert_equal data, queued.first.data
+
+    outstanding = connection.instance_variable_get(:@outstanding_path_challenges)
+    assert_includes outstanding, data
+  end
+
+  def test_matching_path_response_validates_peer_path
+    connection = create_connection
+    data = connection.initiate_path_validation
+    refute connection.peer_path_validated?
+
+    response = Raiha::Quic::Wire::Frames::PathResponseFrame.new
+    response.data = data
+    connection.handle_frames([response])
+
+    assert connection.peer_path_validated?
+    outstanding = connection.instance_variable_get(:@outstanding_path_challenges)
+    refute_includes outstanding, data
+  end
+
+  def test_mismatched_path_response_does_not_validate
+    connection = create_connection
+    connection.initiate_path_validation
+
+    response = Raiha::Quic::Wire::Frames::PathResponseFrame.new
+    response.data = "\x00".b * 8
+    connection.handle_frames([response])
+
+    refute connection.peer_path_validated?
+  end
+
   def test_perspective
     client_connection = create_connection(perspective: :client)
     assert_equal :client, client_connection.perspective

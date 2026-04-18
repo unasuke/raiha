@@ -29,6 +29,8 @@ module Raiha
     def build_initial_packet: (String crypto_data) -> String?
     def get_packets_to_send: -> Array[String]
     def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
+    def initiate_path_validation: -> String
+    def peer_path_validated?: -> bool
     def handle_packet: (String data) -> void
     def complete_handshake: -> void
     def handshake_complete?: -> bool
@@ -46,6 +48,7 @@ module Raiha
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void
     private def queue_path_response: (String challenge_data) -> void
+    private def handle_path_response: (String response_data) -> void
     private def emit_packet: (Array[String] packets, String? packet) -> void
     private def enter_draining_state: -> void
     private def reset_idle_timer: -> void
