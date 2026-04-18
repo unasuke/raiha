@@ -71,6 +71,21 @@ class RaihaConnectionTest < Minitest::Test
     assert connection.draining?
   end
 
+  def test_path_challenge_queues_path_response
+    connection = create_connection
+    connection.complete_handshake
+
+    challenge_data = "\xde\xad\xbe\xef\x01\x02\x03\x04".b
+    challenge = Raiha::Quic::Wire::Frames::PathChallengeFrame.new
+    challenge.data = challenge_data
+    connection.handle_frames([challenge])
+
+    queued = connection.instance_variable_get(:@pending_path_responses)
+    assert_equal 1, queued.length
+    assert_instance_of Raiha::Quic::Wire::Frames::PathResponseFrame, queued.first
+    assert_equal challenge_data, queued.first.data
+  end
+
   def test_perspective
     client_connection = create_connection(perspective: :client)
     assert_equal :client, client_connection.perspective

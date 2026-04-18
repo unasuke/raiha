@@ -45,6 +45,7 @@ module Raiha
     private def update_connection_ids_from_initial: (Quic::Wire::LongHeader header) -> void
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void
+    private def queue_path_response: (String challenge_data) -> void
     private def enter_draining_state: -> void
     private def reset_idle_timer: -> void
     private def build_header: (Symbol level, String encoded_packet_number, Integer payload_length) -> String?

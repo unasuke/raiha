@@ -71,6 +71,8 @@ module Raiha
           enter_draining_state
         when Quic::Wire::Frames::HandshakeDoneFrame
           complete_handshake if @state == State::HANDSHAKING
+        when Quic::Wire::Frames::PathChallengeFrame
+          queue_path_response(frame.data)
         end
       end
 
@@ -223,9 +225,25 @@ module Raiha
           packets << packet if packet
         end
         @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
+
+        # PATH_RESPONSE must echo back peer's PATH_CHALLENGE data (RFC 9000 §8.2.2).
+        @pending_path_responses&.each do |response|
+          packet = build_packet([response], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          packets << packet if packet
+        end
+        @pending_path_responses = [] #: Array[Quic::Wire::Frames::PathResponseFrame]
       end
 
       packets
+    end
+
+    # Queue a PATH_RESPONSE carrying the 8-byte challenge received from the peer.
+    private def queue_path_response(challenge_data)
+      response = Quic::Wire::Frames::PathResponseFrame.new
+      response.data = challenge_data
+
+      @pending_path_responses ||= [] #: Array[Quic::Wire::Frames::PathResponseFrame]
+      @pending_path_responses << response
     end
 
     # Returns an AckFrame for the given encryption level, or nil if none needed

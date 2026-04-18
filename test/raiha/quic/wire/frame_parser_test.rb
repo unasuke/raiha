@@ -437,4 +437,56 @@ class RaihaQuicWireFrameParserTest < Minitest::Test
     assert frame.fin
     assert_equal 4, frame.stream_id
   end
+
+  def test_parse_path_challenge_frame
+    challenge = "\xde\xad\xbe\xef\x01\x02\x03\x04".b
+    buf = Raiha::Quic::Wire::Buffer.new
+    buf.write_varint(0x1a) # PATH_CHALLENGE
+    buf.write(challenge)
+
+    buf.seek(0)
+    frames = Raiha::Quic::Wire::FrameParser.parse(buf)
+    assert_equal 1, frames.length
+    frame = frames.first
+    assert_instance_of Raiha::Quic::Wire::Frames::PathChallengeFrame, frame
+    assert_equal challenge, frame.data
+    assert frame.ack_eliciting?
+  end
+
+  def test_path_challenge_frame_roundtrip
+    frame = Raiha::Quic::Wire::Frames::PathChallengeFrame.new
+    frame.data = "\x00\x11\x22\x33\x44\x55\x66\x77".b
+    serialized = frame.serialize
+
+    buf = Raiha::Quic::Wire::Buffer.new(serialized)
+    parsed = Raiha::Quic::Wire::FrameParser.parse(buf).first
+    assert_instance_of Raiha::Quic::Wire::Frames::PathChallengeFrame, parsed
+    assert_equal frame.data, parsed.data
+  end
+
+  def test_parse_path_response_frame
+    response = "\x01\x02\x03\x04\x05\x06\x07\x08".b
+    buf = Raiha::Quic::Wire::Buffer.new
+    buf.write_varint(0x1b) # PATH_RESPONSE
+    buf.write(response)
+
+    buf.seek(0)
+    frames = Raiha::Quic::Wire::FrameParser.parse(buf)
+    assert_equal 1, frames.length
+    frame = frames.first
+    assert_instance_of Raiha::Quic::Wire::Frames::PathResponseFrame, frame
+    assert_equal response, frame.data
+    assert frame.ack_eliciting?
+  end
+
+  def test_path_response_frame_roundtrip
+    frame = Raiha::Quic::Wire::Frames::PathResponseFrame.new
+    frame.data = "\xaa\xbb\xcc\xdd\xee\xff\x00\x11".b
+    serialized = frame.serialize
+
+    buf = Raiha::Quic::Wire::Buffer.new(serialized)
+    parsed = Raiha::Quic::Wire::FrameParser.parse(buf).first
+    assert_instance_of Raiha::Quic::Wire::Frames::PathResponseFrame, parsed
+    assert_equal frame.data, parsed.data
+  end
 end
