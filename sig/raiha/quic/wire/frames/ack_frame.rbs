@@ -1,10 +1,14 @@
 module Raiha::Quic::Wire::Frames
   class AckFrame < Raiha::Quic::Wire::Frame
-    AckRange: untyped
+    class AckRange
+      attr_reader gap: Integer
+      attr_reader ack_range_length: Integer
+      def initialize: (Integer gap, Integer ack_range_length) -> void
+    end
 
     attr_accessor largest_acknowledged: Integer
     attr_accessor ack_delay: Integer
-    attr_accessor ack_ranges: Array[untyped]
+    attr_accessor ack_ranges: Array[AckRange]
     attr_accessor ecn_counts: { ect0: Integer, ect1: Integer, ecn_ce: Integer }?
 
     def initialize: -> void

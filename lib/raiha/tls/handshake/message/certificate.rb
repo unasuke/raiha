@@ -71,7 +71,7 @@ module Raiha
             cert_length = ("\x00" + certificate_list_buf.read(3)).unpack1("L>")
             opaque_certificate_data = certificate_list_buf.read(cert_length)
             extension_length = certificate_list_buf.read(2).unpack1("n")
-            extensions = Handshake::Extension.deserialize_extensions(certificate_list_buf.read(extension_length), type: :server)
+            extensions = Handshake::Extension.deserialize_extensions(certificate_list_buf.read(extension_length), type: :certificate)
             cert.certificate_entries << CertificateEntry.new(opaque_certificate_data: opaque_certificate_data, extensions: extensions)
           end
 

@@ -1,6 +1,6 @@
 module Raiha::Quic
   module Qerr
-    class ApplicationError < StandardError
+    class ApplicationError < ::Raiha::Quic::Error
       attr_reader error_code: Integer
       attr_reader reason_phrase: String
 

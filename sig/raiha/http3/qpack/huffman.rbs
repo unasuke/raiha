@@ -2,7 +2,7 @@ module Raiha
   module HTTP3
     module QPACK
       module Huffman
-        class DecodingError < StandardError
+        class DecodingError < ::Raiha::HTTP3::Error
         end
 
         TABLE: Array[[::Integer, ::Integer]]

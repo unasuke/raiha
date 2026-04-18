@@ -1,6 +1,6 @@
 module Raiha::Quic
   module Qerr
-    class TransportError < StandardError
+    class TransportError < ::Raiha::Quic::Error
       attr_reader error_code: Integer
       attr_reader frame_type: Integer?
       attr_reader reason_phrase: String

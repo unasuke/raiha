@@ -1,7 +1,7 @@
 module Raiha
   module HTTP3
     module QPACK
-      class DecodingError < StandardError
+      class DecodingError < ::Raiha::HTTP3::Error
       end
 
       class Decoder

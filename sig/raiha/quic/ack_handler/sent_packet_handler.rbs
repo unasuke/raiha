@@ -26,7 +26,7 @@ module Raiha::Quic
 
       private def detect_and_remove_acked_packets: (Wire::Frames::AckFrame ack_frame, PacketNumberSpace space) -> Array[untyped]
       private def acknowledged_packet_numbers: (Wire::Frames::AckFrame ack_frame) -> Array[Integer]
-      private def detect_lost_packets: (PacketNumberSpace space) -> Array[untyped]
+      private def detect_lost_packets: (PacketNumberSpace space) -> Array[untyped]?
     end
   end
 end

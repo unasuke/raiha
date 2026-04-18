@@ -6,6 +6,7 @@ module Raiha
       attr_accessor handshake_type: Integer
       attr_accessor length: Integer
       attr_accessor message: Message
+      attr_accessor raw_bytes: String
 
       def serialize: -> String
       def self.deserialize: (String data) -> Handshake?

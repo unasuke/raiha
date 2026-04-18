@@ -3,7 +3,7 @@ module Raiha::Quic
     class Header
       LONG_HEADER_FORM: Integer
 
-      attr_reader destination_connection_id: Protocol::ConnectionID?
+      attr_accessor destination_connection_id: Protocol::ConnectionID?
       attr_reader packet_number: Integer?
 
       def self.parse: (Buffer buffer) -> Header
@@ -21,7 +21,6 @@ module Raiha::Quic
 
       attr_accessor packet_type: Integer
       attr_accessor version: Integer
-      attr_accessor destination_connection_id: Protocol::ConnectionID
       attr_accessor source_connection_id: Protocol::ConnectionID
       attr_accessor packet_number: Integer?
       attr_accessor packet_number_length: Integer?
@@ -40,7 +39,6 @@ module Raiha::Quic
     end
 
     class ShortHeader < Header
-      attr_accessor destination_connection_id: Protocol::ConnectionID
       attr_accessor packet_number: Integer?
       attr_accessor packet_number_length: Integer?
       attr_accessor key_phase: bool

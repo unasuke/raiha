@@ -1,0 +1,13 @@
+# Ruby 3.3 added bitwise operators and a single-argument slice overload to
+# IO::Buffer that aren't yet declared in the bundled rbs core stubs.
+class IO
+  class Buffer
+    def xor!: (Buffer mask) -> Buffer
+    def and!: (Buffer mask) -> Buffer
+    def or!: (Buffer mask) -> Buffer
+    def not!: -> Buffer
+
+    def slice: (Integer offset) -> Buffer
+             | (Integer offset, Integer length) -> Buffer
+  end
+end

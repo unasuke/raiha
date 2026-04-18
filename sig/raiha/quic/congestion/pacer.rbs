@@ -6,7 +6,7 @@ module Raiha::Quic
       def initialize: (congestion_controller: Cubic, rtt_stats: RTTStats) -> void
       def can_send?: (Integer bytes) -> bool
       def on_packet_sent: (Integer bytes) -> void
-      def time_until_send: (Integer bytes) -> Float
+      def time_until_send: (Integer bytes) -> (Integer | Float)
       def pacing_rate: -> (Integer | Float)
 
       private def update_budget: -> void

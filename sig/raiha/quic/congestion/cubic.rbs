@@ -11,6 +11,14 @@ module Raiha::Quic
       attr_reader bytes_in_flight: Integer
       attr_reader slow_start_threshold: (Integer | Float)
 
+      @max_datagram_size: Integer
+      @congestion_window: Integer
+      @w_max: Integer
+      @w_last_max: Integer
+      @k: (Integer | Float)
+      @epoch_start: Time?
+      @rtt_stats: RTTStats?
+
       def initialize: (?max_datagram_size: Integer, ?rtt_stats: RTTStats?) -> void
       def on_packet_sent: (Integer bytes) -> void
       def on_packets_acked: (Array[untyped] packets) -> void

@@ -1,0 +1,15 @@
+# OpenSSL additions not covered by the bundled rbs core stubs.
+module OpenSSL
+  module PKey
+    def self.new_raw_public_key: (String group, String key_exchange) -> PKey
+    def self.generate_key: (String group) -> PKey
+
+    class PKey
+      def raw_public_key: -> String
+      def verify_pss: (String digest, String signature, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> bool
+      def sign_pss: (String digest, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> String
+      def verify: (String | OpenSSL::Digest digest, String signature, String data) -> bool
+      def sign: (String | OpenSSL::Digest digest, String data) -> String
+    end
+  end
+end

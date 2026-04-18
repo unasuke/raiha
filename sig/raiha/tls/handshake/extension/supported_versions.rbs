@@ -6,7 +6,7 @@ module Raiha
           EXTENSION_TYPE_NUMBER: 43
           @protocol_versions: Array[String]
 
-          def self.generate_for_tls13: ->  SupportedVersions
+          def self.generate_for_tls13: (?on: :client_hello | :server_hello | :hello_retry_request | :encrypted_extensions | :certificate | :certificate_request | :new_session_ticket) -> SupportedVersions
         end
       end
     end
