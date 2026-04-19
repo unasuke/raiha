@@ -9,8 +9,10 @@ require "tempfile"
 class RaihaTLSPicotlsIntegrationTest < Minitest::Test
   include TestCertificate
 
+  PICOTLS = File.expand_path("../../../tmp/picotls/cli/picotls", __dir__)
+
   def setup
-    skip "picotls not found in PATH" unless system("which picotls > /dev/null 2>&1")
+    skip "picotls binary not found at #{PICOTLS}" unless File.executable?(PICOTLS)
   end
 
   def test_client_against_picotls_server
@@ -18,7 +20,7 @@ class RaihaTLSPicotlsIntegrationTest < Minitest::Test
     port = find_available_port
 
     server_pid = Process.spawn(
-      "picotls",
+      PICOTLS,
       "-c", cert_file.path,
       "-k", key_file.path,
       "0.0.0.0", port.to_s,
@@ -71,7 +73,7 @@ class RaihaTLSPicotlsIntegrationTest < Minitest::Test
 
     Timeout.timeout(10) do
       client_pid = Process.spawn(
-        "picotls",
+        PICOTLS,
         "-N", "secp256r1",
         "-y", "TLS_AES_128_GCM_SHA256",
         "localhost", port.to_s,

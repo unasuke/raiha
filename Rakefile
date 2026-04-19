@@ -38,23 +38,70 @@ namespace :test do
   end
 
   namespace :interop do
-    {
-      aioquic: "test/interop/quic/aioquic_test.rb",
-      quicgo: "test/interop/quic/quicgo_test.rb",
-      quiche: "test/interop/quic/quiche_test.rb",
-      quiche_http3_client: "test/interop/http3/quiche_client_test.rb",
-      quiche_http3_server: "test/interop/http3/quiche_server_test.rb",
-      openssl: "test/interop/tls/openssl_test.rb",
-      picotls: "test/interop/tls/picotls_test.rb"
-    }.each do |name, file|
+    INTEROP_SPEC = {
+      aioquic: { file: "test/interop/quic/aioquic_test.rb", build: :aioquic },
+      quicgo: { file: "test/interop/quic/quicgo_test.rb", build: :quicgo },
+      quiche: { file: "test/interop/quic/quiche_test.rb", build: :quiche },
+      quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
+      quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
+      openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
+      picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls }
+    }.freeze
+
+    INTEROP_SPEC.each do |name, spec|
       Rake::TestTask.new(name) do |t|
-        t.description = "Run #{name} interop tests"
+        t.description = "Run #{name} interop tests (auto-builds the peer implementation)"
         t.libs << "test"
         t.libs << "lib"
-        t.test_files = [file]
+        t.test_files = [spec[:file]]
       end
+      task name => "interop:build:#{spec[:build]}"
     end
   end
+end
+
+namespace :interop do
+  namespace :build do
+    desc "Build quic-go interop client/server binaries"
+    task :quicgo do
+      Dir.chdir("test/support/quicgo") do
+        sh "go build -o client_bin client.go"
+        sh "go build -o server_bin server.go"
+      end
+    end
+
+    desc "Clone and build cloudflare/quiche into tmp/quiche"
+    task :quiche do
+      unless Dir.exist?("tmp/quiche")
+        mkdir_p "tmp"
+        sh "git clone --depth 1 https://github.com/cloudflare/quiche.git tmp/quiche"
+      end
+      sh "cargo build --release --manifest-path tmp/quiche/Cargo.toml --package quiche_apps"
+    end
+
+    desc "Clone and build h2o/picotls into tmp/picotls"
+    task :picotls do
+      unless Dir.exist?("tmp/picotls")
+        mkdir_p "tmp"
+        sh "git clone --depth 1 --recurse-submodules https://github.com/h2o/picotls.git tmp/picotls"
+      end
+      sh "cmake -S tmp/picotls -B tmp/picotls"
+      sh "make -C tmp/picotls cli"
+    end
+
+    desc "Verify uv is available (aioquic is resolved on-demand at test time)"
+    task :aioquic do
+      sh "uv --version"
+    end
+
+    desc "Verify system openssl is available"
+    task :openssl do
+      sh "openssl version"
+    end
+  end
+
+  desc "Build every interop peer implementation"
+  task build: %w[build:aioquic build:quicgo build:quiche build:openssl build:picotls]
 end
 
 task :default => :test
