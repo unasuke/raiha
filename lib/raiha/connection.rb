@@ -433,6 +433,24 @@ module Raiha
       @pending_stream_frames << stream_frame
     end
 
+    # Earliest wall-clock deadline at which this connection has something to
+    # do without receiving new network input — the application should
+    # schedule a call to `tick` at or before this time. Returns nil if no
+    # timer is armed.
+    def next_timer_deadline
+      @sent_packet_handler.loss_detection_deadline
+    end
+
+    # Drive timer-based work: time-threshold loss detection, etc. Callers
+    # should invoke this whenever next_timer_deadline has passed (or earlier).
+    # Takes an explicit `now` for deterministic testing.
+    def tick(now: Time.now)
+      loss_deadline = @sent_packet_handler.loss_detection_deadline
+      if loss_deadline && loss_deadline <= now
+        @sent_packet_handler.on_loss_detection_timeout(now: now)
+      end
+    end
+
     # Application-driven send-side reset (RFC 9000 §3.5).
     def reset_stream(stream_id, error_code)
       stream = @streams.get_stream(stream_id)

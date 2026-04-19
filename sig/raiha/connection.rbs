@@ -31,6 +31,8 @@ module Raiha
     def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
     def reset_stream: (Integer stream_id, Integer error_code) -> void
     def stop_sending: (Integer stream_id, Integer error_code) -> void
+    def next_timer_deadline: -> Time?
+    def tick: (?now: Time) -> void
     def initiate_path_validation: -> String
     def peer_path_validated?: -> bool
     def peer_connection_ids: -> Array[Hash[Symbol, untyped]]

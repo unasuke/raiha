@@ -10,13 +10,13 @@ module Raiha::Quic
         attr_reader :encryption_level
         attr_reader :sent_packets
         attr_reader :largest_acked
-        attr_reader :loss_time
+        attr_accessor :loss_time
 
         def initialize(encryption_level)
           @encryption_level = encryption_level
           @sent_packets = {}
           @largest_acked = nil
-          @loss_time = nil
+          @loss_time = nil #: Time?
           @largest_sent = -1
         end
 
@@ -95,7 +95,7 @@ module Raiha::Quic
         end
       end
 
-      def received_ack(ack_frame, pn_space:, ack_delay: 0)
+      def received_ack(ack_frame, pn_space:, ack_delay: 0, now: Time.now)
         space = @spaces[pn_space]
 
         return unless space.largest_acked.nil? ||
@@ -108,17 +108,34 @@ module Raiha::Quic
 
         latest_acked = newly_acked_packets.max_by { |packet| packet.packet_number.value }
         if latest_acked.packet_number.value == ack_frame.largest_acknowledged && @rtt_stats
-          rtt_sample = Time.now - latest_acked.sent_time
+          rtt_sample = now - latest_acked.sent_time
           @rtt_stats.update_rtt(rtt_sample, ack_delay)
         end
 
-        detect_lost_packets(space)
+        detect_lost_packets(space, now: now)
         @congestion_controller&.on_packets_acked(newly_acked_packets)
         @pto_count = 0
       end
 
       def get_alarm_timeout
         @alarm.deadline
+      end
+
+      # Earliest deadline at which any unacked packet, in any PN space, will
+      # cross the RFC 9002 §6.1.2 time-threshold and need re-examination.
+      # Returns nil if nothing is armed.
+      def loss_detection_deadline
+        deadlines = @spaces.values.map(&:loss_time).compact
+        return nil if deadlines.empty?
+
+        deadlines.min
+      end
+
+      # App-driven timer firing. Re-runs detect_lost_packets against every
+      # space so any ack-eliciting packet whose sent_time + loss_delay has
+      # passed is declared lost, even without a fresh ACK.
+      def on_loss_detection_timeout(now: Time.now)
+        @spaces.each_value { |space| detect_lost_packets(space, now: now) }
       end
 
       private def detect_and_remove_acked_packets(ack_frame, space)
@@ -155,19 +172,32 @@ module Raiha::Quic
         numbers
       end
 
-      private def detect_lost_packets(space)
+      # RFC 9002 §6.1: a packet older than largest_acked is declared lost if
+      # either the packet-number gap crosses kPacketThreshold (3) or
+      # sent_time + loss_delay is in the past. The earliest remaining
+      # candidate's deadline becomes the space's next loss_time.
+      private def detect_lost_packets(space, now: Time.now)
         return unless space.largest_acked
 
         packet_threshold = 3
+        loss_delay = @rtt_stats ? @rtt_stats.loss_delay : 0.333
+        time_threshold = now - loss_delay
         lost_packets = [] #: Array[untyped]
+        next_loss_time = nil #: Time?
 
         space.sent_packets.each do |packet_number, sent|
           next unless packet_number < space.largest_acked
 
-          if (space.largest_acked - packet_number) >= packet_threshold
+          if (space.largest_acked - packet_number) >= packet_threshold ||
+             sent.sent_time <= time_threshold
             lost_packets << sent
+          else
+            deadline = sent.sent_time + loss_delay
+            next_loss_time = deadline if next_loss_time.nil? || deadline < next_loss_time
           end
         end
+
+        space.loss_time = next_loss_time
 
         pn_space = pn_space_for(space)
 

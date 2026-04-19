@@ -110,6 +110,57 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal 0, pending.first.offset
   end
 
+  def test_tick_triggers_time_threshold_loss_detection
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+    rtt_stats = connection.instance_variable_get(:@rtt_stats)
+    start = Time.now
+
+    stream_frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    stream_frame.stream_id = 4
+    stream_frame.offset = 0
+    stream_frame.data = "late".b
+    stream_frame.fin = false
+
+    sph.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(1),
+      frames: [stream_frame],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: Raiha::Quic::Protocol::PacketNumberSpace::APPLICATION_DATA,
+      sent_time: start
+    )
+    sph.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(2),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: Raiha::Quic::Protocol::PacketNumberSpace::APPLICATION_DATA,
+      sent_time: start
+    )
+
+    # ACK #2 only, at t=start, so #1 is held in loss_time scope.
+    ack = build_simple_ack(largest: 2)
+    connection.send(:handle_ack_frame, ack, level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    deadline = connection.next_timer_deadline
+    refute_nil deadline
+
+    # Before the deadline: tick does nothing.
+    connection.tick(now: start)
+    assert_empty(connection.instance_variable_get(:@pending_stream_frames) || [])
+
+    # After the deadline: #1 is declared lost and its stream frame is requeued.
+    connection.tick(now: start + rtt_stats.loss_delay + 0.01)
+    pending = connection.instance_variable_get(:@pending_stream_frames)
+    refute_nil pending
+    assert_equal 1, pending.length
+    assert_equal "late".b, pending.first.data
+  end
+
   def test_loss_requeues_reset_stream_frame_on_stream
     connection = create_connection
     enable_one_rtt(connection)

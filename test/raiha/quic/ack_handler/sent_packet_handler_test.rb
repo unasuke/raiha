@@ -1,6 +1,7 @@
 require "test_helper"
 require "raiha/quic/ack_handler"
 require "raiha/quic/wire/frames/ack_frame"
+require "raiha/quic/congestion/rtt_stats"
 
 class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
   def test_sent_packet_tracking
@@ -78,5 +79,122 @@ class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
     assert_equal 0, handler.get_next_packet_number(:application_data).value
     assert_equal 1, handler.get_next_packet_number(:application_data).value
     assert_equal 2, handler.get_next_packet_number(:application_data).value
+  end
+
+  def test_time_threshold_declares_old_packet_lost_on_ack
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    lost = [] #: Array[untyped]
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
+      rtt_stats: rtt_stats,
+      on_packet_lost: ->(packet, _space) { lost << packet }
+    )
+
+    old = Time.now - 10.0  # older than any plausible loss_delay
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: old
+    )
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(1),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data
+    )
+
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = 1
+    ack.ack_delay = 0
+    ack.ack_ranges = [
+      Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)
+    ]
+
+    handler.received_ack(ack, pn_space: :application_data)
+
+    assert_equal 1, lost.length
+    assert_equal 0, lost.first.packet_number.value
+  end
+
+  def test_loss_detection_deadline_follows_oldest_in_flight
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(rtt_stats: rtt_stats)
+
+    # No loss_time if nothing has been acked yet.
+    assert_nil handler.loss_detection_deadline
+
+    start = Time.now
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(1),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+
+    # ACK #1 but not #0; #0 is now in loss_time scope because it precedes
+    # largest_acked and hasn't crossed loss_delay yet.
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = 1
+    ack.ack_delay = 0
+    ack.ack_ranges = [Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)]
+    handler.received_ack(ack, pn_space: :application_data, now: start)
+
+    deadline = handler.loss_detection_deadline
+    refute_nil deadline
+    assert_operator deadline, :>, start
+    assert_in_delta rtt_stats.loss_delay, deadline - start, 0.01
+  end
+
+  def test_on_loss_detection_timeout_declares_time_threshold_losses
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    lost = [] #: Array[untyped]
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
+      rtt_stats: rtt_stats,
+      on_packet_lost: ->(packet, _space) { lost << packet }
+    )
+
+    start = Time.now
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(1),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = 1
+    ack.ack_delay = 0
+    ack.ack_ranges = [Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)]
+    handler.received_ack(ack, pn_space: :application_data, now: start)
+
+    # Not yet past the deadline: no loss fires.
+    handler.on_loss_detection_timeout(now: start)
+    assert_empty lost
+
+    # Fast-forward past loss_delay: now #0 is time-threshold lost.
+    handler.on_loss_detection_timeout(now: start + rtt_stats.loss_delay + 0.01)
+    assert_equal [0], lost.map { |p| p.packet_number.value }
   end
 end
