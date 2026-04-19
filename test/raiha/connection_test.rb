@@ -79,6 +79,66 @@ class RaihaConnectionTest < Minitest::Test
     assert_in_delta 0.2, connection.send(:decode_ack_delay, 25_000), 1e-6
   end
 
+  def test_loss_retransmits_stream_frame
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+
+    # Record three sent packets in application_data so the packet-threshold
+    # (3 packets past largest_acked) will declare #1 as lost when #4 is ACKed.
+    lost_stream_frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    lost_stream_frame.stream_id = 4
+    lost_stream_frame.offset = 0
+    lost_stream_frame.data = "payload".b
+    lost_stream_frame.fin = false
+
+    register_sent_packet(sph, pn_value: 1, frames: [lost_stream_frame])
+    register_sent_packet(sph, pn_value: 2, frames: [])
+    register_sent_packet(sph, pn_value: 3, frames: [])
+    register_sent_packet(sph, pn_value: 4, frames: [])
+
+    # ACK packet #4; packet #1 is now 3 behind largest_acked → lost.
+    ack = build_simple_ack(largest: 4)
+    connection.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    pending = connection.instance_variable_get(:@pending_stream_frames)
+    refute_nil pending
+    assert_equal 1, pending.length
+    assert_equal "payload".b, pending.first.data
+    assert_equal 0, pending.first.offset
+  end
+
+  def test_loss_requeues_reset_stream_frame_on_stream
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+    stream = connection.open_stream(bidirectional: true)
+    connection.reset_stream(stream.stream_id.value, 0x77)
+
+    # Drain the pending flag (simulating the frame going out on the wire).
+    refute_nil stream.take_reset_stream_frame
+    assert_nil stream.take_reset_stream_frame
+
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+    lost_reset = Raiha::Quic::Wire::Frames::ResetStreamFrame.new
+    lost_reset.stream_id = stream.stream_id.value
+    lost_reset.application_protocol_error_code = 0x77
+    lost_reset.final_size = 0
+
+    register_sent_packet(sph, pn_value: 1, frames: [lost_reset])
+    register_sent_packet(sph, pn_value: 2, frames: [])
+    register_sent_packet(sph, pn_value: 3, frames: [])
+    register_sent_packet(sph, pn_value: 4, frames: [])
+
+    ack = build_simple_ack(largest: 4)
+    connection.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    refute_nil stream.take_reset_stream_frame, "lost RESET_STREAM should re-queue"
+  end
+
   def test_reset_stream_frame_transitions_receive_side
     connection = create_connection
     connection.complete_handshake
@@ -337,6 +397,29 @@ class RaihaConnectionTest < Minitest::Test
       dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
       transport_parameters: transport_parameters
     )
+  end
+
+  private def register_sent_packet(sph, pn_value:, frames:)
+    sph.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(pn_value),
+      frames: frames,
+      size: 100,
+      ack_eliciting: true,
+      pn_space: Raiha::Quic::Protocol::PacketNumberSpace::APPLICATION_DATA
+    )
+    # Force the next_packet_number cursor past this value so subsequent
+    # calls do not collide.
+    space = sph.instance_variable_get(:@spaces)[Raiha::Quic::Protocol::PacketNumberSpace::APPLICATION_DATA]
+    current_largest = space.instance_variable_get(:@largest_sent) || -1
+    space.instance_variable_set(:@largest_sent, [current_largest, pn_value].max)
+  end
+
+  private def build_simple_ack(largest:)
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = largest
+    ack.ack_delay = 0
+    ack.ack_ranges = [Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)]
+    ack
   end
 
   # Simulate receiving a MAX_STREAMS from the peer so the connection is

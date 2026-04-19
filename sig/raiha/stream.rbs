@@ -41,6 +41,8 @@ module Raiha
     def handle_stop_sending: (Integer error_code) -> void
     def take_reset_stream_frame: -> Quic::Wire::Frames::ResetStreamFrame?
     def take_stop_sending_frame: -> Quic::Wire::Frames::StopSendingFrame?
+    def requeue_reset_stream_frame: -> void
+    def requeue_stop_sending_frame: -> void
     def get_data_to_send: (Integer max_bytes) -> { offset: Integer, data: String, fin: bool }?
     def on_data: -> void
   end

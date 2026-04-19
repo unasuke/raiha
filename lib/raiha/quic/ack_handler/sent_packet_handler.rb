@@ -49,9 +49,14 @@ module Raiha::Quic
 
       attr_reader :bytes_in_flight
 
-      def initialize(congestion_controller: nil, rtt_stats: nil)
+      # on_packet_lost: called with (lost_packet, pn_space) whenever a packet
+      # is declared lost. The caller (Connection) is responsible for
+      # inspecting the packet's frames and re-enqueueing anything that should
+      # be retransmitted (RFC 9002 §6.3.1).
+      def initialize(congestion_controller: nil, rtt_stats: nil, on_packet_lost: nil)
         @congestion_controller = congestion_controller
         @rtt_stats = rtt_stats
+        @on_packet_lost = on_packet_lost
 
         @spaces = {
           Protocol::PacketNumberSpace::INITIAL => PacketNumberSpace.new(:initial),
@@ -164,15 +169,23 @@ module Raiha::Quic
           end
         end
 
+        pn_space = pn_space_for(space)
+
         lost_packets.each do |packet|
           space.remove_sent_packet(packet.packet_number.value)
           if packet.in_flight
             @bytes_in_flight -= packet.size
             @congestion_controller&.on_packet_lost(packet)
           end
+          @on_packet_lost&.call(packet, pn_space)
         end
 
         lost_packets
+      end
+
+      private def pn_space_for(space)
+        @spaces.each { |key, value| return key if value.equal?(space) }
+        nil
       end
     end
   end

@@ -204,6 +204,19 @@ module Raiha
       frame
     end
 
+    # Restore the pending flag so a previously-emitted RESET_STREAM frame
+    # goes back out on the next connection flush. The error code and final
+    # size on the stream are unchanged between reset() and the ACK for the
+    # RESET_STREAM packet, so rebuilding from them on retransmission is
+    # equivalent to resending the lost frame.
+    def requeue_reset_stream_frame
+      @pending_reset_stream = true if reset_sent?
+    end
+
+    def requeue_stop_sending_frame
+      @pending_stop_sending = true
+    end
+
     def get_data_to_send(max_bytes)
       return nil unless @send_buffer.has_data?
 

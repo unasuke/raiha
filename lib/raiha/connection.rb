@@ -450,6 +450,36 @@ module Raiha
       stream.stop_sending(error_code)
     end
 
+    # RFC 9002 §6.3.1: frames carried in a lost packet that were not already
+    # acknowledged or superseded need to be retransmitted. Called from
+    # SentPacketHandler when the packet threshold declares a loss.
+    private def on_packet_lost(packet, _pn_space)
+      packet.frames.each { |frame| requeue_lost_frame(frame) }
+    end
+
+    private def requeue_lost_frame(frame)
+      case frame
+      when Quic::Wire::Frames::StreamFrame
+        @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
+        @pending_stream_frames << frame
+      when Quic::Wire::Frames::ResetStreamFrame
+        stream = @streams.get_stream(frame.stream_id)
+        stream&.requeue_reset_stream_frame
+      when Quic::Wire::Frames::StopSendingFrame
+        stream = @streams.get_stream(frame.stream_id)
+        stream&.requeue_stop_sending_frame
+      when Quic::Wire::Frames::RetireConnectionIdFrame
+        @pending_retire_connection_ids << frame.sequence_number
+      # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / CRYPTO /
+      # MAX_* / CONNECTION_CLOSE aren't retransmitted here: ACK and
+      # PADDING are never retransmitted; PATH_RESPONSE and CRYPTO have
+      # specialised recovery paths (PATH_CHALLENGE re-initiation, CRYPTO
+      # offset tracking) that are not implemented yet; MAX_* frames are
+      # self-healing because they always carry the latest limit and
+      # re-emit on the next window-update check.
+      end
+    end
+
     private def handle_reset_stream_frame(frame)
       stream = @streams.get_or_create_stream(frame.stream_id)
       stream.handle_reset_stream(
@@ -547,7 +577,8 @@ module Raiha
 
       @sent_packet_handler = Quic::AckHandler::SentPacketHandler.new(
         congestion_controller: @congestion_controller,
-        rtt_stats: @rtt_stats
+        rtt_stats: @rtt_stats,
+        on_packet_lost: method(:on_packet_lost)
       )
 
       @received_packet_handler = Quic::AckHandler::ReceivedPacketHandler.new
