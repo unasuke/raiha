@@ -19,9 +19,14 @@ module Raiha
     attr_reader send_state: Symbol
     attr_reader receive_state: Symbol
     attr_reader flow_controller: Quic::FlowControl::StreamFlowController
+    attr_reader peer_reset_error_code: Integer
+    attr_reader peer_reset_final_size: Integer
+    attr_reader local_reset_error_code: Integer
 
     def initialize: (stream_id: Quic::Protocol::StreamID, flow_controller: Quic::FlowControl::StreamFlowController) -> void
     def fin_received?: -> bool
+    def reset_received?: -> bool
+    def reset_sent?: -> bool
     def update_send_window: (Integer max) -> void
     def write: (String data) -> void
     def close_write: -> void
@@ -30,6 +35,12 @@ module Raiha
     def writable?: -> bool
     def readable?: -> bool
     def receive_data: (Integer offset, String data, ?fin: bool) -> void
+    def reset: (Integer error_code) -> void
+    def handle_reset_stream: (error_code: Integer, final_size: Integer) -> void
+    def stop_sending: (Integer error_code) -> void
+    def handle_stop_sending: (Integer error_code) -> void
+    def take_reset_stream_frame: -> Quic::Wire::Frames::ResetStreamFrame?
+    def take_stop_sending_frame: -> Quic::Wire::Frames::StopSendingFrame?
     def get_data_to_send: (Integer max_bytes) -> { offset: Integer, data: String, fin: bool }?
     def on_data: -> void
   end
@@ -43,6 +54,7 @@ module Raiha
     def has_data?: -> bool
     def pending_bytes: -> Integer
     def empty?: -> bool
+    def clear: -> void
   end
 
   class Stream::ReceiveBuffer
@@ -53,6 +65,7 @@ module Raiha
     def read: (Integer offset, Integer? max_bytes) -> String
     def has_data_at?: (Integer offset) -> bool
     def set_final_offset: (Integer offset) -> void
+    def clear: -> void
 
     private def merge_chunks: -> void
   end

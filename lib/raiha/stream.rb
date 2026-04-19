@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "../raiha"
+require_relative "quic/wire/frames/reset_stream_frame"
+require_relative "quic/wire/frames/stop_sending_frame"
 
 module Raiha
   class Stream
@@ -23,9 +25,20 @@ module Raiha
     attr_reader :send_state
     attr_reader :receive_state
     attr_reader :flow_controller
+    attr_reader :peer_reset_error_code
+    attr_reader :peer_reset_final_size
+    attr_reader :local_reset_error_code
 
     def fin_received?
       @fin_received
+    end
+
+    def reset_received?
+      @receive_state == ReceiveState::RESET_RECVD
+    end
+
+    def reset_sent?
+      @send_state == SendState::RESET_SENT
     end
 
     # Tell the flow controller to raise the send window limit (e.g. from MAX_STREAM_DATA).
@@ -47,6 +60,17 @@ module Raiha
       @receive_buffer = ReceiveBuffer.new
       @read_offset = 0
       @fin_received = false
+
+      # Error codes are only meaningful when the corresponding state flag
+      # says so (reset_sent? / reset_received?); defaulting to 0 keeps these
+      # ivars typed as Integer without nil-narrowing gymnastics at each use.
+      @local_reset_error_code = 0
+      @peer_reset_error_code = 0
+      @peer_reset_final_size = 0
+      @stop_sending_error_code = 0
+      @send_final_size = 0
+      @pending_reset_stream = false
+      @pending_stop_sending = false
 
       @on_data_available = nil
     end
@@ -91,6 +115,9 @@ module Raiha
     end
 
     def receive_data(offset, data, fin: false)
+      # RFC 9000 §3.2: once receive side enters Reset Recvd, STREAM frames MUST be discarded.
+      return if reset_received?
+
       @flow_controller.update_highest_received(offset, data.bytesize)
       @receive_buffer.push(data, offset)
 
@@ -107,6 +134,74 @@ module Raiha
       end
 
       @on_data_available&.call(self) if data_available?
+    end
+
+    # Abort sending on this stream (RFC 9000 §3.5, §19.4). Transitions to
+    # Reset Sent, pins the final size to the highest offset already handed
+    # to the send buffer, drops anything still pending, and queues a
+    # RESET_STREAM frame for the connection to emit.
+    def reset(error_code)
+      return if reset_sent?
+
+      @local_reset_error_code = error_code
+      @send_final_size = @send_offset
+      @send_state = SendState::RESET_SENT
+      @send_buffer.clear
+      @pending_reset_stream = true
+    end
+
+    # Peer reset our receive side (RFC 9000 §3.2). Transition to Reset Recvd,
+    # remember the reported error code and final size, and drop anything
+    # buffered but not yet read.
+    def handle_reset_stream(error_code:, final_size:)
+      return if reset_received?
+
+      @peer_reset_error_code = error_code
+      @peer_reset_final_size = final_size
+      @receive_state = ReceiveState::RESET_RECVD
+      @receive_buffer.clear
+    end
+
+    # Ask the peer to stop sending on this stream (RFC 9000 §3.5, §19.5).
+    def stop_sending(error_code)
+      return if reset_received?
+      return if @pending_stop_sending
+
+      @stop_sending_error_code = error_code
+      @pending_stop_sending = true
+    end
+
+    # Peer sent STOP_SENDING. RFC 9000 §3.5: when the send side is in Ready
+    # or Send, we MUST send RESET_STREAM using the same error code. If we
+    # already reset, or we already sent the FIN, there is nothing to do.
+    def handle_stop_sending(error_code)
+      return if reset_sent?
+      return if @send_state == SendState::DATA_SENT
+
+      reset(error_code)
+    end
+
+    # Returns a RESET_STREAM frame and clears the pending flag, or nil.
+    def take_reset_stream_frame
+      return nil unless @pending_reset_stream
+
+      frame = Raiha::Quic::Wire::Frames::ResetStreamFrame.new
+      frame.stream_id = @stream_id.value
+      frame.application_protocol_error_code = @local_reset_error_code
+      frame.final_size = @send_final_size
+      @pending_reset_stream = false
+      frame
+    end
+
+    # Returns a STOP_SENDING frame and clears the pending flag, or nil.
+    def take_stop_sending_frame
+      return nil unless @pending_stop_sending
+
+      frame = Raiha::Quic::Wire::Frames::StopSendingFrame.new
+      frame.stream_id = @stream_id.value
+      frame.application_protocol_error_code = @stop_sending_error_code
+      @pending_stop_sending = false
+      frame
     end
 
     def get_data_to_send(max_bytes)
@@ -177,6 +272,10 @@ module Raiha
     def empty?
       @chunks.empty?
     end
+
+    def clear
+      @chunks = [] #: Array[Hash[Symbol, untyped]]
+    end
   end
 
   class Stream::ReceiveBuffer
@@ -211,6 +310,10 @@ module Raiha
 
     def set_final_offset(offset)
       @final_offset = offset
+    end
+
+    def clear
+      @chunks = {} #: Hash[Integer, String]
     end
 
     private def merge_chunks
