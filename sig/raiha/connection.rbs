@@ -29,6 +29,8 @@ module Raiha
     def build_initial_packet: (String crypto_data) -> String?
     def get_packets_to_send: -> Array[String]
     def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
+    def reset_stream: (Integer stream_id, Integer error_code) -> void
+    def stop_sending: (Integer stream_id, Integer error_code) -> void
     def initiate_path_validation: -> String
     def peer_path_validated?: -> bool
     def peer_connection_ids: -> Array[Hash[Symbol, untyped]]
@@ -52,6 +54,9 @@ module Raiha
     private def handle_path_response: (String response_data) -> void
     private def handle_new_connection_id: (Quic::Wire::Frames::NewConnectionIdFrame frame) -> void
     private def handle_retire_connection_id: (Quic::Wire::Frames::RetireConnectionIdFrame frame) -> void
+    private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
+    private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
+    private def emit_stream_abort_frames: (Array[String] packets) -> void
     private def emit_packet: (Array[String] packets, String? packet) -> void
     private def enter_draining_state: -> void
     private def reset_idle_timer: -> void

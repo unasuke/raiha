@@ -80,6 +80,10 @@ module Raiha
           handle_new_connection_id(frame)
         when Quic::Wire::Frames::RetireConnectionIdFrame
           handle_retire_connection_id(frame)
+        when Quic::Wire::Frames::ResetStreamFrame
+          handle_reset_stream_frame(frame)
+        when Quic::Wire::Frames::StopSendingFrame
+          handle_stop_sending_frame(frame)
         end
       end
 
@@ -260,9 +264,29 @@ module Raiha
           emit_packet(packets, packet)
         end
         @pending_retire_connection_ids = [] #: Array[Integer]
+
+        # Stream aborts: RESET_STREAM (send-side) and STOP_SENDING
+        # (receive-side) queued on individual streams (RFC 9000 §3.5).
+        emit_stream_abort_frames(packets)
       end
 
       packets
+    end
+
+    private def emit_stream_abort_frames(packets)
+      @streams.each_stream do |stream|
+        reset_frame = stream.take_reset_stream_frame
+        if reset_frame
+          packet = build_packet([reset_frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+
+        stop_frame = stream.take_stop_sending_frame
+        if stop_frame
+          packet = build_packet([stop_frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+      end
     end
 
     # Peer-supplied alternate connection IDs we may route to (RFC 9000 §5.1).
@@ -407,6 +431,38 @@ module Raiha
 
       @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
       @pending_stream_frames << stream_frame
+    end
+
+    # Application-driven send-side reset (RFC 9000 §3.5).
+    def reset_stream(stream_id, error_code)
+      stream = @streams.get_stream(stream_id)
+      return unless stream
+
+      stream.reset(error_code)
+    end
+
+    # Application-driven STOP_SENDING: ask the peer to stop sending on this
+    # stream (RFC 9000 §3.5, §19.5).
+    def stop_sending(stream_id, error_code)
+      stream = @streams.get_stream(stream_id)
+      return unless stream
+
+      stream.stop_sending(error_code)
+    end
+
+    private def handle_reset_stream_frame(frame)
+      stream = @streams.get_or_create_stream(frame.stream_id)
+      stream.handle_reset_stream(
+        error_code: frame.application_protocol_error_code,
+        final_size: frame.final_size
+      )
+    end
+
+    private def handle_stop_sending_frame(frame)
+      stream = @streams.get_stream(frame.stream_id)
+      return unless stream
+
+      stream.handle_stop_sending(frame.application_protocol_error_code)
     end
 
     def complete_handshake

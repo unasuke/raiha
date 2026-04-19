@@ -44,6 +44,73 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal "hello".b, stream.read
   end
 
+  def test_reset_stream_frame_transitions_receive_side
+    connection = create_connection
+    connection.complete_handshake
+
+    frame = Raiha::Quic::Wire::Frames::ResetStreamFrame.new
+    frame.stream_id = 1
+    frame.application_protocol_error_code = 0x11
+    frame.final_size = 3
+    connection.handle_frames([frame])
+
+    stream = connection.streams.get_stream(1)
+    refute_nil stream
+    assert stream.reset_received?
+    assert_equal 0x11, stream.peer_reset_error_code
+    assert_equal 3, stream.peer_reset_final_size
+  end
+
+  def test_stop_sending_frame_triggers_reset_stream_back
+    connection = create_connection
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+
+    stream = connection.open_stream(bidirectional: true)
+    stream.write("hello".b)
+
+    frame = Raiha::Quic::Wire::Frames::StopSendingFrame.new
+    frame.stream_id = stream.stream_id.value
+    frame.application_protocol_error_code = 0x22
+    connection.handle_frames([frame])
+
+    assert stream.reset_sent?
+    assert_equal 0x22, stream.local_reset_error_code
+  end
+
+  def test_reset_stream_api_queues_reset_frame_in_send
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+
+    stream = connection.open_stream(bidirectional: true)
+    connection.reset_stream(stream.stream_id.value, 0x33)
+
+    packets = connection.get_packets_to_send
+    refute_empty packets
+    assert stream.reset_sent?
+  end
+
+  def test_stop_sending_api_queues_stop_sending_frame_in_send
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    # A peer-initiated stream so the connection knows about it.
+    stream_frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    stream_frame.stream_id = 1
+    stream_frame.offset = 0
+    stream_frame.data = "hi".b
+    stream_frame.fin = false
+    connection.handle_frames([stream_frame])
+
+    connection.stop_sending(1, 0x44)
+
+    packets = connection.get_packets_to_send
+    refute_empty packets
+  end
+
   def test_handle_connection_close_frame
     connection = create_connection
     frame = Raiha::Quic::Wire::Frames::ConnectionCloseFrame.new
@@ -235,6 +302,15 @@ class RaihaConnectionTest < Minitest::Test
       dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
       transport_parameters: transport_parameters
     )
+  end
+
+  # Simulate receiving a MAX_STREAMS from the peer so the connection is
+  # allowed to open local bidi streams for the test.
+  private def grant_bidi_streams(connection, count)
+    frame = Raiha::Quic::Wire::Frames::MaxStreamsFrame.new
+    frame.maximum_streams = count
+    frame.bidirectional = true
+    connection.handle_frames([frame])
   end
 
   # Install synthetic 1-RTT AEAD keys on the connection's CryptoSetup so
