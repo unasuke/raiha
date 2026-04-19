@@ -53,7 +53,7 @@ module Raiha
       frames.each do |frame|
         case frame
         when Quic::Wire::Frames::AckFrame
-          handle_ack_frame(frame)
+          handle_ack_frame(frame, level: level)
         when Quic::Wire::Frames::CryptoFrame
           handle_crypto_frame(frame, level: level)
         when Quic::Wire::Frames::StreamFrame
@@ -792,8 +792,22 @@ module Raiha
       end
     end
 
-    private def handle_ack_frame(frame)
-      @sent_packet_handler.received_ack(frame, pn_space: :application_data)
+    # RFC 9000 §19.3: ACK frames apply to the packet number space of the
+    # packet they arrived in. The frame's Ack Delay field is encoded in
+    # microseconds scaled by the peer's ack_delay_exponent transport
+    # parameter (default 3, i.e. 8 microsecond units).
+    private def handle_ack_frame(frame, level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+      ack_delay_seconds = decode_ack_delay(frame.ack_delay)
+      @sent_packet_handler.received_ack(
+        frame,
+        pn_space: level_to_pn_space(level),
+        ack_delay: ack_delay_seconds
+      )
+    end
+
+    private def decode_ack_delay(encoded)
+      peer_exponent = @tls_adapter.peer_transport_parameters&.ack_delay_exponent || 3
+      (encoded << peer_exponent) / 1_000_000.0
     end
 
     private def handle_crypto_frame(frame, level: Quic::Handshake::EncryptionLevel::INITIAL)

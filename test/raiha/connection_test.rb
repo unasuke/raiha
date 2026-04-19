@@ -44,6 +44,41 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal "hello".b, stream.read
   end
 
+  def test_ack_frame_routes_to_matching_pn_space
+    connection = create_connection
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+
+    # Send a dummy Initial-level packet so there's something to ACK.
+    pn = sph.get_next_packet_number(Raiha::Quic::Protocol::PacketNumberSpace::INITIAL)
+    sph.sent_packet(
+      packet_number: pn,
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: Raiha::Quic::Protocol::PacketNumberSpace::INITIAL
+    )
+
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = pn.value
+    ack.ack_delay = 0
+    ack.ack_ranges = [Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)]
+
+    connection.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
+
+    spaces = sph.instance_variable_get(:@spaces)
+    initial_space = spaces[Raiha::Quic::Protocol::PacketNumberSpace::INITIAL]
+    assert_equal pn.value, initial_space.largest_acked
+  end
+
+  def test_ack_delay_decoding_uses_peer_exponent
+    connection = create_connection
+
+    # Pre-handshake: peer transport parameters are nil, so decoding uses the
+    # RFC 9000 default ack_delay_exponent = 3 (multiply by 2^3 = 8).
+    # 25000 * 8 microseconds = 200_000us = 0.2s.
+    assert_in_delta 0.2, connection.send(:decode_ack_delay, 25_000), 1e-6
+  end
+
   def test_reset_stream_frame_transitions_receive_side
     connection = create_connection
     connection.complete_handshake
