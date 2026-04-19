@@ -76,6 +76,10 @@ module Raiha
           queue_path_response(frame.data)
         when Quic::Wire::Frames::PathResponseFrame
           handle_path_response(frame.data)
+        when Quic::Wire::Frames::NewConnectionIdFrame
+          handle_new_connection_id(frame)
+        when Quic::Wire::Frames::RetireConnectionIdFrame
+          handle_retire_connection_id(frame)
         end
       end
 
@@ -246,9 +250,26 @@ module Raiha
           emit_packet(packets, packet)
         end
         @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
+
+        # RETIRE_CONNECTION_ID frames accumulated while processing peer's
+        # NEW_CONNECTION_ID retire_prior_to directives (RFC 9000 §5.1.2).
+        @pending_retire_connection_ids.each do |sequence_number|
+          frame = Quic::Wire::Frames::RetireConnectionIdFrame.new
+          frame.sequence_number = sequence_number
+          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+        @pending_retire_connection_ids = [] #: Array[Integer]
       end
 
       packets
+    end
+
+    # Peer-supplied alternate connection IDs we may route to (RFC 9000 §5.1).
+    # Each entry is a hash with :sequence_number, :connection_id,
+    # and :stateless_reset_token keys.
+    def peer_connection_ids
+      @peer_connection_ids.dup
     end
 
     # Emit MAX_DATA / MAX_STREAM_DATA frames whenever the connection-level or
@@ -330,6 +351,42 @@ module Raiha
       return unless @outstanding_path_challenges.delete(response_data)
 
       @peer_path_validated = true
+    end
+
+    # Track a new alternate connection ID issued by the peer. When
+    # retire_prior_to is non-zero, every known entry with a smaller sequence
+    # number MUST be retired (RFC 9000 §5.1.2) by sending
+    # RETIRE_CONNECTION_ID back.
+    private def handle_new_connection_id(frame)
+      # Duplicate sequence_number is a PROTOCOL_VIOLATION per §19.15; for
+      # now just ignore re-issues of the same sequence number.
+      return if @peer_connection_ids.any? { |entry| entry[:sequence_number] == frame.sequence_number }
+
+      @peer_connection_ids << {
+        sequence_number: frame.sequence_number,
+        connection_id: frame.connection_id,
+        stateless_reset_token: frame.stateless_reset_token,
+      }
+
+      return unless frame.retire_prior_to.positive?
+
+      @peer_connection_ids.reject! do |entry|
+        if entry[:sequence_number] < frame.retire_prior_to
+          @pending_retire_connection_ids << entry[:sequence_number]
+          true
+        end
+      end
+    end
+
+    # The peer is informing us that a connection ID we issued has been
+    # retired. We only ever advertise @src_connection_id today, so there is
+    # no CID pool to prune here. Recording the frame still matters: it
+    # removes the dispatch from the "silently dropped" category and leaves a
+    # hook for a future CID-rotation feature.
+    private def handle_retire_connection_id(_frame)
+      # TODO: when we start issuing additional source connection IDs via
+      # NEW_CONNECTION_ID, retire the matching entry and generate a
+      # replacement.
     end
 
     # Returns an AckFrame for the given encryption level, or nil if none needed
@@ -480,6 +537,12 @@ module Raiha
       @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
       @outstanding_path_challenges = [] #: Array[String]
       @peer_path_validated = false
+
+      # RFC 9000 §5.1: alternate connection IDs the peer has issued to us,
+      # plus a queue of sequence numbers for which we still owe the peer a
+      # RETIRE_CONNECTION_ID frame.
+      @peer_connection_ids = [] #: Array[Hash[Symbol, untyped]]
+      @pending_retire_connection_ids = [] #: Array[Integer]
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer

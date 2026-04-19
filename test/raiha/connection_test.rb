@@ -124,6 +124,73 @@ class RaihaConnectionTest < Minitest::Test
     refute connection.peer_path_validated?
   end
 
+  def test_new_connection_id_frame_is_tracked
+    connection = create_connection
+
+    cid = Raiha::Quic::Protocol::ConnectionID.from_bytes(["a1a2a3a4"].pack("H*"))
+    frame = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    frame.sequence_number = 1
+    frame.retire_prior_to = 0
+    frame.connection_id = cid
+    frame.stateless_reset_token = "\x00".b * 16
+
+    connection.handle_frames([frame])
+
+    ids = connection.peer_connection_ids
+    assert_equal 1, ids.length
+    assert_equal 1, ids.first[:sequence_number]
+    assert_equal cid, ids.first[:connection_id]
+  end
+
+  def test_duplicate_new_connection_id_is_ignored
+    connection = create_connection
+
+    frame = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    frame.sequence_number = 1
+    frame.retire_prior_to = 0
+    frame.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes(["b1b2b3b4"].pack("H*"))
+    frame.stateless_reset_token = "\x00".b * 16
+
+    connection.handle_frames([frame, frame])
+    assert_equal 1, connection.peer_connection_ids.length
+  end
+
+  def test_new_connection_id_retire_prior_to_queues_retires
+    connection = create_connection
+
+    [0, 1, 2].each do |seq|
+      frame = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+      frame.sequence_number = seq
+      frame.retire_prior_to = 0
+      frame.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes([("aa" * 4)].pack("H*"))
+      frame.stateless_reset_token = "\x00".b * 16
+      connection.handle_frames([frame])
+    end
+
+    retiring = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    retiring.sequence_number = 3
+    retiring.retire_prior_to = 2
+    retiring.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes([("bb" * 4)].pack("H*"))
+    retiring.stateless_reset_token = "\x00".b * 16
+    connection.handle_frames([retiring])
+
+    # Only sequence numbers >= 2 remain (2 and 3).
+    sequence_numbers = connection.peer_connection_ids.map { |e| e[:sequence_number] }.sort
+    assert_equal [2, 3], sequence_numbers
+
+    # Retires for sequence numbers 0 and 1 are queued to send back.
+    pending = connection.instance_variable_get(:@pending_retire_connection_ids).sort
+    assert_equal [0, 1], pending
+  end
+
+  def test_retire_connection_id_frame_is_accepted
+    connection = create_connection
+
+    frame = Raiha::Quic::Wire::Frames::RetireConnectionIdFrame.new
+    frame.sequence_number = 0
+    connection.handle_frames([frame]) # does not raise
+  end
+
   def test_no_max_data_frame_on_fresh_connection
     # With no bytes received from the peer, we have no reason to advertise
     # more receive credit yet.
