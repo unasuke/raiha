@@ -64,6 +64,7 @@ module Raiha
     private def emit_stream_abort_frames: (Array[String] packets) -> void
     private def emit_packet: (Array[String] packets, String? packet) -> void
     private def enter_draining_state: -> void
+    private def enter_closed_state: -> void
     private def reset_idle_timer: -> void
     private def build_header: (Symbol level, String encoded_packet_number, Integer payload_length) -> String?
     private def build_initial_header: (String encoded_packet_number, Integer payload_length) -> String

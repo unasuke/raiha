@@ -438,16 +438,40 @@ module Raiha
     # schedule a call to `tick` at or before this time. Returns nil if no
     # timer is armed.
     def next_timer_deadline
-      @sent_packet_handler.loss_detection_deadline
+      candidates = [
+        @sent_packet_handler.loss_detection_deadline,
+        @idle_timer.deadline,
+        @drain_timer&.deadline,
+      ].compact #: Array[Time]
+      return nil if candidates.empty?
+
+      candidates.min
     end
 
-    # Drive timer-based work: time-threshold loss detection, etc. Callers
-    # should invoke this whenever next_timer_deadline has passed (or earlier).
-    # Takes an explicit `now` for deterministic testing.
+    # Drive timer-based work: time-threshold loss detection, idle-timeout
+    # silent close (RFC 9000 §10.1), and draining timeout (§10.2.2).
+    # Callers should invoke this whenever next_timer_deadline has passed
+    # (or earlier). Takes an explicit `now` for deterministic testing.
     def tick(now: Time.now)
+      return if @state == State::CLOSED
+
       loss_deadline = @sent_packet_handler.loss_detection_deadline
       if loss_deadline && loss_deadline <= now
         @sent_packet_handler.on_loss_detection_timeout(now: now)
+      end
+
+      drain_deadline = @drain_timer&.deadline
+      if drain_deadline && drain_deadline <= now
+        enter_closed_state
+        return
+      end
+
+      # Draining state is governed by drain_timer, not idle_timer.
+      return if @state == State::DRAINING
+
+      idle_deadline = @idle_timer.deadline
+      if idle_deadline && idle_deadline <= now
+        enter_closed_state
       end
     end
 
@@ -887,6 +911,14 @@ module Raiha
       drain_timeout = 3 * @rtt_stats.pto
       @drain_timer = Quic::Timer.new
       @drain_timer.set(drain_timeout)
+    end
+
+    private def enter_closed_state
+      return if @state == State::CLOSED
+
+      old_state = @state
+      @state = State::CLOSED
+      log_state_updated(old_state: old_state, new_state: @state)
     end
 
     private def reset_idle_timer

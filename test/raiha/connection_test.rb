@@ -110,6 +110,66 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal 0, pending.first.offset
   end
 
+  def test_tick_transitions_draining_to_closed_on_drain_timeout
+    connection = create_connection
+    connection.close
+
+    assert connection.draining?
+    drain_deadline = connection.instance_variable_get(:@drain_timer).deadline
+    refute_nil drain_deadline
+
+    # Before deadline: still draining.
+    connection.tick(now: drain_deadline - 0.01)
+    assert connection.draining?
+
+    # At or past deadline: transition to closed.
+    connection.tick(now: drain_deadline)
+    assert connection.closed?
+  end
+
+  def test_tick_does_nothing_once_closed
+    connection = create_connection
+    connection.close
+    drain_deadline = connection.instance_variable_get(:@drain_timer).deadline
+    connection.tick(now: drain_deadline)
+    assert connection.closed?
+
+    # Repeated ticks must stay closed and not re-log or re-enter.
+    connection.tick(now: drain_deadline + 10)
+    assert connection.closed?
+  end
+
+  def test_tick_silently_closes_on_idle_timeout
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.max_idle_timeout = 30_000  # 30 seconds in ms
+    connection = create_connection(transport_parameters: transport_parameters)
+    connection.complete_handshake
+
+    idle_deadline = connection.instance_variable_get(:@idle_timer).deadline
+    refute_nil idle_deadline
+
+    connection.tick(now: idle_deadline - 0.01)
+    refute connection.closed?
+
+    connection.tick(now: idle_deadline)
+    assert connection.closed?
+  end
+
+  def test_next_timer_deadline_reflects_earliest_armed_timer
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.max_idle_timeout = 30_000
+    connection = create_connection(transport_parameters: transport_parameters)
+
+    idle_deadline = connection.instance_variable_get(:@idle_timer).deadline
+    assert_equal idle_deadline, connection.next_timer_deadline
+
+    # Entering draining installs a nearer deadline (3 * PTO < 30s idle).
+    connection.close
+    drain_deadline = connection.instance_variable_get(:@drain_timer).deadline
+    assert_operator drain_deadline, :<, idle_deadline
+    assert_equal drain_deadline, connection.next_timer_deadline
+  end
+
   def test_tick_triggers_time_threshold_loss_detection
     connection = create_connection
     enable_one_rtt(connection)
