@@ -275,6 +275,14 @@ module Raiha
           emit_packet(packets, packet)
         end
         @pending_ping_frames = [] #: Array[Quic::Wire::Frames::PingFrame]
+
+        # Server → client handshake confirmation (RFC 9000 §19.20).
+        if @pending_handshake_done
+          frame = Quic::Wire::Frames::HandshakeDoneFrame.new
+          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+          @pending_handshake_done = false
+        end
       end
 
       packets
@@ -527,13 +535,16 @@ module Raiha
         stream&.requeue_stop_sending_frame
       when Quic::Wire::Frames::RetireConnectionIdFrame
         @pending_retire_connection_ids << frame.sequence_number
-      # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / CRYPTO /
+      when Quic::Wire::Frames::HandshakeDoneFrame
+        @pending_handshake_done = true
+      # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / CRYPTO / PING /
       # MAX_* / CONNECTION_CLOSE aren't retransmitted here: ACK and
       # PADDING are never retransmitted; PATH_RESPONSE and CRYPTO have
       # specialised recovery paths (PATH_CHALLENGE re-initiation, CRYPTO
       # offset tracking) that are not implemented yet; MAX_* frames are
       # self-healing because they always carry the latest limit and
-      # re-emit on the next window-update check.
+      # re-emit on the next window-update check; PING is produced fresh
+      # by PTO firings, so a lost PING would be replaced by the next PTO.
       end
     end
 
@@ -560,6 +571,15 @@ module Raiha
       @address_validated = true
       log_state_updated(old_state: old_state, new_state: @state)
       apply_peer_transport_parameters
+
+      # RFC 9000 §19.20: the server MUST signal handshake completion with a
+      # HANDSHAKE_DONE frame, which is the client's cue to discard Initial
+      # and Handshake keys.
+      queue_handshake_done if @perspective == Quic::Protocol::Perspective::SERVER
+    end
+
+    private def queue_handshake_done
+      @pending_handshake_done = true
     end
 
     private def apply_peer_transport_parameters

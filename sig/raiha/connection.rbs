@@ -60,6 +60,7 @@ module Raiha
     private def on_packet_lost: (Quic::AckHandler::SentPacketHandler::SentPacket packet, Symbol pn_space) -> void
     private def on_pto_fired: -> void
     private def requeue_lost_frame: (Quic::Wire::Frame frame) -> void
+    private def queue_handshake_done: -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
     private def emit_stream_abort_frames: (Array[String] packets) -> void

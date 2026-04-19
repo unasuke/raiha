@@ -170,6 +170,55 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal drain_deadline, connection.next_timer_deadline
   end
 
+  def test_server_queues_handshake_done_on_complete_handshake
+    server = create_connection(perspective: :server)
+    refute server.instance_variable_get(:@pending_handshake_done)
+
+    server.complete_handshake
+
+    assert_equal true, server.instance_variable_get(:@pending_handshake_done)
+  end
+
+  def test_client_does_not_queue_handshake_done
+    client = create_connection(perspective: :client)
+    client.complete_handshake
+    assert_nil client.instance_variable_get(:@pending_handshake_done)
+  end
+
+  def test_server_emits_handshake_done_in_one_rtt_packet
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+
+    packets = server.get_packets_to_send
+    refute_empty packets
+
+    # After emission the flag is cleared, so a second call does not re-send.
+    refute server.instance_variable_get(:@pending_handshake_done)
+    assert_empty server.get_packets_to_send
+  end
+
+  def test_lost_handshake_done_is_retransmitted
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+    # Drain the pending flag so we can verify retransmission restores it.
+    server.get_packets_to_send
+    refute server.instance_variable_get(:@pending_handshake_done)
+
+    sph = server.instance_variable_get(:@sent_packet_handler)
+    lost_hd = Raiha::Quic::Wire::Frames::HandshakeDoneFrame.new
+    register_sent_packet(sph, pn_value: 1, frames: [lost_hd])
+    register_sent_packet(sph, pn_value: 2, frames: [])
+    register_sent_packet(sph, pn_value: 3, frames: [])
+    register_sent_packet(sph, pn_value: 4, frames: [])
+
+    ack = build_simple_ack(largest: 4)
+    server.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    assert_equal true, server.instance_variable_get(:@pending_handshake_done)
+  end
+
   def test_tick_fires_pto_and_queues_ping_probe
     connection = create_connection
     enable_one_rtt(connection)
