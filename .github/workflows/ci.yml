@@ -26,7 +26,7 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
-      - run: bundle exec ruby -Ilib:test test/raiha/quic_aioquic_interop_test.rb
+      - run: bundle exec ruby -Ilib:test test/interop/quic/aioquic_test.rb
 
   interop-quicgo:
     name: interop (quic-go, Go)
@@ -46,7 +46,7 @@ jobs:
         run: |
           go build -o client_bin client.go
           go build -o server_bin server.go
-      - run: bundle exec ruby -Ilib:test test/raiha/quic_quicgo_interop_test.rb
+      - run: bundle exec ruby -Ilib:test test/interop/quic/quicgo_test.rb
 
   interop-quiche:
     name: interop (quiche, Rust)
@@ -66,11 +66,11 @@ jobs:
       - name: Build quiche-apps
         run: cargo build --release --manifest-path /tmp/quiche/Cargo.toml --package quiche_apps
       - name: Run quiche QUIC interop
-        run: bundle exec ruby -Ilib:test test/raiha/quic_quiche_interop_test.rb
+        run: bundle exec ruby -Ilib:test test/interop/quic/quiche_test.rb
       - name: Run quiche HTTP/3 client interop
-        run: bundle exec ruby -Ilib:test test/raiha/http3/quiche_interop_test.rb
+        run: bundle exec ruby -Ilib:test test/interop/http3/quiche_client_test.rb
       - name: Run quiche HTTP/3 server interop
-        run: bundle exec ruby -Ilib:test test/raiha/http3/quiche_server_interop_test.rb
+        run: bundle exec ruby -Ilib:test test/interop/http3/quiche_server_test.rb
 
   interop-tls-openssl:
     name: interop (TLS, openssl)
@@ -83,7 +83,7 @@ jobs:
           bundler-cache: true
       - name: Check openssl version
         run: openssl version
-      - run: bundle exec ruby -Ilib:test test/raiha/tls/openssl_integration_test.rb
+      - run: bundle exec ruby -Ilib:test test/interop/tls/openssl_test.rb
 
   interop-tls-picotls:
     name: interop (TLS, picotls)
@@ -111,4 +111,4 @@ jobs:
           make cli
       - name: Install picotls binary
         run: sudo ln -sf /tmp/picotls/cli/picotls /usr/local/bin/picotls
-      - run: bundle exec ruby -Ilib:test test/raiha/tls/picotls_integration_test.rb
+      - run: bundle exec ruby -Ilib:test test/interop/tls/picotls_test.rb

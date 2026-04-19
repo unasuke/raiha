@@ -9,8 +9,8 @@ require "securerandom"
 class RaihaQuicAioquicInteropTest < Minitest::Test
   include TestCertificate
 
-  AIOQUIC_SERVER_SCRIPT = File.expand_path("../support/aioquic_server.py", __dir__)
-  AIOQUIC_CLIENT_SCRIPT = File.expand_path("../support/aioquic_client.py", __dir__)
+  AIOQUIC_SERVER_SCRIPT = File.expand_path("../../support/aioquic_server.py", __dir__)
+  AIOQUIC_CLIENT_SCRIPT = File.expand_path("../../support/aioquic_client.py", __dir__)
 
   def test_raiha_client_to_aioquic_server
     cert_file, key_file = write_cert_files

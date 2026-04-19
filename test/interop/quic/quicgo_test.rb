@@ -8,8 +8,8 @@ require "securerandom"
 class RaihaQuicQuicgoInteropTest < Minitest::Test
   include TestCertificate
 
-  QUICGO_SERVER = File.expand_path("../support/quicgo/server_bin", __dir__)
-  QUICGO_CLIENT = File.expand_path("../support/quicgo/client_bin", __dir__)
+  QUICGO_SERVER = File.expand_path("../../support/quicgo/server_bin", __dir__)
+  QUICGO_CLIENT = File.expand_path("../../support/quicgo/client_bin", __dir__)
 
   def setup
     skip "quic-go server not found" unless File.executable?(QUICGO_SERVER)

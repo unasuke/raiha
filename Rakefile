@@ -9,24 +9,11 @@ Rake::TestTask.new(:test) do |t|
 end
 
 namespace :test do
-  # Tests that spawn an external-language implementation (Python aioquic,
-  # Go quic-go, Rust quiche, or the openssl/picotls CLI). CI runs each
-  # of these in its own job with the corresponding toolchain installed.
-  INTEROP_TEST_FILES = %w[
-    test/raiha/quic_aioquic_interop_test.rb
-    test/raiha/quic_quicgo_interop_test.rb
-    test/raiha/quic_quiche_interop_test.rb
-    test/raiha/http3/quiche_interop_test.rb
-    test/raiha/http3/quiche_server_interop_test.rb
-    test/raiha/tls/openssl_integration_test.rb
-    test/raiha/tls/picotls_integration_test.rb
-  ].freeze
-
   Rake::TestTask.new(:unit) do |t|
     t.description = "Run unit/self-contained tests (excludes cross-language interop)"
     t.libs << "test"
     t.libs << "lib"
-    t.test_files = FileList["test/**/*_test.rb"].exclude(*INTEROP_TEST_FILES)
+    t.test_files = FileList["test/**/*_test.rb"].exclude("test/interop/**/*_test.rb")
   end
 
   Rake::TestTask.new(:quic) do |t|
@@ -41,6 +28,32 @@ namespace :test do
     t.libs << "test"
     t.libs << "lib"
     t.test_files = FileList["test/raiha/tls/**/*_test.rb"]
+  end
+
+  Rake::TestTask.new(:interop) do |t|
+    t.description = "Run all cross-language interop tests"
+    t.libs << "test"
+    t.libs << "lib"
+    t.test_files = FileList["test/interop/**/*_test.rb"]
+  end
+
+  namespace :interop do
+    {
+      aioquic: "test/interop/quic/aioquic_test.rb",
+      quicgo: "test/interop/quic/quicgo_test.rb",
+      quiche: "test/interop/quic/quiche_test.rb",
+      quiche_http3_client: "test/interop/http3/quiche_client_test.rb",
+      quiche_http3_server: "test/interop/http3/quiche_server_test.rb",
+      openssl: "test/interop/tls/openssl_test.rb",
+      picotls: "test/interop/tls/picotls_test.rb"
+    }.each do |name, file|
+      Rake::TestTask.new(name) do |t|
+        t.description = "Run #{name} interop tests"
+        t.libs << "test"
+        t.libs << "lib"
+        t.test_files = [file]
+      end
+    end
   end
 end
 

@@ -8,7 +8,7 @@ require "tempfile"
 class RaihaQuicQuicheInteropTest < Minitest::Test
   include TestCertificate
 
-  QUICHE_SERVER = File.expand_path("../../tmp/quiche/target/release/quiche-server", __dir__)
+  QUICHE_SERVER = File.expand_path("../../../tmp/quiche/target/release/quiche-server", __dir__)
 
   def setup
     skip "quiche-server not found" unless File.executable?(QUICHE_SERVER)
