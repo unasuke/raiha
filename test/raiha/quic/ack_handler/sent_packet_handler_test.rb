@@ -158,6 +158,83 @@ class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
     assert_in_delta rtt_stats.loss_delay, deadline - start, 0.01
   end
 
+  def test_pto_deadline_uses_last_ack_eliciting_sent_time_with_backoff
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(rtt_stats: rtt_stats)
+
+    start = Time.now
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+
+    base = rtt_stats.pto
+    assert_in_delta start + base, handler.pto_deadline, 0.001
+
+    # Simulate one prior PTO firing: deadline doubles (exponential backoff).
+    handler.instance_variable_set(:@pto_count, 1)
+    assert_in_delta start + base * 2, handler.pto_deadline, 0.001
+  end
+
+  def test_on_loss_detection_timeout_without_loss_time_fires_pto
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    pto_callbacks = 0
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
+      rtt_stats: rtt_stats,
+      on_pto_fired: -> { pto_callbacks += 1 }
+    )
+
+    start = Time.now
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data,
+      sent_time: start
+    )
+
+    # No ACK arrived, loss_time stays nil. Firing the timer past the PTO
+    # deadline should bump pto_count and trigger the callback.
+    handler.on_loss_detection_timeout(now: start + rtt_stats.pto + 0.01)
+    assert_equal 1, handler.pto_count
+    assert_equal 1, pto_callbacks
+
+    # Firing again doubles the backoff and fires another probe.
+    handler.on_loss_detection_timeout(now: start + rtt_stats.pto * 4)
+    assert_equal 2, handler.pto_count
+    assert_equal 2, pto_callbacks
+  end
+
+  def test_ack_resets_pto_count
+    rtt_stats = Raiha::Quic::Congestion::RTTStats.new
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
+      rtt_stats: rtt_stats,
+      on_pto_fired: ->() {}
+    )
+
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data
+    )
+    handler.instance_variable_set(:@pto_count, 3)
+
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = 0
+    ack.ack_delay = 0
+    ack.ack_ranges = [Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)]
+    handler.received_ack(ack, pn_space: :application_data)
+
+    assert_equal 0, handler.pto_count
+  end
+
   def test_on_loss_detection_timeout_declares_time_threshold_losses
     rtt_stats = Raiha::Quic::Congestion::RTTStats.new
     lost = [] #: Array[untyped]

@@ -268,6 +268,13 @@ module Raiha
         # Stream aborts: RESET_STREAM (send-side) and STOP_SENDING
         # (receive-side) queued on individual streams (RFC 9000 §3.5).
         emit_stream_abort_frames(packets)
+
+        # PTO probes (RFC 9002 §6.2.4): one ack-eliciting frame per firing.
+        @pending_ping_frames&.each do |frame|
+          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+        @pending_ping_frames = [] #: Array[Quic::Wire::Frames::PingFrame]
       end
 
       packets
@@ -499,6 +506,14 @@ module Raiha
       packet.frames.each { |frame| requeue_lost_frame(frame) }
     end
 
+    # RFC 9002 §6.2.4: on PTO expiry, emit one ack-eliciting probe packet to
+    # provoke a fresh ACK from the peer. A PING frame is always sufficient
+    # and doesn't conflict with pending application data.
+    private def on_pto_fired
+      @pending_ping_frames ||= [] #: Array[Quic::Wire::Frames::PingFrame]
+      @pending_ping_frames << Quic::Wire::Frames::PingFrame.new
+    end
+
     private def requeue_lost_frame(frame)
       case frame
       when Quic::Wire::Frames::StreamFrame
@@ -620,7 +635,8 @@ module Raiha
       @sent_packet_handler = Quic::AckHandler::SentPacketHandler.new(
         congestion_controller: @congestion_controller,
         rtt_stats: @rtt_stats,
-        on_packet_lost: method(:on_packet_lost)
+        on_packet_lost: method(:on_packet_lost),
+        on_pto_fired: method(:on_pto_fired)
       )
 
       @received_packet_handler = Quic::AckHandler::ReceivedPacketHandler.new

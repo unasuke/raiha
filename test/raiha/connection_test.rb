@@ -170,6 +170,41 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal drain_deadline, connection.next_timer_deadline
   end
 
+  def test_tick_fires_pto_and_queues_ping_probe
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+    rtt_stats = connection.instance_variable_get(:@rtt_stats)
+    start = Time.now
+
+    sph.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: Raiha::Quic::Protocol::PacketNumberSpace::APPLICATION_DATA,
+      sent_time: start
+    )
+
+    # Before PTO deadline: no probe queued.
+    connection.tick(now: start)
+    assert_empty(connection.instance_variable_get(:@pending_ping_frames) || [])
+
+    # After PTO deadline with no ACK: pto_count increments and a PING is queued.
+    connection.tick(now: start + rtt_stats.pto + 0.01)
+    pending = connection.instance_variable_get(:@pending_ping_frames)
+    refute_nil pending
+    assert_equal 1, pending.length
+    assert_instance_of Raiha::Quic::Wire::Frames::PingFrame, pending.first
+    assert_equal 1, sph.pto_count
+
+    # get_packets_to_send actually sends the probe packet.
+    packets = connection.get_packets_to_send
+    refute_empty packets
+  end
+
   def test_tick_triggers_time_threshold_loss_detection
     connection = create_connection
     enable_one_rtt(connection)

@@ -49,14 +49,21 @@ module Raiha::Quic
 
       attr_reader :bytes_in_flight
 
+      attr_reader :pto_count
+
       # on_packet_lost: called with (lost_packet, pn_space) whenever a packet
       # is declared lost. The caller (Connection) is responsible for
       # inspecting the packet's frames and re-enqueueing anything that should
       # be retransmitted (RFC 9002 §6.3.1).
-      def initialize(congestion_controller: nil, rtt_stats: nil, on_packet_lost: nil)
+      #
+      # on_pto_fired: called with no arguments whenever the PTO alarm fires
+      # (RFC 9002 §6.2.4). The caller should emit one or two ack-eliciting
+      # probe packets (typically a PING).
+      def initialize(congestion_controller: nil, rtt_stats: nil, on_packet_lost: nil, on_pto_fired: nil)
         @congestion_controller = congestion_controller
         @rtt_stats = rtt_stats
         @on_packet_lost = on_packet_lost
+        @on_pto_fired = on_pto_fired
 
         @spaces = {
           Protocol::PacketNumberSpace::INITIAL => PacketNumberSpace.new(:initial),
@@ -66,7 +73,7 @@ module Raiha::Quic
 
         @bytes_in_flight = 0
         @pto_count = 0
-        @time_of_last_ack_eliciting_packet = nil
+        @time_of_last_ack_eliciting_packet = nil #: Time?
         @alarm = Timer.new
       end
 
@@ -121,21 +128,53 @@ module Raiha::Quic
         @alarm.deadline
       end
 
-      # Earliest deadline at which any unacked packet, in any PN space, will
-      # cross the RFC 9002 §6.1.2 time-threshold and need re-examination.
-      # Returns nil if nothing is armed.
+      # Earliest deadline at which this handler wants to be woken up: the
+      # smaller of the time-threshold loss deadline (§6.1.2) and the PTO
+      # deadline (§6.2.1). Per §A.9, loss_time always wins when set.
       def loss_detection_deadline
-        deadlines = @spaces.values.map(&:loss_time).compact
-        return nil if deadlines.empty?
+        loss_time = @spaces.values.map(&:loss_time).compact.min
+        return loss_time if loss_time
 
-        deadlines.min
+        pto_deadline
       end
 
-      # App-driven timer firing. Re-runs detect_lost_packets against every
-      # space so any ack-eliciting packet whose sent_time + loss_delay has
-      # passed is declared lost, even without a fresh ACK.
+      # App-driven timer firing. Distinguishes the two phases per RFC 9002
+      # §A.9 OnLossDetectionTimeout:
+      #   - if any loss_time is set, run time-threshold loss detection;
+      #   - otherwise this is a PTO firing: bump pto_count (exponential
+      #     backoff) and signal the caller to send probe packets.
       def on_loss_detection_timeout(now: Time.now)
-        @spaces.each_value { |space| detect_lost_packets(space, now: now) }
+        earliest_loss_time = @spaces.values.map(&:loss_time).compact.min
+        if earliest_loss_time
+          @spaces.each_value { |space| detect_lost_packets(space, now: now) }
+          return
+        end
+
+        return unless ack_eliciting_in_flight?
+
+        @pto_count += 1
+        @on_pto_fired&.call
+      end
+
+      # RFC 9002 §6.2.1: PTO = smoothed_rtt + max(4*rttvar, kGranularity) +
+      # max_ack_delay. We arm the alarm relative to the most recent
+      # ack-eliciting packet sent in any space and back off exponentially
+      # based on pto_count.
+      def pto_deadline
+        return nil unless @time_of_last_ack_eliciting_packet
+        return nil unless ack_eliciting_in_flight?
+
+        base = @rtt_stats ? @rtt_stats.pto : 0.333 + 0.025
+        @time_of_last_ack_eliciting_packet + base * (2**@pto_count)
+      end
+
+      private def ack_eliciting_in_flight?
+        @spaces.each_value do |space|
+          space.sent_packets.each_value do |packet|
+            return true if packet.ack_eliciting
+          end
+        end
+        false
       end
 
       private def detect_and_remove_acked_packets(ack_frame, space)
