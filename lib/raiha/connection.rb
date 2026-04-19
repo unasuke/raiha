@@ -33,6 +33,10 @@ module Raiha
     attr_reader :state
     attr_reader :streams
     attr_reader :qlog_writer
+    # Most recent address-validation token (NEW_TOKEN, RFC 9000 §19.7)
+    # issued by the peer. Clients persist this across sessions to present
+    # it in the token field of the next Initial packet.
+    attr_reader :peer_issued_token
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
       @perspective = perspective
@@ -84,6 +88,8 @@ module Raiha
           handle_reset_stream_frame(frame)
         when Quic::Wire::Frames::StopSendingFrame
           handle_stop_sending_frame(frame)
+        when Quic::Wire::Frames::NewTokenFrame
+          handle_new_token_frame(frame)
         end
       end
 
@@ -283,6 +289,15 @@ module Raiha
           emit_packet(packets, packet)
           @pending_handshake_done = false
         end
+
+        # Server → client address-validation tokens (RFC 9000 §19.7).
+        @pending_new_tokens&.each do |token|
+          frame = Quic::Wire::Frames::NewTokenFrame.new
+          frame.token = token
+          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+          emit_packet(packets, packet)
+        end
+        @pending_new_tokens = [] #: Array[String]
       end
 
       packets
@@ -490,6 +505,18 @@ module Raiha
       end
     end
 
+    # Issue an address-validation token to the peer (RFC 9000 §8.1.3,
+    # §19.7). The server calls this with an opaque byte string that a
+    # future client can replay in the token field of its Initial packet;
+    # this library does not prescribe the token format, so the caller is
+    # responsible for generating and later validating it.
+    def send_new_token(token)
+      raise Raiha::Error, "NEW_TOKEN may only be sent by the server" unless @perspective == Quic::Protocol::Perspective::SERVER
+
+      @pending_new_tokens ||= [] #: Array[String]
+      @pending_new_tokens << token
+    end
+
     # Application-driven send-side reset (RFC 9000 §3.5).
     def reset_stream(stream_id, error_code)
       stream = @streams.get_stream(stream_id)
@@ -537,6 +564,9 @@ module Raiha
         @pending_retire_connection_ids << frame.sequence_number
       when Quic::Wire::Frames::HandshakeDoneFrame
         @pending_handshake_done = true
+      when Quic::Wire::Frames::NewTokenFrame
+        @pending_new_tokens ||= [] #: Array[String]
+        @pending_new_tokens << frame.token
       # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / CRYPTO / PING /
       # MAX_* / CONNECTION_CLOSE aren't retransmitted here: ACK and
       # PADDING are never retransmitted; PATH_RESPONSE and CRYPTO have
@@ -546,6 +576,17 @@ module Raiha
       # re-emit on the next window-update check; PING is produced fresh
       # by PTO firings, so a lost PING would be replaced by the next PTO.
       end
+    end
+
+    private def handle_new_token_frame(frame)
+      # RFC 9000 §19.7: a client MUST treat a NEW_TOKEN received from a
+      # server as invalid if... it's actually only invalid in the other
+      # direction (peer → client is legal). Servers MUST treat receipt of
+      # NEW_TOKEN as a PROTOCOL_VIOLATION; we silently drop it for now
+      # until the transport-error emission path exists.
+      return unless @perspective == Quic::Protocol::Perspective::CLIENT
+
+      @peer_issued_token = frame.token
     end
 
     private def handle_reset_stream_frame(frame)

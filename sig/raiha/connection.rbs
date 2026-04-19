@@ -13,6 +13,7 @@ module Raiha
     attr_reader state: Symbol
     attr_reader streams: StreamsMap
     attr_reader qlog_writer: Qlog::Writer?
+    attr_reader peer_issued_token: String?
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
@@ -31,6 +32,7 @@ module Raiha
     def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
     def reset_stream: (Integer stream_id, Integer error_code) -> void
     def stop_sending: (Integer stream_id, Integer error_code) -> void
+    def send_new_token: (String token) -> void
     def next_timer_deadline: -> Time?
     def tick: (?now: Time) -> void
     def initiate_path_validation: -> String
@@ -61,6 +63,7 @@ module Raiha
     private def on_pto_fired: -> void
     private def requeue_lost_frame: (Quic::Wire::Frame frame) -> void
     private def queue_handshake_done: -> void
+    private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
     private def emit_stream_abort_frames: (Array[String] packets) -> void

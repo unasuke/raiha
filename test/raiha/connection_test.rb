@@ -198,6 +198,65 @@ class RaihaConnectionTest < Minitest::Test
     assert_empty server.get_packets_to_send
   end
 
+  def test_client_stores_received_new_token
+    client = create_connection(perspective: :client)
+    assert_nil client.peer_issued_token
+
+    frame = Raiha::Quic::Wire::Frames::NewTokenFrame.new
+    frame.token = "opaque-token".b
+    client.handle_frames([frame])
+
+    assert_equal "opaque-token".b, client.peer_issued_token
+  end
+
+  def test_server_drops_new_token_received_from_peer
+    # RFC 9000 §19.7: servers MUST treat receipt of NEW_TOKEN as a
+    # protocol violation. We silently drop pending transport-error
+    # emission infrastructure.
+    server = create_connection(perspective: :server)
+    frame = Raiha::Quic::Wire::Frames::NewTokenFrame.new
+    frame.token = "bad".b
+    server.handle_frames([frame])
+
+    assert_nil server.peer_issued_token
+  end
+
+  def test_server_send_new_token_queues_frame
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+    server.get_packets_to_send  # drain HANDSHAKE_DONE so it doesn't confound
+
+    server.send_new_token("future-resumption".b)
+
+    packets = server.get_packets_to_send
+    refute_empty packets
+    assert_empty server.instance_variable_get(:@pending_new_tokens)
+  end
+
+  def test_client_send_new_token_raises
+    client = create_connection(perspective: :client)
+    assert_raises(Raiha::Error) { client.send_new_token("nope".b) }
+  end
+
+  def test_lost_new_token_is_retransmitted
+    server = create_connection(perspective: :server)
+
+    sph = server.instance_variable_get(:@sent_packet_handler)
+    lost_nt = Raiha::Quic::Wire::Frames::NewTokenFrame.new
+    lost_nt.token = "resume-me".b
+    register_sent_packet(sph, pn_value: 0, frames: [lost_nt])
+    register_sent_packet(sph, pn_value: 1, frames: [])
+    register_sent_packet(sph, pn_value: 2, frames: [])
+    register_sent_packet(sph, pn_value: 3, frames: [])
+
+    ack = build_simple_ack(largest: 3)
+    server.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    pending = server.instance_variable_get(:@pending_new_tokens)
+    assert_equal ["resume-me".b], pending
+  end
+
   def test_lost_handshake_done_is_retransmitted
     server = create_connection(perspective: :server)
     enable_one_rtt(server)
