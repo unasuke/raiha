@@ -24,6 +24,12 @@ module Raiha
     module State
       HANDSHAKING = :handshaking
       CONNECTED = :connected
+      # CLOSING: we sent CONNECTION_CLOSE and may re-send it in response to
+      # incoming packets (RFC 9000 §10.2.1). Transitions to CLOSED when the
+      # drain timer expires.
+      CLOSING = :closing
+      # DRAINING: we received CONNECTION_CLOSE from the peer and must not
+      # send any more packets (RFC 9000 §10.2.2).
       DRAINING = :draining
       CLOSED = :closed
     end
@@ -134,8 +140,32 @@ module Raiha
       @tls_adapter.start
     end
 
+    # Application-driven close with an implicit NO_ERROR (RFC 9000 §20.1).
+    # Sends CONNECTION_CLOSE with a transport-level code; use
+    # #close_with_application_error for application-level codes.
     def close(error_code: 0, reason: "")
-      enter_draining_state
+      close_with_error(error_code: error_code, reason_phrase: reason)
+    end
+
+    # Send a transport-level CONNECTION_CLOSE (type 0x1c) and enter the
+    # closing state. `frame_type` is the QUIC frame type that triggered
+    # the close when applicable (RFC 9000 §19.19), or nil.
+    def close_with_error(error_code:, reason_phrase: "", frame_type: nil)
+      frame = Quic::Wire::Frames::ConnectionCloseFrame.new
+      frame.error_code = error_code
+      frame.trigger_frame_type = frame_type || 0
+      frame.reason_phrase = reason_phrase
+      frame.application_error = false
+      enter_closing_state(frame)
+    end
+
+    # Send an application-level CONNECTION_CLOSE (type 0x1d).
+    def close_with_application_error(error_code:, reason_phrase: "")
+      frame = Quic::Wire::Frames::ConnectionCloseFrame.new
+      frame.error_code = error_code
+      frame.reason_phrase = reason_phrase
+      frame.application_error = true
+      enter_closing_state(frame)
     end
 
     # Minimum Initial packet size per RFC 9000 Section 14.1
@@ -213,6 +243,12 @@ module Raiha
     # with at most one packet per encryption level and the short-header
     # 1-RTT packet always last.
     def get_packets_to_send
+      return [] if @state == State::CLOSED
+      # RFC 9000 §10.2.2: draining endpoints MUST NOT send anything.
+      return [] if @state == State::DRAINING
+      # RFC 9000 §10.2.1: closing endpoints emit only CONNECTION_CLOSE.
+      return emit_connection_close if @state == State::CLOSING
+
       datagrams = [] #: Array[String]
 
       initial_packet = build_level_packet(Quic::Handshake::EncryptionLevel::INITIAL)
@@ -227,6 +263,26 @@ module Raiha
       emit_datagram(datagrams, datagram) unless datagram.empty?
 
       datagrams
+    end
+
+    private def emit_connection_close
+      datagrams = [] #: Array[String]
+      return datagrams unless @pending_close_frame
+      return datagrams unless @close_frame
+
+      level = best_available_level_for_close
+      return datagrams unless level
+
+      packet = build_packet([@close_frame], level: level)
+      @pending_close_frame = false
+      emit_datagram(datagrams, packet) if packet
+      datagrams
+    end
+
+    private def best_available_level_for_close
+      [Quic::Handshake::EncryptionLevel::ONE_RTT,
+       Quic::Handshake::EncryptionLevel::HANDSHAKE,
+       Quic::Handshake::EncryptionLevel::INITIAL].find { |level| @crypto_setup.available?(level) }
     end
 
     # Gather every frame queued for `level` and build a single packet
@@ -483,8 +539,8 @@ module Raiha
         return
       end
 
-      # Draining state is governed by drain_timer, not idle_timer.
-      return if @state == State::DRAINING
+      # Closing / draining state is governed by drain_timer, not idle_timer.
+      return if @state == State::DRAINING || @state == State::CLOSING
 
       idle_deadline = @idle_timer.deadline
       if idle_deadline && idle_deadline <= now
@@ -642,6 +698,10 @@ module Raiha
       @state == State::DRAINING
     end
 
+    def closing?
+      @state == State::CLOSING
+    end
+
     # Reassembles CRYPTO frame data arriving at different offsets.
     # Only returns data when complete TLS handshake messages are available.
     class CryptoStreamBuffer
@@ -756,6 +816,7 @@ module Raiha
     # A single UDP datagram may contain multiple coalesced QUIC packets (RFC 9000 Section 12.2)
     def handle_packet(data)
       return if @state == State::CLOSED
+      return if @state == State::DRAINING
 
       # RFC 9000 §10.3.1: check the final 16 bytes of the datagram against
       # any stateless reset tokens the peer has advertised. A match means
@@ -767,6 +828,13 @@ module Raiha
       end
 
       @bytes_received_from_peer += data.bytesize
+
+      # RFC 9000 §10.2.1: every datagram received while closing prompts us
+      # to re-send CONNECTION_CLOSE. The frame is otherwise dropped.
+      if @state == State::CLOSING
+        @pending_close_frame = true
+        return
+      end
 
       offset = 0
       while offset < data.bytesize
@@ -988,8 +1056,26 @@ module Raiha
     end
 
     private def enter_draining_state
+      return if @state == State::DRAINING || @state == State::CLOSED
+
       old_state = @state
       @state = State::DRAINING
+      log_state_updated(old_state: old_state, new_state: @state)
+
+      drain_timeout = 3 * @rtt_stats.pto
+      @drain_timer = Quic::Timer.new
+      @drain_timer.set(drain_timeout)
+    end
+
+    private def enter_closing_state(close_frame)
+      # Idempotent: a second close() call with an error keeps the first
+      # frame; DRAINING / CLOSED short-circuit.
+      return if @state == State::CLOSING || @state == State::DRAINING || @state == State::CLOSED
+
+      old_state = @state
+      @state = State::CLOSING
+      @close_frame = close_frame
+      @pending_close_frame = true
       log_state_updated(old_state: old_state, new_state: @state)
 
       drain_timeout = 3 * @rtt_stats.pto

@@ -3,6 +3,7 @@ module Raiha
     module State
       HANDSHAKING: Symbol
       CONNECTED: Symbol
+      CLOSING: Symbol
       DRAINING: Symbol
       CLOSED: Symbol
     end
@@ -26,6 +27,8 @@ module Raiha
     def flush_qlog: -> void
     def start_handshake: -> void
     def close: (?error_code: Integer, ?reason: String) -> void
+    def close_with_error: (error_code: Integer, ?reason_phrase: String, ?frame_type: Integer?) -> void
+    def close_with_application_error: (error_code: Integer, ?reason_phrase: String) -> void
     def build_packet: (Array[Quic::Wire::Frame] frames, level: Symbol, ?pad_to_min: bool) -> String?
     def build_initial_packet: (String crypto_data) -> String?
     def get_packets_to_send: -> Array[String]
@@ -43,6 +46,7 @@ module Raiha
     def handshake_complete?: -> bool
     def closed?: -> bool
     def draining?: -> bool
+    def closing?: -> bool
 
     private def setup_components: -> void
     private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
@@ -73,7 +77,10 @@ module Raiha
     private def gather_one_rtt_frames: (Array[Quic::Wire::Frame] frames) -> void
     private def append_flow_control_frames: (Array[Quic::Wire::Frame] frames) -> void
     private def enter_draining_state: -> void
+    private def enter_closing_state: (Quic::Wire::Frames::ConnectionCloseFrame close_frame) -> void
     private def enter_closed_state: -> void
+    private def emit_connection_close: -> Array[String]
+    private def best_available_level_for_close: -> Symbol?
     private def reset_idle_timer: -> void
     private def build_header: (Symbol level, String encoded_packet_number, Integer payload_length) -> String?
     private def build_initial_header: (String encoded_packet_number, Integer payload_length) -> String

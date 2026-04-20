@@ -110,19 +110,37 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal 0, pending.first.offset
   end
 
-  def test_tick_transitions_draining_to_closed_on_drain_timeout
+  def test_tick_transitions_closing_to_closed_on_drain_timeout
     connection = create_connection
     connection.close
+
+    assert connection.closing?
+    drain_deadline = connection.instance_variable_get(:@drain_timer).deadline
+    refute_nil drain_deadline
+
+    # Before deadline: still closing.
+    connection.tick(now: drain_deadline - 0.01)
+    assert connection.closing?
+
+    # At or past deadline: transition to closed.
+    connection.tick(now: drain_deadline)
+    assert connection.closed?
+  end
+
+  def test_tick_transitions_draining_to_closed_on_drain_timeout
+    connection = create_connection
+
+    # Peer-initiated close: receiving CONNECTION_CLOSE puts us in draining.
+    frame = Raiha::Quic::Wire::Frames::ConnectionCloseFrame.new
+    connection.handle_frames([frame])
 
     assert connection.draining?
     drain_deadline = connection.instance_variable_get(:@drain_timer).deadline
     refute_nil drain_deadline
 
-    # Before deadline: still draining.
     connection.tick(now: drain_deadline - 0.01)
     assert connection.draining?
 
-    # At or past deadline: transition to closed.
     connection.tick(now: drain_deadline)
     assert connection.closed?
   end
@@ -535,7 +553,63 @@ class RaihaConnectionTest < Minitest::Test
   def test_close
     connection = create_connection
     connection.close
+    # close() now sends CONNECTION_CLOSE and enters the closing state
+    # (RFC 9000 §10.2.1); draining is reserved for the peer-initiated path.
+    assert connection.closing?
+    refute connection.draining?
+  end
+
+  def test_close_emits_connection_close_frame_at_best_available_level
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    connection.close(error_code: 0x0a, reason: "bye")
+
+    datagrams = connection.get_packets_to_send
+    refute_empty datagrams
+    assert connection.closing?
+
+    # After the first emission, the pending flag is cleared so subsequent
+    # calls without new incoming packets are idle.
+    assert_empty connection.get_packets_to_send
+  end
+
+  def test_close_with_application_error_sets_app_flag
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    connection.close_with_application_error(error_code: 0x0100, reason_phrase: "h3-ok")
+
+    frame = connection.instance_variable_get(:@close_frame)
+    assert frame.application_error
+    assert_equal 0x0100, frame.error_code
+  end
+
+  def test_closing_state_retransmits_connection_close_on_incoming_packet
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    connection.close(error_code: 0)
+    connection.get_packets_to_send  # drain the first emission
+
+    # Simulate an incoming stray packet while closing. RFC 9000 §10.2.1
+    # requires re-sending CONNECTION_CLOSE.
+    connection.handle_packet("\x40".b + ("\x00".b * 40))
+
+    datagrams = connection.get_packets_to_send
+    refute_empty datagrams
+  end
+
+  def test_draining_state_produces_nothing_from_get_packets_to_send
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    frame = Raiha::Quic::Wire::Frames::ConnectionCloseFrame.new
+    connection.handle_frames([frame])
     assert connection.draining?
+
+    assert_empty connection.get_packets_to_send
   end
 
   def test_path_challenge_queues_path_response
