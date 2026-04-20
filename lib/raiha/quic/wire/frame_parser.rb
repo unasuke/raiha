@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../error"
+require_relative "../qerr/transport_error"
 require_relative "buffer"
 require_relative "frame"
 require_relative "frames/padding_frame"
@@ -83,13 +84,23 @@ module Raiha::Quic
           when Frame::Type::HANDSHAKE_DONE
             Frames::HandshakeDoneFrame.parse(buffer)
           else
-            raise Raiha::Quic::Error, "Unknown frame type: 0x#{frame_type.to_s(16)}"
+            # RFC 9000 §12.4: an endpoint that receives a frame type it does
+            # not recognize terminates the connection with FRAME_ENCODING_ERROR.
+            raise Raiha::Quic::Qerr::FrameEncodingError.new(
+              frame_type: frame_type,
+              reason_phrase: "Unknown frame type: 0x#{frame_type.to_s(16)}"
+            )
           end
 
           frames << frame
         end
 
         frames
+      rescue Raiha::Quic::Qerr::TransportError
+        raise
+      rescue EOFError => e
+        # Truncated varint or length field inside a frame payload.
+        raise Raiha::Quic::Qerr::FrameEncodingError.new(reason_phrase: e.message)
       end
     end
   end

@@ -489,4 +489,23 @@ class RaihaQuicWireFrameParserTest < Minitest::Test
     assert_instance_of Raiha::Quic::Wire::Frames::PathResponseFrame, parsed
     assert_equal frame.data, parsed.data
   end
+
+  def test_unknown_frame_type_raises_frame_encoding_error
+    # 0x2f is well beyond the currently-defined frame type range.
+    buf = Raiha::Quic::Wire::Buffer.new("\x2f".b)
+
+    err = assert_raises(Raiha::Quic::Qerr::FrameEncodingError) do
+      Raiha::Quic::Wire::FrameParser.parse(buf)
+    end
+    assert_equal 0x2f, err.frame_type
+  end
+
+  def test_truncated_frame_payload_raises_frame_encoding_error
+    # Begin a RESET_STREAM frame (type 0x04) but cut off mid-varint.
+    buf = Raiha::Quic::Wire::Buffer.new("\x04".b)
+
+    assert_raises(Raiha::Quic::Qerr::FrameEncodingError) do
+      Raiha::Quic::Wire::FrameParser.parse(buf)
+    end
+  end
 end
