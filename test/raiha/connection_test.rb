@@ -278,16 +278,21 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal "opaque-token".b, client.peer_issued_token
   end
 
-  def test_server_drops_new_token_received_from_peer
+  def test_server_closes_with_protocol_violation_on_new_token_receipt
     # RFC 9000 §19.7: servers MUST treat receipt of NEW_TOKEN as a
-    # protocol violation. We silently drop pending transport-error
-    # emission infrastructure.
+    # PROTOCOL_VIOLATION transport error.
     server = create_connection(perspective: :server)
     frame = Raiha::Quic::Wire::Frames::NewTokenFrame.new
     frame.token = "bad".b
     server.handle_frames([frame])
 
     assert_nil server.peer_issued_token
+    assert server.closing?
+
+    close_frame = server.instance_variable_get(:@close_frame)
+    assert_equal Raiha::Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION, close_frame.error_code
+    refute close_frame.application_error
+    assert_equal Raiha::Quic::Wire::Frame::Type::NEW_TOKEN, close_frame.trigger_frame_type
   end
 
   def test_server_send_new_token_queues_frame
@@ -654,7 +659,7 @@ class RaihaConnectionTest < Minitest::Test
     refute_includes outstanding, data
   end
 
-  def test_mismatched_path_response_does_not_validate
+  def test_mismatched_path_response_closes_with_protocol_violation
     connection = create_connection
     connection.initiate_path_validation
 
@@ -663,6 +668,10 @@ class RaihaConnectionTest < Minitest::Test
     connection.handle_frames([response])
 
     refute connection.peer_path_validated?
+    assert connection.closing?
+    close_frame = connection.instance_variable_get(:@close_frame)
+    assert_equal Raiha::Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION, close_frame.error_code
+    assert_equal Raiha::Quic::Wire::Frame::Type::PATH_RESPONSE, close_frame.trigger_frame_type
   end
 
   def test_new_connection_id_frame_is_tracked

@@ -17,6 +17,7 @@ require_relative "quic/congestion"
 require_relative "quic/flow_control"
 require_relative "quic/timer"
 require_relative "quic/stateless_reset"
+require_relative "quic/qerr/error_code"
 require_relative "qlog"
 
 module Raiha
@@ -441,13 +442,18 @@ module Raiha
     end
 
     # Match a received PATH_RESPONSE against our outstanding challenges.
-    # RFC 9000 §8.2.3: a response with non-matching data is a PROTOCOL_VIOLATION.
-    # The RFC-correct reaction is a connection close; for now we just ignore
-    # mismatches. A matching response validates the current path.
+    # RFC 9000 §8.2.3: a response with non-matching data is a
+    # PROTOCOL_VIOLATION; a matching response validates the current path.
     private def handle_path_response(response_data)
-      return unless @outstanding_path_challenges.delete(response_data)
-
-      @peer_path_validated = true
+      if @outstanding_path_challenges.delete(response_data)
+        @peer_path_validated = true
+      else
+        close_with_error(
+          error_code: Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION,
+          reason_phrase: "PATH_RESPONSE did not match any outstanding PATH_CHALLENGE",
+          frame_type: Quic::Wire::Frame::Type::PATH_RESPONSE
+        )
+      end
     end
 
     # Track a new alternate connection ID issued by the peer. When
@@ -622,12 +628,16 @@ module Raiha
     end
 
     private def handle_new_token_frame(frame)
-      # RFC 9000 §19.7: a client MUST treat a NEW_TOKEN received from a
-      # server as invalid if... it's actually only invalid in the other
-      # direction (peer → client is legal). Servers MUST treat receipt of
-      # NEW_TOKEN as a PROTOCOL_VIOLATION; we silently drop it for now
-      # until the transport-error emission path exists.
-      return unless @perspective.client?
+      # RFC 9000 §19.7: a server that receives NEW_TOKEN MUST treat it as a
+      # PROTOCOL_VIOLATION; NEW_TOKEN is server-only.
+      unless @perspective.client?
+        close_with_error(
+          error_code: Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION,
+          reason_phrase: "server received NEW_TOKEN",
+          frame_type: Quic::Wire::Frame::Type::NEW_TOKEN
+        )
+        return
+      end
 
       @peer_issued_token = frame.token
     end
