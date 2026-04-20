@@ -128,6 +128,24 @@ class RaihaStreamTest < Minitest::Test
     assert_raises(Raiha::Error) { stream.write("nope".b) }
   end
 
+  def test_handle_reset_stream_rejects_final_size_below_highest_received
+    stream = create_stream
+    stream.receive_data(0, "xxxxxxxxxx".b) # highest_received = 10
+
+    assert_raises(Raiha::Quic::Qerr::FinalSizeError) do
+      stream.handle_reset_stream(error_code: 0, final_size: 5)
+    end
+  end
+
+  def test_handle_reset_stream_rejects_final_size_conflicting_with_prior_fin
+    stream = create_stream
+    stream.receive_data(0, "done".b, fin: true) # final_size fixed at 4
+
+    assert_raises(Raiha::Quic::Qerr::FinalSizeError) do
+      stream.handle_reset_stream(error_code: 0, final_size: 7)
+    end
+  end
+
   def test_handle_reset_stream_transitions_receive_side
     stream = create_stream
     stream.receive_data(0, "partial".b)

@@ -152,10 +152,13 @@ module Raiha
 
     # Peer reset our receive side (RFC 9000 §3.2). Transition to Reset Recvd,
     # remember the reported error code and final size, and drop anything
-    # buffered but not yet read.
+    # buffered but not yet read. Raises Qerr::FinalSizeError (RFC 9000 §4.5)
+    # when the announced final_size contradicts any size the peer already
+    # committed to via STREAM frames or a prior RESET_STREAM.
     def handle_reset_stream(error_code:, final_size:)
       return if reset_received?
 
+      @flow_controller.set_final_size(final_size)
       @peer_reset_error_code = error_code
       @peer_reset_final_size = final_size
       @receive_state = ReceiveState::RESET_RECVD

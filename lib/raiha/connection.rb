@@ -18,6 +18,7 @@ require_relative "quic/flow_control"
 require_relative "quic/timer"
 require_relative "quic/stateless_reset"
 require_relative "quic/qerr/error_code"
+require_relative "quic/qerr/transport_error"
 require_relative "qlog"
 
 module Raiha
@@ -461,9 +462,18 @@ module Raiha
     # number MUST be retired (RFC 9000 §5.1.2) by sending
     # RETIRE_CONNECTION_ID back.
     private def handle_new_connection_id(frame)
-      # Duplicate sequence_number is a PROTOCOL_VIOLATION per §19.15; for
-      # now just ignore re-issues of the same sequence number.
-      return if @peer_connection_ids.any? { |entry| entry[:sequence_number] == frame.sequence_number }
+      # RFC 9000 §19.15: a duplicate sequence number with the same CID and
+      # stateless reset token is a plain retransmission; one carrying a
+      # different CID or token is a PROTOCOL_VIOLATION.
+      existing = @peer_connection_ids.find { |entry| entry[:sequence_number] == frame.sequence_number }
+      if existing && (existing[:connection_id] != frame.connection_id ||
+                      existing[:stateless_reset_token] != frame.stateless_reset_token)
+        raise Quic::Qerr::ProtocolViolation.new(
+          frame_type: Quic::Wire::Frame::Type::NEW_CONNECTION_ID,
+          reason_phrase: "NEW_CONNECTION_ID reuses sequence number with different CID or token"
+        )
+      end
+      return if existing
 
       @peer_connection_ids << {
         sequence_number: frame.sequence_number,
@@ -865,6 +875,10 @@ module Raiha
           break # Short header packets are always last in a coalesced datagram
         end
       end
+    rescue Quic::Qerr::TransportError => error
+      # RFC 9000 §11: a transport-level protocol violation detected during
+      # packet processing becomes an outgoing CONNECTION_CLOSE.
+      enter_closing_state(error.to_connection_close_frame)
     rescue => error
       # Log error but don't crash the connection
       $stderr.puts "Connection error handling packet: #{error.class}: #{error.message}" if $DEBUG

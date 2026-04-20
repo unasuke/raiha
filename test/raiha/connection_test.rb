@@ -705,6 +705,47 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal 1, connection.peer_connection_ids.length
   end
 
+  def test_new_connection_id_duplicate_seq_with_mismatched_cid_is_protocol_violation
+    connection = create_connection
+
+    first = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    first.sequence_number = 1
+    first.retire_prior_to = 0
+    first.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes(["aaaaaaaa"].pack("H*"))
+    first.stateless_reset_token = "\x00".b * 16
+    connection.handle_frames([first])
+
+    conflicting = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    conflicting.sequence_number = 1
+    conflicting.retire_prior_to = 0
+    conflicting.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes(["bbbbbbbb"].pack("H*"))
+    conflicting.stateless_reset_token = "\x00".b * 16
+
+    assert_raises(Raiha::Quic::Qerr::ProtocolViolation) do
+      connection.handle_frames([conflicting])
+    end
+  end
+
+  def test_handle_packet_converts_transport_error_to_connection_close
+    connection = create_connection
+
+    # Stub the first stage of packet parsing to throw a TransportError,
+    # mirroring what a real invalid frame would produce during an
+    # encrypted packet's frame loop. This exercises the handle_packet
+    # rescue arm without needing a real encrypted payload.
+    connection.define_singleton_method(:handle_long_header_packet) do |_, _|
+      raise Raiha::Quic::Qerr::ProtocolViolation.new(reason_phrase: "synthetic")
+    end
+
+    # A long-header datagram shape so handle_packet routes to the stub.
+    datagram = ("\xc0".b + "\x00".b * 40)
+    connection.handle_packet(datagram)
+
+    assert connection.closing?
+    close_frame = connection.instance_variable_get(:@close_frame)
+    assert_equal Raiha::Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION, close_frame.error_code
+  end
+
   def test_new_connection_id_retire_prior_to_queues_retires
     connection = create_connection
 
