@@ -90,4 +90,27 @@ class RaihaQuicAckHandlerReceivedPacketHandlerTest < Minitest::Test
     assert handler.should_send_ack?(:initial)
     refute handler.should_send_ack?(:application_data)
   end
+
+  def test_ack_frame_carries_ecn_counts_when_ect_seen
+    handler = Raiha::Quic::AckHandler::ReceivedPacketHandler.new
+
+    handler.received_packet(packet_number: 0, pn_space: :application_data, ack_eliciting: true, ecn: :ect0)
+    handler.received_packet(packet_number: 1, pn_space: :application_data, ack_eliciting: true, ecn: :ce)
+
+    frame = handler.get_ack_frame(:application_data)
+    refute_nil frame.ecn_counts
+    assert_equal 1, frame.ecn_counts[:ect0]
+    assert_equal 0, frame.ecn_counts[:ect1]
+    assert_equal 1, frame.ecn_counts[:ecn_ce]
+  end
+
+  def test_ack_frame_omits_ecn_counts_when_no_marks_seen
+    handler = Raiha::Quic::AckHandler::ReceivedPacketHandler.new
+
+    handler.received_packet(packet_number: 0, pn_space: :application_data, ack_eliciting: true)
+    # default ecn: :not_ect
+
+    frame = handler.get_ack_frame(:application_data)
+    assert_nil frame.ecn_counts
+  end
 end

@@ -884,7 +884,7 @@ class RaihaConnectionTest < Minitest::Test
     # mirroring what a real invalid frame would produce during an
     # encrypted packet's frame loop. This exercises the handle_packet
     # rescue arm without needing a real encrypted payload.
-    connection.define_singleton_method(:handle_long_header_packet) do |_, _|
+    connection.define_singleton_method(:handle_long_header_packet) do |_, _, **_kwargs|
       raise Raiha::Quic::Qerr::ProtocolViolation.new(reason_phrase: "synthetic")
     end
 

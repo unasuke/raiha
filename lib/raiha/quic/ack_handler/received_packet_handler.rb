@@ -11,6 +11,7 @@ module Raiha::Quic
         attr_reader :largest_received
         attr_reader :received_packet_numbers
         attr_reader :ack_eliciting_count
+        attr_reader :ecn_counts
         attr_accessor :ack_alarm
 
         def initialize
@@ -19,9 +20,10 @@ module Raiha::Quic
           @largest_received_time = nil
           @ack_eliciting_count = 0
           @ack_alarm = Timer.new
+          @ecn_counts = { ect0: 0, ect1: 0, ecn_ce: 0 } #: Hash[Symbol, Integer]
         end
 
-        def record_received(packet_number, ack_eliciting:)
+        def record_received(packet_number, ack_eliciting:, ecn: :not_ect)
           @received_packet_numbers << packet_number
 
           if @largest_received.nil? || packet_number > @largest_received
@@ -30,6 +32,15 @@ module Raiha::Quic
           end
 
           @ack_eliciting_count += 1 if ack_eliciting
+          case ecn
+          when :ect0 then @ecn_counts[:ect0] += 1
+          when :ect1 then @ecn_counts[:ect1] += 1
+          when :ce then @ecn_counts[:ecn_ce] += 1
+          end
+        end
+
+        def any_ecn_mark?
+          @ecn_counts[:ect0] > 0 || @ecn_counts[:ect1] > 0 || @ecn_counts[:ecn_ce] > 0
         end
 
         def should_send_ack?
@@ -56,12 +67,12 @@ module Raiha::Quic
         }
       end
 
-      def received_packet(packet_number:, pn_space:, ack_eliciting:)
+      def received_packet(packet_number:, pn_space:, ack_eliciting:, ecn: :not_ect)
         space = @spaces[pn_space]
 
         return false if space.received_packet_numbers.include?(packet_number)
 
-        space.record_received(packet_number, ack_eliciting: ack_eliciting)
+        space.record_received(packet_number, ack_eliciting: ack_eliciting, ecn: ecn)
 
         if ack_eliciting && !space.ack_alarm.active?
           space.ack_alarm.set(MAX_ACK_DELAY / 1000.0)
@@ -89,6 +100,10 @@ module Raiha::Quic
         frame.largest_acknowledged = space.largest_received
         frame.ack_delay = compute_ack_delay(space)
         frame.ack_ranges = ranges
+        # RFC 9000 §19.3.2: include ECN counts (which upgrades the frame to
+        # ACK_ECN, type 0x03) whenever any packet in this space has been
+        # reported as ECT/CE on the receive side.
+        frame.ecn_counts = space.ecn_counts.dup if space.any_ecn_mark?
 
         space.reset_ack_state
 

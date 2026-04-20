@@ -41,7 +41,7 @@ module Raiha
     def initiate_path_validation: -> String
     def peer_path_validated?: -> bool
     def peer_connection_ids: -> Array[Hash[Symbol, untyped]]
-    def handle_packet: (String data) -> void
+    def handle_packet: (String data, ?ecn: Symbol) -> void
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool
@@ -49,8 +49,8 @@ module Raiha
     def closing?: -> bool
 
     private def setup_components: -> void
-    private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
-    private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer) -> void
+    private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> void
+    private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> void
     private def decode_packet_number: (String bytes) -> Integer
     private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame, ?level: Symbol) -> void
     private def decode_ack_delay: (Integer encoded) -> Float

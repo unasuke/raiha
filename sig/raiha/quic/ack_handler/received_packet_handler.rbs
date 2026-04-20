@@ -4,7 +4,7 @@ module Raiha::Quic
       MAX_ACK_DELAY: Integer
 
       def initialize: -> void
-      def received_packet: (packet_number: Integer, pn_space: Symbol, ack_eliciting: bool) -> bool
+      def received_packet: (packet_number: Integer, pn_space: Symbol, ack_eliciting: bool, ?ecn: Symbol) -> bool
       def should_send_ack?: (Symbol pn_space) -> bool
       def get_ack_frame: (Symbol pn_space) -> Wire::Frames::AckFrame?
       def get_alarm_timeout: -> Time?

@@ -922,9 +922,13 @@ module Raiha
       reset_idle_timer
     end
 
-    # Process a raw QUIC packet (with header protection and encryption)
-    # A single UDP datagram may contain multiple coalesced QUIC packets (RFC 9000 Section 12.2)
-    def handle_packet(data)
+    # Process a raw QUIC packet (with header protection and encryption).
+    # A single UDP datagram may contain multiple coalesced QUIC packets
+    # (RFC 9000 §12.2). `ecn` is the IP-layer ECN mark observed on the
+    # datagram (:not_ect / :ect0 / :ect1 / :ce) for §13.4 ECN feedback;
+    # the caller is responsible for reading it from the socket via
+    # recvmsg / IPV6_RECVTCLASS. Defaults to :not_ect when absent.
+    def handle_packet(data, ecn: :not_ect)
       return if @state == State::CLOSED
       return if @state == State::DRAINING
 
@@ -957,11 +961,11 @@ module Raiha
         break if first_byte < 0x40
 
         if (first_byte & 0x80) != 0
-          consumed = handle_long_header_packet(remaining, Quic::Wire::Buffer.new(remaining))
+          consumed = handle_long_header_packet(remaining, Quic::Wire::Buffer.new(remaining), ecn: ecn)
           break unless consumed && consumed > 0
           offset += consumed
         else
-          handle_short_header_packet(remaining, Quic::Wire::Buffer.new(remaining))
+          handle_short_header_packet(remaining, Quic::Wire::Buffer.new(remaining), ecn: ecn)
           break # Short header packets are always last in a coalesced datagram
         end
       end
@@ -975,7 +979,7 @@ module Raiha
     end
 
     # Returns the number of bytes consumed, or nil on failure
-    private def handle_long_header_packet(data, buffer)
+    private def handle_long_header_packet(data, buffer, ecn: :not_ect)
       header = Quic::Wire::LongHeader.parse(buffer)
 
       level = case header.packet_type
@@ -1044,7 +1048,8 @@ module Raiha
         @received_packet_handler.received_packet(
           packet_number: packet_number,
           pn_space: level_to_pn_space(level),
-          ack_eliciting: frames.any?(&:ack_eliciting?)
+          ack_eliciting: frames.any?(&:ack_eliciting?),
+          ecn: ecn
         )
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
@@ -1054,7 +1059,7 @@ module Raiha
       total_packet_size
     end
 
-    private def handle_short_header_packet(data, buffer)
+    private def handle_short_header_packet(data, buffer, ecn: :not_ect)
       connection_id_length = @src_connection_id.length
       level = Quic::Handshake::EncryptionLevel::ONE_RTT
 
@@ -1098,7 +1103,8 @@ module Raiha
         @received_packet_handler.received_packet(
           packet_number: packet_number,
           pn_space: level_to_pn_space(level),
-          ack_eliciting: frames.any?(&:ack_eliciting?)
+          ack_eliciting: frames.any?(&:ack_eliciting?),
+          ecn: ecn
         )
         handle_frames(frames, level: level)
       rescue OpenSSL::Cipher::CipherError
