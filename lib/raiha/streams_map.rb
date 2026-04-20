@@ -8,7 +8,7 @@ require_relative "quic/flow_control"
 module Raiha
   class StreamsMap
     def initialize(perspective:, connection_flow_controller:, max_streams_bidi: 0, max_streams_uni: 0, stream_receive_window: 65536)
-      @perspective = perspective
+      @perspective = Quic::Protocol::Perspective.coerce(perspective)
       @connection_flow_controller = connection_flow_controller
       @stream_receive_window = stream_receive_window
 
@@ -20,8 +20,8 @@ module Raiha
         max_uni: max_streams_uni
       )
 
-      @next_bidi_stream_id = @perspective == Quic::Protocol::Perspective::CLIENT ? 0 : 1
-      @next_uni_stream_id = @perspective == Quic::Protocol::Perspective::CLIENT ? 2 : 3
+      @next_bidi_stream_id = @perspective.client? ? 0 : 1
+      @next_uni_stream_id = @perspective.client? ? 2 : 3
     end
 
     def open_bidirectional_stream

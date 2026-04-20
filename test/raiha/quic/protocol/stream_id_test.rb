@@ -59,7 +59,7 @@ class RaihaQuicProtocolStreamIDTest < Minitest::Test
   end
 
   def test_initiator
-    assert_equal :client, Raiha::Quic::Protocol::StreamID.new(0).initiator
-    assert_equal :server, Raiha::Quic::Protocol::StreamID.new(1).initiator
+    assert Raiha::Quic::Protocol::StreamID.new(0).initiator.client?
+    assert Raiha::Quic::Protocol::StreamID.new(1).initiator.server?
   end
 end

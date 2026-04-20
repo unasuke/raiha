@@ -689,10 +689,12 @@ class RaihaConnectionTest < Minitest::Test
 
   def test_perspective
     client_connection = create_connection(perspective: :client)
-    assert_equal :client, client_connection.perspective
+    assert client_connection.perspective.client?
+    refute client_connection.perspective.server?
 
     server_connection = create_connection(perspective: :server)
-    assert_equal :server, server_connection.perspective
+    assert server_connection.perspective.server?
+    refute server_connection.perspective.client?
   end
 
   private def create_connection(perspective: :client, transport_parameters: nil)

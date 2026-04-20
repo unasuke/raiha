@@ -15,7 +15,7 @@ module Raiha::Quic
       attr_reader :key_phase
 
       def initialize(client_secret:, server_secret:, perspective:, cipher_suite:)
-        @perspective = perspective
+        @perspective = Protocol::Perspective.coerce(perspective)
         @cipher_suite = cipher_suite
         @key_phase = false
 
@@ -99,11 +99,11 @@ module Raiha::Quic
       end
 
       private def send_secret
-        @perspective == Protocol::Perspective::CLIENT ? @current_client_secret : @current_server_secret
+        @perspective.client? ? @current_client_secret : @current_server_secret
       end
 
       private def receive_secret
-        @perspective == Protocol::Perspective::CLIENT ? @current_server_secret : @current_client_secret
+        @perspective.client? ? @current_server_secret : @current_client_secret
       end
 
       private def send_key_iv

@@ -8,9 +8,9 @@ module Raiha::Quic
       def server_initiated?: -> bool
       def bidirectional?: -> bool
       def unidirectional?: -> bool
-      def initiator: -> Symbol
-      def self.next_bidirectional: (Symbol perspective, Integer? current_max) -> StreamID
-      def self.next_unidirectional: (Symbol perspective, Integer? current_max) -> StreamID
+      def initiator: -> Perspective
+      def self.next_bidirectional: (Perspective | Symbol perspective, Integer? current_max) -> StreamID
+      def self.next_unidirectional: (Perspective | Symbol perspective, Integer? current_max) -> StreamID
       def ==: (untyped other) -> bool
       def hash: -> Integer
       def to_i: -> Integer

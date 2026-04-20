@@ -1,12 +1,23 @@
 module Raiha::Quic
   module Protocol
-    module Perspective
-      CLIENT: Symbol
-      SERVER: Symbol
+    class Perspective
+      CLIENT_VALUE: Symbol
+      SERVER_VALUE: Symbol
+      VALID_VALUES: Array[Symbol]
+      CLIENT: Perspective
+      SERVER: Perspective
 
-      def self.opposite: (Symbol perspective) -> Symbol
-      def self.client?: (Symbol perspective) -> bool
-      def self.server?: (Symbol perspective) -> bool
+      attr_reader value: Symbol
+
+      def initialize: (Symbol value) -> void
+      def client?: -> bool
+      def server?: -> bool
+      def opposite: -> Perspective
+      def ==: (untyped other) -> bool
+      def to_s: -> String
+      def inspect: -> String
+
+      def self.coerce: (Perspective | Symbol input) -> Perspective
     end
   end
 end

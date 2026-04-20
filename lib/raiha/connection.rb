@@ -40,7 +40,7 @@ module Raiha
     attr_reader :peer_issued_token
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
-      @perspective = perspective
+      @perspective = Quic::Protocol::Perspective.coerce(perspective)
       @src_connection_id = src_connection_id
       @dest_connection_id = dest_connection_id
       @state = State::HANDSHAKING
@@ -156,7 +156,7 @@ module Raiha
       encoded_packet_number = encode_packet_number(packet_number.value)
 
       # For Initial packets from client, pad to minimum size
-      should_pad = pad_to_min || (level == Quic::Handshake::EncryptionLevel::INITIAL && @perspective == :client)
+      should_pad = pad_to_min || (level == Quic::Handshake::EncryptionLevel::INITIAL && @perspective.client?)
       if should_pad
         header_bytes_estimate = build_header(level, encoded_packet_number, 0)
         overhead = header_bytes_estimate.bytesize + encoded_packet_number.bytesize + 16 # AEAD tag
@@ -366,7 +366,7 @@ module Raiha
     private def emit_datagram(datagrams, datagram)
       return if datagram.empty?
 
-      if @perspective == Quic::Protocol::Perspective::SERVER && !@address_validated
+      if @perspective.server? && !@address_validated
         budget = 3 * @bytes_received_from_peer - @bytes_sent_to_peer
         return if datagram.bytesize > budget
       end
@@ -498,7 +498,7 @@ module Raiha
     # this library does not prescribe the token format, so the caller is
     # responsible for generating and later validating it.
     def send_new_token(token)
-      raise Raiha::Error, "NEW_TOKEN may only be sent by the server" unless @perspective == Quic::Protocol::Perspective::SERVER
+      raise Raiha::Error, "NEW_TOKEN may only be sent by the server" unless @perspective.server?
 
       @pending_new_tokens ||= [] #: Array[String]
       @pending_new_tokens << token
@@ -571,7 +571,7 @@ module Raiha
       # direction (peer → client is legal). Servers MUST treat receipt of
       # NEW_TOKEN as a PROTOCOL_VIOLATION; we silently drop it for now
       # until the transport-error emission path exists.
-      return unless @perspective == Quic::Protocol::Perspective::CLIENT
+      return unless @perspective.client?
 
       @peer_issued_token = frame.token
     end
@@ -603,7 +603,7 @@ module Raiha
       # RFC 9000 §19.20: the server MUST signal handshake completion with a
       # HANDSHAKE_DONE frame, which is the client's cue to discard Initial
       # and Handshake keys.
-      queue_handshake_done if @perspective == Quic::Protocol::Perspective::SERVER
+      queue_handshake_done if @perspective.server?
     end
 
     private def queue_handshake_done
@@ -926,10 +926,10 @@ module Raiha
 
     # Update connection IDs when receiving the first Initial packet from the peer.
     private def update_connection_ids_from_initial(header)
-      if @perspective == :client && header.source_connection_id
+      if @perspective.client? && header.source_connection_id
         # RFC 9000 Section 7.2: client updates DCID to server's SCID
         @dest_connection_id = header.source_connection_id
-      elsif @perspective == :server && !@initial_keys_rederived
+      elsif @perspective.server? && !@initial_keys_rederived
         @dest_connection_id = header.source_connection_id if header.source_connection_id
         # RFC 9000 Section 7.3: record original DCID for transport parameters validation
         @transport_parameters.original_destination_connection_id = header.destination_connection_id.serialize

@@ -20,7 +20,7 @@ module Raiha::Quic
       attr_reader :perspective
 
       def initialize(perspective:, connection_id:, version: Protocol::Version::V1)
-        @perspective = perspective
+        @perspective = Protocol::Perspective.coerce(perspective)
         @version = version
         @handshake_complete = false
 

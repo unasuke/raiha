@@ -24,7 +24,7 @@ module Raiha::Quic
       attr_reader :client_hp_key, :server_hp_key
 
       def initialize(connection_id:, perspective:, version: Protocol::Version::V1)
-        @perspective = perspective
+        @perspective = Protocol::Perspective.coerce(perspective)
 
         initial_salt = version == Protocol::Version::V2 ? INITIAL_SALT_V2 : INITIAL_SALT_V1
         initial_secret = OpenSSL::HMAC.digest("SHA256", initial_salt, connection_id.bytes)
@@ -88,7 +88,7 @@ module Raiha::Quic
       end
 
       private def send_key_iv
-        if @perspective == Protocol::Perspective::CLIENT
+        if @perspective.client?
           [@client_key, @client_iv]
         else
           [@server_key, @server_iv]
@@ -96,7 +96,7 @@ module Raiha::Quic
       end
 
       private def receive_key_iv
-        if @perspective == Protocol::Perspective::CLIENT
+        if @perspective.client?
           [@server_key, @server_iv]
         else
           [@client_key, @client_iv]
@@ -104,11 +104,11 @@ module Raiha::Quic
       end
 
       private def send_hp_key
-        @perspective == Protocol::Perspective::CLIENT ? @client_hp_key : @server_hp_key
+        @perspective.client? ? @client_hp_key : @server_hp_key
       end
 
       private def receive_hp_key
-        @perspective == Protocol::Perspective::CLIENT ? @server_hp_key : @client_hp_key
+        @perspective.client? ? @server_hp_key : @client_hp_key
       end
 
       private def compute_nonce(iv, packet_number)

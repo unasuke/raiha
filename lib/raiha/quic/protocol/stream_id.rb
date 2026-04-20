@@ -37,12 +37,12 @@ module Raiha::Quic
       end
 
       def self.next_bidirectional(perspective, current_max)
-        base = perspective == Perspective::CLIENT ? 0 : 1
+        base = Perspective.coerce(perspective).client? ? 0 : 1
         self.new((current_max || -4) + 4 + base)
       end
 
       def self.next_unidirectional(perspective, current_max)
-        base = perspective == Perspective::CLIENT ? 2 : 3
+        base = Perspective.coerce(perspective).client? ? 2 : 3
         self.new((current_max || -4) + 4 + base)
       end
 

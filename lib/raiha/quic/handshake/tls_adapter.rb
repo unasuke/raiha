@@ -20,11 +20,11 @@ module Raiha::Quic
       attr_reader :tls
 
       def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil, alpn_protocols: nil)
-        @perspective = perspective
+        @perspective = Protocol::Perspective.coerce(perspective)
         @crypto_setup = crypto_setup
         @transport_parameters = transport_parameters
 
-        if perspective == Protocol::Perspective::CLIENT
+        if @perspective.client?
           @tls = Raiha::TLS::Client.new(config: tls_config, server_name: server_name)
         else
           @tls = Raiha::TLS::Server.new(config: tls_config || Raiha::TLS::Config.server_default)
@@ -40,7 +40,7 @@ module Raiha::Quic
 
       # Start the handshake (client sends ClientHello)
       def start
-        return unless @perspective == Protocol::Perspective::CLIENT
+        return unless @perspective.client?
 
         # Build ClientHello via TLS, extract raw handshake bytes from record
         records = @tls.datagrams_to_send
@@ -52,7 +52,7 @@ module Raiha::Quic
 
       # Receive raw TLS handshake data from a CRYPTO frame
       def receive_crypto_data(data, level:)
-        if @perspective == Protocol::Perspective::SERVER
+        if @perspective.server?
           receive_as_server(data, level)
         else
           receive_as_client(data, level)
@@ -69,7 +69,7 @@ module Raiha::Quic
         return @peer_transport_parameters if defined?(@peer_transport_parameters) && @peer_transport_parameters
 
         extensions =
-          if @perspective == Protocol::Perspective::CLIENT
+          if @perspective.client?
             @tls.encrypted_extensions&.extensions
           else
             @tls.client_hello&.extensions
@@ -199,7 +199,7 @@ module Raiha::Quic
 
       private def inject_alpn_extension(protocols)
         ext = Raiha::TLS::Handshake::Extension::ApplicationLayerProtocolNegotiation.new(
-          on: @perspective == Protocol::Perspective::CLIENT ? :client_hello : :encrypted_extensions
+          on: @perspective.client? ? :client_hello : :encrypted_extensions
         )
         ext.protocol_names = protocols
         @tls.additional_extensions << ext
@@ -209,15 +209,11 @@ module Raiha::Quic
         return unless @transport_parameters
 
         ext = Raiha::TLS::Handshake::Extension::QuicTransportParameters.new(
-          on: @perspective == Protocol::Perspective::CLIENT ? :client_hello : :encrypted_extensions
+          on: @perspective.client? ? :client_hello : :encrypted_extensions
         )
         ext.transport_parameters_data = @transport_parameters.serialize
 
-        if @perspective == Protocol::Perspective::CLIENT
-          @tls.additional_extensions << ext
-        else
-          @tls.additional_extensions << ext
-        end
+        @tls.additional_extensions << ext
       end
 
       private def check_key_derivation

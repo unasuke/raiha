@@ -2,24 +2,37 @@ require "test_helper"
 require "raiha/quic/protocol"
 
 class RaihaQuicProtocolPerspectiveTest < Minitest::Test
-  def test_opposite
-    assert_equal :server, Raiha::Quic::Protocol::Perspective.opposite(:client)
-    assert_equal :client, Raiha::Quic::Protocol::Perspective.opposite(:server)
+  Perspective = Raiha::Quic::Protocol::Perspective
+
+  def test_client_and_server_predicates
+    assert Perspective::CLIENT.client?
+    refute Perspective::CLIENT.server?
+
+    assert Perspective::SERVER.server?
+    refute Perspective::SERVER.client?
   end
 
-  def test_opposite_invalid
-    assert_raises(ArgumentError) do
-      Raiha::Quic::Protocol::Perspective.opposite(:invalid)
-    end
+  def test_opposite_flips_role
+    assert_equal Perspective::SERVER, Perspective::CLIENT.opposite
+    assert_equal Perspective::CLIENT, Perspective::SERVER.opposite
   end
 
-  def test_client?
-    assert Raiha::Quic::Protocol::Perspective.client?(:client)
-    refute Raiha::Quic::Protocol::Perspective.client?(:server)
+  def test_coerce_accepts_symbol
+    assert_equal Perspective::CLIENT, Perspective.coerce(:client)
+    assert_equal Perspective::SERVER, Perspective.coerce(:server)
   end
 
-  def test_server?
-    assert Raiha::Quic::Protocol::Perspective.server?(:server)
-    refute Raiha::Quic::Protocol::Perspective.server?(:client)
+  def test_coerce_idempotent_on_existing_instance
+    assert_same Perspective::CLIENT, Perspective.coerce(Perspective::CLIENT)
+  end
+
+  def test_coerce_rejects_invalid_input
+    assert_raises(ArgumentError) { Perspective.coerce(:invalid) }
+    assert_raises(ArgumentError) { Perspective.coerce("client") }
+  end
+
+  def test_equality_with_symbol
+    assert_equal Perspective::CLIENT, :client
+    refute_equal Perspective::CLIENT, :server
   end
 end
