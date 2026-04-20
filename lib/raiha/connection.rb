@@ -706,6 +706,15 @@ module Raiha
       end
 
       stream = @streams.get_stream(frame.stream_id)
+
+      # RFC 9000 §19.5: STOP_SENDING targeting a locally-initiated stream
+      # we have not yet opened is STREAM_STATE_ERROR.
+      if stream.nil? && stream_id.initiator == @perspective
+        raise Quic::Qerr::StreamStateError.new(
+          frame_type: Quic::Wire::Frame::Type::STOP_SENDING,
+          reason_phrase: "STOP_SENDING for a locally-initiated stream that has not been created"
+        )
+      end
       return unless stream
 
       stream.handle_stop_sending(frame.application_protocol_error_code)

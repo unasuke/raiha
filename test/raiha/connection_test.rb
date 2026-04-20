@@ -774,6 +774,39 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_stream_exceeding_initial_max_streams_raises_stream_limit_error
+    # Configure our local limits to admit only 1 peer-initiated bidi stream.
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.initial_max_streams_bidi = 1
+    transport_parameters.initial_max_streams_uni = 0
+    client = create_connection(perspective: :client, transport_parameters: transport_parameters)
+
+    # Peer-initiated bidi stream id 1 is the first permitted server stream.
+    # Id 5 would be the second, which exceeds initial_max_streams_bidi.
+    frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    frame.stream_id = 5
+    frame.offset = 0
+    frame.data = "nope".b
+    frame.fin = false
+
+    assert_raises(Raiha::Quic::Qerr::StreamLimitError) do
+      client.handle_frames([frame])
+    end
+  end
+
+  def test_stop_sending_on_unopened_locally_initiated_stream_raises_stream_state_error
+    client = create_connection(perspective: :client)
+    # Client-initiated bidi stream id 0 — we (client) would have opened it
+    # but haven't; peer cannot preemptively STOP_SENDING on it.
+    frame = Raiha::Quic::Wire::Frames::StopSendingFrame.new
+    frame.stream_id = 0
+    frame.application_protocol_error_code = 0
+
+    assert_raises(Raiha::Quic::Qerr::StreamStateError) do
+      client.handle_frames([frame])
+    end
+  end
+
   def test_stop_sending_on_peer_initiated_uni_raises_stream_state_error
     client = create_connection(perspective: :client)
     # Server-initiated uni (id = 3 + 4n) is receive-only for us; peer cannot
