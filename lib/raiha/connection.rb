@@ -207,116 +207,128 @@ module Raiha
       build_packet(frames, level: Quic::Handshake::EncryptionLevel::INITIAL)
     end
 
-    # Get all packets ready to send
+    # Build the UDP datagrams ready to go out. Each returned string is a
+    # complete datagram that the caller writes to its socket; a datagram
+    # may carry multiple QUIC packets coalesced together (RFC 9000 §12.2),
+    # with at most one packet per encryption level and the short-header
+    # 1-RTT packet always last.
     def get_packets_to_send
-      packets = [] #: Array[String]
+      datagrams = [] #: Array[String]
 
-      # Check for pending crypto data or ACK at each level
-      [Quic::Handshake::EncryptionLevel::INITIAL,
-       Quic::Handshake::EncryptionLevel::HANDSHAKE,
-       Quic::Handshake::EncryptionLevel::ONE_RTT].each do |level|
-        next unless @crypto_setup.available?(level)
+      initial_packet = build_level_packet(Quic::Handshake::EncryptionLevel::INITIAL)
+      handshake_packet = build_level_packet(Quic::Handshake::EncryptionLevel::HANDSHAKE)
+      one_rtt_packet = build_level_packet(Quic::Handshake::EncryptionLevel::ONE_RTT)
 
-        frames = [] #: Array[Quic::Wire::Frame]
+      datagram = String.new(encoding: "BINARY")
+      datagram << initial_packet if initial_packet
+      datagram << handshake_packet if handshake_packet
+      datagram << one_rtt_packet if one_rtt_packet
 
-        ack_frame = pending_ack_frame(level)
-        frames << ack_frame if ack_frame
+      emit_datagram(datagrams, datagram) unless datagram.empty?
 
-        crypto_data = @crypto_setup.get_crypto_data(level: level)
-        if crypto_data
-          crypto_frame = Quic::Wire::Frames::CryptoFrame.new
-          crypto_frame.offset = 0
-          crypto_frame.data = crypto_data
-          frames << crypto_frame
-        end
+      datagrams
+    end
 
-        next if frames.empty?
+    # Gather every frame queued for `level` and build a single packet
+    # holding all of them. Returns nil if no keys are installed for the
+    # level or nothing is pending.
+    private def build_level_packet(level)
+      return nil unless @crypto_setup.available?(level)
 
-        packet = build_packet(frames, level: level)
-        emit_packet(packets, packet)
+      frames = gather_frames_for(level)
+      return nil if frames.empty?
+
+      build_packet(frames, level: level)
+    end
+
+    private def gather_frames_for(level)
+      frames = [] #: Array[Quic::Wire::Frame]
+
+      ack_frame = pending_ack_frame(level)
+      frames << ack_frame if ack_frame
+
+      crypto_data = @crypto_setup.get_crypto_data(level: level)
+      if crypto_data
+        crypto_frame = Quic::Wire::Frames::CryptoFrame.new
+        crypto_frame.offset = 0
+        crypto_frame.data = crypto_data
+        frames << crypto_frame
       end
 
-      # Check for pending stream data
-      if @crypto_setup.available?(Quic::Handshake::EncryptionLevel::ONE_RTT)
-        @pending_stream_frames&.each do |frame|
-          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
+      return frames unless level == Quic::Handshake::EncryptionLevel::ONE_RTT
+
+      # 1-RTT carries every application-level frame type we emit.
+      gather_one_rtt_frames(frames)
+      frames
+    end
+
+    private def gather_one_rtt_frames(frames)
+      if @pending_stream_frames
+        frames.concat(@pending_stream_frames)
         @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
+      end
 
-        # Tell the peer about new flow-control credits when our receive
-        # windows have advanced enough to need updating (RFC 9000 §4).
-        emit_flow_control_updates(packets)
+      append_flow_control_frames(frames)
 
-        # PATH_RESPONSE must echo back peer's PATH_CHALLENGE data (RFC 9000 §8.2.2).
-        @pending_path_responses&.each do |response|
-          packet = build_packet([response], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
+      if @pending_path_responses
+        frames.concat(@pending_path_responses)
         @pending_path_responses = [] #: Array[Quic::Wire::Frames::PathResponseFrame]
+      end
 
-        # PATH_CHALLENGE initiated from this endpoint to probe the peer's path.
-        @pending_path_challenges.each do |challenge|
-          packet = build_packet([challenge], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
-        @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
+      frames.concat(@pending_path_challenges)
+      @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
 
-        # RETIRE_CONNECTION_ID frames accumulated while processing peer's
-        # NEW_CONNECTION_ID retire_prior_to directives (RFC 9000 §5.1.2).
-        @pending_retire_connection_ids.each do |sequence_number|
-          frame = Quic::Wire::Frames::RetireConnectionIdFrame.new
-          frame.sequence_number = sequence_number
-          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
-        @pending_retire_connection_ids = [] #: Array[Integer]
+      @pending_retire_connection_ids.each do |sequence_number|
+        retire = Quic::Wire::Frames::RetireConnectionIdFrame.new
+        retire.sequence_number = sequence_number
+        frames << retire
+      end
+      @pending_retire_connection_ids = [] #: Array[Integer]
 
-        # Stream aborts: RESET_STREAM (send-side) and STOP_SENDING
-        # (receive-side) queued on individual streams (RFC 9000 §3.5).
-        emit_stream_abort_frames(packets)
+      @streams.each_stream do |stream|
+        reset_frame = stream.take_reset_stream_frame
+        frames << reset_frame if reset_frame
+        stop_frame = stream.take_stop_sending_frame
+        frames << stop_frame if stop_frame
+      end
 
-        # PTO probes (RFC 9002 §6.2.4): one ack-eliciting frame per firing.
-        @pending_ping_frames&.each do |frame|
-          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
+      if @pending_ping_frames
+        frames.concat(@pending_ping_frames)
         @pending_ping_frames = [] #: Array[Quic::Wire::Frames::PingFrame]
+      end
 
-        # Server → client handshake confirmation (RFC 9000 §19.20).
-        if @pending_handshake_done
-          frame = Quic::Wire::Frames::HandshakeDoneFrame.new
-          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-          @pending_handshake_done = false
-        end
+      if @pending_handshake_done
+        frames << Quic::Wire::Frames::HandshakeDoneFrame.new
+        @pending_handshake_done = false
+      end
 
-        # Server → client address-validation tokens (RFC 9000 §19.7).
-        @pending_new_tokens&.each do |token|
-          frame = Quic::Wire::Frames::NewTokenFrame.new
-          frame.token = token
-          packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
+      if @pending_new_tokens
+        @pending_new_tokens.each do |token|
+          nt = Quic::Wire::Frames::NewTokenFrame.new
+          nt.token = token
+          frames << nt
         end
         @pending_new_tokens = [] #: Array[String]
       end
-
-      packets
     end
 
-    private def emit_stream_abort_frames(packets)
-      @streams.each_stream do |stream|
-        reset_frame = stream.take_reset_stream_frame
-        if reset_frame
-          packet = build_packet([reset_frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
+    private def append_flow_control_frames(frames)
+      if @connection_flow_controller.should_send_window_update?
+        new_limit = @connection_flow_controller.get_window_update
+        md = Quic::Wire::Frames::MaxDataFrame.new
+        md.maximum_data = new_limit
+        frames << md
+      end
 
-        stop_frame = stream.take_stop_sending_frame
-        if stop_frame
-          packet = build_packet([stop_frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-          emit_packet(packets, packet)
-        end
+      @streams.each_stream do |stream|
+        fc = stream.flow_controller
+        next unless fc.should_send_window_update?
+
+        new_limit = fc.get_window_update
+        msd = Quic::Wire::Frames::MaxStreamDataFrame.new
+        msd.stream_id = stream.stream_id.value
+        msd.maximum_stream_data = new_limit
+        frames << msd
       end
     end
 
@@ -325,32 +337,6 @@ module Raiha
     # and :stateless_reset_token keys.
     def peer_connection_ids
       @peer_connection_ids.dup
-    end
-
-    # Emit MAX_DATA / MAX_STREAM_DATA frames whenever the connection-level or
-    # any stream's receive window has fallen below the update threshold
-    # (BaseFlowController#should_send_window_update?). Each update frame
-    # goes out in its own 1-RTT packet.
-    private def emit_flow_control_updates(packets)
-      if @connection_flow_controller.should_send_window_update?
-        new_limit = @connection_flow_controller.get_window_update
-        frame = Quic::Wire::Frames::MaxDataFrame.new
-        frame.maximum_data = new_limit
-        packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-        emit_packet(packets, packet)
-      end
-
-      @streams.each_stream do |stream|
-        fc = stream.flow_controller
-        next unless fc.should_send_window_update?
-
-        new_limit = fc.get_window_update
-        frame = Quic::Wire::Frames::MaxStreamDataFrame.new
-        frame.stream_id = stream.stream_id.value
-        frame.maximum_stream_data = new_limit
-        packet = build_packet([frame], level: Quic::Handshake::EncryptionLevel::ONE_RTT)
-        emit_packet(packets, packet)
-      end
     end
 
     # Send a PATH_CHALLENGE with 8 bytes of fresh random data (RFC 9000 §8.2.1).
@@ -371,22 +357,22 @@ module Raiha
       @peer_path_validated
     end
 
-    # Accepts a built packet into the outgoing list if the server's
+    # Accepts a built datagram into the outgoing list if the server's
     # anti-amplification budget permits (RFC 9000 §8.1): prior to address
     # validation, cumulative bytes sent MUST NOT exceed 3x bytes received.
-    # Dropped packets are discarded here; they'll be rebuilt on the next
-    # get_packets_to_send after more peer data grows the budget, or after
-    # the handshake completes and the limit is lifted.
-    private def emit_packet(packets, packet)
-      return unless packet
+    # Dropped datagrams are discarded here; their frames were already
+    # drained from the pending queues, so loss detection will rebuild
+    # them on the next ACK or PTO.
+    private def emit_datagram(datagrams, datagram)
+      return if datagram.empty?
 
       if @perspective == Quic::Protocol::Perspective::SERVER && !@address_validated
         budget = 3 * @bytes_received_from_peer - @bytes_sent_to_peer
-        return if packet.bytesize > budget
+        return if datagram.bytesize > budget
       end
 
-      packets << packet
-      @bytes_sent_to_peer += packet.bytesize
+      datagrams << datagram
+      @bytes_sent_to_peer += datagram.bytesize
     end
 
     # Queue a PATH_RESPONSE carrying the 8-byte challenge received from the peer.

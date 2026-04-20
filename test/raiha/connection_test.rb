@@ -201,6 +201,26 @@ class RaihaConnectionTest < Minitest::Test
     refute connection.draining?
   end
 
+  def test_multiple_one_rtt_frames_coalesce_into_single_datagram
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+
+    # Arrange multiple pending 1-RTT items: stream data, PATH_RESPONSE,
+    # RETIRE_CONNECTION_ID, PING, HANDSHAKE_DONE... pre-coalescing this
+    # would be >=5 separate datagrams; now they all go in one.
+    stream = connection.open_stream(bidirectional: true)
+    connection.send_stream_data(stream.stream_id, "hi".b)
+    connection.send(:queue_path_response, "\x00".b * 8)
+    connection.instance_variable_get(:@pending_retire_connection_ids) << 7
+    connection.send(:on_pto_fired)
+
+    datagrams = connection.get_packets_to_send
+    assert_equal 1, datagrams.length
+    refute_empty datagrams.first
+  end
+
   def test_server_queues_handshake_done_on_complete_handshake
     server = create_connection(perspective: :server)
     refute server.instance_variable_get(:@pending_handshake_done)

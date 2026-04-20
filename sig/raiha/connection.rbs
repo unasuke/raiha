@@ -67,8 +67,11 @@ module Raiha
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
-    private def emit_stream_abort_frames: (Array[String] packets) -> void
-    private def emit_packet: (Array[String] packets, String? packet) -> void
+    private def emit_datagram: (Array[String] datagrams, String datagram) -> void
+    private def build_level_packet: (Symbol level) -> String?
+    private def gather_frames_for: (Symbol level) -> Array[Quic::Wire::Frame]
+    private def gather_one_rtt_frames: (Array[Quic::Wire::Frame] frames) -> void
+    private def append_flow_control_frames: (Array[Quic::Wire::Frame] frames) -> void
     private def enter_draining_state: -> void
     private def enter_closed_state: -> void
     private def reset_idle_timer: -> void
