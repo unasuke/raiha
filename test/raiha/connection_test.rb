@@ -726,6 +726,63 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_stream_data_blocked_emitted_when_stream_send_window_exhausted
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+
+    stream = connection.open_stream(bidirectional: true)
+    # Peer-advertised per-stream window is 0 by default; try to send 10 bytes
+    # so the stream immediately wants to send but can't.
+    stream.write("xxxxxxxxxx".b)
+    refute_nil stream.get_data_to_send(1000).nil? || nil
+    # (above ensures mark_blocked_at fires)
+    stream.get_data_to_send(1000)  # blocked path
+
+    frames = connection.send(:gather_frames_for, Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+    sdb = frames.find { |f| f.is_a?(Raiha::Quic::Wire::Frames::StreamDataBlockedFrame) }
+    refute_nil sdb, "STREAM_DATA_BLOCKED should be queued when stream send_window is exhausted"
+    assert_equal stream.stream_id.value, sdb.stream_id
+  end
+
+  def test_data_blocked_cleared_when_max_data_arrives
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+
+    stream = connection.open_stream(bidirectional: true)
+    stream.write("xxxxxxxxxx".b)
+    stream.get_data_to_send(1000)  # mark blocked at current windows
+
+    # Now peer raises the connection-level window.
+    md_frame = Raiha::Quic::Wire::Frames::MaxDataFrame.new
+    md_frame.maximum_data = 1_000_000
+    connection.handle_frames([md_frame])
+
+    cfc = connection.instance_variable_get(:@connection_flow_controller)
+    refute cfc.pending_blocked_signal?
+  end
+
+  def test_streams_blocked_emitted_when_local_opens_exceed_peer_limit
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 1)  # peer allows 1 bidi stream
+
+    connection.open_stream(bidirectional: true)  # ok
+    assert_raises(Raiha::Quic::Qerr::StreamLimitError) do
+      connection.open_stream(bidirectional: true)  # blocked
+    end
+
+    frames = connection.send(:gather_frames_for, Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+    sb = frames.find { |f| f.is_a?(Raiha::Quic::Wire::Frames::StreamsBlockedFrame) }
+    refute_nil sb
+    assert sb.bidirectional
+    assert_equal 1, sb.maximum_streams
+  end
+
   def test_max_stream_data_on_receive_only_stream_raises_stream_state_error
     client = create_connection(perspective: :client)
     # Server-initiated uni (id = 3) is receive-only for a client; peer has

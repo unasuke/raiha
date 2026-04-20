@@ -20,6 +20,10 @@ module Raiha::Quic
       def get_window_update: -> Integer
       def blocked?: -> bool
       def can_send?: (Integer count) -> bool
+      def mark_blocked_at: (Integer limit) -> void
+      def at_send_limit?: -> bool
+      def pending_blocked_signal?: -> bool
+      def take_blocked_signal: -> Integer?
 
       private def initial_receive_window: -> Integer
     end

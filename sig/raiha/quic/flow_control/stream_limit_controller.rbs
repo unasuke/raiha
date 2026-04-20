@@ -9,6 +9,10 @@ module Raiha::Quic
       def update_peer_max_bidi: (Integer max) -> void
       def update_peer_max_uni: (Integer max) -> void
       def accept_stream: (Protocol::StreamID stream_id) -> void
+      def pending_bidi_blocked_signal?: -> bool
+      def pending_uni_blocked_signal?: -> bool
+      def take_bidi_blocked_signal: -> Integer?
+      def take_uni_blocked_signal: -> Integer?
     end
   end
 end

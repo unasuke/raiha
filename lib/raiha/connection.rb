@@ -388,6 +388,41 @@ module Raiha
         msd.maximum_stream_data = new_limit
         frames << msd
       end
+
+      # Flip side: signal to the peer when we have data to send but flow
+      # control is holding us back (RFC 9000 §19.12 / §19.13). The limit
+      # value is whatever send_window value capped us.
+      if @connection_flow_controller.pending_blocked_signal?
+        db = Quic::Wire::Frames::DataBlockedFrame.new
+        db.maximum_data = @connection_flow_controller.take_blocked_signal
+        frames << db
+      end
+
+      @streams.each_stream do |stream|
+        fc = stream.flow_controller
+        next unless fc.pending_blocked_signal?
+
+        sdb = Quic::Wire::Frames::StreamDataBlockedFrame.new
+        sdb.stream_id = stream.stream_id.value
+        sdb.maximum_stream_data = fc.take_blocked_signal
+        frames << sdb
+      end
+
+      # STREAMS_BLOCKED (RFC 9000 §19.14): we tried to open a new stream
+      # but the peer's max_streams limit stopped us.
+      limits = @streams.stream_limit_controller
+      if limits.pending_bidi_blocked_signal?
+        sb = Quic::Wire::Frames::StreamsBlockedFrame.new
+        sb.bidirectional = true
+        sb.maximum_streams = limits.take_bidi_blocked_signal
+        frames << sb
+      end
+      if limits.pending_uni_blocked_signal?
+        sb = Quic::Wire::Frames::StreamsBlockedFrame.new
+        sb.bidirectional = false
+        sb.maximum_streams = limits.take_uni_blocked_signal
+        frames << sb
+      end
     end
 
     # Peer-supplied alternate connection IDs we may route to (RFC 9000 §5.1).

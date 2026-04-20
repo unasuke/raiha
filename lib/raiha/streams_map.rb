@@ -85,6 +85,10 @@ module Raiha
       @stream_limit.update_peer_max_uni(max)
     end
 
+    def stream_limit_controller
+      @stream_limit
+    end
+
     private def create_stream(stream_id)
       flow_controller = Quic::FlowControl::StreamFlowController.new(
         stream_id: stream_id,

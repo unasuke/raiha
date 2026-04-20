@@ -225,7 +225,16 @@ module Raiha
 
       allowed = @flow_controller.send_window_size
       bytes_to_send = [max_bytes, allowed, @send_buffer.pending_bytes].min
-      return nil if bytes_to_send == 0
+      if bytes_to_send == 0
+        # We have data queued but flow control is refusing the send.
+        # Mark whichever limit is actually capping us so the connection
+        # emits a STREAM_DATA_BLOCKED or DATA_BLOCKED frame (RFC 9000
+        # §19.12 / §19.13).
+        @flow_controller.mark_blocked_at(@flow_controller.send_window) if @flow_controller.at_send_limit?
+        conn_fc = @flow_controller.connection_flow_controller
+        conn_fc.mark_blocked_at(conn_fc.send_window) if conn_fc.at_send_limit?
+        return nil
+      end
 
       data = @send_buffer.pop(bytes_to_send)
       @flow_controller.add_bytes_sent(data.bytesize)

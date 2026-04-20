@@ -12,6 +12,7 @@ module Raiha
     def active_streams_count: -> Integer
     def update_peer_max_streams_bidi: (Integer max) -> void
     def update_peer_max_streams_uni: (Integer max) -> void
+    def stream_limit_controller: -> Quic::FlowControl::StreamLimitController
 
     private def create_stream: (Quic::Protocol::StreamID stream_id) -> Stream
   end
