@@ -52,6 +52,7 @@ module Raiha
     private def decode_ack_delay: (Integer encoded) -> Float
     private def pending_ack_frame: (Symbol level) -> Quic::Wire::Frames::AckFrame?
     private def apply_peer_transport_parameters: -> void
+    private def known_peer_reset_tokens: -> Array[String]
     private def update_connection_ids_from_initial: (Quic::Wire::LongHeader header) -> void
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void

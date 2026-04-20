@@ -170,6 +170,37 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal drain_deadline, connection.next_timer_deadline
   end
 
+  def test_incoming_datagram_with_known_reset_token_enters_draining
+    connection = create_connection
+
+    # Register an alternate CID carrying a known reset token via
+    # NEW_CONNECTION_ID, the same path the peer would use at runtime.
+    token = "STATELESSRESET!!".b
+    frame = Raiha::Quic::Wire::Frames::NewConnectionIdFrame.new
+    frame.sequence_number = 1
+    frame.retire_prior_to = 0
+    frame.connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes(["c1c2c3c4"].pack("H*"))
+    frame.stateless_reset_token = token
+    connection.handle_frames([frame])
+
+    refute connection.draining?
+
+    datagram = ("\x00".b * 20) + token
+    connection.handle_packet(datagram)
+
+    assert connection.draining?
+  end
+
+  def test_incoming_datagram_without_matching_token_is_processed_normally
+    connection = create_connection
+
+    # No peer CIDs registered → no tokens known → normal processing path.
+    datagram = "\x00".b * 50
+    connection.handle_packet(datagram)
+
+    refute connection.draining?
+  end
+
   def test_server_queues_handshake_done_on_complete_handshake
     server = create_connection(perspective: :server)
     refute server.instance_variable_get(:@pending_handshake_done)

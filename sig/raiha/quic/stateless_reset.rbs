@@ -1,0 +1,9 @@
+module Raiha::Quic
+  module StatelessReset
+    TOKEN_LENGTH: Integer
+    MIN_PACKET_LENGTH: Integer
+
+    def self.build: (String token, ?min_size: Integer) -> String
+    def self.match_token?: (String datagram, Array[String] tokens) -> bool
+  end
+end

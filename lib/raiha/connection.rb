@@ -16,6 +16,7 @@ require_relative "quic/ack_handler"
 require_relative "quic/congestion"
 require_relative "quic/flow_control"
 require_relative "quic/timer"
+require_relative "quic/stateless_reset"
 require_relative "qlog"
 
 module Raiha
@@ -630,6 +631,17 @@ module Raiha
       @streams.update_peer_max_streams_bidi(peer_tp.initial_max_streams_bidi) if peer_tp.initial_max_streams_bidi
       @streams.update_peer_max_streams_uni(peer_tp.initial_max_streams_uni) if peer_tp.initial_max_streams_uni
       @connection_flow_controller.update_send_window(peer_tp.initial_max_data) if peer_tp.initial_max_data
+
+      # RFC 9000 §18.2: stateless_reset_token advertises a token for the
+      # connection ID the peer used during the handshake, separate from
+      # any token delivered later via NEW_CONNECTION_ID.
+      @peer_transport_reset_token = peer_tp.stateless_reset_token
+    end
+
+    private def known_peer_reset_tokens
+      tokens = @peer_connection_ids.map { |entry| entry[:stateless_reset_token] }.compact
+      tokens << @peer_transport_reset_token if @peer_transport_reset_token
+      tokens
     end
 
     def handshake_complete?
@@ -758,6 +770,15 @@ module Raiha
     # A single UDP datagram may contain multiple coalesced QUIC packets (RFC 9000 Section 12.2)
     def handle_packet(data)
       return if @state == State::CLOSED
+
+      # RFC 9000 §10.3.1: check the final 16 bytes of the datagram against
+      # any stateless reset tokens the peer has advertised. A match means
+      # the peer has lost connection state and is asking us to abandon it
+      # immediately — enter draining and stop processing.
+      if Quic::StatelessReset.match_token?(data, known_peer_reset_tokens)
+        enter_draining_state
+        return
+      end
 
       @bytes_received_from_peer += data.bytesize
 
