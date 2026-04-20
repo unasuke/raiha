@@ -2,6 +2,7 @@
 
 require_relative "../varint"
 require_relative "../wire/buffer"
+require_relative "../qerr/transport_error"
 
 module Raiha::Quic
   module Handshake
@@ -89,6 +90,48 @@ module Raiha::Quic
         serialize_bytes_param(buf, :retry_source_connection_id, @retry_source_connection_id)
 
         buf.to_s
+      end
+
+      # Apply RFC 9000 §18.2 validity checks on parameter values received
+      # from the peer. Raises Qerr::TransportParameterError so the
+      # caller (Connection) can turn it into a CONNECTION_CLOSE.
+      def validate_peer!
+        if @max_udp_payload_size && @max_udp_payload_size < 1200
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "max_udp_payload_size must be at least 1200 (RFC 9000 §18.2)"
+          )
+        end
+
+        if @ack_delay_exponent && @ack_delay_exponent > 20
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "ack_delay_exponent must not exceed 20 (RFC 9000 §18.2)"
+          )
+        end
+
+        # max_ack_delay is encoded in milliseconds; RFC caps it just below 2^14.
+        if @max_ack_delay && @max_ack_delay >= (1 << 14)
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "max_ack_delay must be less than 2^14 (RFC 9000 §18.2)"
+          )
+        end
+
+        if @active_connection_id_limit && @active_connection_id_limit < 2
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "active_connection_id_limit must be at least 2 (RFC 9000 §18.2)"
+          )
+        end
+
+        if @initial_max_streams_bidi && @initial_max_streams_bidi > (1 << 60)
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "initial_max_streams_bidi exceeds 2^60 (RFC 9000 §4.6)"
+          )
+        end
+
+        if @initial_max_streams_uni && @initial_max_streams_uni > (1 << 60)
+          raise Raiha::Quic::Qerr::TransportParameterError.new(
+            "initial_max_streams_uni exceeds 2^60 (RFC 9000 §4.6)"
+          )
+        end
       end
 
       def self.deserialize(data)

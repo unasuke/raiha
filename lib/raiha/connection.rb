@@ -743,6 +743,8 @@ module Raiha
       peer_tp = @tls_adapter.peer_transport_parameters
       return unless peer_tp
 
+      peer_tp.validate_peer!
+
       @streams.update_peer_max_streams_bidi(peer_tp.initial_max_streams_bidi) if peer_tp.initial_max_streams_bidi
       @streams.update_peer_max_streams_uni(peer_tp.initial_max_streams_uni) if peer_tp.initial_max_streams_uni
       @connection_flow_controller.update_send_window(peer_tp.initial_max_data) if peer_tp.initial_max_data

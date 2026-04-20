@@ -23,6 +23,7 @@ module Raiha::Quic
 
       def initialize: -> void
       def serialize: -> String
+      def validate_peer!: -> void
       def self.deserialize: (String data) -> TransportParameters
 
       private def serialize_varint_param: (Wire::Buffer buf, Symbol name, Integer? value) -> void

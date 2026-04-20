@@ -67,4 +67,43 @@ class RaihaQuicHandshakeTransportParametersTest < Minitest::Test
 
     assert_equal "\x00" * 16, parsed.stateless_reset_token
   end
+
+  def test_validate_peer_accepts_defaults
+    Raiha::Quic::Handshake::TransportParameters.new.validate_peer!
+  end
+
+  def test_validate_peer_rejects_small_max_udp_payload_size
+    params = Raiha::Quic::Handshake::TransportParameters.new
+    params.max_udp_payload_size = 1199
+
+    assert_raises(Raiha::Quic::Qerr::TransportParameterError) { params.validate_peer! }
+  end
+
+  def test_validate_peer_rejects_ack_delay_exponent_above_20
+    params = Raiha::Quic::Handshake::TransportParameters.new
+    params.ack_delay_exponent = 21
+
+    assert_raises(Raiha::Quic::Qerr::TransportParameterError) { params.validate_peer! }
+  end
+
+  def test_validate_peer_rejects_max_ack_delay_at_or_above_2_to_14
+    params = Raiha::Quic::Handshake::TransportParameters.new
+    params.max_ack_delay = 1 << 14
+
+    assert_raises(Raiha::Quic::Qerr::TransportParameterError) { params.validate_peer! }
+  end
+
+  def test_validate_peer_rejects_active_connection_id_limit_below_2
+    params = Raiha::Quic::Handshake::TransportParameters.new
+    params.active_connection_id_limit = 1
+
+    assert_raises(Raiha::Quic::Qerr::TransportParameterError) { params.validate_peer! }
+  end
+
+  def test_validate_peer_rejects_excessive_initial_max_streams_bidi
+    params = Raiha::Quic::Handshake::TransportParameters.new
+    params.initial_max_streams_bidi = (1 << 60) + 1
+
+    assert_raises(Raiha::Quic::Qerr::TransportParameterError) { params.validate_peer! }
+  end
 end
