@@ -88,6 +88,6 @@ jobs:
         id: picotls-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: tmp/picotls/cli/picotls
+          path: tmp/picotls/cli
           key: picotls-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - run: bundle exec rake test:interop:picotls

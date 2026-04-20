@@ -9,7 +9,7 @@ require "tempfile"
 class RaihaTLSPicotlsIntegrationTest < Minitest::Test
   include TestCertificate
 
-  PICOTLS = File.expand_path("../../../tmp/picotls/cli/picotls", __dir__)
+  PICOTLS = File.expand_path("../../../tmp/picotls/cli", __dir__)
 
   def setup
     skip "picotls binary not found at #{PICOTLS}" unless File.executable?(PICOTLS)
