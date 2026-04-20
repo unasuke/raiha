@@ -60,6 +60,7 @@ module Raiha
     private def update_connection_ids_from_initial: (Quic::Wire::LongHeader header) -> void
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void
     private def handle_stream_frame: (Quic::Wire::Frames::StreamFrame frame) -> void
+    private def handle_max_stream_data_frame: (Quic::Wire::Frames::MaxStreamDataFrame frame) -> void
     private def queue_path_response: (String challenge_data) -> void
     private def handle_path_response: (String response_data) -> void
     private def handle_new_connection_id: (Quic::Wire::Frames::NewConnectionIdFrame frame) -> void

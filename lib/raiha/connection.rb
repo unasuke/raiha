@@ -74,7 +74,7 @@ module Raiha
         when Quic::Wire::Frames::MaxDataFrame
           @connection_flow_controller.update_send_window(frame.maximum_data)
         when Quic::Wire::Frames::MaxStreamDataFrame
-          @streams.get_stream(frame.stream_id)&.update_send_window(frame.maximum_stream_data)
+          handle_max_stream_data_frame(frame)
         when Quic::Wire::Frames::MaxStreamsFrame
           if frame.bidirectional
             @streams.update_peer_max_streams_bidi(frame.maximum_streams)
@@ -512,8 +512,14 @@ module Raiha
 
     # Queue stream data for sending as a 1-RTT STREAM frame
     def send_stream_data(stream_id, data, offset: 0, fin: false)
+      stream_id_value = stream_id.is_a?(Integer) ? stream_id : stream_id.value
+      sid = Quic::Protocol::StreamID.new(stream_id_value)
+      unless sid.writable_by?(@perspective)
+        raise ArgumentError, "stream #{stream_id_value} is not writable by this endpoint"
+      end
+
       stream_frame = Quic::Wire::Frames::StreamFrame.new
-      stream_frame.stream_id = stream_id.is_a?(Integer) ? stream_id : stream_id.value
+      stream_frame.stream_id = stream_id_value
       stream_frame.offset = offset
       stream_frame.data = data
       stream_frame.fin = fin
@@ -650,6 +656,21 @@ module Raiha
       end
 
       @peer_issued_token = frame.token
+    end
+
+    # RFC 9000 §19.10: MAX_STREAM_DATA flows receiver→sender. The peer sends
+    # it when they are the receiver on this stream, so we must be the sender.
+    # A receive-only stream from our perspective is a STREAM_STATE_ERROR.
+    private def handle_max_stream_data_frame(frame)
+      stream_id = Quic::Protocol::StreamID.new(frame.stream_id)
+      unless stream_id.writable_by?(@perspective)
+        raise Quic::Qerr::StreamStateError.new(
+          frame_type: Quic::Wire::Frame::Type::MAX_STREAM_DATA,
+          reason_phrase: "MAX_STREAM_DATA for a receive-only stream"
+        )
+      end
+
+      @streams.get_stream(frame.stream_id)&.update_send_window(frame.maximum_stream_data)
     end
 
     private def handle_reset_stream_frame(frame)

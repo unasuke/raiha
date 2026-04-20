@@ -726,6 +726,27 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_max_stream_data_on_receive_only_stream_raises_stream_state_error
+    client = create_connection(perspective: :client)
+    # Server-initiated uni (id = 3) is receive-only for a client; peer has
+    # no business granting us credit to send on it.
+    frame = Raiha::Quic::Wire::Frames::MaxStreamDataFrame.new
+    frame.stream_id = 3
+    frame.maximum_stream_data = 10_000
+
+    assert_raises(Raiha::Quic::Qerr::StreamStateError) do
+      client.handle_frames([frame])
+    end
+  end
+
+  def test_send_stream_data_on_receive_only_stream_raises_argument_error
+    client = create_connection(perspective: :client)
+    # server-initiated uni, client cannot send on it.
+    assert_raises(ArgumentError) do
+      client.send_stream_data(3, "nope".b)
+    end
+  end
+
   def test_stream_frame_on_locally_initiated_uni_raises_stream_state_error
     client = create_connection(perspective: :client)
     # Client-initiated unidirectional streams use id = 2 + 4n. Peer sending
