@@ -726,6 +726,46 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_stream_frame_on_locally_initiated_uni_raises_stream_state_error
+    client = create_connection(perspective: :client)
+    # Client-initiated unidirectional streams use id = 2 + 4n. Peer sending
+    # STREAM on stream 2 means peer is the sender on our send-only stream.
+    frame = Raiha::Quic::Wire::Frames::StreamFrame.new
+    frame.stream_id = 2
+    frame.offset = 0
+    frame.data = "no".b
+    frame.fin = false
+
+    assert_raises(Raiha::Quic::Qerr::StreamStateError) do
+      client.handle_frames([frame])
+    end
+  end
+
+  def test_reset_stream_on_locally_initiated_uni_raises_stream_state_error
+    client = create_connection(perspective: :client)
+    frame = Raiha::Quic::Wire::Frames::ResetStreamFrame.new
+    frame.stream_id = 2  # client-initiated uni
+    frame.application_protocol_error_code = 0
+    frame.final_size = 0
+
+    assert_raises(Raiha::Quic::Qerr::StreamStateError) do
+      client.handle_frames([frame])
+    end
+  end
+
+  def test_stop_sending_on_peer_initiated_uni_raises_stream_state_error
+    client = create_connection(perspective: :client)
+    # Server-initiated uni (id = 3 + 4n) is receive-only for us; peer cannot
+    # ask us to stop sending on a stream we never send on.
+    frame = Raiha::Quic::Wire::Frames::StopSendingFrame.new
+    frame.stream_id = 3
+    frame.application_protocol_error_code = 0
+
+    assert_raises(Raiha::Quic::Qerr::StreamStateError) do
+      client.handle_frames([frame])
+    end
+  end
+
   def test_handle_packet_converts_transport_error_to_connection_close
     connection = create_connection
 

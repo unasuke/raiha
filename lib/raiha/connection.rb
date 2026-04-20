@@ -653,6 +653,17 @@ module Raiha
     end
 
     private def handle_reset_stream_frame(frame)
+      # RFC 9000 §3.5: RESET_STREAM flows sender→receiver. Receiving it on a
+      # stream where we are the sender (a locally-initiated unidirectional
+      # stream) is a STREAM_STATE_ERROR.
+      stream_id = Quic::Protocol::StreamID.new(frame.stream_id)
+      unless stream_id.readable_by?(@perspective)
+        raise Quic::Qerr::StreamStateError.new(
+          frame_type: Quic::Wire::Frame::Type::RESET_STREAM,
+          reason_phrase: "RESET_STREAM on a locally-initiated unidirectional stream"
+        )
+      end
+
       stream = @streams.get_or_create_stream(frame.stream_id)
       stream.handle_reset_stream(
         error_code: frame.application_protocol_error_code,
@@ -661,6 +672,18 @@ module Raiha
     end
 
     private def handle_stop_sending_frame(frame)
+      # RFC 9000 §3.5: STOP_SENDING flows receiver→sender. The peer sends it
+      # when they are the receiver on this stream, so we must be the sender
+      # — a peer-initiated unidirectional stream (where peer is sender) is
+      # a STREAM_STATE_ERROR.
+      stream_id = Quic::Protocol::StreamID.new(frame.stream_id)
+      unless stream_id.writable_by?(@perspective)
+        raise Quic::Qerr::StreamStateError.new(
+          frame_type: Quic::Wire::Frame::Type::STOP_SENDING,
+          reason_phrase: "STOP_SENDING on a peer-initiated unidirectional stream"
+        )
+      end
+
       stream = @streams.get_stream(frame.stream_id)
       return unless stream
 
@@ -1075,6 +1098,17 @@ module Raiha
     end
 
     private def handle_stream_frame(frame)
+      # RFC 9000 §3.5: STREAM frames flow sender→receiver, so a STREAM frame
+      # from the peer on a locally-initiated unidirectional stream (one we
+      # can only send on) is a STREAM_STATE_ERROR.
+      stream_id = Quic::Protocol::StreamID.new(frame.stream_id)
+      unless stream_id.readable_by?(@perspective)
+        raise Quic::Qerr::StreamStateError.new(
+          frame_type: Quic::Wire::Frame::Type::STREAM.first,
+          reason_phrase: "STREAM frame on a locally-initiated unidirectional stream"
+        )
+      end
+
       stream = @streams.get_or_create_stream(frame.stream_id)
       stream.receive_data(frame.offset, frame.data, fin: frame.fin)
     end

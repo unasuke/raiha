@@ -9,6 +9,8 @@ module Raiha::Quic
       def bidirectional?: -> bool
       def unidirectional?: -> bool
       def initiator: -> Perspective
+      def readable_by?: (Perspective | Symbol perspective) -> bool
+      def writable_by?: (Perspective | Symbol perspective) -> bool
       def self.next_bidirectional: (Perspective | Symbol perspective, Integer? current_max) -> StreamID
       def self.next_unidirectional: (Perspective | Symbol perspective, Integer? current_max) -> StreamID
       def ==: (untyped other) -> bool

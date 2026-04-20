@@ -36,6 +36,20 @@ module Raiha::Quic
         client_initiated? ? Perspective::CLIENT : Perspective::SERVER
       end
 
+      # Can the given perspective receive data on this stream (RFC 9000 §2.1)?
+      # Both sides may receive on a bidirectional stream; on a unidirectional
+      # stream only the non-initiator is the receiver.
+      def readable_by?(perspective)
+        return true if bidirectional?
+        Perspective.coerce(perspective) != initiator
+      end
+
+      # Can the given perspective send data on this stream?
+      def writable_by?(perspective)
+        return true if bidirectional?
+        Perspective.coerce(perspective) == initiator
+      end
+
       def self.next_bidirectional(perspective, current_max)
         base = Perspective.coerce(perspective).client? ? 0 : 1
         self.new((current_max || -4) + 4 + base)

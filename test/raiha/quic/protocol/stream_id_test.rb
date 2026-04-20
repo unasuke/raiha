@@ -62,4 +62,30 @@ class RaihaQuicProtocolStreamIDTest < Minitest::Test
     assert Raiha::Quic::Protocol::StreamID.new(0).initiator.client?
     assert Raiha::Quic::Protocol::StreamID.new(1).initiator.server?
   end
+
+  def test_readable_and_writable_by
+    client_bidi = Raiha::Quic::Protocol::StreamID.new(0)
+    server_bidi = Raiha::Quic::Protocol::StreamID.new(1)
+    client_uni = Raiha::Quic::Protocol::StreamID.new(2)
+    server_uni = Raiha::Quic::Protocol::StreamID.new(3)
+
+    # Bidirectional streams are read/write for both sides.
+    [client_bidi, server_bidi].each do |sid|
+      assert sid.readable_by?(:client)
+      assert sid.writable_by?(:client)
+      assert sid.readable_by?(:server)
+      assert sid.writable_by?(:server)
+    end
+
+    # Unidirectional: only the initiator writes; only the non-initiator reads.
+    assert client_uni.writable_by?(:client)
+    refute client_uni.readable_by?(:client)
+    assert client_uni.readable_by?(:server)
+    refute client_uni.writable_by?(:server)
+
+    assert server_uni.writable_by?(:server)
+    refute server_uni.readable_by?(:server)
+    assert server_uni.readable_by?(:client)
+    refute server_uni.writable_by?(:client)
+  end
 end
