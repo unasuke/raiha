@@ -33,10 +33,21 @@ module Raiha::Quic
         @handshake_aead = nil
         @one_rtt_aead = nil
 
+        # Per-level queue of pending outgoing CRYPTO frame payloads, each
+        # tagged with the offset at which it must be placed in the TLS
+        # stream (RFC 9000 §19.6). Entries are dequeued by get_crypto_data
+        # and re-enqueued verbatim when a carrying packet is declared lost.
         @pending_crypto_data = {
-          EncryptionLevel::INITIAL => String.new(encoding: "BINARY"),
-          EncryptionLevel::HANDSHAKE => String.new(encoding: "BINARY"),
-          EncryptionLevel::ONE_RTT => String.new(encoding: "BINARY"),
+          EncryptionLevel::INITIAL => [],
+          EncryptionLevel::HANDSHAKE => [],
+          EncryptionLevel::ONE_RTT => [],
+        } #: Hash[Symbol, Array[{offset: Integer, data: String}]]
+        # Running offset cursor per level: next contiguous TLS-stream byte
+        # index a fresh queue_crypto_data call will claim.
+        @next_crypto_offset = {
+          EncryptionLevel::INITIAL => 0,
+          EncryptionLevel::HANDSHAKE => 0,
+          EncryptionLevel::ONE_RTT => 0,
         }
       end
 
@@ -106,14 +117,38 @@ module Raiha::Quic
 
       # Queue TLS handshake data to send at a specific encryption level
       def queue_crypto_data(data, level:)
-        @pending_crypto_data[level] << data
+        offset = @next_crypto_offset[level]
+        @pending_crypto_data[level] << { offset: offset, data: data }
+        @next_crypto_offset[level] = offset + data.bytesize
       end
 
-      # Get pending crypto data for a specific level
+      # Drain every pending CRYPTO chunk for the level and return the bytes
+      # as a single concatenated String. Preserved for callers that treat
+      # the queue as an opaque byte stream (tests, simple handshake
+      # drivers). Returns nil when no data is pending.
       def get_crypto_data(level:)
-        data = @pending_crypto_data[level]
-        @pending_crypto_data[level] = String.new(encoding: "BINARY")
-        data.empty? ? nil : data
+        chunks = @pending_crypto_data[level]
+        return nil if chunks.empty?
+
+        data = chunks.map { |c| c[:data] }.join.b
+        chunks.clear
+        data
+      end
+
+      # Pop the oldest pending CRYPTO chunk for the level, preserving the
+      # offset it was assigned when queued. Used by Connection to build
+      # one CRYPTO frame per chunk so offsets land correctly on the wire
+      # (RFC 9000 §19.6).
+      def pop_crypto_frame(level:)
+        @pending_crypto_data[level].shift
+      end
+
+      # Re-enqueue a CRYPTO payload at its original offset so it rides the
+      # next flush. Used when the packet carrying it is declared lost
+      # (RFC 9002 §6.3.1). The entry keeps its offset so the peer sees a
+      # contiguous CRYPTO stream even across retransmissions.
+      def requeue_crypto_data(offset:, data:, level:)
+        @pending_crypto_data[level] << { offset: offset, data: data }
       end
 
       # Discard keys for a specific encryption level (after handshake progress)

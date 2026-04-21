@@ -126,6 +126,46 @@ class RaihaQuicHandshakeCryptoSetupTest < Minitest::Test
     assert_nil crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
   end
 
+  def test_pop_crypto_frame_returns_chunks_with_contiguous_offsets
+    crypto_setup = create_crypto_setup(:client)
+    level = Raiha::Quic::Handshake::EncryptionLevel::INITIAL
+
+    crypto_setup.queue_crypto_data("hello".b, level: level)
+    crypto_setup.queue_crypto_data(" world".b, level: level)
+
+    first = crypto_setup.pop_crypto_frame(level: level)
+    assert_equal 0, first[:offset]
+    assert_equal "hello".b, first[:data]
+
+    second = crypto_setup.pop_crypto_frame(level: level)
+    assert_equal 5, second[:offset]
+    assert_equal " world".b, second[:data]
+
+    assert_nil crypto_setup.pop_crypto_frame(level: level)
+  end
+
+  def test_requeue_crypto_data_preserves_original_offset
+    crypto_setup = create_crypto_setup(:client)
+    level = Raiha::Quic::Handshake::EncryptionLevel::INITIAL
+
+    crypto_setup.queue_crypto_data("ABCDE".b, level: level)
+    first = crypto_setup.pop_crypto_frame(level: level)
+
+    # Simulate loss: requeue the dequeued chunk at its original offset.
+    crypto_setup.requeue_crypto_data(offset: first[:offset], data: first[:data], level: level)
+
+    # New data arrives after the lost chunk.
+    crypto_setup.queue_crypto_data("FG".b, level: level)
+
+    re_emitted = crypto_setup.pop_crypto_frame(level: level)
+    assert_equal 0, re_emitted[:offset]
+    assert_equal "ABCDE".b, re_emitted[:data]
+
+    fresh = crypto_setup.pop_crypto_frame(level: level)
+    assert_equal 5, fresh[:offset]
+    assert_equal "FG".b, fresh[:data]
+  end
+
   def test_key_update
     client_secret = OpenSSL::Random.random_bytes(32)
     server_secret = OpenSSL::Random.random_bytes(32)

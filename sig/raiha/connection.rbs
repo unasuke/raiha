@@ -67,7 +67,8 @@ module Raiha
     private def handle_retire_connection_id: (Quic::Wire::Frames::RetireConnectionIdFrame frame) -> void
     private def on_packet_lost: (Quic::AckHandler::SentPacketHandler::SentPacket packet, Symbol pn_space) -> void
     private def on_pto_fired: -> void
-    private def requeue_lost_frame: (Quic::Wire::Frame frame) -> void
+    private def requeue_lost_frame: (Quic::Wire::Frame frame, level: Symbol) -> void
+    private def pn_space_to_level: (Symbol pn_space) -> Symbol
     private def queue_handshake_done: -> void
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void

@@ -305,11 +305,13 @@ module Raiha
       ack_frame = pending_ack_frame(level)
       frames << ack_frame if ack_frame
 
-      crypto_data = @crypto_setup.get_crypto_data(level: level)
-      if crypto_data
+      # Drain every pending CRYPTO payload for this level so a single packet
+      # carries them all at their distinct, contiguous offsets (RFC 9000
+      # §19.6).
+      while (chunk = @crypto_setup.pop_crypto_frame(level: level))
         crypto_frame = Quic::Wire::Frames::CryptoFrame.new
-        crypto_frame.offset = 0
-        crypto_frame.data = crypto_data
+        crypto_frame.offset = chunk[:offset]
+        crypto_frame.data = chunk[:data]
         frames << crypto_frame
       end
 
@@ -637,8 +639,20 @@ module Raiha
     # RFC 9002 §6.3.1: frames carried in a lost packet that were not already
     # acknowledged or superseded need to be retransmitted. Called from
     # SentPacketHandler when the packet threshold declares a loss.
-    private def on_packet_lost(packet, _pn_space)
-      packet.frames.each { |frame| requeue_lost_frame(frame) }
+    private def on_packet_lost(packet, pn_space)
+      level = pn_space_to_level(pn_space)
+      packet.frames.each { |frame| requeue_lost_frame(frame, level: level) }
+    end
+
+    private def pn_space_to_level(pn_space)
+      case pn_space
+      when Quic::Protocol::PacketNumberSpace::INITIAL
+        Quic::Handshake::EncryptionLevel::INITIAL
+      when Quic::Protocol::PacketNumberSpace::HANDSHAKE
+        Quic::Handshake::EncryptionLevel::HANDSHAKE
+      else
+        Quic::Handshake::EncryptionLevel::ONE_RTT
+      end
     end
 
     # RFC 9002 §6.2.4: on PTO expiry, emit one ack-eliciting probe packet to
@@ -649,11 +663,13 @@ module Raiha
       @pending_ping_frames << Quic::Wire::Frames::PingFrame.new
     end
 
-    private def requeue_lost_frame(frame)
+    private def requeue_lost_frame(frame, level:)
       case frame
       when Quic::Wire::Frames::StreamFrame
         @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
         @pending_stream_frames << frame
+      when Quic::Wire::Frames::CryptoFrame
+        @crypto_setup.requeue_crypto_data(offset: frame.offset, data: frame.data, level: level)
       when Quic::Wire::Frames::ResetStreamFrame
         stream = @streams.get_stream(frame.stream_id)
         stream&.requeue_reset_stream_frame
@@ -667,14 +683,14 @@ module Raiha
       when Quic::Wire::Frames::NewTokenFrame
         @pending_new_tokens ||= [] #: Array[String]
         @pending_new_tokens << frame.token
-      # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / CRYPTO / PING /
+      # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / PING /
       # MAX_* / CONNECTION_CLOSE aren't retransmitted here: ACK and
-      # PADDING are never retransmitted; PATH_RESPONSE and CRYPTO have
-      # specialised recovery paths (PATH_CHALLENGE re-initiation, CRYPTO
-      # offset tracking) that are not implemented yet; MAX_* frames are
-      # self-healing because they always carry the latest limit and
-      # re-emit on the next window-update check; PING is produced fresh
-      # by PTO firings, so a lost PING would be replaced by the next PTO.
+      # PADDING are never retransmitted; PATH_RESPONSE is replaced by a
+      # fresh PATH_CHALLENGE round if the peer still needs validation;
+      # MAX_* frames are self-healing because they always carry the
+      # latest limit and re-emit on the next window-update check;
+      # PING is produced fresh by PTO firings, so a lost PING would be
+      # replaced by the next PTO.
       end
     end
 

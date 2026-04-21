@@ -14,6 +14,8 @@ module Raiha::Quic
       def header_protection_mask: (String sample, level: Symbol, ?direction: Symbol) -> String
       def queue_crypto_data: (String data, level: Symbol) -> void
       def get_crypto_data: (level: Symbol) -> String?
+      def pop_crypto_frame: (level: Symbol) -> { offset: Integer, data: String }?
+      def requeue_crypto_data: (offset: Integer, data: String, level: Symbol) -> void
       def discard_keys: (Symbol level) -> void
       def update_keys: -> void
 

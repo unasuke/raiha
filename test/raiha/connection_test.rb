@@ -438,6 +438,31 @@ class RaihaConnectionTest < Minitest::Test
     assert_equal "late".b, pending.first.data
   end
 
+  def test_loss_requeues_crypto_frame_with_original_offset
+    connection = create_connection
+
+    sph = connection.instance_variable_get(:@sent_packet_handler)
+
+    lost_crypto = Raiha::Quic::Wire::Frames::CryptoFrame.new
+    lost_crypto.offset = 100
+    lost_crypto.data = "handshake-bytes".b
+
+    register_sent_packet(sph, pn_value: 0, frames: [lost_crypto])
+    register_sent_packet(sph, pn_value: 1, frames: [])
+    register_sent_packet(sph, pn_value: 2, frames: [])
+    register_sent_packet(sph, pn_value: 3, frames: [])
+
+    ack = build_simple_ack(largest: 3)
+    connection.handle_frames([ack], level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+    # The CryptoSetup now has one pending chunk at the original offset 100.
+    crypto = connection.instance_variable_get(:@crypto_setup)
+    chunk = crypto.pop_crypto_frame(level: Raiha::Quic::Handshake::EncryptionLevel::ONE_RTT)
+    refute_nil chunk
+    assert_equal 100, chunk[:offset]
+    assert_equal "handshake-bytes".b, chunk[:data]
+  end
+
   def test_loss_requeues_reset_stream_frame_on_stream
     connection = create_connection
     enable_one_rtt(connection)
