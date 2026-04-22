@@ -54,8 +54,14 @@ module Raiha::Quic
         [time_threshold * [@smoothed_rtt, @latest_rtt].max, granularity].max
       end
 
+      # Drop every sample and return to the pristine post-construction
+      # state. Used on connection migration (RFC 9000 §9.4) when RTT
+      # observations from the old path no longer describe the new one.
       def reset
         @min_rtt = Float::INFINITY
+        @latest_rtt = 0
+        @smoothed_rtt = INITIAL_RTT
+        @rtt_var = INITIAL_RTT / 2
         @first_sample = true
       end
 

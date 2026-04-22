@@ -36,6 +36,20 @@ module Raiha::Quic
         @bytes_in_flight += bytes
       end
 
+      # Return CUBIC to its initial state. Called on connection migration
+      # (RFC 9000 §9.4) when the old path's RTT / CWND no longer applies
+      # to the new one. Bytes-in-flight is preserved because the in-flight
+      # packets are still outstanding regardless of path.
+      def reset
+        @congestion_window = INITIAL_WINDOW_PACKETS * @max_datagram_size
+        @slow_start_threshold = Float::INFINITY
+        @w_max = 0
+        @k = 0
+        @epoch_start = nil
+        @w_last_max = 0
+        @in_slow_start = true
+      end
+
       def on_packets_acked(packets)
         packets.each do |packet|
           on_packet_acked(packet.size)

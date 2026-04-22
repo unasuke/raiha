@@ -21,6 +21,7 @@ module Raiha::Quic
 
       def initialize: (?max_datagram_size: Integer, ?rtt_stats: RTTStats?) -> void
       def on_packet_sent: (Integer bytes) -> void
+      def reset: -> void
       def on_packets_acked: (Array[untyped] packets) -> void
       def on_packet_lost: (untyped packet) -> void
       def on_ecn_ce: -> void

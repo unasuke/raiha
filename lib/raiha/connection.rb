@@ -487,15 +487,24 @@ module Raiha
     # Match a received PATH_RESPONSE against our outstanding challenges.
     # RFC 9000 §8.2.3: a response with non-matching data is a
     # PROTOCOL_VIOLATION; a matching response validates the current path.
+    # When the matched challenge was sent as part of a migration probe,
+    # RFC 9000 §9.4 additionally requires resetting the congestion
+    # controller and RTT estimator so the new path starts from scratch.
     private def handle_path_response(response_data)
-      if @outstanding_path_challenges.delete(response_data)
-        @peer_path_validated = true
-      else
+      unless @outstanding_path_challenges.delete(response_data)
         close_with_error(
           error_code: Quic::Qerr::TransportErrorCode::PROTOCOL_VIOLATION,
           reason_phrase: "PATH_RESPONSE did not match any outstanding PATH_CHALLENGE",
           frame_type: Quic::Wire::Frame::Type::PATH_RESPONSE
         )
+        return
+      end
+
+      @peer_path_validated = true
+
+      if @migration_challenges.delete(response_data)
+        @congestion_controller.reset if @congestion_controller.respond_to?(:reset)
+        @rtt_stats.reset if @rtt_stats.respond_to?(:reset)
       end
     end
 
@@ -721,9 +730,11 @@ module Raiha
       return unless @state == State::CONNECTED
 
       # Re-validate the new path. On receipt of the matching
-      # PATH_RESPONSE, @peer_path_validated flips true again.
+      # PATH_RESPONSE, @peer_path_validated flips true again and the §9.4
+      # reset fires (see handle_path_response).
       @peer_path_validated = false
-      initiate_path_validation
+      challenge = initiate_path_validation
+      @migration_challenges << challenge
     end
 
     def migration_count
@@ -989,6 +1000,9 @@ module Raiha
       # the validation exchange itself.
       @peer_address = nil #: untyped
       @migration_count = 0
+      # Outstanding PATH_CHALLENGE data we sent as part of a migration
+      # probe. A matching PATH_RESPONSE triggers §9.4 cwnd/RTT reset.
+      @migration_challenges = [] #: Array[String]
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer

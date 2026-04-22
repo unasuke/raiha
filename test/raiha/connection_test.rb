@@ -932,6 +932,61 @@ class RaihaConnectionTest < Minitest::Test
     refute server.peer_path_validated?
   end
 
+  def test_successful_migration_resets_congestion_and_rtt
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+    server.handle_packet("\x40".b + ("\x00".b * 40), peer_address: ["10.0.0.1", 40000])
+
+    cubic = server.instance_variable_get(:@congestion_controller)
+    rtt = server.instance_variable_get(:@rtt_stats)
+
+    # Make sure cubic and rtt have non-default state so we can observe a reset.
+    rtt.update_rtt(0.05, 0.001)
+    packet = Data.define(:size).new(size: 1200)
+    cubic.on_packet_lost(packet)
+    refute cubic.in_slow_start?
+    refute_equal Float::INFINITY, cubic.slow_start_threshold
+
+    # Trigger migration: new peer address.
+    server.handle_packet("\x40".b + ("\x00".b * 40), peer_address: ["10.0.0.2", 40001])
+
+    challenge = server.instance_variable_get(:@migration_challenges).first
+    refute_nil challenge
+
+    # Peer answers the migration PATH_CHALLENGE with the matching data.
+    response = Raiha::Quic::Wire::Frames::PathResponseFrame.new
+    response.data = challenge
+    server.handle_frames([response])
+
+    assert server.peer_path_validated?
+    # §9.4: congestion controller and RTT estimator reset.
+    assert cubic.in_slow_start?
+    assert_equal Float::INFINITY, cubic.slow_start_threshold
+    refute rtt.has_samples?
+  end
+
+  def test_non_migration_path_response_does_not_reset_cubic
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+
+    challenge = server.initiate_path_validation
+    cubic = server.instance_variable_get(:@congestion_controller)
+    # Sanity: the congestion controller starts in slow start; push it out
+    # explicitly so a bogus reset would be observable.
+    packet = Data.define(:size).new(size: 1200)
+    cubic.on_packet_lost(packet)
+    refute cubic.in_slow_start?
+
+    response = Raiha::Quic::Wire::Frames::PathResponseFrame.new
+    response.data = challenge
+    server.handle_frames([response])
+
+    # Non-migration validation leaves congestion state alone.
+    refute cubic.in_slow_start?
+  end
+
   def test_peer_address_change_without_peer_address_arg_is_a_noop
     server = create_connection(perspective: :server)
     enable_one_rtt(server)
