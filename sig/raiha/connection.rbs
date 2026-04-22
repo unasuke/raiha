@@ -16,6 +16,7 @@ module Raiha
     attr_reader qlog_writer: Qlog::Writer?
     attr_reader peer_issued_token: String?
     attr_reader peer_supported_versions: Array[Integer]?
+    attr_reader peer_address: untyped
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
@@ -44,6 +45,7 @@ module Raiha
     def peer_connection_ids: -> Array[Hash[Symbol, untyped]]
     def handle_packet: (String data, ?ecn: Symbol, ?peer_address: untyped) -> void
     def migration_count: -> Integer
+    def migration_allowed?: -> bool
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool

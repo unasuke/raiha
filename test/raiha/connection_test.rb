@@ -902,6 +902,32 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_peer_address_reader_tracks_latest_supplied_address
+    server = create_connection(perspective: :server)
+    assert_nil server.peer_address
+
+    server.handle_packet("\x00".b * 40, peer_address: ["10.0.0.1", 40000])
+    assert_equal ["10.0.0.1", 40000], server.peer_address
+  end
+
+  def test_migration_allowed_defaults_true_before_handshake
+    connection = create_connection
+    assert connection.migration_allowed?
+  end
+
+  def test_migration_allowed_false_when_peer_advertised_disable
+    connection = create_connection
+
+    peer_tp = Raiha::Quic::Handshake::TransportParameters.new
+    peer_tp.disable_active_migration = true
+
+    # Pretend the handshake has completed and produced the peer TP.
+    tls_adapter = connection.instance_variable_get(:@tls_adapter)
+    tls_adapter.instance_variable_set(:@peer_transport_parameters, peer_tp)
+
+    refute connection.migration_allowed?
+  end
+
   def test_peer_address_change_before_handshake_is_not_migration
     server = create_connection(perspective: :server)
 

@@ -51,6 +51,11 @@ module Raiha
     # packet (RFC 9000 §6). Populated on clients when the handshake is
     # abandoned because no version matched; nil otherwise.
     attr_reader :peer_supported_versions
+    # Opaque identifier for the peer's current address, as last supplied
+    # via handle_packet(peer_address:). Meaningful only post-handshake
+    # for migration decisions (RFC 9000 §9); nil until the caller
+    # supplies one.
+    attr_reader :peer_address
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
       @perspective = Quic::Protocol::Perspective.coerce(perspective)
@@ -739,6 +744,17 @@ module Raiha
 
     def migration_count
       @migration_count
+    end
+
+    # RFC 9000 §9.5 / §18.2: the receiver of disable_active_migration
+    # MUST NOT actively migrate. Returns false when the peer advertised
+    # disable_active_migration in their transport parameters, so the
+    # application can refuse to switch sockets.
+    def migration_allowed?
+      peer_tp = @tls_adapter.peer_transport_parameters
+      return true unless peer_tp
+
+      !peer_tp.disable_active_migration
     end
 
     private def handle_version_negotiation(data)
