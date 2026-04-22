@@ -15,6 +15,7 @@ module Raiha
     attr_reader streams: StreamsMap
     attr_reader qlog_writer: Qlog::Writer?
     attr_reader peer_issued_token: String?
+    attr_reader peer_supported_versions: Array[Integer]?
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
@@ -71,6 +72,7 @@ module Raiha
     private def pn_space_to_level: (Symbol pn_space) -> Symbol
     private def queue_handshake_done: -> void
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
+    private def handle_version_negotiation: (String data) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
     private def emit_datagram: (Array[String] datagrams, String datagram) -> void

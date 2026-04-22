@@ -1,0 +1,12 @@
+module Raiha::Quic
+  module Wire
+    module VersionNegotiation
+      VERSION_FIELD_OFFSET: Integer
+      VERSION_FIELD_LENGTH: Integer
+
+      def self.match?: (String data) -> bool
+      def self.build: (src_connection_id: String, dest_connection_id: String, supported_versions: Array[Integer]) -> String
+      def self.parse: (String data) -> { dest_connection_id: String, src_connection_id: String, supported_versions: Array[Integer] }?
+    end
+  end
+end

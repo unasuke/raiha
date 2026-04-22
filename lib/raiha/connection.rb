@@ -17,6 +17,7 @@ require_relative "quic/congestion"
 require_relative "quic/flow_control"
 require_relative "quic/timer"
 require_relative "quic/stateless_reset"
+require_relative "quic/wire/version_negotiation"
 require_relative "quic/qerr/error_code"
 require_relative "quic/qerr/transport_error"
 require_relative "qlog"
@@ -46,6 +47,10 @@ module Raiha
     # issued by the peer. Clients persist this across sessions to present
     # it in the token field of the next Initial packet.
     attr_reader :peer_issued_token
+    # Versions the server advertised if it sent a Version Negotiation
+    # packet (RFC 9000 §6). Populated on clients when the handshake is
+    # abandoned because no version matched; nil otherwise.
+    attr_reader :peer_supported_versions
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
       @perspective = Quic::Protocol::Perspective.coerce(perspective)
@@ -694,6 +699,18 @@ module Raiha
       end
     end
 
+    private def handle_version_negotiation(data)
+      parsed = Quic::Wire::VersionNegotiation.parse(data)
+      return unless parsed
+
+      # If the server listed a version we already agreed to speak, RFC
+      # §6.2 says we MUST treat it as a protocol violation (the server is
+      # advertising a version it already accepted). For raiha, which has
+      # no version-fallback mechanism yet, we abandon unconditionally.
+      @peer_supported_versions = parsed[:supported_versions]
+      enter_closed_state
+    end
+
     private def handle_new_token_frame(frame)
       # RFC 9000 §19.7: a server that receives NEW_TOKEN MUST treat it as a
       # PROTOCOL_VIOLATION; NEW_TOKEN is server-only.
@@ -954,6 +971,15 @@ module Raiha
       # immediately — enter draining and stop processing.
       if Quic::StatelessReset.match_token?(data, known_peer_reset_tokens)
         enter_draining_state
+        return
+      end
+
+      # RFC 9000 §6.2: a client receiving a Version Negotiation packet MUST
+      # abandon the connection attempt. Record the list of versions the
+      # server did advertise so the application can decide whether to
+      # retry with a different version.
+      if @perspective.client? && Quic::Wire::VersionNegotiation.match?(data)
+        handle_version_negotiation(data)
         return
       end
 

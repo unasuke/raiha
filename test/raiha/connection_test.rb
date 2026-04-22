@@ -902,6 +902,36 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_client_version_negotiation_abandons_connection
+    client = create_connection(perspective: :client)
+
+    packet = Raiha::Quic::Wire::VersionNegotiation.build(
+      src_connection_id: client.dest_connection_id.serialize,
+      dest_connection_id: client.src_connection_id.serialize,
+      supported_versions: [0xfafafafa, 0xff000011]
+    )
+
+    client.handle_packet(packet)
+
+    assert client.closed?
+    assert_equal [0xfafafafa, 0xff000011], client.peer_supported_versions
+  end
+
+  def test_server_ignores_version_negotiation_packet
+    # §6.2 is client-only; servers don't interpret incoming VN packets.
+    server = create_connection(perspective: :server)
+
+    packet = Raiha::Quic::Wire::VersionNegotiation.build(
+      src_connection_id: "\x01".b,
+      dest_connection_id: "\x02".b,
+      supported_versions: [0x00000001]
+    )
+
+    server.handle_packet(packet)
+    refute server.closed?
+    assert_nil server.peer_supported_versions
+  end
+
   def test_handle_packet_converts_transport_error_to_connection_close
     connection = create_connection
 
@@ -913,8 +943,9 @@ class RaihaConnectionTest < Minitest::Test
       raise Raiha::Quic::Qerr::ProtocolViolation.new(reason_phrase: "synthetic")
     end
 
-    # A long-header datagram shape so handle_packet routes to the stub.
-    datagram = ("\xc0".b + "\x00".b * 40)
+    # A long-header datagram with version V1 so handle_packet routes to
+    # the stub (version 0 would short-circuit into the VN detector).
+    datagram = ("\xc0".b + "\x00\x00\x00\x01".b + ("\x00".b * 36))
     connection.handle_packet(datagram)
 
     assert connection.closing?
