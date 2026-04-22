@@ -902,6 +902,47 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_peer_address_change_before_handshake_is_not_migration
+    server = create_connection(perspective: :server)
+
+    server.handle_packet("\x00".b * 40, peer_address: ["10.0.0.1", 40000])
+    server.handle_packet("\x00".b * 40, peer_address: ["10.0.0.2", 40001])
+
+    assert_equal 1, server.migration_count
+    # No PATH_CHALLENGE queued because handshake is not complete yet.
+    assert_empty server.instance_variable_get(:@pending_path_challenges)
+  end
+
+  def test_peer_address_change_after_handshake_initiates_path_validation
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+
+    # First datagram arrives from address A; becomes the baseline.
+    server.handle_packet("\x40".b + ("\x00".b * 40), peer_address: ["10.0.0.1", 40000])
+    refute server.instance_variable_get(:@pending_path_challenges).any?
+
+    # Second datagram arrives from address B after handshake complete:
+    # migration detected, PATH_CHALLENGE auto-queued, peer marked
+    # unvalidated until the matching PATH_RESPONSE comes back.
+    server.handle_packet("\x40".b + ("\x00".b * 40), peer_address: ["10.0.0.2", 40001])
+
+    assert_equal 1, server.migration_count
+    refute_empty server.instance_variable_get(:@pending_path_challenges)
+    refute server.peer_path_validated?
+  end
+
+  def test_peer_address_change_without_peer_address_arg_is_a_noop
+    server = create_connection(perspective: :server)
+    enable_one_rtt(server)
+    server.complete_handshake
+
+    server.handle_packet("\x40".b + ("\x00".b * 40))
+    server.handle_packet("\x40".b + ("\x00".b * 40))
+
+    assert_equal 0, server.migration_count
+  end
+
   def test_client_version_negotiation_abandons_connection
     client = create_connection(perspective: :client)
 

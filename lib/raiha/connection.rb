@@ -699,6 +699,37 @@ module Raiha
       end
     end
 
+    # RFC 9000 §9: record the current peer address and, if the handshake
+    # is complete and it changes, probe the new path. The actual PATH
+    # routing belongs to the caller (socket layer); Connection merely
+    # queues a PATH_CHALLENGE that the caller sends on the new 4-tuple.
+    private def observe_peer_address(peer_address)
+      if @peer_address.nil?
+        @peer_address = peer_address
+        return
+      end
+
+      return if @peer_address == peer_address
+
+      @peer_address = peer_address
+      @migration_count += 1
+
+      # Migration is only defined post-handshake (§9.2). Before that, a
+      # changing 4-tuple is expected (client's first Initial can be
+      # followed by retransmits from other ephemeral ports) and
+      # handle_packet just trusts the caller.
+      return unless @state == State::CONNECTED
+
+      # Re-validate the new path. On receipt of the matching
+      # PATH_RESPONSE, @peer_path_validated flips true again.
+      @peer_path_validated = false
+      initiate_path_validation
+    end
+
+    def migration_count
+      @migration_count
+    end
+
     private def handle_version_negotiation(data)
       parsed = Quic::Wire::VersionNegotiation.parse(data)
       return unless parsed
@@ -951,6 +982,14 @@ module Raiha
       @peer_connection_ids = [] #: Array[Hash[Symbol, untyped]]
       @pending_retire_connection_ids = [] #: Array[Integer]
 
+      # RFC 9000 §9: peer address tracking for migration detection. The
+      # current address is opaque to Connection (caller supplies it via
+      # handle_packet(peer_address:)) but a change after the handshake
+      # completes auto-triggers a PATH_CHALLENGE so the caller can route
+      # the validation exchange itself.
+      @peer_address = nil #: untyped
+      @migration_count = 0
+
       @idle_timer = Quic::Timer.new
       reset_idle_timer
     end
@@ -961,7 +1000,11 @@ module Raiha
     # datagram (:not_ect / :ect0 / :ect1 / :ce) for §13.4 ECN feedback;
     # the caller is responsible for reading it from the socket via
     # recvmsg / IPV6_RECVTCLASS. Defaults to :not_ect when absent.
-    def handle_packet(data, ecn: :not_ect)
+    # `peer_address` is the opaque identifier (e.g. [ip, port]) of the
+    # sender. When provided and it differs from the previously observed
+    # one after the handshake completes, path validation is initiated
+    # automatically (RFC 9000 §9).
+    def handle_packet(data, ecn: :not_ect, peer_address: nil)
       return if @state == State::CLOSED
       return if @state == State::DRAINING
 
@@ -991,6 +1034,8 @@ module Raiha
         @pending_close_frame = true
         return
       end
+
+      observe_peer_address(peer_address) if peer_address
 
       offset = 0
       while offset < data.bytesize

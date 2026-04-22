@@ -42,7 +42,8 @@ module Raiha
     def initiate_path_validation: -> String
     def peer_path_validated?: -> bool
     def peer_connection_ids: -> Array[Hash[Symbol, untyped]]
-    def handle_packet: (String data, ?ecn: Symbol) -> void
+    def handle_packet: (String data, ?ecn: Symbol, ?peer_address: untyped) -> void
+    def migration_count: -> Integer
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool
@@ -73,6 +74,7 @@ module Raiha
     private def queue_handshake_done: -> void
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_version_negotiation: (String data) -> void
+    private def observe_peer_address: (untyped peer_address) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
     private def emit_datagram: (Array[String] datagrams, String datagram) -> void
