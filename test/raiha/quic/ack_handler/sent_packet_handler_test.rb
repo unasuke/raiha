@@ -81,6 +81,57 @@ class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
     assert_equal 2, handler.get_next_packet_number(:application_data).value
   end
 
+  def test_ack_with_new_ce_count_triggers_congestion_controller
+    ce_notifications = 0
+    controller = Object.new
+    controller.define_singleton_method(:on_packet_sent) { |_| }
+    controller.define_singleton_method(:on_packets_acked) { |_| }
+    controller.define_singleton_method(:on_packet_lost) { |_| }
+    controller.define_singleton_method(:on_ecn_ce) { ce_notifications += 1 }
+
+    handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
+      congestion_controller: controller,
+      rtt_stats: Raiha::Quic::Congestion::RTTStats.new
+    )
+
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(0),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data
+    )
+
+    ack = Raiha::Quic::Wire::Frames::AckFrame.new
+    ack.largest_acknowledged = 0
+    ack.ack_delay = 0
+    ack.ack_ranges = [
+      Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)
+    ]
+    ack.ecn_counts = { ect0: 0, ect1: 0, ecn_ce: 1 }
+
+    handler.received_ack(ack, pn_space: :application_data)
+    assert_equal 1, ce_notifications
+
+    # Same ecn_ce on a follow-up ACK must not refire; only an increase does.
+    handler.sent_packet(
+      packet_number: Raiha::Quic::Protocol::PacketNumber.new(1),
+      frames: [],
+      size: 100,
+      ack_eliciting: true,
+      pn_space: :application_data
+    )
+    follow_up = Raiha::Quic::Wire::Frames::AckFrame.new
+    follow_up.largest_acknowledged = 1
+    follow_up.ack_delay = 0
+    follow_up.ack_ranges = [
+      Raiha::Quic::Wire::Frames::AckFrame::AckRange.new(gap: 0, ack_range_length: 0)
+    ]
+    follow_up.ecn_counts = { ect0: 0, ect1: 0, ecn_ce: 1 }
+    handler.received_ack(follow_up, pn_space: :application_data)
+    assert_equal 1, ce_notifications
+  end
+
   def test_time_threshold_declares_old_packet_lost_on_ack
     rtt_stats = Raiha::Quic::Congestion::RTTStats.new
     lost = [] #: Array[untyped]

@@ -75,6 +75,14 @@ module Raiha::Quic
         @pto_count = 0
         @time_of_last_ack_eliciting_packet = nil #: Time?
         @alarm = Timer.new
+        # Per-PN-space ECN-CE count last observed on ACK_ECN frames from
+        # the peer (RFC 9002 §B.4 ProcessECN). An increase is treated as a
+        # congestion event.
+        @last_peer_ce_counts = {
+          Protocol::PacketNumberSpace::INITIAL => 0,
+          Protocol::PacketNumberSpace::HANDSHAKE => 0,
+          Protocol::PacketNumberSpace::APPLICATION_DATA => 0,
+        }
       end
 
       def get_next_packet_number(pn_space)
@@ -121,7 +129,21 @@ module Raiha::Quic
 
         detect_lost_packets(space, now: now)
         @congestion_controller&.on_packets_acked(newly_acked_packets)
+        process_ecn(ack_frame, pn_space: pn_space)
         @pto_count = 0
+      end
+
+      # RFC 9002 §B.4 ProcessECN: if the peer's ACK_ECN reports more CE
+      # marks than we've previously seen for this space, that is a new
+      # congestion event (same treatment as a packet-loss event).
+      private def process_ecn(ack_frame, pn_space:)
+        return unless ack_frame.ecn_counts
+
+        reported_ce = ack_frame.ecn_counts[:ecn_ce] || 0
+        return unless reported_ce > @last_peer_ce_counts[pn_space]
+
+        @last_peer_ce_counts[pn_space] = reported_ce
+        @congestion_controller&.on_ecn_ce
       end
 
       def get_alarm_timeout

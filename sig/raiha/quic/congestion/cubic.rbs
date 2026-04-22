@@ -23,11 +23,13 @@ module Raiha::Quic
       def on_packet_sent: (Integer bytes) -> void
       def on_packets_acked: (Array[untyped] packets) -> void
       def on_packet_lost: (untyped packet) -> void
+      def on_ecn_ce: -> void
       def can_send?: -> bool
       def available_congestion_window: -> Integer
       def in_slow_start?: -> bool
       def in_congestion_avoidance?: -> bool
 
+      private def enter_congestion_recovery: -> void
       private def on_packet_acked: (Integer acked_bytes) -> void
       private def cubic_increase: (Integer acked_bytes) -> void
       private def min_congestion_window: -> Integer

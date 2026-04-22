@@ -44,7 +44,17 @@ module Raiha::Quic
 
       def on_packet_lost(packet)
         @bytes_in_flight -= packet.size if @bytes_in_flight >= packet.size
+        enter_congestion_recovery
+      end
 
+      # RFC 9002 §7, §B.4 OnCongestionEvent: the peer reported one or more
+      # new ECN-CE marks in an ACK_ECN. Treated the same way as loss at the
+      # CWND level — halve the window and leave slow start.
+      def on_ecn_ce
+        enter_congestion_recovery
+      end
+
+      private def enter_congestion_recovery
         @epoch_start = nil
         if @congestion_window < @w_last_max
           @w_last_max = (@congestion_window * (1 + BETA_CUBIC) / 2).to_i

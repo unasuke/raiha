@@ -87,4 +87,15 @@ class RaihaQuicCongestionCubicTest < Minitest::Test
     refute_equal Float::INFINITY, cubic.slow_start_threshold
     assert_equal cubic.congestion_window, cubic.slow_start_threshold
   end
+
+  def test_on_ecn_ce_reduces_window_like_loss
+    cubic = Raiha::Quic::Congestion::Cubic.new
+    initial = cubic.congestion_window
+
+    cubic.on_ecn_ce
+
+    assert_operator cubic.congestion_window, :<, initial
+    refute cubic.in_slow_start?
+    assert_equal cubic.congestion_window, cubic.slow_start_threshold
+  end
 end
