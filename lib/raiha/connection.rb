@@ -628,7 +628,45 @@ module Raiha
       idle_deadline = @idle_timer.deadline
       if idle_deadline && idle_deadline <= now
         enter_closed_state
+        return
       end
+
+      maybe_queue_keepalive_ping(now)
+    end
+
+    # RFC 9000 §10.1.2: when the idle period has eaten at least half of
+    # max_idle_timeout, queue a PING to provoke an ACK from the peer and
+    # restart both sides' idle timers. Guards against the per-tick
+    # flood: at most one PING is queued at a time.
+    private def maybe_queue_keepalive_ping(now)
+      return unless @state == State::CONNECTED
+
+      idle_deadline = @idle_timer.deadline
+      return unless idle_deadline
+
+      idle_timeout = @transport_parameters.max_idle_timeout / 1000.0
+      return unless idle_timeout > 0
+
+      # "Half-timeout" heuristic: idle-timer has less than half of its
+      # configured duration remaining.
+      time_remaining = idle_deadline - now
+      return if time_remaining > idle_timeout / 2.0
+
+      ping
+    end
+
+    # Queue a PING frame to be sent on the next flush (RFC 9000 §10.1.2).
+    # PING is ack-eliciting, so the peer must answer with an ACK; that
+    # ACK restarts the idle timer on both ends. Useful as an
+    # application-driven keepalive when idle periods risk tearing the
+    # connection down. Returns true when a PING was queued; false if
+    # one is already pending.
+    def ping
+      @pending_ping_frames ||= [] #: Array[Quic::Wire::Frames::PingFrame]
+      return false if @pending_ping_frames.any?
+
+      @pending_ping_frames << Quic::Wire::Frames::PingFrame.new
+      true
     end
 
     # Issue an address-validation token to the peer (RFC 9000 §8.1.3,

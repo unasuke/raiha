@@ -902,6 +902,63 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_ping_queues_a_single_ping_frame
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    assert connection.ping
+    # A second call while one is still pending returns false.
+    refute connection.ping
+
+    pending = connection.instance_variable_get(:@pending_ping_frames)
+    assert_equal 1, pending.length
+    assert_instance_of Raiha::Quic::Wire::Frames::PingFrame, pending.first
+  end
+
+  def test_ping_emitted_in_get_packets_to_send
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    connection.ping
+
+    refute_empty connection.get_packets_to_send
+    # Queue was drained.
+    assert_empty connection.instance_variable_get(:@pending_ping_frames)
+  end
+
+  def test_tick_queues_keepalive_ping_when_idle_past_half_timeout
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.max_idle_timeout = 30_000  # 30 seconds
+    connection = create_connection(transport_parameters: transport_parameters)
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    idle_deadline = connection.instance_variable_get(:@idle_timer).deadline
+    # Plenty of time left → no keepalive.
+    connection.tick(now: idle_deadline - 20)
+    assert_nil connection.instance_variable_get(:@pending_ping_frames)
+
+    # Past the halfway mark → keepalive PING queued.
+    connection.tick(now: idle_deadline - 10)
+    pending = connection.instance_variable_get(:@pending_ping_frames)
+    assert_equal 1, pending.length
+  end
+
+  def test_tick_does_not_queue_keepalive_when_one_already_pending
+    transport_parameters = Raiha::Quic::Handshake::TransportParameters.new
+    transport_parameters.max_idle_timeout = 30_000
+    connection = create_connection(transport_parameters: transport_parameters)
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    idle_deadline = connection.instance_variable_get(:@idle_timer).deadline
+    connection.tick(now: idle_deadline - 5)  # queue one
+    connection.tick(now: idle_deadline - 3)  # should not pile up a second
+
+    assert_equal 1, connection.instance_variable_get(:@pending_ping_frames).length
+  end
+
   def test_retry_packet_updates_connection_id_and_captures_token
     # RFC 9001 Appendix A.4 sample retry packet, matched by its ODCID.
     odcid = ["8394c8f03e515708"].pack("H*")

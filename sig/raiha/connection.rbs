@@ -48,6 +48,7 @@ module Raiha
     def migration_count: -> Integer
     def migration_allowed?: -> bool
     def initiate_key_update: (?now: Time) -> bool
+    def ping: -> bool
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool
@@ -87,6 +88,7 @@ module Raiha
     private def gather_frames_for: (Symbol level) -> Array[Quic::Wire::Frame]
     private def gather_one_rtt_frames: (Array[Quic::Wire::Frame] frames) -> void
     private def append_flow_control_frames: (Array[Quic::Wire::Frame] frames) -> void
+    private def maybe_queue_keepalive_ping: (Time now) -> void
     private def enter_draining_state: -> void
     private def enter_closing_state: (Quic::Wire::Frames::ConnectionCloseFrame close_frame) -> void
     private def enter_closed_state: -> void
