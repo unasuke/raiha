@@ -16,6 +16,7 @@ module Raiha::Quic
       def get_crypto_data: (level: Symbol) -> String?
       def pop_crypto_frame: (level: Symbol) -> { offset: Integer, data: String }?
       def requeue_crypto_data: (offset: Integer, data: String, level: Symbol) -> void
+      def restart_initial_crypto: -> void
       def discard_keys: (Symbol level) -> void
       def update_keys: -> void
       def one_rtt_key_phase: -> bool

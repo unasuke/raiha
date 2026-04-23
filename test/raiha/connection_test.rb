@@ -925,6 +925,35 @@ class RaihaConnectionTest < Minitest::Test
     assert client.instance_variable_get(:@retry_consumed)
   end
 
+  def test_retry_replays_client_hello_at_offset_zero_with_token
+    odcid = ["8394c8f03e515708"].pack("H*")
+    sample_retry = [
+      "ff000000010008f067a5502a4262b574" +
+      "6f6b656e04a265ba2eff4d829058fb3f" +
+      "0f2496ba"
+    ].pack("H*")
+
+    client = Raiha::Connection.new(
+      perspective: :client,
+      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.from_bytes(odcid)
+    )
+
+    # Stage some Initial CRYPTO as if start_handshake had queued a ClientHello.
+    crypto = client.instance_variable_get(:@crypto_setup)
+    crypto.queue_crypto_data("CHBYTES".b, level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
+
+    # Drain (as if we already sent the first Initial), then receive Retry.
+    crypto.pop_crypto_frame(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
+    client.handle_packet(sample_retry)
+
+    # The ClientHello bytes are replayed at offset 0 under the new keys.
+    replayed = crypto.pop_crypto_frame(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
+    refute_nil replayed
+    assert_equal 0, replayed[:offset]
+    assert_equal "CHBYTES".b, replayed[:data]
+  end
+
   def test_second_retry_is_ignored
     odcid = ["8394c8f03e515708"].pack("H*")
     sample_retry = [

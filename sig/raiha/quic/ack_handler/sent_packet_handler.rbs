@@ -24,6 +24,7 @@ module Raiha::Quic
       def sent_packet: (packet_number: Protocol::PacketNumber, frames: Array[untyped], size: Integer, ack_eliciting: bool, pn_space: Symbol, ?sent_time: Time) -> void
       def received_ack: (Wire::Frames::AckFrame ack_frame, pn_space: Symbol, ?ack_delay: Float, ?now: Time) -> void
       def get_alarm_timeout: -> Time?
+      def discard_space: (Symbol pn_space) -> void
       def loss_detection_deadline: -> Time?
       def on_loss_detection_timeout: (?now: Time) -> void
       def pto_deadline: -> Time?

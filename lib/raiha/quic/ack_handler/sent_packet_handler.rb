@@ -150,6 +150,22 @@ module Raiha::Quic
         @alarm.deadline
       end
 
+      # Drop every sent-but-unacked packet for the given packet-number
+      # space and adjust bytes_in_flight accordingly. Used when an entire
+      # flight needs to be forgotten rather than acked or declared lost —
+      # e.g. on a client-side RFC 9000 §17.2.5.2 Retry, where the Initial
+      # we already sent was never meant for the server that accepted us.
+      def discard_space(pn_space)
+        space = @spaces[pn_space]
+        return unless space
+
+        space.sent_packets.each_value do |packet|
+          @bytes_in_flight -= packet.size if packet.in_flight
+        end
+        space.sent_packets.clear
+        space.loss_time = nil
+      end
+
       # Earliest deadline at which this handler wants to be woken up: the
       # smaller of the time-threshold loss deadline (§6.1.2) and the PTO
       # deadline (§6.2.1). Per §A.9, loss_time always wins when set.

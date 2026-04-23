@@ -807,6 +807,15 @@ module Raiha
       # next Initial packet is protected with the keys the server
       # expects.
       @crypto_setup.rederive_initial_keys(connection_id: header.source_connection_id)
+      # RFC 9000 §17.2.5.2: replay the ClientHello in a new Initial
+      # packet that carries the retry token and is encrypted with the
+      # freshly-derived Initial keys.
+      @crypto_setup.restart_initial_crypto
+      # The already-sent Initial is abandoned — the server we're now
+      # talking to never received it. Tell the sent-packet handler to
+      # forget the whole Initial space so loss detection doesn't wait
+      # for phantom ACKs (§17.2.5).
+      @sent_packet_handler.discard_space(Quic::Protocol::PacketNumberSpace::INITIAL)
     end
 
     private def handle_version_negotiation(data)
@@ -1452,8 +1461,13 @@ module Raiha
       buf.write_uint8(@src_connection_id.length)
       buf.write(@src_connection_id.serialize)
 
-      # Token (empty for client Initial)
-      buf.write_varint(0)
+      # Token: empty on the very first client Initial; carries the
+      # server-issued Retry token on the Initial that follows a Retry
+      # packet (RFC 9000 §17.2.5.2). Also carries a NEW_TOKEN from a
+      # previous connection if the application chose to supply one.
+      token = @retry_token || ""
+      buf.write_varint(token.bytesize)
+      buf.write(token) unless token.empty?
 
       # Length (packet number + encrypted payload + AEAD tag)
       total_length = encoded_packet_number.bytesize + payload_length + 16 # 16 = AEAD tag

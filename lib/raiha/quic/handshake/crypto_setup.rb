@@ -49,6 +49,9 @@ module Raiha::Quic
           EncryptionLevel::HANDSHAKE => 0,
           EncryptionLevel::ONE_RTT => 0,
         }
+        # ClientHello bytes ever queued at INITIAL level, so a Retry on
+        # the client can replay them at offset 0 with the new keys.
+        @initial_crypto_history = [] #: Array[String]
       end
 
       def available?(level)
@@ -120,6 +123,11 @@ module Raiha::Quic
         offset = @next_crypto_offset[level]
         @pending_crypto_data[level] << { offset: offset, data: data }
         @next_crypto_offset[level] = offset + data.bytesize
+        # Keep an Initial-level history so we can replay the ClientHello
+        # bytes verbatim on a server-issued Retry (RFC 9000 §17.2.5.2).
+        if level == EncryptionLevel::INITIAL
+          @initial_crypto_history << data
+        end
       end
 
       # Drain every pending CRYPTO chunk for the level and return the bytes
@@ -149,6 +157,18 @@ module Raiha::Quic
       # contiguous CRYPTO stream even across retransmissions.
       def requeue_crypto_data(offset:, data:, level:)
         @pending_crypto_data[level] << { offset: offset, data: data }
+      end
+
+      # Client-side RFC 9000 §17.2.5.2: after a Retry, discard any
+      # pending Initial-level CRYPTO data and replay the ClientHello
+      # bytes at offset 0 so they travel in a new Initial packet
+      # protected by keys derived from the Retry's SCID.
+      def restart_initial_crypto
+        @pending_crypto_data[EncryptionLevel::INITIAL].clear
+        @next_crypto_offset[EncryptionLevel::INITIAL] = 0
+        history = @initial_crypto_history
+        @initial_crypto_history = [] #: Array[String]
+        history.each { |data| queue_crypto_data(data, level: EncryptionLevel::INITIAL) }
       end
 
       # Discard keys for a specific encryption level (after handshake progress)
