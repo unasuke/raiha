@@ -19,6 +19,7 @@ module Raiha::Quic
       def discard_keys: (Symbol level) -> void
       def update_keys: -> void
       def one_rtt_key_phase: -> bool
+      def decrypt_next_phase: (String ciphertext, packet_number: Integer, aad: String) -> String
 
       private def aead_for_level: (Symbol level) -> (InitialAEAD | UpdatableAEAD)?
     end

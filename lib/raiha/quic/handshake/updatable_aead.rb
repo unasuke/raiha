@@ -57,6 +57,26 @@ module Raiha::Quic
 
       def decrypt(ciphertext_with_tag, packet_number:, aad:)
         key, iv = receive_key_iv
+        do_decrypt(ciphertext_with_tag, packet_number: packet_number, aad: aad, key: key, iv: iv)
+      end
+
+      # Attempt decryption using the receive keys we would obtain AFTER a
+      # key update (RFC 9001 §6.2). Used when an incoming short-header
+      # packet advertises a Key Phase that differs from our current one:
+      # if this call succeeds, the caller commits the key rotation via
+      # rotate_keys. State is not mutated on either success or failure.
+      def decrypt_next_phase(ciphertext_with_tag, packet_number:, aad:)
+        next_client_secret = derive_next_secret(@current_client_secret)
+        next_server_secret = derive_next_secret(@current_server_secret)
+        next_receive_secret = @perspective.client? ? next_server_secret : next_client_secret
+
+        key = Raiha::CryptoUtil.hkdf_expand_label(next_receive_secret, "quic key", "", @key_length, hash: @hash_algorithm)
+        iv = Raiha::CryptoUtil.hkdf_expand_label(next_receive_secret, "quic iv", "", @iv_length, hash: @hash_algorithm)
+
+        do_decrypt(ciphertext_with_tag, packet_number: packet_number, aad: aad, key: key, iv: iv)
+      end
+
+      private def do_decrypt(ciphertext_with_tag, packet_number:, aad:, key:, iv:)
         nonce = compute_nonce(iv, packet_number)
 
         tag = ciphertext_with_tag[-TAG_LENGTH..]

@@ -10,7 +10,10 @@ module Raiha::Quic
       def rotate_keys: -> void
       def encrypt: (String plaintext, packet_number: Integer, aad: String) -> String
       def decrypt: (String ciphertext_with_tag, packet_number: Integer, aad: String) -> String
+      def decrypt_next_phase: (String ciphertext_with_tag, packet_number: Integer, aad: String) -> String
       def header_protection_mask: (String sample, ?direction: Symbol) -> String
+
+      private def do_decrypt: (String ciphertext_with_tag, packet_number: Integer, aad: String, key: String, iv: String) -> String
 
       private def derive_keys: -> void
       private def derive_next_secret: (String current_secret) -> String

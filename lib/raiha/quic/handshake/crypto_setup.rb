@@ -161,6 +161,16 @@ module Raiha::Quic
         end
       end
 
+      # Trial-decrypt a 1-RTT packet with the next key phase's keys
+      # (RFC 9001 §6.2). Returns the plaintext without mutating state;
+      # raises OpenSSL::Cipher::CipherError on failure. Only defined for
+      # the 1-RTT level because earlier levels don't support key update.
+      def decrypt_next_phase(ciphertext, packet_number:, aad:)
+        raise Raiha::Quic::Error, "1-RTT keys not available" unless @one_rtt_aead
+
+        @one_rtt_aead.decrypt_next_phase(ciphertext, packet_number: packet_number, aad: aad)
+      end
+
       # Rotate 1-RTT keys
       def update_keys
         raise Raiha::Quic::Error, "1-RTT keys not available" unless @one_rtt_aead

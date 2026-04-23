@@ -1237,8 +1237,20 @@ module Raiha
 
       encrypted_payload = data[(packet_number_offset + packet_number_length)..]
 
+      # RFC 9001 §17.3.1: bit 2 of the unprotected first byte is the Key
+      # Phase. When it differs from our current phase, the peer has
+      # initiated (or completed) a key update; trial-decrypt with the
+      # next key phase and commit the rotation on success.
+      observed_phase = (unprotected_data.getbyte(0) & 0x04) != 0
+      key_update_observed = observed_phase != @crypto_setup.one_rtt_key_phase
+
       begin
-        decrypted = @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
+        decrypted = if key_update_observed
+                      @crypto_setup.decrypt_next_phase(encrypted_payload, packet_number: packet_number, aad: aad)
+                    else
+                      @crypto_setup.decrypt(encrypted_payload, packet_number: packet_number, aad: aad, level: level)
+                    end
+        @crypto_setup.update_keys if key_update_observed
         frames = Quic::Wire::FrameParser.parse(Quic::Wire::Buffer.new(decrypted))
         log_packet_received(level: level, packet_number: packet_number, frames: frames)
         @received_packet_handler.received_packet(

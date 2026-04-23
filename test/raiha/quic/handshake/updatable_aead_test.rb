@@ -52,6 +52,38 @@ class RaihaQuicHandshakeUpdatableAEADTest < Minitest::Test
     assert_equal plaintext, decrypted
   end
 
+  def test_decrypt_next_phase_handles_unilateral_peer_update
+    client_aead, server_aead = create_aead_pair
+
+    # Client initiates a key update; server does not yet know.
+    client_aead.rotate_keys
+    assert client_aead.key_phase
+    refute server_aead.key_phase
+
+    plaintext = "post-update".b
+    aad = "\x44".b  # Short header with Key Phase bit set.
+    ciphertext = client_aead.encrypt(plaintext, packet_number: 1, aad: aad)
+
+    # Server's current keys reject the new ciphertext.
+    assert_raises(OpenSSL::Cipher::CipherError) do
+      server_aead.decrypt(ciphertext, packet_number: 1, aad: aad)
+    end
+
+    # decrypt_next_phase succeeds without mutating the server's state.
+    decrypted = server_aead.decrypt_next_phase(ciphertext, packet_number: 1, aad: aad)
+    assert_equal plaintext, decrypted
+    refute server_aead.key_phase
+
+    # The caller then commits the rotation and subsequent packets decrypt
+    # with the regular path again.
+    server_aead.rotate_keys
+    assert server_aead.key_phase
+
+    plaintext2 = "post-commit".b
+    ciphertext2 = client_aead.encrypt(plaintext2, packet_number: 2, aad: aad)
+    assert_equal plaintext2, server_aead.decrypt(ciphertext2, packet_number: 2, aad: aad)
+  end
+
   def test_header_protection_mask
     client_aead, _server_aead = create_aead_pair
 
