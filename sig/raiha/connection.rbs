@@ -46,6 +46,7 @@ module Raiha
     def handle_packet: (String data, ?ecn: Symbol, ?peer_address: untyped) -> void
     def migration_count: -> Integer
     def migration_allowed?: -> bool
+    def initiate_key_update: (?now: Time) -> bool
     def complete_handshake: -> void
     def handshake_complete?: -> bool
     def closed?: -> bool

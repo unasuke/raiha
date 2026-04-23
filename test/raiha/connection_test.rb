@@ -902,6 +902,39 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_initiate_key_update_flips_key_phase_and_rotates_keys
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    phase_before = connection.send(:instance_variable_get, :@crypto_setup).one_rtt_key_phase
+    new_phase = connection.initiate_key_update
+
+    refute_equal phase_before, new_phase
+  end
+
+  def test_initiate_key_update_raises_without_one_rtt_keys
+    connection = create_connection
+    assert_raises(Raiha::Error) { connection.initiate_key_update }
+  end
+
+  def test_initiate_key_update_rate_limited_within_three_pto
+    connection = create_connection
+    enable_one_rtt(connection)
+    connection.complete_handshake
+
+    now = Time.now
+    connection.initiate_key_update(now: now)
+
+    rtt = connection.instance_variable_get(:@rtt_stats)
+    assert_raises(Raiha::Error) do
+      connection.initiate_key_update(now: now + rtt.pto) # well under 3×PTO
+    end
+
+    # After 3×PTO+ε, the next update is allowed again.
+    connection.initiate_key_update(now: now + 3 * rtt.pto + 0.01)
+  end
+
   def test_peer_address_reader_tracks_latest_supplied_address
     server = create_connection(perspective: :server)
     assert_nil server.peer_address

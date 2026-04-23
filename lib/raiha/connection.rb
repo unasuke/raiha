@@ -750,6 +750,25 @@ module Raiha
     # MUST NOT actively migrate. Returns false when the peer advertised
     # disable_active_migration in their transport parameters, so the
     # application can refuse to switch sockets.
+    # Initiate a 1-RTT Key Update (RFC 9001 §6.1). The call rotates our
+    # send/receive keys to the next generation, flips the Key Phase bit
+    # that subsequent outgoing short-header packets will carry, and
+    # enforces the §6.1 rate limit: we MUST NOT initiate another update
+    # within 3 × current PTO of the previous one. Raises
+    # `Raiha::Error` when called before 1-RTT is available or before the
+    # rate-limit window elapses; returns the new key phase otherwise.
+    def initiate_key_update(now: Time.now)
+      raise Raiha::Error, "1-RTT keys not available" unless @crypto_setup.available?(Quic::Handshake::EncryptionLevel::ONE_RTT)
+
+      if @last_key_update_at && (now - @last_key_update_at) < 3 * @rtt_stats.pto
+        raise Raiha::Error, "Key update rate-limited (RFC 9001 §6.1: 3×PTO between updates)"
+      end
+
+      @crypto_setup.update_keys
+      @last_key_update_at = now
+      @crypto_setup.one_rtt_key_phase
+    end
+
     def migration_allowed?
       peer_tp = @tls_adapter.peer_transport_parameters
       return true unless peer_tp
@@ -1008,6 +1027,11 @@ module Raiha
       # RETIRE_CONNECTION_ID frame.
       @peer_connection_ids = [] #: Array[Hash[Symbol, untyped]]
       @pending_retire_connection_ids = [] #: Array[Integer]
+
+      # RFC 9001 §6: last time we initiated a 1-RTT Key Update. A second
+      # update is refused until 3×PTO has elapsed AND the peer has
+      # acknowledged a packet at the most recent key phase.
+      @last_key_update_at = nil #: Time?
 
       # RFC 9000 §9: peer address tracking for migration detection. The
       # current address is opaque to Connection (caller supplies it via
@@ -1406,8 +1430,11 @@ module Raiha
     private def build_short_header(encoded_packet_number)
       buf = Quic::Wire::Buffer.new
 
-      # First byte: Fixed bit (0x40) | PN length
+      # RFC 9000 §17.3.1 short header first byte:
+      #   Header Form (0) | Fixed Bit (1) | Spin Bit | 2 reserved bits |
+      #   Key Phase | PN length (2 bits).
       first_byte = 0x40 | ((encoded_packet_number.bytesize - 1) & 0x03)
+      first_byte |= 0x04 if @crypto_setup.one_rtt_key_phase
       buf.write_uint8(first_byte)
 
       buf.write(@dest_connection_id.serialize)

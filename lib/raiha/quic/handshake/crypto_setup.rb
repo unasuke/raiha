@@ -168,6 +168,12 @@ module Raiha::Quic
         @one_rtt_aead.rotate_keys
       end
 
+      # Current 1-RTT Key Phase bit (RFC 9001 §6). Returns false when
+      # 1-RTT is not yet established.
+      def one_rtt_key_phase
+        @one_rtt_aead&.key_phase || false
+      end
+
       private def aead_for_level(level)
         case level
         when EncryptionLevel::INITIAL

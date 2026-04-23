@@ -18,6 +18,7 @@ module Raiha::Quic
       def requeue_crypto_data: (offset: Integer, data: String, level: Symbol) -> void
       def discard_keys: (Symbol level) -> void
       def update_keys: -> void
+      def one_rtt_key_phase: -> bool
 
       private def aead_for_level: (Symbol level) -> (InitialAEAD | UpdatableAEAD)?
     end
