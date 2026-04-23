@@ -902,6 +902,72 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_retry_packet_updates_connection_id_and_captures_token
+    # RFC 9001 Appendix A.4 sample retry packet, matched by its ODCID.
+    odcid = ["8394c8f03e515708"].pack("H*")
+    sample_retry = [
+      "ff000000010008f067a5502a4262b574" +
+      "6f6b656e04a265ba2eff4d829058fb3f" +
+      "0f2496ba"
+    ].pack("H*")
+
+    client = Raiha::Connection.new(
+      perspective: :client,
+      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.from_bytes(odcid)
+    )
+
+    client.handle_packet(sample_retry)
+
+    assert_equal "token".b, client.retry_token
+    # Server-picked SCID (8 bytes: f067a5502a4262b5) becomes our new DCID.
+    assert_equal ["f067a5502a4262b5"].pack("H*"), client.dest_connection_id.serialize
+    assert client.instance_variable_get(:@retry_consumed)
+  end
+
+  def test_second_retry_is_ignored
+    odcid = ["8394c8f03e515708"].pack("H*")
+    sample_retry = [
+      "ff000000010008f067a5502a4262b574" +
+      "6f6b656e04a265ba2eff4d829058fb3f" +
+      "0f2496ba"
+    ].pack("H*")
+    client = Raiha::Connection.new(
+      perspective: :client,
+      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.from_bytes(odcid)
+    )
+
+    client.handle_packet(sample_retry)
+    first_dcid = client.dest_connection_id.serialize
+
+    # A second Retry even with a valid tag (same packet) must not change
+    # the state after the first was processed (§17.2.5.2).
+    client.handle_packet(sample_retry)
+    assert_equal first_dcid, client.dest_connection_id.serialize
+  end
+
+  def test_retry_with_invalid_integrity_tag_is_dropped
+    odcid = ["8394c8f03e515708"].pack("H*")
+    sample_retry = [
+      "ff000000010008f067a5502a4262b574" +
+      "6f6b656e04a265ba2eff4d829058fb3f" +
+      "0f2496ba"
+    ].pack("H*")
+    tampered = sample_retry.dup
+    tampered.setbyte(-1, tampered.getbyte(-1) ^ 0xff)
+
+    client = Raiha::Connection.new(
+      perspective: :client,
+      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
+      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.from_bytes(odcid)
+    )
+
+    client.handle_packet(tampered)
+    assert_nil client.retry_token
+    refute client.instance_variable_get(:@retry_consumed)
+  end
+
   def test_initiate_key_update_flips_key_phase_and_rotates_keys
     connection = create_connection
     enable_one_rtt(connection)

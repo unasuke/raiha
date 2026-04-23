@@ -18,6 +18,7 @@ require_relative "quic/flow_control"
 require_relative "quic/timer"
 require_relative "quic/stateless_reset"
 require_relative "quic/wire/version_negotiation"
+require_relative "quic/wire/retry"
 require_relative "quic/qerr/error_code"
 require_relative "quic/qerr/transport_error"
 require_relative "qlog"
@@ -56,6 +57,10 @@ module Raiha
     # for migration decisions (RFC 9000 §9); nil until the caller
     # supplies one.
     attr_reader :peer_address
+    # Retry token the server asked us to echo on our next Initial packet
+    # (RFC 9000 §17.2.5). nil until a Retry has been received and
+    # validated.
+    attr_reader :retry_token
 
     def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
       @perspective = Quic::Protocol::Perspective.coerce(perspective)
@@ -776,6 +781,34 @@ module Raiha
       !peer_tp.disable_active_migration
     end
 
+    # RFC 9000 §17.2.5: handle a server-emitted Retry packet on the
+    # client side. The integrity tag authenticates our Original
+    # Destination Connection ID, and its verification is the only way we
+    # can trust the retry token or the new server-chosen DCID. A second
+    # Retry is silently discarded per §17.2.5.2.
+    private def handle_retry_packet(data, header)
+      return unless @perspective.client?
+      return if @retry_consumed
+
+      unless Quic::Wire::Retry.verify_integrity_tag(
+        data: data,
+        original_destination_connection_id: @original_dcid,
+        version: header.version
+      )
+        # §17.2.5.2: "Clients MUST discard Retry packets that have a
+        # Retry Integrity Tag that cannot be validated."
+        return
+      end
+
+      @retry_consumed = true
+      @retry_token = header.retry_token
+      @dest_connection_id = header.source_connection_id
+      # RFC 9001 §5.2: re-derive Initial keys using the new DCID so the
+      # next Initial packet is protected with the keys the server
+      # expects.
+      @crypto_setup.rederive_initial_keys(connection_id: header.source_connection_id)
+    end
+
     private def handle_version_negotiation(data)
       parsed = Quic::Wire::VersionNegotiation.parse(data)
       return unless parsed
@@ -1028,6 +1061,13 @@ module Raiha
       @peer_connection_ids = [] #: Array[Hash[Symbol, untyped]]
       @pending_retire_connection_ids = [] #: Array[Integer]
 
+      # RFC 9000 §17.2.5: client-side Retry state. @original_dcid records
+      # the DCID we chose for the very first Initial, which the server
+      # authenticates in its Retry Integrity Tag. @retry_consumed gates
+      # "at most one Retry per connection attempt".
+      @original_dcid = dest_connection_id.serialize.dup
+      @retry_consumed = false
+
       # RFC 9001 §6: last time we initiated a 1-RTT Key Update. A second
       # update is refused until 3×PTO has elapsed AND the peer has
       # acknowledged a packet at the most recent key phase.
@@ -1130,6 +1170,9 @@ module Raiha
         Quic::Handshake::EncryptionLevel::HANDSHAKE
       when Quic::Wire::LongHeader::PacketType::ZERO_RTT
         Quic::Handshake::EncryptionLevel::ZERO_RTT
+      when Quic::Wire::LongHeader::PacketType::RETRY
+        handle_retry_packet(data, header)
+        return data.bytesize
       else
         return nil
       end

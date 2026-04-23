@@ -17,6 +17,7 @@ module Raiha
     attr_reader peer_issued_token: String?
     attr_reader peer_supported_versions: Array[Integer]?
     attr_reader peer_address: untyped
+    attr_reader retry_token: String?
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
@@ -77,6 +78,7 @@ module Raiha
     private def queue_handshake_done: -> void
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_version_negotiation: (String data) -> void
+    private def handle_retry_packet: (String data, Quic::Wire::LongHeader header) -> void
     private def observe_peer_address: (untyped peer_address) -> void
     private def handle_reset_stream_frame: (Quic::Wire::Frames::ResetStreamFrame frame) -> void
     private def handle_stop_sending_frame: (Quic::Wire::Frames::StopSendingFrame frame) -> void
