@@ -36,6 +36,7 @@ module Raiha
     def build_initial_packet: (String crypto_data) -> String?
     def get_packets_to_send: -> Array[String]
     def send_stream_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
+    def send_early_data: (Integer stream_id, String data, ?offset: Integer, ?fin: bool) -> void
     def reset_stream: (Integer stream_id, Integer error_code) -> void
     def stop_sending: (Integer stream_id, Integer error_code) -> void
     def send_new_token: (String token) -> void
@@ -87,6 +88,8 @@ module Raiha
     private def build_level_packet: (Symbol level) -> String?
     private def gather_frames_for: (Symbol level) -> Array[Quic::Wire::Frame]
     private def gather_one_rtt_frames: (Array[Quic::Wire::Frame] frames) -> void
+    private def gather_zero_rtt_frames: -> Array[Quic::Wire::Frame]
+    private def build_zero_rtt_header: (String encoded_packet_number, Integer payload_length) -> String
     private def append_flow_control_frames: (Array[Quic::Wire::Frame] frames) -> void
     private def maybe_queue_keepalive_ping: (Time now) -> void
     private def enter_draining_state: -> void

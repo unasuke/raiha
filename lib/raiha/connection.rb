@@ -269,11 +269,13 @@ module Raiha
       datagrams = [] #: Array[String]
 
       initial_packet = build_level_packet(Quic::Handshake::EncryptionLevel::INITIAL)
+      zero_rtt_packet = build_level_packet(Quic::Handshake::EncryptionLevel::ZERO_RTT)
       handshake_packet = build_level_packet(Quic::Handshake::EncryptionLevel::HANDSHAKE)
       one_rtt_packet = build_level_packet(Quic::Handshake::EncryptionLevel::ONE_RTT)
 
       datagram = String.new(encoding: "BINARY")
       datagram << initial_packet if initial_packet
+      datagram << zero_rtt_packet if zero_rtt_packet
       datagram << handshake_packet if handshake_packet
       datagram << one_rtt_packet if one_rtt_packet
 
@@ -315,6 +317,11 @@ module Raiha
     end
 
     private def gather_frames_for(level)
+      # RFC 9000 §13.1: 0-RTT packets MUST NOT carry ACK, CRYPTO, or
+      # HANDSHAKE_DONE frames, so the 0-RTT level has its own gather
+      # path that just drains early application data.
+      return gather_zero_rtt_frames if level == Quic::Handshake::EncryptionLevel::ZERO_RTT
+
       frames = [] #: Array[Quic::Wire::Frame]
 
       ack_frame = pending_ack_frame(level)
@@ -334,6 +341,15 @@ module Raiha
 
       # 1-RTT carries every application-level frame type we emit.
       gather_one_rtt_frames(frames)
+      frames
+    end
+
+    private def gather_zero_rtt_frames
+      frames = [] #: Array[Quic::Wire::Frame]
+      if @pending_early_stream_frames
+        frames.concat(@pending_early_stream_frames)
+        @pending_early_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
+      end
       frames
     end
 
@@ -569,6 +585,29 @@ module Raiha
       return nil unless @received_packet_handler.should_send_ack?(pn_space)
 
       @received_packet_handler.get_ack_frame(pn_space)
+    end
+
+    # Queue stream data to go out in a 0-RTT STREAM frame (RFC 9001 §4,
+    # RFC 9000 §17.2.3). Only meaningful on clients that have installed
+    # early keys via the TLS adapter; when 0-RTT is not available the
+    # caller should fall back to send_stream_data after the handshake
+    # completes. Raises when the stream is not writable by this
+    # endpoint, mirroring send_stream_data.
+    def send_early_data(stream_id, data, offset: 0, fin: false)
+      stream_id_value = stream_id.is_a?(Integer) ? stream_id : stream_id.value
+      sid = Quic::Protocol::StreamID.new(stream_id_value)
+      unless sid.writable_by?(@perspective)
+        raise ArgumentError, "stream #{stream_id_value} is not writable by this endpoint"
+      end
+
+      stream_frame = Quic::Wire::Frames::StreamFrame.new
+      stream_frame.stream_id = stream_id_value
+      stream_frame.offset = offset
+      stream_frame.data = data
+      stream_frame.fin = fin
+
+      @pending_early_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
+      @pending_early_stream_frames << stream_frame
     end
 
     # Queue stream data for sending as a 1-RTT STREAM frame
@@ -1476,6 +1515,8 @@ module Raiha
         build_initial_header(encoded_packet_number, payload_length)
       when Quic::Handshake::EncryptionLevel::HANDSHAKE
         build_handshake_header(encoded_packet_number, payload_length)
+      when Quic::Handshake::EncryptionLevel::ZERO_RTT
+        build_zero_rtt_header(encoded_packet_number, payload_length)
       when Quic::Handshake::EncryptionLevel::ONE_RTT
         build_short_header(encoded_packet_number)
       end
@@ -1509,6 +1550,29 @@ module Raiha
 
       # Length (packet number + encrypted payload + AEAD tag)
       total_length = encoded_packet_number.bytesize + payload_length + 16 # 16 = AEAD tag
+      buf.write_varint(total_length)
+
+      buf.to_s
+    end
+
+    # RFC 9000 §17.2.3: 0-RTT packet long header. Packet Type is 0b01
+    # and there is no token / no length prefix beyond the standard
+    # length field. Only clients send these.
+    private def build_zero_rtt_header(encoded_packet_number, payload_length)
+      buf = Quic::Wire::Buffer.new
+
+      # First byte: Long header (0x80) | Fixed bit (0x40) | 0-RTT (0x10) | PN length
+      first_byte = 0xc0 | (0x01 << 4) | ((encoded_packet_number.bytesize - 1) & 0x03)
+      buf.write_uint8(first_byte)
+
+      buf.write_uint32(Quic::Protocol::Version::V1)
+
+      buf.write_uint8(@dest_connection_id.length)
+      buf.write(@dest_connection_id.serialize)
+      buf.write_uint8(@src_connection_id.length)
+      buf.write(@src_connection_id.serialize)
+
+      total_length = encoded_packet_number.bytesize + payload_length + 16
       buf.write_varint(total_length)
 
       buf.to_s

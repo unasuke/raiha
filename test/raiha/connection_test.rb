@@ -902,6 +902,54 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_send_early_data_queues_stream_frame_for_zero_rtt_emit
+    # Install early keys so build_level_packet(ZERO_RTT) is available.
+    client = create_connection(perspective: :client)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    secret = SecureRandom.random_bytes(32)
+    client.instance_variable_get(:@crypto_setup).set_early_keys(
+      client_early_traffic_secret: secret,
+      cipher_suite: cipher_suite
+    )
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+
+    client.send_early_data(stream.stream_id, "first-flight".b)
+
+    pending = client.instance_variable_get(:@pending_early_stream_frames)
+    assert_equal 1, pending.length
+    assert_equal "first-flight".b, pending.first.data
+    assert_equal stream.stream_id.value, pending.first.stream_id
+  end
+
+  def test_send_early_data_rejects_stream_not_writable_by_us
+    client = create_connection(perspective: :client)
+    # Server-initiated uni stream id 3 is receive-only for a client.
+    assert_raises(ArgumentError) do
+      client.send_early_data(3, "nope".b)
+    end
+  end
+
+  def test_zero_rtt_packet_coalesces_with_initial
+    client = create_connection(perspective: :client)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    client.instance_variable_get(:@crypto_setup).set_early_keys(
+      client_early_traffic_secret: SecureRandom.random_bytes(32),
+      cipher_suite: cipher_suite
+    )
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+    client.send_early_data(stream.stream_id, "hi".b)
+
+    datagrams = client.get_packets_to_send
+    refute_empty datagrams
+
+    # An Initial leads with the 0xc* upper nibble; the datagram carries
+    # one (either produced by any pending Initial CRYPTO OR padded to
+    # 1200 by build_packet). After flush the 0-RTT queue is drained.
+    assert_empty client.instance_variable_get(:@pending_early_stream_frames)
+  end
+
   def test_ping_queues_a_single_ping_frame
     connection = create_connection
     enable_one_rtt(connection)
