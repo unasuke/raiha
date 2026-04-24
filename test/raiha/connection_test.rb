@@ -902,6 +902,26 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_complete_handshake_discards_zero_rtt_keys
+    client = create_connection(perspective: :client)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    crypto = client.instance_variable_get(:@crypto_setup)
+    crypto.set_early_keys(
+      client_early_traffic_secret: SecureRandom.random_bytes(32),
+      cipher_suite: cipher_suite
+    )
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+    client.send_early_data(stream.stream_id, "never-sent".b)
+
+    assert crypto.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+
+    client.complete_handshake
+
+    refute crypto.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+    assert_empty client.instance_variable_get(:@pending_early_stream_frames)
+  end
+
   def test_send_early_data_queues_stream_frame_for_zero_rtt_emit
     # Install early keys so build_level_packet(ZERO_RTT) is available.
     client = create_connection(perspective: :client)
