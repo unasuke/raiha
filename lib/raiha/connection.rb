@@ -993,10 +993,16 @@ module Raiha
       log_state_updated(old_state: old_state, new_state: @state)
       apply_peer_transport_parameters
 
-      # RFC 9001 §4.1.3: once 1-RTT keys are in use, 0-RTT keys are no
-      # longer needed and MUST be discarded. Any not-yet-sent early data
-      # is abandoned along with them.
+      # RFC 9001 §4.1.2 / §4.1.3: once 1-RTT keys are in use, 0-RTT
+      # keys are discarded. If the 0-RTT queue still has frames, the
+      # server either rejected early data or we never managed to
+      # install keys; replay them at 1-RTT so the application doesn't
+      # silently lose data it asked us to send.
       @crypto_setup.discard_early_keys
+      if @pending_early_stream_frames && !@pending_early_stream_frames.empty?
+        @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
+        @pending_stream_frames.concat(@pending_early_stream_frames)
+      end
       @pending_early_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
 
       # RFC 9000 §19.20: the server MUST signal handshake completion with a

@@ -910,16 +910,34 @@ class RaihaConnectionTest < Minitest::Test
       client_early_traffic_secret: SecureRandom.random_bytes(32),
       cipher_suite: cipher_suite
     )
-    grant_bidi_streams(client, 10)
-    stream = client.open_stream(bidirectional: true)
-    client.send_early_data(stream.stream_id, "never-sent".b)
-
     assert crypto.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
 
     client.complete_handshake
-
     refute crypto.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+  end
+
+  def test_complete_handshake_replays_unacknowledged_early_data_as_1rtt
+    client = create_connection(perspective: :client)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    client.instance_variable_get(:@crypto_setup).set_early_keys(
+      client_early_traffic_secret: SecureRandom.random_bytes(32),
+      cipher_suite: cipher_suite
+    )
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+    client.send_early_data(stream.stream_id, "replay-me".b)
+
+    # Simulate "0-RTT was never transmitted" (server rejected / we never
+    # flushed): queue is still populated when the handshake completes.
+    assert_equal 1, client.instance_variable_get(:@pending_early_stream_frames).length
+
+    client.complete_handshake
+
     assert_empty client.instance_variable_get(:@pending_early_stream_frames)
+    replayed = client.instance_variable_get(:@pending_stream_frames)
+    refute_nil replayed
+    assert_equal 1, replayed.length
+    assert_equal "replay-me".b, replayed.first.data
   end
 
   def test_send_early_data_queues_stream_frame_for_zero_rtt_emit
