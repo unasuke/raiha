@@ -126,6 +126,51 @@ class RaihaQuicHandshakeCryptoSetupTest < Minitest::Test
     assert_nil crypto_setup.get_crypto_data(level: Raiha::Quic::Handshake::EncryptionLevel::INITIAL)
   end
 
+  def test_set_early_keys_enables_zero_rtt_roundtrip
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    secret = SecureRandom.random_bytes(32)
+
+    client_setup = create_crypto_setup(:client)
+    server_setup = create_crypto_setup(:server)
+
+    refute client_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+
+    client_setup.set_early_keys(client_early_traffic_secret: secret, cipher_suite: cipher_suite)
+    server_setup.set_early_keys(client_early_traffic_secret: secret, cipher_suite: cipher_suite)
+
+    assert client_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+    assert server_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+
+    plaintext = "early data".b
+    aad = "\xc0".b
+    ciphertext = client_setup.encrypt(
+      plaintext,
+      packet_number: 0,
+      aad: aad,
+      level: Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT
+    )
+    decrypted = server_setup.decrypt(
+      ciphertext,
+      packet_number: 0,
+      aad: aad,
+      level: Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT
+    )
+    assert_equal plaintext, decrypted
+  end
+
+  def test_discard_early_keys_tears_zero_rtt_down
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    setup = create_crypto_setup(:client)
+    setup.set_early_keys(
+      client_early_traffic_secret: SecureRandom.random_bytes(32),
+      cipher_suite: cipher_suite
+    )
+    assert setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+
+    setup.discard_early_keys
+    refute setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+  end
+
   def test_pop_crypto_frame_returns_chunks_with_contiguous_offsets
     crypto_setup = create_crypto_setup(:client)
     level = Raiha::Quic::Handshake::EncryptionLevel::INITIAL

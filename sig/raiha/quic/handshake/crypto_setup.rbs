@@ -9,6 +9,8 @@ module Raiha::Quic
       def rederive_initial_keys: (connection_id: Protocol::ConnectionID) -> void
       def set_handshake_keys: (client_secret: String, server_secret: String, cipher_suite: Raiha::TLS::CipherSuite) -> void
       def set_application_keys: (client_secret: String, server_secret: String, cipher_suite: Raiha::TLS::CipherSuite) -> void
+      def set_early_keys: (client_early_traffic_secret: String, cipher_suite: Raiha::TLS::CipherSuite) -> void
+      def discard_early_keys: -> void
       def encrypt: (String plaintext, packet_number: Integer, aad: String, level: Symbol) -> String
       def decrypt: (String ciphertext, packet_number: Integer, aad: String, level: Symbol) -> String
       def header_protection_mask: (String sample, level: Symbol, ?direction: Symbol) -> String

@@ -94,6 +94,29 @@ module Raiha::Quic
         @handshake_complete = true
       end
 
+      # Install 0-RTT (Early Data) keys. RFC 9001 §5.1 derives a single
+      # one-direction secret from the TLS client_early_traffic_secret:
+      # client encrypts outbound 0-RTT packets with it, server decrypts
+      # inbound 0-RTT packets with it. We reuse UpdatableAEAD with the
+      # same secret on both "directions" so encrypt / decrypt on the
+      # right perspective picks up the right key; the opposite direction
+      # and rotate_keys are never exercised at this level.
+      def set_early_keys(client_early_traffic_secret:, cipher_suite:)
+        @zero_rtt_aead = UpdatableAEAD.new(
+          client_secret: client_early_traffic_secret,
+          server_secret: client_early_traffic_secret,
+          perspective: @perspective,
+          cipher_suite: cipher_suite
+        )
+      end
+
+      # Drop 0-RTT keys. Called on the client once the handshake moves
+      # past early data (RFC 9001 §4.1.3) and on the server once it
+      # decides to reject early data.
+      def discard_early_keys
+        @zero_rtt_aead = nil
+      end
+
       # Encrypt a packet payload
       def encrypt(plaintext, packet_number:, aad:, level:)
         aead = aead_for_level(level)
@@ -210,6 +233,8 @@ module Raiha::Quic
           @initial_aead
         when EncryptionLevel::HANDSHAKE
           @handshake_aead
+        when EncryptionLevel::ZERO_RTT
+          @zero_rtt_aead
         when EncryptionLevel::ONE_RTT
           @one_rtt_aead
         end
