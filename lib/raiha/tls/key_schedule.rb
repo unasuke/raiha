@@ -18,6 +18,7 @@ module Raiha
       attr_reader :server_handshake_traffic_secret
       attr_reader :client_application_traffic_secret
       attr_reader :server_application_traffic_secret
+      attr_reader :client_early_traffic_secret
 
       def initialize(mode:)
         @mode = mode

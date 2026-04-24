@@ -25,6 +25,8 @@ module Raiha
       @certificate_request: Handshake::CertificateRequest?
 
       attr_reader encrypted_extensions: Handshake::EncryptedExtensions?
+      attr_reader client_hello: Handshake::ClientHello?
+      attr_reader early_data_available: bool
 
       def initialize: (?config: Config?, ?server_name: String?) -> void
       def build_client_hello: -> Array[String]

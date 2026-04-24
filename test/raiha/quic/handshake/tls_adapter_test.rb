@@ -78,6 +78,39 @@ class RaihaQuicHandshakeTLSAdapterTest < Minitest::Test
     assert server_crypto_setup.handshake_complete?, "Server handshake should be complete"
   end
 
+  def test_install_early_keys_bridges_tls_secret_into_crypto_setup
+    crypto_setup, adapter = create_client
+
+    # Simulate the TLS Client post-PSK state: ClientHello built, early
+    # data available, early traffic secret derived.
+    tls = adapter.tls
+    tls.build_client_hello if tls.client_hello.nil?
+
+    cipher_suite = tls.client_hello.cipher_suites.first
+    tls.key_schedule.cipher_suite = cipher_suite
+    secret = SecureRandom.random_bytes(
+      OpenSSL::Digest.new(cipher_suite.hash_algorithm).digest_length
+    )
+    tls.key_schedule.instance_variable_set(:@client_early_traffic_secret, secret)
+    tls.instance_variable_set(:@early_data_available, true)
+
+    refute crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+    adapter.send(:install_early_keys_if_available)
+    assert crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+  end
+
+  def test_install_early_keys_is_noop_without_early_data
+    crypto_setup, adapter = create_client
+    adapter.send(:install_early_keys_if_available)
+    refute crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+  end
+
+  def test_install_early_keys_is_noop_on_server
+    crypto_setup, adapter = create_server
+    adapter.send(:install_early_keys_if_available)
+    refute crypto_setup.available?(Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+  end
+
   private def create_client
     connection_id = Raiha::Quic::Protocol::ConnectionID.from_bytes(["0102030405060708"].pack("H*"))
     crypto_setup = Raiha::Quic::Handshake::CryptoSetup.new(

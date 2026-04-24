@@ -32,6 +32,8 @@ module Raiha
       end
 
       attr_reader :encrypted_extensions
+      attr_reader :client_hello
+      attr_reader :early_data_available
 
       def initialize(config: nil, server_name: nil)
         super()

@@ -37,7 +37,7 @@ module Raiha
 
       def transcript_hash: (Array[String] messages) -> String
       # def derive_binder_key: -> String
-      def client_early_traffic_secret: (Raiha::TLS::Handshake client_hello) -> String
+      attr_reader client_early_traffic_secret: String?
       def early_exporter_secret: (Raiha::TLS::Handshake client_hello) -> String
       def derive_client_early_traffic_secret: (String transcript_hash) -> String
       def derive_early_exporter_master_secret: (String transcript_hash) -> String

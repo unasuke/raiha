@@ -48,6 +48,30 @@ module Raiha::Quic
           fragment = extract_handshake_fragment(record)
           @crypto_setup.queue_crypto_data(fragment, level: EncryptionLevel::INITIAL) if fragment
         end
+
+        # RFC 9001 §4.1 / §5.1: once the TLS Client has accepted a PSK and
+        # derived client_early_traffic_secret, feed the raw secret plus
+        # the negotiated cipher suite into CryptoSetup so 0-RTT packets
+        # can be encrypted with QUIC keys (key/iv/hp) expanded from it.
+        install_early_keys_if_available
+      end
+
+      private def install_early_keys_if_available
+        return unless @perspective.client?
+
+        tls = @tls #: Raiha::TLS::Client
+        return unless tls.early_data_available
+
+        client_hello = tls.client_hello
+        return unless client_hello
+
+        secret = tls.key_schedule.client_early_traffic_secret
+        return unless secret
+
+        @crypto_setup.set_early_keys(
+          client_early_traffic_secret: secret,
+          cipher_suite: client_hello.cipher_suites.first
+        )
       end
 
       # Receive raw TLS handshake data from a CRYPTO frame
