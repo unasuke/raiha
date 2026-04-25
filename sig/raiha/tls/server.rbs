@@ -22,6 +22,7 @@ module Raiha
       @selected_psk: { index: Integer, psk: String }?
 
       attr_reader client_hello: Handshake::ClientHello?
+      attr_reader early_data_available: bool
 
       def initialize: (?config: Config) -> void
       def datagrams_to_send: -> Array[String]?
@@ -48,6 +49,7 @@ module Raiha
 
       private def receive_retry_client_hello: -> void
       private def check_psk: -> void
+      private def check_early_data: -> void
       private def verify_psk_binder: (String psk, String binder, Integer identity_index) -> bool
       private def compute_binders_size: (Integer target_index) -> Integer
       private def check_key_share_or_retry: -> void

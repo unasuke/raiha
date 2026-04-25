@@ -57,10 +57,9 @@ module Raiha::Quic
       end
 
       private def install_early_keys_if_available
-        return unless @perspective.client?
-
-        tls = @tls #: Raiha::TLS::Client
-        return unless tls.early_data_available
+        tls = @tls
+        return unless tls.respond_to?(:early_data_available) && tls.early_data_available
+        return unless tls.respond_to?(:client_hello)
 
         client_hello = tls.client_hello
         return unless client_hello
@@ -68,9 +67,19 @@ module Raiha::Quic
         secret = tls.key_schedule.client_early_traffic_secret
         return unless secret
 
+        # RFC 9001 §4.1.4: server uses the same cipher_suite it negotiated
+        # (available via TLS::Server's negotiated_cipher_suite) while the
+        # client uses the one it proposed (only ever one in the
+        # ClientHello at this point).
+        cipher_suite = if tls.respond_to?(:negotiated_cipher_suite) && tls.negotiated_cipher_suite
+                         tls.negotiated_cipher_suite
+                       else
+                         client_hello.cipher_suites.first
+                       end
+
         @crypto_setup.set_early_keys(
           client_early_traffic_secret: secret,
-          cipher_suite: client_hello.cipher_suites.first
+          cipher_suite: cipher_suite
         )
       end
 
@@ -115,6 +124,12 @@ module Raiha::Quic
 
           # Update transport parameters extension with latest values (e.g., original_destination_connection_id)
           update_transport_parameters_extension
+
+          # RFC 9001 §4.1.4: if the TLS server accepted the client's
+          # early_data extension during select_parameters, bridge the
+          # derived client_early_traffic_secret into CryptoSetup so
+          # 0-RTT packets from the client can be decrypted.
+          install_early_keys_if_available
 
           # Trigger server to build response flight
           @tls.datagrams_to_send

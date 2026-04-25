@@ -30,6 +30,7 @@ module Raiha
       end
 
       attr_reader :client_hello
+      attr_reader :early_data_available
 
       def initialize(config: Config.server_default)
         @config = config
@@ -48,6 +49,7 @@ module Raiha
         @session_ticket_store = SessionTicketStore.new
         @psk_mode = false
         @selected_psk = nil
+        @early_data_available = false
         @additional_extensions = []
       end
 
@@ -154,8 +156,38 @@ module Raiha
         end
 
         check_psk
+        check_early_data
         choose_group
         check_key_share_or_retry
+      end
+
+      # RFC 8446 §4.2.10 / RFC 9001 §4.1.4: accept early data when we
+      # just accepted a PSK and the client included the EarlyData
+      # extension. Derive the client_early_traffic_secret from the PSK
+      # and the ClientHello-only transcript so a QUIC adapter can
+      # install 0-RTT AEAD keys.
+      private def check_early_data
+        return unless @psk_mode
+
+        early_data_ext = @extensions[:client_hello].find do |ext|
+          ext.is_a?(Handshake::Extension::EarlyData)
+        end
+        return unless early_data_ext
+
+        hash_alg = @cipher_suite.hash_algorithm # steep:ignore
+        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
+
+        @key_schedule.cipher_suite = @cipher_suite # steep:ignore
+        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, @selected_psk[:psk]) # steep:ignore
+        @key_schedule.instance_variable_set(:@ikm, {
+          early_secret: early_secret,
+          handshake_secret: nil,
+          main_secret: nil,
+        })
+        @key_schedule.derive_client_early_traffic_secret(@transcript_hash.hash)
+
+        @early_data_available = true
+        @early_data_extension = Handshake::Extension::EarlyData.new(on: :encrypted_extensions)
       end
 
       private def check_psk
@@ -344,12 +376,16 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:encrypted_extensions]
           hs.message = Handshake::EncryptedExtensions.new.tap do |ee|
-            ee.extensions = [
+            extensions = [
               Handshake::Extension::SupportedGroups.new(on: :encrypted_extensions).tap do |sg|
                 sg.groups = [@pkey[:group]]
               end,
               *@additional_extensions
             ]
+            # RFC 8446 §4.2.10: echo EarlyData in EncryptedExtensions so
+            # the client knows 0-RTT was accepted.
+            extensions << @early_data_extension if @early_data_extension
+            ee.extensions = extensions
           end
         end
         @transcript_hash[:encrypted_extensions] = handshake.serialize
