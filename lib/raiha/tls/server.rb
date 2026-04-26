@@ -312,7 +312,15 @@ module Raiha
         new_session_ticket.ticket_age_add = SecureRandom.random_number(0xFFFFFFFF)
         new_session_ticket.ticket_nonce = ticket_nonce
         new_session_ticket.ticket = ticket_data
-        new_session_ticket.extensions = []
+        # RFC 9001 §4.6.1: when issuing a ticket on a QUIC connection,
+        # max_early_data_size MUST be 0xFFFFFFFF if 0-RTT is allowed
+        # (and any other value is a connection error). raiha's TLS layer
+        # is built into raiha's QUIC implementation, so always advertise
+        # the QUIC sentinel.
+        early_data_ext = Handshake::Extension::EarlyData.new(on: :new_session_ticket)
+        early_data_ext.max_early_data_size = 0xFFFFFFFF
+        early_data_ext.context = :new_session_ticket
+        new_session_ticket.extensions = [early_data_ext]
 
         psk = @key_schedule.derive_resumption_psk(ticket_nonce)
         @session_ticket_store.store(ticket_data, new_session_ticket, psk)

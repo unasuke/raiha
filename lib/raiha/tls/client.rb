@@ -323,7 +323,12 @@ module Raiha
         psk_entry = @session_ticket_store.get(@server_name || "")
         if psk_entry
           add_psk_to_client_hello(hs_clienthello, psk_entry)
-          @early_data_available = true
+          # RFC 8446 §4.2.10 / RFC 9001 §4.6.1: only attempt 0-RTT when
+          # the issuing NewSessionTicket carried an EarlyData extension.
+          if ticket_allows_early_data?(psk_entry)
+            @client_hello.extensions << Handshake::Extension::EarlyData.new(on: :client_hello)
+            @early_data_available = true
+          end
         end
 
         @transcript_hash[:client_hello] = hs_clienthello.serialize
@@ -380,6 +385,13 @@ module Raiha
 
         # Create early data cipher
         @early_cipher = AEAD.new(cipher_suite: cipher_suite, key_schedule: @key_schedule, mode: :client)
+      end
+
+      private def ticket_allows_early_data?(psk_entry)
+        extensions = psk_entry[:extensions]
+        return false unless extensions
+
+        extensions.any? { |ext| ext.is_a?(Handshake::Extension::EarlyData) }
       end
 
       private def add_psk_to_client_hello(hs_clienthello, psk_entry)

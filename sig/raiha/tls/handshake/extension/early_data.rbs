@@ -4,6 +4,9 @@ module Raiha
       class Extension
         class EarlyData < AbstractExtension
           EXTENSION_TYPE_NUMBER: 42
+
+          attr_accessor max_early_data_size: Integer?
+          attr_accessor context: Symbol?
         end
       end
     end
