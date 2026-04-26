@@ -155,6 +155,21 @@ module Raiha
     # Start the handshake (client-initiated)
     def start_handshake
       @tls_adapter.start
+      # RFC 9001 §4.6.1: if we have a session ticket carrying remembered
+      # QUIC transport parameters, use them to bound 0-RTT send limits
+      # until the server's current parameters arrive in EncryptedExtensions.
+      apply_remembered_transport_parameters
+    end
+
+    private def apply_remembered_transport_parameters
+      return unless @perspective.client?
+
+      remembered = @tls_adapter.remembered_transport_parameters
+      return unless remembered
+
+      @streams.update_peer_max_streams_bidi(remembered.initial_max_streams_bidi) if remembered.initial_max_streams_bidi
+      @streams.update_peer_max_streams_uni(remembered.initial_max_streams_uni) if remembered.initial_max_streams_uni
+      @connection_flow_controller.update_send_window(remembered.initial_max_data) if remembered.initial_max_data
     end
 
     # Application-driven close with an implicit NO_ERROR (RFC 9000 §20.1).

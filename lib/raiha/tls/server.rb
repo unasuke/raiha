@@ -303,7 +303,21 @@ module Raiha
         end
       end
 
-      def build_new_session_ticket
+      def build_new_session_ticket(application_data: nil)
+        handshake = build_new_session_ticket_handshake(application_data: application_data)
+
+        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
+          inner.content = handshake.serialize
+          inner.content_type = Record::CONTENT_TYPE[:handshake]
+        end
+        @server_cipher.encrypt(plaintext: innerplaintext, phase: :application).serialize
+      end
+
+      # Build a NewSessionTicket Handshake message (without the TLS record
+      # wrapping). QUIC carries handshake messages in CRYPTO frames so
+      # callers can serialize this directly. The ticket is also stored
+      # with the optional opaque application_data blob.
+      def build_new_session_ticket_handshake(application_data: nil)
         ticket_nonce = SecureRandom.random_bytes(8)
         ticket_data = SecureRandom.random_bytes(32)
 
@@ -323,17 +337,12 @@ module Raiha
         new_session_ticket.extensions = [early_data_ext]
 
         psk = @key_schedule.derive_resumption_psk(ticket_nonce)
-        @session_ticket_store.store(ticket_data, new_session_ticket, psk)
+        @session_ticket_store.store(ticket_data, new_session_ticket, psk, application_data: application_data)
 
         handshake = Handshake.new
         handshake.handshake_type = Handshake::HANDSHAKE_TYPE[:new_session_ticket]
         handshake.message = new_session_ticket
-
-        innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
-          inner.content = handshake.serialize
-          inner.content_type = Record::CONTENT_TYPE[:handshake]
-        end
-        @server_cipher.encrypt(plaintext: innerplaintext, phase: :application).serialize
+        handshake
       end
 
       def build_change_cipher_spec
@@ -516,6 +525,7 @@ module Raiha
         unless handshake.message.verify_data == expected
           raise Raiha::TLS::Error, "Client Finished verification failed"
         end
+        @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
         true
       end
 

@@ -7,9 +7,12 @@ module Raiha::Quic
       def start: -> void
       def receive_crypto_data: (String data, level: Symbol) -> void
       def handshake_complete?: -> bool
+      def peer_transport_parameters: -> Raiha::Quic::Handshake::TransportParameters?
+      def remembered_transport_parameters: -> Raiha::Quic::Handshake::TransportParameters?
+      def build_new_session_ticket: -> String?
 
       private def install_early_keys_if_available: -> void
-      private def peer_transport_parameters: -> Raiha::Quic::Handshake::TransportParameters?
+      private def attach_transport_parameters_to_ticket: -> void
       private def receive_as_server: (String data, Symbol level) -> void
       private def receive_as_client: (String data, Symbol level) -> void
       private def verify_client_finished: (Raiha::TLS::Handshake handshake) -> void

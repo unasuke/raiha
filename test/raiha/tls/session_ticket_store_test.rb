@@ -53,4 +53,39 @@ class RaihaTLSSessionTicketStoreTest < Minitest::Test
     store.delete("example.com")
     assert_nil store.get("example.com")
   end
+
+  def test_store_with_application_data
+    store = Raiha::TLS::SessionTicketStore.new
+    ticket_msg = Raiha::TLS::Handshake::NewSessionTicket.new
+    ticket_msg.ticket_lifetime = 7200
+    ticket_msg.ticket_age_add = 0
+    ticket_msg.ticket_nonce = "".b
+    ticket_msg.ticket = "ticket"
+    ticket_msg.extensions = []
+
+    store.store("example.com", ticket_msg, "psk", application_data: "tp-blob".b)
+
+    assert_equal "tp-blob".b, store.get("example.com")[:application_data]
+  end
+
+  def test_attach_application_data
+    store = Raiha::TLS::SessionTicketStore.new
+    ticket_msg = Raiha::TLS::Handshake::NewSessionTicket.new
+    ticket_msg.ticket_lifetime = 7200
+    ticket_msg.ticket_age_add = 0
+    ticket_msg.ticket_nonce = "".b
+    ticket_msg.ticket = "ticket"
+    ticket_msg.extensions = []
+
+    store.store("example.com", ticket_msg, "psk")
+    assert_nil store.get("example.com")[:application_data]
+
+    assert store.attach_application_data("example.com", "tp-blob".b)
+    assert_equal "tp-blob".b, store.get("example.com")[:application_data]
+  end
+
+  def test_attach_application_data_returns_false_for_unknown_key
+    store = Raiha::TLS::SessionTicketStore.new
+    refute store.attach_application_data("unknown", "tp-blob".b)
+  end
 end

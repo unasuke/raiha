@@ -33,7 +33,8 @@ module Raiha
       def select_parameters: -> void
       def connected?: -> bool
 
-      def build_new_session_ticket: -> String
+      def build_new_session_ticket: (?application_data: String?) -> String
+      def build_new_session_ticket_handshake: (?application_data: String?) -> Handshake
       def build_change_cipher_spec: -> Array[String]
       def build_hello_retry_request: -> Array[String]
       def build_error_alert: (Alert alert) -> Array[String]

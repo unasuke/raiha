@@ -115,6 +115,42 @@ module Raiha::Quic
         @peer_transport_parameters = TransportParameters.deserialize(ext.extension_data)
       end
 
+      # RFC 9001 §4.6.1: when resuming with a ticket that carried QUIC
+      # transport parameters, the client uses these remembered values to
+      # bound 0-RTT data sent before the server's current parameters
+      # arrive in EncryptedExtensions. Returns nil when not resuming, or
+      # when the ticket has no associated TP blob.
+      def remembered_transport_parameters
+        return nil unless @perspective.client?
+
+        store = @tls.instance_variable_get(:@session_ticket_store)
+        return nil unless store
+
+        server_name = @tls.instance_variable_get(:@server_name) || ""
+        entry = store.get(server_name)
+        blob = entry && entry[:application_data]
+        return nil unless blob
+
+        TransportParameters.deserialize(blob)
+      end
+
+      # Issue a NewSessionTicket on the server side. The current local
+      # transport parameters are persisted alongside the ticket so a
+      # future resumption can be validated against them (RFC 9001 §4.6.1).
+      # Returns raw handshake bytes suitable for transmission in a CRYPTO
+      # frame at 1-RTT level, or nil when not applicable.
+      def build_new_session_ticket
+        return nil unless @perspective.server?
+        return nil unless @transport_parameters
+
+        tls = @tls
+        return nil unless tls.is_a?(Raiha::TLS::Server)
+
+        application_data = @transport_parameters.serialize
+        handshake = tls.build_new_session_ticket_handshake(application_data: application_data)
+        handshake.serialize
+      end
+
       private def receive_as_server(data, level)
         case level
         when EncryptionLevel::INITIAL
@@ -172,12 +208,28 @@ module Raiha::Quic
         handshakes = Raiha::TLS::Handshake.deserialize_multiple(data)
         handshakes.each do |handshake|
           @tls.handle_handshake_message(handshake)
+          attach_transport_parameters_to_ticket if handshake.message.is_a?(Raiha::TLS::Handshake::NewSessionTicket)
         end
 
         check_key_derivation
 
         # After receiving server Finished, build client Finished
         collect_client_finished
+      end
+
+      # Persist the peer's QUIC transport parameters alongside the freshly
+      # stored ticket entry (RFC 9001 §4.6.1). Called from the client
+      # receive path right after the TLS layer stored a NewSessionTicket.
+      private def attach_transport_parameters_to_ticket
+        store = @tls.instance_variable_get(:@session_ticket_store)
+        return unless store
+
+        server_name = @tls.instance_variable_get(:@server_name) || ""
+
+        peer_tp = peer_transport_parameters
+        return unless peer_tp
+
+        store.attach_application_data(server_name, peer_tp.serialize)
       end
 
       private def collect_server_response

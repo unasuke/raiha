@@ -48,6 +48,20 @@ class RaihaTLSSessionResumptionTest < Minitest::Test
     assert_includes psk_modes.modes, :psk_dhe_ke
   end
 
+  def test_application_data_persists_with_ticket
+    _client, server = establish_connection
+
+    # RFC 9001 §4.6.1: server attaches its QUIC transport parameters
+    # blob (opaque to TLS) when issuing the ticket; client side stores
+    # them too via the QUIC adapter, but we exercise the server-side
+    # attachment path here to keep the test at the TLS layer.
+    server.build_new_session_ticket(application_data: "remembered-tp".b)
+
+    server_store = server.instance_variable_get(:@session_ticket_store)
+    last_entry = server_store.instance_variable_get(:@tickets).values.last
+    assert_equal "remembered-tp".b, last_entry[:application_data]
+  end
+
   private def establish_connection
     client = Raiha::TLS::Client.new
     server = Raiha::TLS::Server.new(config: create_server_config)

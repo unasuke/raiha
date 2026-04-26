@@ -988,6 +988,28 @@ class RaihaConnectionTest < Minitest::Test
     assert_empty client.instance_variable_get(:@pending_early_stream_frames)
   end
 
+  def test_start_handshake_applies_remembered_transport_parameters
+    client = create_connection(perspective: :client)
+
+    remembered_tp = Raiha::Quic::Handshake::TransportParameters.new
+    remembered_tp.initial_max_data = 4_096
+    remembered_tp.initial_max_streams_bidi = 7
+    remembered_tp.initial_max_streams_uni = 3
+
+    client.instance_variable_get(:@tls_adapter).define_singleton_method(:remembered_transport_parameters) do
+      remembered_tp
+    end
+
+    client.start_handshake
+
+    flow = client.instance_variable_get(:@connection_flow_controller)
+    assert_equal 4_096, flow.instance_variable_get(:@send_window)
+
+    stream_limit = client.streams.stream_limit_controller
+    assert_equal 7, stream_limit.instance_variable_get(:@peer_max_bidi)
+    assert_equal 3, stream_limit.instance_variable_get(:@peer_max_uni)
+  end
+
   def test_ping_queues_a_single_ping_frame
     connection = create_connection
     enable_one_rtt(connection)

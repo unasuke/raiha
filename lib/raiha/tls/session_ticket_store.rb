@@ -7,7 +7,7 @@ module Raiha
         @tickets = {}
       end
 
-      def store(server_name, ticket_message, psk)
+      def store(server_name, ticket_message, psk, application_data: nil)
         @tickets[server_name] = {
           ticket: ticket_message.ticket,
           ticket_nonce: ticket_message.ticket_nonce,
@@ -16,7 +16,18 @@ module Raiha
           lifetime: ticket_message.ticket_lifetime,
           age_add: ticket_message.ticket_age_add,
           extensions: ticket_message.extensions,
+          application_data: application_data,
         }
+      end
+
+      # Attach an opaque application-layer blob to an existing ticket entry
+      # (RFC 9001 §4.6.1: QUIC servers/clients persist transport parameters
+      # alongside the resumption ticket). Returns true when the entry exists.
+      def attach_application_data(key, application_data)
+        entry = @tickets[key]
+        return false unless entry
+        entry[:application_data] = application_data
+        true
       end
 
       def get(server_name)
