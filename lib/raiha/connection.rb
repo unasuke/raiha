@@ -79,6 +79,8 @@ module Raiha
 
     def handle_frames(frames, level: Quic::Handshake::EncryptionLevel::INITIAL)
       frames.each do |frame|
+        reject_frame_at_level!(frame, level)
+
         case frame
         when Quic::Wire::Frames::AckFrame
           handle_ack_frame(frame, level: level)
@@ -1056,6 +1058,15 @@ module Raiha
       @state == State::CONNECTED
     end
 
+    # RFC 9001 §4.6.1: was the 0-RTT data this client transmitted (if
+    # any) accepted by the server? Returns nil before the server's
+    # EncryptedExtensions arrives. Useful for application-level metrics
+    # and for confirming that any in-flight 0-RTT data will be acked at
+    # 1-RTT instead of needing application-level retransmit.
+    def early_data_accepted?
+      @tls_adapter.early_data_accepted?
+    end
+
     def closed?
       @state == State::CLOSED
     end
@@ -1477,6 +1488,33 @@ module Raiha
       if @tls_adapter.handshake_complete? && @state == State::HANDSHAKING
         complete_handshake
       end
+    end
+
+    # RFC 9000 §12.4 Table 3 / RFC 9001 §4: each encryption level only
+    # admits a fixed subset of frame types. Receiving a forbidden frame
+    # is a connection error of type PROTOCOL_VIOLATION. Currently only
+    # the 0-RTT carve-outs are enforced because that's the level the
+    # server has just started accepting; the Initial/Handshake side is
+    # left for a follow-up.
+    private def reject_frame_at_level!(frame, level)
+      return unless level == Quic::Handshake::EncryptionLevel::ZERO_RTT
+
+      forbidden = case frame
+                  when Quic::Wire::Frames::AckFrame,
+                       Quic::Wire::Frames::CryptoFrame,
+                       Quic::Wire::Frames::NewTokenFrame,
+                       Quic::Wire::Frames::HandshakeDoneFrame,
+                       Quic::Wire::Frames::PathResponseFrame,
+                       Quic::Wire::Frames::RetireConnectionIdFrame
+                    true
+                  else
+                    false
+                  end
+      return unless forbidden
+
+      raise Quic::Qerr::ProtocolViolation.new(
+        reason_phrase: "frame type not allowed at 0-RTT"
+      )
     end
 
     private def handle_stream_frame(frame)

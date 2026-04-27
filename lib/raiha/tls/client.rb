@@ -188,6 +188,15 @@ module Raiha
         transition_state(State::WAIT_SH_RETRY)
       end
 
+      # RFC 8446 §4.2.10: the server signals 0-RTT acceptance by echoing
+      # the EarlyData extension in EncryptedExtensions. Returns nil while
+      # we have not yet processed EE.
+      def early_data_accepted?
+        ee = @encrypted_extensions
+        return nil unless ee
+        ee.extensions.any? { |ext| ext.is_a?(Handshake::Extension::EarlyData) }
+      end
+
       # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
       def receive_encrypted_extensions(handshake)
         # handshakes = Handshake.deserialize_multiple(record.content)

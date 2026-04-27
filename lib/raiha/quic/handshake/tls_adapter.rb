@@ -96,6 +96,18 @@ module Raiha::Quic
         @crypto_setup.handshake_complete?
       end
 
+      # RFC 9001 §4.6.1 / RFC 8446 §4.2.10: relays the TLS Client's
+      # EncryptedExtensions check so the QUIC layer can tell whether the
+      # 0-RTT data it transmitted was accepted by the server. Returns
+      # nil before EE has been processed, false on rejection, true on
+      # acceptance. Only meaningful on the client.
+      def early_data_accepted?
+        return nil unless @perspective.client?
+        tls = @tls
+        return nil unless tls.respond_to?(:early_data_accepted?)
+        tls.early_data_accepted?
+      end
+
       # Extract the peer's quic_transport_parameters TLS extension (RFC 9001 Section 8.2)
       # and deserialize into a TransportParameters object, or nil if not yet received.
       def peer_transport_parameters

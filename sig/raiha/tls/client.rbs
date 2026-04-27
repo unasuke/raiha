@@ -44,6 +44,7 @@ module Raiha
       def receive_certificate_verify: (Handshake handshake) -> void
       def receive_finished: (Handshake handshake) -> void
       def receive_new_session_ticket: (Handshake handshake) -> void
+      def early_data_accepted?: -> bool?
       def receive_key_update: (Handshake handshake) -> void
       def send_early_data: (String data) -> String?
       def send_end_of_early_data: -> String?

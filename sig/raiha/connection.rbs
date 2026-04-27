@@ -23,6 +23,7 @@ module Raiha
 
     def initialize: (perspective: Quic::Protocol::Perspective | Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?alpn_protocols: Array[String]?) -> void
     def handle_frames: (Array[Quic::Wire::Frame] frames, ?level: Symbol) -> void
+    def early_data_accepted?: -> bool?
     def open_stream: (?bidirectional: bool) -> Stream
     def accept_stream: -> Stream
     def accept_stream_nonblock: -> Stream?
@@ -65,6 +66,7 @@ module Raiha
     private def pending_ack_frame: (Symbol level) -> Quic::Wire::Frames::AckFrame?
     private def apply_peer_transport_parameters: -> void
     private def apply_remembered_transport_parameters: -> void
+    private def reject_frame_at_level!: (Quic::Wire::Frame frame, Symbol level) -> void
     private def known_peer_reset_tokens: -> Array[String]
     private def update_connection_ids_from_initial: (Quic::Wire::LongHeader header) -> void
     private def handle_crypto_frame: (Quic::Wire::Frames::CryptoFrame frame, ?level: Symbol) -> void

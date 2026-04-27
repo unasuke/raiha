@@ -988,6 +988,87 @@ class RaihaConnectionTest < Minitest::Test
     assert_empty client.instance_variable_get(:@pending_early_stream_frames)
   end
 
+  def test_server_decrypts_zero_rtt_stream_frame
+    secret = SecureRandom.random_bytes(32)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+
+    client_src = Raiha::Quic::Protocol::ConnectionID.generate
+    server_src = Raiha::Quic::Protocol::ConnectionID.generate
+
+    # Client treats server_src as the destination CID, so the on-wire
+    # header carries DCID=server_src/SCID=client_src — matching how the
+    # server wires up its own ConnectionID.
+    client = Raiha::Connection.new(
+      perspective: :client,
+      src_connection_id: client_src,
+      dest_connection_id: server_src
+    )
+    server = Raiha::Connection.new(
+      perspective: :server,
+      src_connection_id: server_src,
+      dest_connection_id: client_src
+    )
+
+    [client, server].each do |conn|
+      conn.instance_variable_get(:@crypto_setup).set_early_keys(
+        client_early_traffic_secret: secret,
+        cipher_suite: cipher_suite
+      )
+    end
+
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+    client.send_early_data(stream.stream_id, "early-payload".b)
+
+    datagrams = client.get_packets_to_send
+    refute_empty datagrams
+
+    datagrams.each { |d| server.handle_packet(d) }
+
+    received_stream = server.streams.get_stream(stream.stream_id.value)
+    refute_nil received_stream, "server should have created the stream from 0-RTT data"
+    assert_equal "early-payload".b, received_stream.read
+  end
+
+  def test_early_data_accepted_signal_reflects_encrypted_extensions
+    client = create_connection(perspective: :client)
+    # Before EE arrives: undecided.
+    assert_nil client.early_data_accepted?
+
+    tls = client.instance_variable_get(:@tls_adapter).tls
+
+    # Server rejects 0-RTT: EE without EarlyData ext.
+    rejected_ee = Raiha::TLS::Handshake::EncryptedExtensions.new
+    rejected_ee.extensions = []
+    tls.instance_variable_set(:@encrypted_extensions, rejected_ee)
+    refute client.early_data_accepted?
+
+    # Server accepts 0-RTT: EE echoes EarlyData (RFC 8446 §4.2.10).
+    accepted_ee = Raiha::TLS::Handshake::EncryptedExtensions.new
+    accepted_ee.extensions = [
+      Raiha::TLS::Handshake::Extension::EarlyData.new(on: :encrypted_extensions),
+    ]
+    tls.instance_variable_set(:@encrypted_extensions, accepted_ee)
+    assert client.early_data_accepted?
+  end
+
+  def test_zero_rtt_rejects_forbidden_crypto_frame
+    server = create_connection(perspective: :server)
+    cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
+    server.instance_variable_get(:@crypto_setup).set_early_keys(
+      client_early_traffic_secret: SecureRandom.random_bytes(32),
+      cipher_suite: cipher_suite
+    )
+
+    crypto_frame = Raiha::Quic::Wire::Frames::CryptoFrame.new
+    crypto_frame.offset = 0
+    crypto_frame.data = "x".b
+
+    assert_raises(Raiha::Quic::Qerr::ProtocolViolation) do
+      server.handle_frames([crypto_frame], level: Raiha::Quic::Handshake::EncryptionLevel::ZERO_RTT)
+    end
+  end
+
   def test_start_handshake_applies_remembered_transport_parameters
     client = create_connection(perspective: :client)
 
