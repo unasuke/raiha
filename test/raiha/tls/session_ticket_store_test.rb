@@ -88,4 +88,26 @@ class RaihaTLSSessionTicketStoreTest < Minitest::Test
     store = Raiha::TLS::SessionTicketStore.new
     refute store.attach_application_data("unknown", "tp-blob".b)
   end
+
+  def test_mark_consumed_for_early_data_round_trip
+    store = Raiha::TLS::SessionTicketStore.new
+    ticket_msg = Raiha::TLS::Handshake::NewSessionTicket.new
+    ticket_msg.ticket_lifetime = 7200
+    ticket_msg.ticket_age_add = 0
+    ticket_msg.ticket_nonce = "".b
+    ticket_msg.ticket = "ticket-bytes".b
+    ticket_msg.extensions = []
+
+    store.store("example.com", ticket_msg, "psk")
+    refute store.consumed_for_early_data?("ticket-bytes".b)
+
+    assert store.mark_consumed_for_early_data("ticket-bytes".b)
+    assert store.consumed_for_early_data?("ticket-bytes".b)
+  end
+
+  def test_consumed_for_early_data_for_unknown_ticket
+    store = Raiha::TLS::SessionTicketStore.new
+    refute store.consumed_for_early_data?("unknown".b)
+    refute store.mark_consumed_for_early_data("unknown".b)
+  end
 end

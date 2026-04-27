@@ -1,18 +1,21 @@
 module Raiha
   module TLS
     class SessionTicketStore
-      type entry = { ticket: String, ticket_nonce: String, psk: String, received_at: Time, lifetime: Integer, age_add: Integer, extensions: Array[untyped], application_data: String? }
+      type entry = { ticket: String, ticket_nonce: String, psk: String, received_at: Time, lifetime: Integer, age_add: Integer, extensions: Array[untyped], application_data: String?, consumed_for_early_data: bool }
 
       @tickets: Hash[String, entry]
 
       def initialize: -> void
       def store: (String server_name, Handshake::NewSessionTicket ticket_message, String psk, ?application_data: String?) -> void
       def attach_application_data: (String key, String? application_data) -> bool
+      def mark_consumed_for_early_data: (String ticket_data) -> bool
+      def consumed_for_early_data?: (String ticket_data) -> bool
       def get: (String server_name) -> (entry | nil)
       def get_by_ticket: (String ticket_data) -> (entry | nil)
       def delete: (String server_name) -> void
 
       private def expired?: ({ received_at: Time, lifetime: Integer } entry) -> bool
+      private def locate_by_ticket: (String ticket_data) -> (entry | nil)
     end
   end
 end

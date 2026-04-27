@@ -17,6 +17,7 @@ module Raiha
           age_add: ticket_message.ticket_age_add,
           extensions: ticket_message.extensions,
           application_data: application_data,
+          consumed_for_early_data: false,
         }
       end
 
@@ -28,6 +29,23 @@ module Raiha
         return false unless entry
         entry[:application_data] = application_data
         true
+      end
+
+      # RFC 9001 §5.1 / RFC 8446 §8.1: 0-RTT data carried under a session
+      # ticket is replayable, so the server treats each ticket as
+      # single-use for early data. Subsequent connections that reuse the
+      # ticket may still PSK-resume but MUST NOT accept 0-RTT.
+      def mark_consumed_for_early_data(ticket_data)
+        entry = locate_by_ticket(ticket_data)
+        return false unless entry
+        entry[:consumed_for_early_data] = true
+        true
+      end
+
+      def consumed_for_early_data?(ticket_data)
+        entry = locate_by_ticket(ticket_data)
+        return false unless entry
+        entry[:consumed_for_early_data] == true
       end
 
       def get(server_name)
@@ -51,6 +69,13 @@ module Raiha
 
       private def expired?(entry)
         Time.now > entry[:received_at] + entry[:lifetime]
+      end
+
+      private def locate_by_ticket(ticket_data)
+        @tickets.each_value do |entry|
+          return entry if entry[:ticket] == ticket_data
+        end
+        nil
       end
     end
   end

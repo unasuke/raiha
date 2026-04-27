@@ -62,6 +62,68 @@ class RaihaTLSSessionResumptionTest < Minitest::Test
     assert_equal "remembered-tp".b, last_entry[:application_data]
   end
 
+  def test_replay_with_consumed_ticket_rejects_early_data
+    server_ticket_store, client_hello_record = build_resumption_client_hello
+
+    # First resumption: server accepts early data and marks the ticket
+    # consumed. A fresh server reusing the same ticket store rejects the
+    # replay (RFC 9001 §5.1).
+    first_server = build_resumption_server(server_ticket_store)
+    first_server.receive(client_hello_record)
+    assert first_server.early_data_available, "first resumption should accept early data"
+
+    second_server = build_resumption_server(server_ticket_store)
+    second_server.receive(client_hello_record)
+
+    refute second_server.early_data_available,
+      "replayed ticket must not be accepted for early data"
+  end
+
+  def test_stale_ticket_age_rejects_early_data
+    first_client, first_server = establish_connection
+    ticket_record = first_server.build_new_session_ticket
+    first_client.receive(ticket_record)
+
+    server_ticket_store = first_server.instance_variable_get(:@session_ticket_store)
+    client_ticket_store = first_client.instance_variable_get(:@session_ticket_store)
+
+    # Push the client's stored received_at well into the past so the
+    # claimed ticket_age the server reconstructs falls outside the 10s
+    # acceptance window.
+    client_entry = client_ticket_store.instance_variable_get(:@tickets).values.last
+    client_entry[:received_at] = Time.now - 60
+
+    second_client = Raiha::TLS::Client.new
+    second_client.instance_variable_set(:@session_ticket_store, client_ticket_store)
+    client_hello_record = second_client.datagrams_to_send.join
+
+    second_server = build_resumption_server(server_ticket_store)
+    second_server.receive(client_hello_record)
+
+    refute second_server.early_data_available,
+      "claimed ticket age outside the window must reject early data"
+  end
+
+  private def build_resumption_client_hello
+    first_client, first_server = establish_connection
+    ticket_record = first_server.build_new_session_ticket
+    first_client.receive(ticket_record)
+
+    server_ticket_store = first_server.instance_variable_get(:@session_ticket_store)
+    client_ticket_store = first_client.instance_variable_get(:@session_ticket_store)
+
+    second_client = Raiha::TLS::Client.new
+    second_client.instance_variable_set(:@session_ticket_store, client_ticket_store)
+
+    [server_ticket_store, second_client.datagrams_to_send.join]
+  end
+
+  private def build_resumption_server(ticket_store)
+    server = Raiha::TLS::Server.new(config: create_server_config)
+    server.instance_variable_set(:@session_ticket_store, ticket_store)
+    server
+  end
+
   private def establish_connection
     client = Raiha::TLS::Client.new
     server = Raiha::TLS::Server.new(config: create_server_config)

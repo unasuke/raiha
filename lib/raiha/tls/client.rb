@@ -322,13 +322,17 @@ module Raiha
 
         psk_entry = @session_ticket_store.get(@server_name || "")
         if psk_entry
-          add_psk_to_client_hello(hs_clienthello, psk_entry)
-          # RFC 8446 §4.2.10 / RFC 9001 §4.6.1: only attempt 0-RTT when
-          # the issuing NewSessionTicket carried an EarlyData extension.
+          # RFC 8446 §4.2.10 / RFC 9001 §4.6.1: 0-RTT requires the issuing
+          # ticket to advertise EarlyData. RFC 8446 §4.2.11 also forces
+          # PreSharedKey to be the last extension in ClientHello, so add
+          # EarlyData first and let add_psk_to_client_hello append PSK at
+          # the very end (otherwise the binder is computed over the wrong
+          # bytes and the server rejects the PSK).
           if ticket_allows_early_data?(psk_entry)
             @client_hello.extensions << Handshake::Extension::EarlyData.new(on: :client_hello)
             @early_data_available = true
           end
+          add_psk_to_client_hello(hs_clienthello, psk_entry)
         end
 
         @transcript_hash[:client_hello] = hs_clienthello.serialize

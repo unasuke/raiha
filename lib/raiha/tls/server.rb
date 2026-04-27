@@ -173,6 +173,7 @@ module Raiha
           ext.is_a?(Handshake::Extension::EarlyData)
         end
         return unless early_data_ext
+        return unless early_data_replay_safe?
 
         hash_alg = @cipher_suite.hash_algorithm # steep:ignore
         digest_length = OpenSSL::Digest.new(hash_alg).digest_length
@@ -188,6 +189,38 @@ module Raiha
 
         @early_data_available = true
         @early_data_extension = Handshake::Extension::EarlyData.new(on: :encrypted_extensions)
+        @session_ticket_store.mark_consumed_for_early_data(@selected_psk[:ticket]) # steep:ignore
+      end
+
+      # RFC 9001 §5.1 / RFC 8446 §8: 0-RTT replay defenses. A ticket is
+      # treated as single-use for early data, and the client-claimed
+      # ticket age must fall within a small window of how long the
+      # server has actually held the ticket. Returns false when either
+      # check fails so check_early_data leaves @early_data_available
+      # cleared (the connection still PSK-resumes without 0-RTT).
+      private def early_data_replay_safe?
+        return false unless @selected_psk
+        ticket = @selected_psk[:ticket] # steep:ignore
+        return false if ticket.nil?
+        return false if @session_ticket_store.consumed_for_early_data?(ticket)
+
+        within_age_window?
+      end
+
+      private def within_age_window?
+        psk = @selected_psk
+        return false unless psk
+
+        received_at = psk[:received_at] # steep:ignore
+        age_add = psk[:age_add] # steep:ignore
+        obfuscated = psk[:obfuscated_ticket_age] # steep:ignore
+        return false if received_at.nil? || age_add.nil? || obfuscated.nil?
+
+        claimed_age_ms = (obfuscated - age_add) & 0xFFFFFFFF
+        actual_age_ms = ((Time.now - received_at) * 1000).to_i
+        # RFC 8446 §8.2: a 10-second window is suggested; use it both
+        # ways to tolerate clock skew on the client.
+        (claimed_age_ms - actual_age_ms).abs <= 10_000
       end
 
       private def check_psk
@@ -204,7 +237,14 @@ module Raiha
 
           if verify_psk_binder(psk_entry[:psk], psk_ext.binders[index], index)
             @psk_mode = true
-            @selected_psk = { index: index, psk: psk_entry[:psk] }
+            @selected_psk = {
+              index: index,
+              psk: psk_entry[:psk],
+              ticket: psk_entry[:ticket],
+              received_at: psk_entry[:received_at],
+              age_add: psk_entry[:age_add],
+              obfuscated_ticket_age: identity.obfuscated_ticket_age,
+            }
             return
           end
         end
