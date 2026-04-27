@@ -5,8 +5,10 @@ module Raiha::Quic
 
     @connections: Hash[String, Raiha::Connection]
     @supported_versions: Array[Integer]
+    @stateless_reset_key: String?
+    @server_connection_id_length: Integer
 
-    def initialize: (?supported_versions: Array[Integer]) -> void
+    def initialize: (?supported_versions: Array[Integer], ?stateless_reset_key: String?, ?server_connection_id_length: Integer) -> void
     def register: (Protocol::ConnectionID | String connection_id, Raiha::Connection connection) -> void
     def unregister: (Protocol::ConnectionID | String connection_id) -> Raiha::Connection?
     def registered?: (Protocol::ConnectionID | String connection_id) -> bool
@@ -15,6 +17,7 @@ module Raiha::Quic
     private def dispatch_long_header: (String datagram, peer_address: untyped, ecn: Symbol) -> String?
     private def dispatch_short_header: (String datagram, peer_address: untyped, ecn: Symbol) -> String?
     private def build_version_negotiation_response: (String datagram) -> String
+    private def build_stateless_reset_response: (String dcid_bytes, Integer incoming_size) -> String?
     private def read_long_header_dcid: (String datagram) -> String?
     private def connection_id_key: (Protocol::ConnectionID | String cid) -> String
   end

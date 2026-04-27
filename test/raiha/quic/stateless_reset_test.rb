@@ -67,4 +67,36 @@ class RaihaQuicStatelessResetTest < Minitest::Test
 
     assert Raiha::Quic::StatelessReset.match_token?(datagram, [other, active])
   end
+
+  def test_derive_token_is_deterministic_per_key_and_cid
+    key = "static-reset-key".b * 2
+    cid = "ABCDEFGH".b
+
+    token = Raiha::Quic::StatelessReset.derive_token(key, cid)
+    assert_equal Raiha::Quic::StatelessReset::TOKEN_LENGTH, token.bytesize
+    assert_equal token, Raiha::Quic::StatelessReset.derive_token(key, cid)
+  end
+
+  def test_derive_token_differs_across_keys
+    cid = "ABCDEFGH".b
+    a = Raiha::Quic::StatelessReset.derive_token("k1".b * 16, cid)
+    b = Raiha::Quic::StatelessReset.derive_token("k2".b * 16, cid)
+
+    refute_equal a, b
+  end
+
+  def test_derive_token_accepts_connection_id_object
+    key = "k".b * 32
+    cid_bytes = "ABCDEFGH".b
+    cid = Raiha::Quic::Protocol::ConnectionID.from_bytes(cid_bytes)
+
+    assert_equal(
+      Raiha::Quic::StatelessReset.derive_token(key, cid_bytes),
+      Raiha::Quic::StatelessReset.derive_token(key, cid)
+    )
+  end
+
+  def test_derive_token_rejects_empty_key
+    assert_raises(ArgumentError) { Raiha::Quic::StatelessReset.derive_token("", "ABCDEFGH".b) }
+  end
 end

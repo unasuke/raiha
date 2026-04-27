@@ -2,6 +2,7 @@
 
 require_relative "protocol/connection_id"
 require_relative "protocol/version"
+require_relative "stateless_reset"
 require_relative "wire/buffer"
 require_relative "wire/version_negotiation"
 
@@ -21,9 +22,13 @@ module Raiha::Quic
     LONG_HEADER_VERSION_OFFSET = 1
     LONG_HEADER_DCID_OFFSET = 5
 
-    def initialize(supported_versions: Protocol::Version::SUPPORTED_VERSIONS)
+    def initialize(supported_versions: Protocol::Version::SUPPORTED_VERSIONS,
+                   stateless_reset_key: nil,
+                   server_connection_id_length: 8)
       @connections = {} #: Hash[String, Raiha::Connection]
       @supported_versions = supported_versions
+      @stateless_reset_key = stateless_reset_key
+      @server_connection_id_length = server_connection_id_length
     end
 
     def register(connection_id, connection)
@@ -57,7 +62,7 @@ module Raiha::Quic
     end
 
     private def dispatch_long_header(datagram, peer_address:, ecn:)
-      version = datagram.byteslice(LONG_HEADER_VERSION_OFFSET, 4).unpack1("N")
+      version = datagram.byteslice(LONG_HEADER_VERSION_OFFSET, 4).unpack1("N") # steep:ignore
 
       # RFC 9000 §6: a VN packet from the server uses Version=0; an
       # incoming datagram with Version=0 is from the client side and
@@ -80,11 +85,38 @@ module Raiha::Quic
     end
 
     private def dispatch_short_header(datagram, peer_address:, ecn:)
-      # 1-RTT packets carry an opaque DCID without a length prefix; the
-      # Demuxer does not yet know how to recover the boundary in that
-      # frame, so an unmatched short-header packet is dropped here.
-      # Stateless Reset emission will hook in at this point.
-      nil
+      # 1-RTT packets do not encode the DCID length on the wire — the
+      # server is expected to know the length it issued. The demuxer
+      # is configured with a fixed length (RFC 9000 §5.1 explicitly
+      # encourages servers to use one) and pulls the DCID off the
+      # front. A registered Connection consumes the datagram; an
+      # unrecognized DCID with a configured stateless_reset_key
+      # produces a Stateless Reset (RFC 9000 §10.3.1).
+      return nil if datagram.bytesize < 1 + @server_connection_id_length
+
+      dcid_bytes = datagram.byteslice(1, @server_connection_id_length)
+      return nil unless dcid_bytes
+
+      connection = @connections[connection_id_key(dcid_bytes)]
+      if connection
+        connection.handle_packet(datagram, peer_address: peer_address, ecn: ecn)
+        return nil
+      end
+
+      build_stateless_reset_response(dcid_bytes, datagram.bytesize)
+    end
+
+    # RFC 9000 §10.3.1: build a Stateless Reset whose trailing 16
+    # bytes are HMAC(stateless_reset_key, DCID). The packet must be
+    # smaller than the triggering datagram so the peer cannot use it
+    # to inflate traffic; we simply mirror the incoming size minus
+    # one byte.
+    private def build_stateless_reset_response(dcid_bytes, incoming_size)
+      return nil unless @stateless_reset_key
+
+      token = StatelessReset.derive_token(@stateless_reset_key, dcid_bytes) # steep:ignore
+      reset_size = [incoming_size - 1, StatelessReset::MIN_PACKET_LENGTH].max
+      StatelessReset.build(token, min_size: reset_size)
     end
 
     # RFC 9000 §6.1: the VN response swaps the SCID and DCID from the

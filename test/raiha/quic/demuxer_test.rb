@@ -79,6 +79,45 @@ class RaihaQuicDemuxerTest < Minitest::Test
     assert_empty connection.received
   end
 
+  def test_short_header_routes_to_registered_connection
+    demuxer = Raiha::Quic::Demuxer.new(server_connection_id_length: 8)
+    cid_bytes = "12345678".b
+    connection = ConnectionDouble.new
+    demuxer.register(cid_bytes, connection)
+
+    datagram = build_short_header_datagram(dcid: cid_bytes, payload_size: 30)
+    response = demuxer.dispatch(datagram)
+
+    assert_nil response
+    assert_equal 1, connection.received.length
+  end
+
+  def test_short_header_unknown_dcid_emits_stateless_reset
+    reset_key = "k" * 32
+    demuxer = Raiha::Quic::Demuxer.new(
+      server_connection_id_length: 8,
+      stateless_reset_key: reset_key
+    )
+
+    dcid_bytes = "UNKNOWN1".b
+    datagram = build_short_header_datagram(dcid: dcid_bytes, payload_size: 60)
+
+    response = demuxer.dispatch(datagram)
+    refute_nil response
+    assert_operator response.bytesize, :>=, Raiha::Quic::StatelessReset::MIN_PACKET_LENGTH
+    assert response.bytesize < datagram.bytesize, "reset must be smaller than the trigger"
+
+    expected_token = Raiha::Quic::StatelessReset.derive_token(reset_key, dcid_bytes)
+    assert_equal expected_token, response.byteslice(-Raiha::Quic::StatelessReset::TOKEN_LENGTH, Raiha::Quic::StatelessReset::TOKEN_LENGTH)
+  end
+
+  def test_short_header_unknown_dcid_without_reset_key_drops_silently
+    demuxer = Raiha::Quic::Demuxer.new(server_connection_id_length: 8)
+    datagram = build_short_header_datagram(dcid: "UNKNOWN1".b, payload_size: 60)
+
+    assert_nil demuxer.dispatch(datagram)
+  end
+
   def test_register_accepts_connection_id_object
     demuxer = Raiha::Quic::Demuxer.new
     cid = Raiha::Quic::Protocol::ConnectionID.from_bytes("ABCDEFGH".b)
@@ -93,6 +132,15 @@ class RaihaQuicDemuxerTest < Minitest::Test
 
     demuxer.dispatch(datagram)
     assert_equal 1, connection.received.length
+  end
+
+  private def build_short_header_datagram(dcid:, payload_size:)
+    buf = String.new(encoding: "BINARY")
+    # Short header: bit 7 = 0, fixed bit (bit 6) = 1.
+    buf << [0x40].pack("C")
+    buf << dcid
+    buf << SecureRandom.random_bytes(payload_size)
+    buf
   end
 
   private def build_long_header_datagram(version:, dcid:, scid:)

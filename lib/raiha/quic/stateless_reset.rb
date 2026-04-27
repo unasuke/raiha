@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+require "openssl"
 require "securerandom"
+
+require_relative "protocol/connection_id"
 
 module Raiha::Quic
   # RFC 9000 §10.3 Stateless Reset.
@@ -39,6 +42,18 @@ module Raiha::Quic
       unpredictable.setbyte(0, first_byte)
 
       unpredictable + token
+    end
+
+    # RFC 9000 §10.3.1: derive a stateless reset token deterministically
+    # from a static, server-wide reset key and the connection ID that
+    # the server picked when issuing it. HMAC-SHA256 truncated to 16
+    # bytes gives the required pseudo-randomness without keeping any
+    # per-CID state.
+    def self.derive_token(reset_key, connection_id)
+      raise ArgumentError, "reset_key must not be empty" if reset_key.nil? || reset_key.empty?
+
+      cid_bytes = connection_id.is_a?(Protocol::ConnectionID) ? connection_id.serialize : connection_id
+      OpenSSL::HMAC.digest("SHA256", reset_key, cid_bytes).byteslice(0, TOKEN_LENGTH) # steep:ignore
     end
 
     # Return true when the datagram's trailing 16 bytes match any of the
