@@ -2,6 +2,7 @@
 
 require "openssl"
 require_relative "../protocol/version"
+require_relative "long_header"
 
 module Raiha::Quic
   module Wire
@@ -21,6 +22,32 @@ module Raiha::Quic
       INTEGRITY_NONCE_V1 = ["461599d35d632bf2239825bb"].pack("H*").freeze
       INTEGRITY_KEY_V2 = ["8fb4b01b56ac48e260fbcbcead7ccc92"].pack("H*").freeze
       INTEGRITY_NONCE_V2 = ["d86969bc2d7c6d9990efb04a"].pack("H*").freeze
+
+      # Build a complete Retry packet (RFC 9000 §17.2.5). Returns the
+      # header bytes followed by the Retry Token and the 16-byte
+      # Integrity Tag. There is no Length field — the token's length
+      # is implicit from the datagram boundary, so the demuxer should
+      # send the returned bytes as a standalone datagram.
+      def self.build(source_connection_id:, destination_connection_id:, original_destination_connection_id:, retry_token:, version: Protocol::Version::V1)
+        body = String.new(encoding: "BINARY")
+        # Long header form (0x80) | fixed bit (0x40) | Retry type
+        # (0b11 << 4 = 0x30). The low 4 bits are explicitly reserved
+        # / unused per RFC §17.2.5; we leave them zero.
+        body << [0xc0 | (LongHeader::PacketType::RETRY << 4)].pack("C")
+        body << [version].pack("N")
+        body << [destination_connection_id.bytesize].pack("C")
+        body << destination_connection_id
+        body << [source_connection_id.bytesize].pack("C")
+        body << source_connection_id
+        body << retry_token
+
+        tag = compute_integrity_tag(
+          original_destination_connection_id: original_destination_connection_id,
+          retry_packet_without_tag: body,
+          version: version
+        )
+        body + tag
+      end
 
       # Compute the 16-byte Retry Integrity Tag for a Retry Pseudo-Packet.
       # `retry_packet_without_tag` is the bytes of the Retry packet from the

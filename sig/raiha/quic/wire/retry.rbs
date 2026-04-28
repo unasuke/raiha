@@ -7,6 +7,7 @@ module Raiha::Quic
       INTEGRITY_KEY_V2: String
       INTEGRITY_NONCE_V2: String
 
+      def self.build: (source_connection_id: String, destination_connection_id: String, original_destination_connection_id: String, retry_token: String, ?version: Integer) -> String
       def self.compute_integrity_tag: (original_destination_connection_id: String, retry_packet_without_tag: String, ?version: Integer) -> String
       def self.verify_integrity_tag: (data: String, original_destination_connection_id: String, ?version: Integer) -> bool
       def self.integrity_key_and_nonce: (Integer version) -> [String, String]

@@ -6,18 +6,26 @@ module Raiha::Quic
     @connections: Hash[String, Raiha::Connection]
     @supported_versions: Array[Integer]
     @stateless_reset_key: String?
+    @retry_key: String?
+    @require_retry: bool
     @server_connection_id_length: Integer
+    @validated_initials: Hash[String, { original_dcid: String }]
 
-    def initialize: (?supported_versions: Array[Integer], ?stateless_reset_key: String?, ?server_connection_id_length: Integer) -> void
+    def initialize: (?supported_versions: Array[Integer], ?stateless_reset_key: String?, ?retry_key: String?, ?require_retry: bool, ?server_connection_id_length: Integer) -> void
     def register: (Protocol::ConnectionID | String connection_id, Raiha::Connection connection) -> void
     def unregister: (Protocol::ConnectionID | String connection_id) -> Raiha::Connection?
     def registered?: (Protocol::ConnectionID | String connection_id) -> bool
     def dispatch: (String datagram, ?peer_address: untyped, ?ecn: Symbol) -> String?
+    def validated_original_dcid: (Protocol::ConnectionID | String connection_id) -> String?
 
     private def dispatch_long_header: (String datagram, peer_address: untyped, ecn: Symbol) -> String?
     private def dispatch_short_header: (String datagram, peer_address: untyped, ecn: Symbol) -> String?
     private def build_version_negotiation_response: (String datagram) -> String
     private def build_stateless_reset_response: (String dcid_bytes, Integer incoming_size) -> String?
+    private def build_retry_response: (version: Integer, original_dcid: String, client_scid: String, peer_bytes: String) -> String
+    private def maybe_handle_initial: (String datagram, version: Integer, peer_address: untyped) -> String?
+    private def parse_initial_header: (String datagram, version: Integer) -> { dcid: String, scid: String, token: String }?
+    private def peer_address_bytes: (untyped peer_address) -> String?
     private def read_long_header_dcid: (String datagram) -> String?
     private def connection_id_key: (Protocol::ConnectionID | String cid) -> String
   end

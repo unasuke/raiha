@@ -1,0 +1,10 @@
+module Raiha::Quic
+  module RetryToken
+    HMAC_LENGTH: Integer
+    EXPIRY_BYTES: Integer
+    DEFAULT_LIFETIME: Integer
+
+    def self.mint: (retry_key: String, peer_address_bytes: String, original_destination_connection_id: Protocol::ConnectionID | String, ?lifetime: Integer, ?now: Time) -> String
+    def self.verify: (retry_key: String, token: String, peer_address_bytes: String, ?now: Time) -> String?
+  end
+end
