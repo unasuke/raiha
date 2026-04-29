@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 require_relative "../quic/wire/buffer"
 require_relative "frame"
 require_relative "qpack/encoder"
@@ -87,6 +89,53 @@ module Raiha
         @connection.streams.each_stream.find do |stream|
           stream.stream_id.bidirectional? && stream.stream_id.client_initiated? && stream.fin_received?
         end
+      end
+
+      # Serve a Request against a static document root. Only GET is
+      # supported (anything else returns 405). Used by the
+      # quic-interop-runner `transfer` / `http3` cases where the
+      # server hands out files staged under /www.
+      def serve_static(stream, request, root:)
+        if request.method != "GET"
+          send_response(stream, status: 405, body: nil)
+          return
+        end
+
+        full = resolve_static_path(request.path, root)
+        unless full && File.file?(full)
+          send_response(stream, status: 404, body: nil)
+          return
+        end
+
+        body = File.binread(full)
+        send_response(
+          stream,
+          status: 200,
+          headers: [["content-length", body.bytesize.to_s]],
+          body: body
+        )
+      end
+
+      # Resolve a request-target against `root`, returning the
+      # absolute filesystem path or nil when the request is
+      # malformed or escapes the root. URI.parse strips any query /
+      # fragment from `:path`; File.expand_path then normalises
+      # `..` and symlinks so a prefix check is sufficient to bound
+      # the lookup to the document root.
+      private def resolve_static_path(request_path, root)
+        return nil if request_path.nil? || request_path.empty?
+
+        parsed = URI.parse(request_path)
+        relative = parsed.path.to_s.sub(%r{\A/+}, "")
+        return nil if relative.empty?
+
+        root_abs = File.expand_path(root)
+        full = File.expand_path(relative, root_abs)
+        return nil unless full == root_abs || full.start_with?(root_abs + File::SEPARATOR)
+
+        full
+      rescue URI::InvalidURIError
+        nil
       end
     end
   end
