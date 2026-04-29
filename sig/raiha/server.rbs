@@ -2,13 +2,21 @@ module Raiha
   class Server
     attr_reader connections: Hash[String, Connection]
 
-    def initialize: (?config: Config?) -> void
+    @config: Config
+    @socket: UDPSocket?
+    @incoming_connections: Queue
+    @closed: bool
+    @demuxer: Quic::Demuxer
+    @server_connection_id_length: Integer
+
+    def initialize: (?config: Config?, ?stateless_reset_key: String?, ?retry_key: String?, ?require_retry: bool, ?server_connection_id_length: Integer) -> void
     def listen: (String host, Integer port) -> self
     def accept: -> Connection
     def accept_nonblock: -> Connection?
     def close: -> void
-    def handle_packet: (String data, untyped addr) -> Connection?
+    def handle_packet: (String data, untyped addr) -> String?
 
-    private def create_connection: (Quic::Wire::LongHeader header) -> Connection
+    private def parse_long_header: (String data) -> Quic::Wire::LongHeader?
+    private def create_connection: (Quic::Wire::LongHeader header, retry_validated_odcid: String?) -> Connection
   end
 end
