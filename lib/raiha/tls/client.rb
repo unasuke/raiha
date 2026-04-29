@@ -656,6 +656,9 @@ module Raiha
       end
 
       private def save_to_sslkeylogfile
+        path = ENV["SSLKEYLOGFILE"]
+        return unless path && !path.empty?
+
         body = <<~SSLKEYLOGFILE
           SERVER_HANDSHAKE_TRAFFIC_SECRET #{@client_hello.random.unpack1("H*")} #{@key_schedule.server_handshake_traffic_secret.unpack1("H*")}
           SERVER_TRAFFIC_SECRET_0 #{@client_hello.random.unpack1("H*")} #{@key_schedule.server_application_traffic_secret[0].unpack1("H*")}
@@ -663,7 +666,7 @@ module Raiha
           CLIENT_TRAFFIC_SECRET_0 #{@client_hello.random.unpack1("H*")} #{@key_schedule.client_application_traffic_secret[0].unpack1("H*")}
         SSLKEYLOGFILE
 
-        File.open("SSLKEYLOGFILE", "a") do |f|
+        File.open(path, "a") do |f|
           f.write(body)
         end
       end

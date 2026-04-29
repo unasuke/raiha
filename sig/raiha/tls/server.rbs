@@ -48,6 +48,7 @@ module Raiha
       def verify_client_finished: (Handshake handshake) -> bool
       def response_flight_bytes: (Symbol level) -> String?
 
+      private def save_to_sslkeylogfile: -> void
       private def receive_retry_client_hello: -> void
       private def check_psk: -> void
       private def check_early_data: -> void

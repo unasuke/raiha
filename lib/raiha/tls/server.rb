@@ -566,7 +566,30 @@ module Raiha
           raise Raiha::TLS::Error, "Client Finished verification failed"
         end
         @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
+        save_to_sslkeylogfile
         true
+      end
+
+      # Append the negotiated traffic secrets to the file pointed to by
+      # the SSLKEYLOGFILE environment variable so external tooling
+      # (Wireshark, packet decoders) can decrypt captured traffic.
+      # Silently no-ops when the env var is unset.
+      private def save_to_sslkeylogfile
+        path = ENV["SSLKEYLOGFILE"]
+        return unless path && !path.empty?
+        return unless @client_hello && @key_schedule
+
+        client_random = @client_hello.random.unpack1("H*")
+        body = <<~SSLKEYLOGFILE
+          SERVER_HANDSHAKE_TRAFFIC_SECRET #{client_random} #{@key_schedule.server_handshake_traffic_secret.unpack1("H*")}
+          SERVER_TRAFFIC_SECRET_0 #{client_random} #{@key_schedule.server_application_traffic_secret[0].unpack1("H*")}
+          CLIENT_HANDSHAKE_TRAFFIC_SECRET #{client_random} #{@key_schedule.client_handshake_traffic_secret.unpack1("H*")}
+          CLIENT_TRAFFIC_SECRET_0 #{client_random} #{@key_schedule.client_application_traffic_secret[0].unpack1("H*")}
+        SSLKEYLOGFILE
+
+        File.open(path, "a") do |f|
+          f.write(body)
+        end
       end
 
       # Return the concatenated raw handshake bytes for the server flight at the
