@@ -38,35 +38,45 @@ out of the box.
 
 ## Local smoke test
 
-The runner expects a server cert at `/certs/cert.pem` and a private
-key at `/certs/priv.key`. To exercise the image without the runner:
+Working files live under the repo's `tmp/` (gitignored). One-time
+fixture setup:
 
 ```sh
-mkdir -p /tmp/raiha-certs /tmp/raiha-www /tmp/raiha-downloads
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
-  -keyout /tmp/raiha-certs/priv.key \
-  -out /tmp/raiha-certs/cert.pem \
-  -days 1 -nodes -subj "/CN=raiha.test"
-echo hello > /tmp/raiha-www/hello.txt
+mkdir -p tmp/raiha-{certs,www,downloads,qlog}
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+  -keyout tmp/raiha-certs/priv.key \
+  -out tmp/raiha-certs/cert.pem \
+  -subj "/CN=raiha-server"
+echo "interop test payload" > tmp/raiha-www/index.html
+docker network create raiha-net
+```
 
-docker run --rm -p 4433:443/udp \
-  -e ROLE=server \
-  -e TESTCASE_SERVER=handshake \
-  -v /tmp/raiha-certs:/certs:ro \
-  -v /tmp/raiha-www:/www:ro \
+Run server (detached, `raiha-server` is reachable from the client
+container by name on the bridge network):
+
+```sh
+docker run -d --name raiha-server --network raiha-net \
+  -e ROLE=server -e TESTCASE_SERVER=handshake -e BIND_PORT=4433 \
+  -e SSLKEYLOGFILE=/logs/keylog.txt -e QLOGDIR=/logs/qlog \
+  -v $(pwd)/tmp/raiha-certs:/certs:ro \
+  -v $(pwd)/tmp/raiha-www:/www:ro \
+  -v $(pwd)/tmp/raiha-qlog:/logs \
   raiha-interop
 ```
 
-In another terminal:
+Client:
 
 ```sh
-docker run --rm \
-  -e ROLE=client \
-  -e TESTCASE_CLIENT=handshake \
-  -e WAITFORSERVER=host.docker.internal:4433 \
-  -v /tmp/raiha-downloads:/downloads \
+docker run --rm --network raiha-net \
+  -e ROLE=client -e TESTCASE_CLIENT=handshake \
+  -e WAITFORSERVER=raiha-server:4433 \
+  -e DOWNLOADS=/downloads \
+  -v $(pwd)/tmp/raiha-downloads:/downloads \
   raiha-interop
 ```
+
+For the http3 / transfer testcases also pass `REQUESTS=https://raiha-server/index.html`
+to the client.
 
 ## Running with quic-interop-runner
 
@@ -90,11 +100,11 @@ restricts the testcases to run.
 
 | testcase | status |
 |----------|--------|
-| `handshake` | claimed |
-| `transfer` | claimed (HTTP/3 GET against `/www`) |
-| `http3` | claimed |
-| `versionnegotiation` | claimed (Demuxer answers VN) |
-| `retry` | claimed (Demuxer issues + validates Retry token) |
+| `handshake` | claimed — raiha vs raiha smoke OK |
+| `transfer` | claimed — raiha vs raiha smoke OK (downloaded body matches `/www`) |
+| `http3` | claimed — raiha vs raiha smoke OK |
+| `versionnegotiation` | claimed — raiha vs raiha smoke は v1-v1 で degenerate (VN は trigger せず); Demuxer 単体の VN 応答は unit test で検証済 |
+| `retry` | claimed — raiha vs raiha smoke で `require_retry: true` のもと client exit 0 (Retry → 二度目 Initial 経路を経たと推定) |
 
 Anything else returns exit status 127 and the runner reports it as
 "not implemented", which keeps the matrix honest while we expand

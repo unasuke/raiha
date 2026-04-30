@@ -21,6 +21,7 @@ module RaihaInterop
       @logger = logger
       @http3_servers = {} #: Hash[Object, Raiha::HTTP3::Server]
       @control_setup = {} #: Hash[Object, bool]
+      @served_streams = {} #: Hash[Object, Hash[Integer, bool]]
     end
 
     def run
@@ -47,9 +48,14 @@ module RaihaInterop
 
         readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
         if readable
-          data, addr = socket.recvfrom(65535)
-          response = server.handle_packet(data, addr)
-          socket.send(response, 0, addr[3], addr[1]) if response
+          data, raw_addr = socket.recvfrom(65535)
+          # UDPSocket#recvfrom yields [family, port, hostname, ip].
+          # Reduce that to [ip, port] so Connection#peer_address (which
+          # stores whatever we pass in) round-trips into a usable
+          # sendto target downstream.
+          peer_address = [raw_addr[3], raw_addr[1]]
+          response = server.handle_packet(data, peer_address)
+          socket.send(response, 0, peer_address[0], peer_address[1]) if response
         end
 
         loop do
@@ -66,8 +72,7 @@ module RaihaInterop
           connection.get_packets_to_send.each do |datagram|
             peer = connection.peer_address
             next unless peer
-            host, port = peer
-            socket.send(datagram, 0, host, port)
+            socket.send(datagram, 0, peer[0], peer[1])
           end
         end
       end
@@ -87,16 +92,22 @@ module RaihaInterop
       return unless connection.handshake_complete?
 
       http3 = (@http3_servers[connection.object_id] ||= Raiha::HTTP3::Server.new(connection: connection))
+      served = (@served_streams[connection.object_id] ||= {})
 
       unless @control_setup[connection.object_id]
         http3.setup_control_stream
         @control_setup[connection.object_id] = true
       end
 
-      while (stream = http3.pending_request_stream)
+      connection.streams.each_stream do |stream|
+        next unless stream.stream_id.bidirectional? && stream.stream_id.client_initiated?
+        next unless stream.fin_received?
+        next if served[stream.stream_id.value]
+
         request = http3.receive_request(stream)
         root = @env["WWW"] || "/www"
         http3.serve_static(stream, request, root: root)
+        served[stream.stream_id.value] = true
       end
     end
 
