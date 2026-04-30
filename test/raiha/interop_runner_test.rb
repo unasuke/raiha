@@ -36,4 +36,21 @@ class RaihaInteropRunnerTest < Minitest::Test
   def test_supported_testcase_list_includes_handshake
     assert RaihaInterop::Testcases.supported?("handshake")
   end
+
+  def test_supported_testcases_extend_to_http3_and_retry
+    %w[transfer http3 versionnegotiation retry].each do |name|
+      assert RaihaInterop::Testcases.supported?(name), "expected #{name} to be supported"
+    end
+  end
+
+  def test_retry_requires_retry_flag
+    assert RaihaInterop::Testcases.requires_retry?("retry")
+    refute RaihaInterop::Testcases.requires_retry?("handshake")
+  end
+
+  def test_http3_testcases_request_h3_alpn
+    assert RaihaInterop::Testcases.requires_http3?("http3")
+    assert RaihaInterop::Testcases.requires_http3?("transfer")
+    refute RaihaInterop::Testcases.requires_http3?("handshake")
+  end
 end

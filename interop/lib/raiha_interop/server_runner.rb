@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
 require "openssl"
+require "securerandom"
 require "socket"
 require "raiha/server"
+require "raiha/http3/server"
 require "raiha/tls/config"
+
+require_relative "testcases"
 
 module RaihaInterop
   class ServerRunner
@@ -15,6 +19,8 @@ module RaihaInterop
       @env = env
       @testcase = testcase
       @logger = logger
+      @http3_servers = {} #: Hash[Object, Raiha::HTTP3::Server]
+      @control_setup = {} #: Hash[Object, bool]
     end
 
     def run
@@ -23,8 +29,8 @@ module RaihaInterop
         tls_config: tls_config,
         alpn_protocols: alpn_protocols_for(@testcase),
         stateless_reset_key: @env["STATELESS_RESET_KEY"] || SecureRandom.random_bytes(32),
-        retry_key: retry_required? ? (@env["RETRY_KEY"] || SecureRandom.random_bytes(32)) : nil,
-        require_retry: retry_required?
+        retry_key: Testcases.requires_retry?(@testcase) ? (@env["RETRY_KEY"] || SecureRandom.random_bytes(32)) : nil,
+        require_retry: Testcases.requires_retry?(@testcase)
       )
 
       host = @env["BIND_HOST"] || DEFAULT_BIND_HOST
@@ -34,6 +40,8 @@ module RaihaInterop
       log("listening on #{host}:#{port} testcase=#{@testcase}")
 
       install_signal_handlers
+      open_connections = [] #: Array[Raiha::Connection]
+
       loop do
         break if @stop
 
@@ -44,12 +52,30 @@ module RaihaInterop
           socket.send(response, 0, addr[3], addr[1]) if response
         end
 
-        drain_connections(server, socket)
+        loop do
+          new_connection = server.accept_nonblock
+          break unless new_connection
+          attach_qlog(new_connection)
+          open_connections << new_connection
+        end
+
+        now = Time.now
+        open_connections.each do |connection|
+          serve_http3(connection) if Testcases.requires_http3?(@testcase)
+          connection.tick(now: now)
+          connection.get_packets_to_send.each do |datagram|
+            peer = connection.peer_address
+            next unless peer
+            host, port = peer
+            socket.send(datagram, 0, host, port)
+          end
+        end
       end
 
       0
     rescue StandardError => error
       log("server error: #{error.class}: #{error.message}")
+      log(error.backtrace.first(8).join("\n")) if error.backtrace
       1
     end
 
@@ -57,26 +83,30 @@ module RaihaInterop
       [:INT, :TERM].each { |sig| Signal.trap(sig) { @stop = true } }
     end
 
-    private def drain_connections(server, socket)
-      loop do
-        connection = server.accept_nonblock
-        break unless connection
+    private def serve_http3(connection)
+      return unless connection.handshake_complete?
 
-        @open_connections ||= []
-        @open_connections << connection
+      http3 = (@http3_servers[connection.object_id] ||= Raiha::HTTP3::Server.new(connection: connection))
+
+      unless @control_setup[connection.object_id]
+        http3.setup_control_stream
+        @control_setup[connection.object_id] = true
       end
 
-      now = Time.now
-      (@open_connections ||= []).each do |connection|
-        connection.tick(now: now)
-        connection.get_packets_to_send.each do |datagram|
-          peer = connection.peer_address
-          next unless peer
-
-          host, port = peer
-          socket.send(datagram, 0, host, port)
-        end
+      while (stream = http3.pending_request_stream)
+        request = http3.receive_request(stream)
+        root = @env["WWW"] || "/www"
+        http3.serve_static(stream, request, root: root)
       end
+    end
+
+    private def attach_qlog(connection)
+      qlog_dir = @env["QLOGDIR"]
+      return if qlog_dir.nil? || qlog_dir.empty?
+
+      Dir.mkdir(qlog_dir) unless Dir.exist?(qlog_dir)
+      cid = connection.src_connection_id.serialize.unpack1("H*")
+      connection.enable_qlog(output: File.join(qlog_dir, "#{cid}.qlog"))
     end
 
     private def build_tls_config
@@ -93,14 +123,7 @@ module RaihaInterop
     end
 
     private def alpn_protocols_for(testcase)
-      case testcase
-      when "http3", "transfer" then ["h3"]
-      else nil
-      end
-    end
-
-    private def retry_required?
-      @testcase == "retry"
+      Testcases.requires_http3?(testcase) ? ["h3"] : nil
     end
 
     private def log(message)

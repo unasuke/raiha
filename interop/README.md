@@ -91,6 +91,10 @@ restricts the testcases to run.
 | testcase | status |
 |----------|--------|
 | `handshake` | claimed |
+| `transfer` | claimed (HTTP/3 GET against `/www`) |
+| `http3` | claimed |
+| `versionnegotiation` | claimed (Demuxer answers VN) |
+| `retry` | claimed (Demuxer issues + validates Retry token) |
 
 Anything else returns exit status 127 and the runner reports it as
 "not implemented", which keeps the matrix honest while we expand

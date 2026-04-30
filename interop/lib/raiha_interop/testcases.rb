@@ -7,10 +7,27 @@ module RaihaInterop
   module Testcases
     SUPPORTED = %w[
       handshake
+      transfer
+      http3
+      versionnegotiation
+      retry
     ].freeze
+
+    # Testcases that change the server's behaviour rather than just
+    # extending the client request set.
+    SERVER_REQUIRES_RETRY = %w[retry].freeze
+    REQUIRES_HTTP3 = %w[http3 transfer].freeze
 
     def self.supported?(name)
       SUPPORTED.include?(name)
+    end
+
+    def self.requires_retry?(name)
+      SERVER_REQUIRES_RETRY.include?(name)
+    end
+
+    def self.requires_http3?(name)
+      REQUIRES_HTTP3.include?(name)
     end
   end
 end
