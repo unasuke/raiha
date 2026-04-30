@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Entry point invoked by quic-interop-runner via run_endpoint.sh.
+# Reads ROLE / TESTCASE_{CLIENT,SERVER} / WAITFORSERVER / WWW /
+# DOWNLOADS / CERTS / SSLKEYLOGFILE / QLOGDIR from the environment
+# and dispatches to the matching runner.
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift File.expand_path("../../lib", __dir__)
+
+require "raiha_interop/runner"
+
+exit RaihaInterop::Runner.run

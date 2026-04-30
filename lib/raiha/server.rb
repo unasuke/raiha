@@ -12,8 +12,12 @@ module Raiha
   class Server
     attr_reader :connections
 
-    def initialize(config: nil, stateless_reset_key: nil, retry_key: nil, require_retry: false, server_connection_id_length: 8)
+    def initialize(config: nil, tls_config: nil, alpn_protocols: nil,
+                   stateless_reset_key: nil, retry_key: nil, require_retry: false,
+                   server_connection_id_length: 8)
       @config = config || Config.server_default
+      @tls_config = tls_config
+      @alpn_protocols = alpn_protocols
       @socket = nil
       @connections = {} #: Hash[String, Connection]
       @incoming_connections = Queue.new
@@ -108,7 +112,9 @@ module Raiha
         perspective: Quic::Protocol::Perspective::SERVER,
         src_connection_id: src_connection_id,
         dest_connection_id: dest_connection_id,
-        transport_parameters: @config.to_transport_parameters
+        transport_parameters: @config.to_transport_parameters,
+        tls_config: @tls_config,
+        alpn_protocols: @alpn_protocols
       )
     end
   end
