@@ -27,6 +27,7 @@ module RaihaInterop
       host, port = resolve_server(first_uri)
       authority = first_uri&.host || host
 
+      log("starting testcase=#{@testcase} target=#{host}:#{port} requests=#{requests.size}")
       socket = build_socket(host, port)
       connection = Raiha::Connection.new(
         perspective: :client,
@@ -142,7 +143,7 @@ module RaihaInterop
     private def enable_observability(connection)
       qlog_dir = @env["QLOGDIR"]
       if qlog_dir && !qlog_dir.empty?
-        Dir.mkdir(qlog_dir) unless Dir.exist?(qlog_dir)
+        FileUtils.mkdir_p(qlog_dir)
         cid_hex = connection.src_connection_id.serialize.unpack1("H*")
         connection.enable_qlog(output: File.join(qlog_dir, "#{cid_hex}.qlog"))
       end

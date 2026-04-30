@@ -81,20 +81,44 @@ to the client.
 ## Running with quic-interop-runner
 
 ```sh
-git clone https://github.com/quic-interop/quic-interop-runner /tmp/qir
-cd /tmp/qir
-# Add raiha to the local implementations.json:
+git clone --depth 1 https://github.com/quic-interop/quic-interop-runner tmp/quic-interop-runner
+cd tmp/quic-interop-runner
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+# Add raiha to implementations_quic.json:
 #   "raiha": {
-#     "image": "raiha-interop",
-#     "url": "...",
+#     "image": "localhost/raiha-interop:latest",
+#     "url": "https://github.com/unasuke/raiha",
 #     "role": "both"
 #   }
-python run.py -c raiha -s raiha -t handshake
+python run.py -c raiha -s raiha -t handshake -d
 python run.py -c raiha -s quic-go -t handshake
 ```
 
 `-c` selects the client implementation, `-s` the server. `-t`
 restricts the testcases to run.
+
+### Known environment caveats (podman docker-shim)
+
+Running on a docker shim provided by podman 5.x surfaced two issues
+that an actual Docker Engine 28.1+ install would avoid:
+
+- `interface_name:` in `docker-compose.yml` requires Docker Engine
+  28.1; under the podman shim it errors out at compose-up. Strip the
+  four `interface_name:` lines from `tmp/quic-interop-runner/docker-compose.yml`
+  before running.
+- The `martenseemann/quic-network-simulator` ns-3 container needs raw
+  socket / iptables forwarding inside its network namespace. Under
+  podman the sim container starts and `dumpcap` runs, but no packets
+  appear to traverse the ns-3 datapath, so handshake testcases time
+  out with the client never reaching the server. The compliance
+  pre-check still passes (raiha returns 127 for unknown testcases).
+  Outside the runner the same image self-pairs cleanly via `docker network`
+  (see "Local smoke test" above), so the gap is purely in the
+  podman ↔ ns-3 simulator interaction.
+
+Tracking the simulator integration on a real Docker Engine is on the
+todo list; for now CI / batch runs should use the self-pair path.
 
 ## Supported testcases
 

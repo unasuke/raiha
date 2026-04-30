@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "openssl"
 require "securerandom"
 require "socket"
@@ -115,7 +116,7 @@ module RaihaInterop
       qlog_dir = @env["QLOGDIR"]
       return if qlog_dir.nil? || qlog_dir.empty?
 
-      Dir.mkdir(qlog_dir) unless Dir.exist?(qlog_dir)
+      FileUtils.mkdir_p(qlog_dir)
       cid = connection.src_connection_id.serialize.unpack1("H*")
       connection.enable_qlog(output: File.join(qlog_dir, "#{cid}.qlog"))
     end
