@@ -75,7 +75,31 @@ module Raiha
         end
 
         def sign(private_key, transcript_hash, context)
-          @signature = private_key.sign_pss("sha256", signed_data(transcript_hash, context), salt_length: :digest, mgf1_hash: "sha256")
+          data = signed_data(transcript_hash, context)
+          case private_key
+          when OpenSSL::PKey::RSA
+            @algorithm = "rsa_pss_rsae_sha256"
+            @signature = private_key.sign_pss("sha256", data, salt_length: :digest, mgf1_hash: "sha256")
+          when OpenSSL::PKey::EC
+            # RFC 8446 §4.2.3: ecdsa_secp256r1_sha256 / *_secp384r1_*
+            # / *_secp521r1_* per the curve.
+            curve = private_key.group.curve_name
+            case curve
+            when "prime256v1"
+              @algorithm = "ecdsa_secp256r1_sha256"
+              @signature = private_key.sign("sha256", data)
+            when "secp384r1"
+              @algorithm = "ecdsa_secp384r1_sha384"
+              @signature = private_key.sign("sha384", data)
+            when "secp521r1"
+              @algorithm = "ecdsa_secp521r1_sha512"
+              @signature = private_key.sign("sha512", data)
+            else
+              raise Raiha::TLS::Error, "unsupported EC curve for CertificateVerify: #{curve}"
+            end
+          else
+            raise Raiha::TLS::Error, "unsupported private key type for CertificateVerify: #{private_key.class}"
+          end
         end
 
         def verify_signature(certificate, transcript_hash, context, allowed_algorithms: nil)

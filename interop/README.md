@@ -100,25 +100,41 @@ restricts the testcases to run.
 
 ### Known environment caveats (podman docker-shim)
 
-Running on a docker shim provided by podman 5.x surfaced two issues
-that an actual Docker Engine 28.1+ install would avoid:
+Running on a docker shim provided by podman 5.x surfaced three issues
+that an actual Docker Engine 28.1+ install with Wireshark would
+avoid:
 
-- `interface_name:` in `docker-compose.yml` requires Docker Engine
-  28.1; under the podman shim it errors out at compose-up. Strip the
-  four `interface_name:` lines from `tmp/quic-interop-runner/docker-compose.yml`
-  before running.
+- `interface_name:` in the upstream `docker-compose.yml` requires
+  Docker Engine 28.1; under the podman shim it errors out at compose
+  up. Either strip those four lines or use the sim-less variant
+  (next bullet).
 - The `martenseemann/quic-network-simulator` ns-3 container needs raw
   socket / iptables forwarding inside its network namespace. Under
   podman the sim container starts and `dumpcap` runs, but no packets
   appear to traverse the ns-3 datapath, so handshake testcases time
-  out with the client never reaching the server. The compliance
-  pre-check still passes (raiha returns 127 for unknown testcases).
-  Outside the runner the same image self-pairs cleanly via `docker network`
-  (see "Local smoke test" above), so the gap is purely in the
-  podman ↔ ns-3 simulator interaction.
+  out. A `docker-compose.no-sim.yml` variant lives under
+  `tmp/quic-interop-runner/` and replaces the sim with a no-op alpine
+  container that just publishes empty pcap stubs, so client and
+  server share a plain bridge network and h3 traffic flows directly:
 
-Tracking the simulator integration on a real Docker Engine is on the
-todo list; for now CI / batch runs should use the self-pair path.
+  ```sh
+  COMPOSE_FILE=docker-compose.no-sim.yml \
+    python run.py -c raiha -s raiha -t handshake -d
+  ```
+
+  Under this layout the handshake actually completes (`client exited
+  with code 0`, file downloaded), but…
+- The runner's testcase verification is pcap-driven via pyshark and
+  needs `tshark` / `editcap` to inspect QUIC packets. Without
+  Wireshark installed, `_check_version_and_files` reports `Expected
+  exactly one version. Got []` and the verdict ends up as FAILED
+  even though the wire-level transfer was successful. Install
+  Wireshark 4.5+ to unlock the verdict.
+
+Until tshark is available, treat runner runs as smoke checks (does
+docker compose orchestration succeed, do client/server containers
+exchange traffic) and trust the self-pair smoke (above) for actual
+testcase verification.
 
 ## Supported testcases
 

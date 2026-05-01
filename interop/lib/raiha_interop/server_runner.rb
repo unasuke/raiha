@@ -68,7 +68,10 @@ module RaihaInterop
 
         now = Time.now
         open_connections.each do |connection|
-          serve_http3(connection) if Testcases.requires_http3?(@testcase)
+          # Whenever ALPN landed on h3, drive the HTTP/3 layer. raiha
+          # has no HTTP/0.9, so this catches handshake / transfer /
+          # retry / http3 alike.
+          serve_http3(connection) if h3_negotiated?
           connection.tick(now: now)
           connection.get_packets_to_send.each do |datagram|
             peer = connection.peer_address
@@ -87,6 +90,11 @@ module RaihaInterop
 
     private def install_signal_handlers
       [:INT, :TERM].each { |sig| Signal.trap(sig) { @stop = true } }
+    end
+
+    private def h3_negotiated?
+      alpn = alpn_protocols_for(@testcase)
+      alpn && alpn.include?("h3")
     end
 
     private def serve_http3(connection)
@@ -135,7 +143,14 @@ module RaihaInterop
     end
 
     private def alpn_protocols_for(testcase)
-      Testcases.requires_http3?(testcase) ? ["h3"] : nil
+      # raiha only implements HTTP/3 on the application side, so every
+      # testcase that needs the server to actually serve content has
+      # to negotiate h3. Versionnegotiation does not exchange ALPN
+      # because the handshake never completes — leave ALPN alone for
+      # those.
+      return nil if testcase == "versionnegotiation"
+
+      ["h3"]
     end
 
     private def log(message)

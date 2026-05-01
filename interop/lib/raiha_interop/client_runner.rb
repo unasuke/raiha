@@ -27,14 +27,20 @@ module RaihaInterop
       host, port = resolve_server(first_uri)
       authority = first_uri&.host || host
 
-      log("starting testcase=#{@testcase} target=#{host}:#{port} requests=#{requests.size}")
+      # raiha only speaks HTTP/3 (no hq-interop / HTTP/0.9), so any
+      # testcase that hands us REQUESTS gets fetched over h3. The
+      # testcase classifier still drives flags like require_retry.
+      use_http3 = requests.any? || Testcases.requires_http3?(@testcase)
+      alpn = use_http3 ? ["h3"] : alpn_protocols_for(@testcase)
+
+      log("starting testcase=#{@testcase} target=#{host}:#{port} requests=#{requests.size} alpn=#{alpn.inspect}")
       socket = build_socket(host, port)
       connection = Raiha::Connection.new(
         perspective: :client,
         src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
         dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
         server_name: authority,
-        alpn_protocols: alpn_protocols_for(@testcase)
+        alpn_protocols: alpn
       )
 
       enable_observability(connection)
@@ -56,7 +62,7 @@ module RaihaInterop
 
       log("handshake complete")
 
-      if Testcases.requires_http3?(@testcase) && requests.any?
+      if use_http3 && requests.any?
         return 1 unless run_http3_requests(connection, socket, requests, authority)
       end
 
@@ -110,8 +116,12 @@ module RaihaInterop
     end
 
     private def write_download(uri, body)
+      # quic-interop-runner mounts /downloads inside the container
+      # without exporting a corresponding env var; honour DOWNLOADS
+      # when set (local smoke runs do this) and fall back to the
+      # runner's well-known mount point.
       dir = @env["DOWNLOADS"]
-      return if dir.nil? || dir.empty?
+      dir = "/downloads" if dir.nil? || dir.empty?
 
       FileUtils.mkdir_p(dir)
       filename = File.basename(uri.path)

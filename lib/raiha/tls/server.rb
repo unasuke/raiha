@@ -476,7 +476,9 @@ module Raiha
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:certificate_verify]
           hs.message = Handshake::CertificateVerify.new.tap do |cv|
-            cv.algorithm = "rsa_pss_rsae_sha256"
+            # cv.sign picks the signature_scheme from the private key
+            # type (RSA-PSS for RSA, ECDSA for EC), so leave algorithm
+            # unset here — sign assigns it.
             cv.sign(@server_private_key, @transcript_hash.hash, "TLS 1.3, server CertificateVerify")
           end
         end
