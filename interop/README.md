@@ -112,12 +112,15 @@ avoid:
   socket / iptables forwarding inside its network namespace. Under
   podman the sim container starts and `dumpcap` runs, but no packets
   appear to traverse the ns-3 datapath, so handshake testcases time
-  out. A `docker-compose.no-sim.yml` variant lives under
-  `tmp/quic-interop-runner/` and replaces the sim with a no-op alpine
-  container that just publishes empty pcap stubs, so client and
-  server share a plain bridge network and h3 traffic flows directly:
+  out. The repo ships a sim-less compose override at
+  `interop/quic-interop-runner.no-sim.yml`; copy it into the runner's
+  clone and point compose at it, so client and server share a plain
+  bridge network and h3 traffic flows directly:
 
   ```sh
+  cp interop/quic-interop-runner.no-sim.yml \
+     tmp/quic-interop-runner/docker-compose.no-sim.yml
+  cd tmp/quic-interop-runner && . .venv/bin/activate
   COMPOSE_FILE=docker-compose.no-sim.yml \
     python run.py -c raiha -s raiha -t handshake -d
   ```

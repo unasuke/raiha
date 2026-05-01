@@ -1,0 +1,93 @@
+# Sim-less variant of docker-compose.yml. Drops the ns-3 network
+# simulator (martenseemann/quic-network-simulator) which does not
+# propagate packets reliably under podman, and puts client + server
+# on the same bridge network so QUIC datagrams flow directly. The
+# pcap-based testcase verifications won't run (there is no trace
+# capture), but handshake / transfer / retry can be exercised end
+# to end.
+#
+# Use with: COMPOSE_FILE=docker-compose.no-sim.yml docker compose ...
+# or pass `-f docker-compose.no-sim.yml` to compose.
+
+services:
+  sim:
+    # Stub: the quic-interop-runner spawns "sim client server" and
+    # later docker-cp's /logs/trace_node_{left,right}.pcap out. We
+    # have no ns-3 routing in this fallback compose, so just create
+    # empty pcap files (libpcap-shaped: 24-byte global header) and
+    # idle.
+    image: alpine:3.20
+    container_name: sim
+    hostname: sim
+    command:
+      - "sh"
+      - "-c"
+      - |
+        mkdir -p /logs &&
+        printf '\xd4\xc3\xb2\xa1\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\x01\x00\x00\x00' > /logs/trace_node_left.pcap &&
+        cp /logs/trace_node_left.pcap /logs/trace_node_right.pcap &&
+        sleep infinity
+    networks:
+      interopnet:
+
+  server:
+    image: $SERVER
+    container_name: server
+    hostname: server
+    stdin_open: true
+    tty: true
+    volumes:
+      - $SERVER_WWW:/www:ro
+      - $SERVER_DOWNLOADS:/downloads:delegated
+      - $CERTS:/certs:ro
+    environment:
+      - CRON=$CRON
+      - ROLE=server
+      - SERVER_PARAMS=$SERVER_PARAMS
+      - SSLKEYLOGFILE=/logs/keys.log
+      - QLOGDIR=/logs/qlog/
+      - TESTCASE=$TESTCASE_SERVER
+      - REQUESTS=$REQUESTS_SERVER
+      - PROTOCOLS=$PROTOCOLS_SERVER
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      memlock: 67108864
+    networks:
+      interopnet:
+        aliases:
+          - server4
+          - server6
+          - server46
+
+  client:
+    image: $CLIENT
+    container_name: client
+    hostname: client
+    stdin_open: true
+    tty: true
+    volumes:
+      - $CLIENT_WWW:/www:ro
+      - $CLIENT_DOWNLOADS:/downloads:delegated
+      - $CERTS:/certs:ro
+    environment:
+      - CRON=$CRON
+      - ROLE=client
+      - CLIENT_PARAMS=$CLIENT_PARAMS
+      - SSLKEYLOGFILE=/logs/keys.log
+      - QLOGDIR=/logs/qlog/
+      - TESTCASE=$TESTCASE_CLIENT
+      - REQUESTS=$REQUESTS_CLIENT
+      - PROTOCOLS=$PROTOCOLS_CLIENT
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      memlock: 67108864
+    depends_on:
+      - server
+    networks:
+      interopnet:
+
+networks:
+  interopnet:
+    driver: bridge
