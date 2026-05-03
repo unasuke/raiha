@@ -23,7 +23,7 @@ FROM ruby:4.0-slim
 ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libssl3 ca-certificates iproute2 \
+      libssl3 ca-certificates iproute2 tcpdump \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

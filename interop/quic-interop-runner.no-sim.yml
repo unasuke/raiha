@@ -1,32 +1,32 @@
 # Sim-less variant of docker-compose.yml. Drops the ns-3 network
 # simulator (martenseemann/quic-network-simulator) which does not
 # propagate packets reliably under podman, and puts client + server
-# on the same bridge network so QUIC datagrams flow directly. The
-# pcap-based testcase verifications won't run (there is no trace
-# capture), but handshake / transfer / retry can be exercised end
-# to end.
+# on the same bridge network so QUIC datagrams flow directly.
+#
+# IMPORTANT: trace.py in the runner hardcodes IP4_CLIENT=193.167.0.100
+# and IP4_SERVER=193.167.100.100, so this compose pins the client /
+# server containers to those addresses. Without that the pyshark
+# filter `ip.src == 193.167.100.100` matches nothing and
+# _get_versions returns [].
+#
+# /logs is a named volume shared between client, server and sim. The
+# client and server containers run tcpdump on their own eth0 (see
+# interop/run_endpoint.sh) and write trace_node_left.pcap /
+# trace_node_right.pcap into the volume; the no-op sim service
+# exposes the same /logs so quic-interop-runner's `docker cp sim:/logs/.`
+# picks the captures up. SSLKEYLOGFILE / QLOGDIR also share the
+# volume — their per-role filenames don't collide.
 #
 # Use with: COMPOSE_FILE=docker-compose.no-sim.yml docker compose ...
-# or pass `-f docker-compose.no-sim.yml` to compose.
 
 services:
   sim:
-    # Stub: the quic-interop-runner spawns "sim client server" and
-    # later docker-cp's /logs/trace_node_{left,right}.pcap out. We
-    # have no ns-3 routing in this fallback compose, so just create
-    # empty pcap files (libpcap-shaped: 24-byte global header) and
-    # idle.
     image: alpine:3.20
     container_name: sim
     hostname: sim
-    command:
-      - "sh"
-      - "-c"
-      - |
-        mkdir -p /logs &&
-        printf '\xd4\xc3\xb2\xa1\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\x01\x00\x00\x00' > /logs/trace_node_left.pcap &&
-        cp /logs/trace_node_left.pcap /logs/trace_node_right.pcap &&
-        sleep infinity
+    command: ["sh", "-c", "mkdir -p /logs && sleep infinity"]
+    volumes:
+      - simlogs:/logs
     networks:
       interopnet:
 
@@ -40,6 +40,7 @@ services:
       - $SERVER_WWW:/www:ro
       - $SERVER_DOWNLOADS:/downloads:delegated
       - $CERTS:/certs:ro
+      - simlogs:/logs
     environment:
       - CRON=$CRON
       - ROLE=server
@@ -49,12 +50,12 @@ services:
       - TESTCASE=$TESTCASE_SERVER
       - REQUESTS=$REQUESTS_SERVER
       - PROTOCOLS=$PROTOCOLS_SERVER
-    cap_add:
-      - NET_ADMIN
+    privileged: true
     ulimits:
       memlock: 67108864
     networks:
       interopnet:
+        ipv4_address: 193.167.100.100
         aliases:
           - server4
           - server6
@@ -70,6 +71,7 @@ services:
       - $CLIENT_WWW:/www:ro
       - $CLIENT_DOWNLOADS:/downloads:delegated
       - $CERTS:/certs:ro
+      - simlogs:/logs
     environment:
       - CRON=$CRON
       - ROLE=client
@@ -79,15 +81,21 @@ services:
       - TESTCASE=$TESTCASE_CLIENT
       - REQUESTS=$REQUESTS_CLIENT
       - PROTOCOLS=$PROTOCOLS_CLIENT
-    cap_add:
-      - NET_ADMIN
+    privileged: true
     ulimits:
       memlock: 67108864
     depends_on:
       - server
     networks:
       interopnet:
+        ipv4_address: 193.167.0.100
 
 networks:
   interopnet:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 193.167.0.0/16
+
+volumes:
+  simlogs:

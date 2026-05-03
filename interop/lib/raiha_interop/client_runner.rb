@@ -53,8 +53,16 @@ module RaihaInterop
 
         readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
         if readable
-          data, _ = socket.recvfrom(65535)
-          connection.handle_packet(data)
+          begin
+            data, _ = socket.recvfrom(65535)
+            connection.handle_packet(data)
+          rescue Errno::ECONNREFUSED
+            # ICMP unreachable from a server that hasn't bound yet.
+            # depends_on in compose only waits on container start, not
+            # on the QUIC listener, so absorb a few of these and let
+            # the loss-detection re-send drive the next Initial.
+            next
+          end
         end
         connection.tick
         flush(connection, socket)
@@ -98,8 +106,15 @@ module RaihaInterop
 
           readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
           if readable
-            data, _ = socket.recvfrom(65535)
-            connection.handle_packet(data)
+            begin
+              data, _ = socket.recvfrom(65535)
+              connection.handle_packet(data)
+            rescue Errno::ECONNREFUSED
+              # An ICMP unreachable came back — typically the server
+              # closed the socket between our send and its recvfrom.
+              # Drop it and let loss detection drive the next attempt.
+              next
+            end
           end
           connection.tick
           flush(connection, socket)

@@ -128,16 +128,25 @@ avoid:
   Under this layout the handshake actually completes (`client exited
   with code 0`, file downloaded), but…
 - The runner's testcase verification is pcap-driven via pyshark and
-  needs `tshark` / `editcap` to inspect QUIC packets. Without
-  Wireshark installed, `_check_version_and_files` reports `Expected
-  exactly one version. Got []` and the verdict ends up as FAILED
-  even though the wire-level transfer was successful. Install
-  Wireshark 4.5+ to unlock the verdict.
+  needs `tshark` / `editcap` to inspect QUIC packets. With
+  Wireshark 4.4+ installed and the no-sim compose pinning the
+  containers to `193.167.{0,100}.100` (the IPs that
+  `quic-interop-runner/trace.py` hardcodes), pyshark sees real
+  packets and `_get_versions` returns `0x1`.
 
-Until tshark is available, treat runner runs as smoke checks (does
-docker compose orchestration succeed, do client/server containers
-exchange traffic) and trust the self-pair smoke (above) for actual
-testcase verification.
+### Last verified status (raiha vs raiha, sim-less compose)
+
+| testcase | result | notes |
+|----------|--------|-------|
+| `handshake` | ✓ | 15 s, file integrity check passes |
+| `retry` | ✓ | Demuxer issues + validates Retry token end-to-end |
+| `transfer` | ✕ | raiha builds the response into a single UDP datagram (~2 MB) and `sendto` returns EMSGSIZE; needs stream-frame chunking on the QUIC layer |
+| `http3` | ✕ | same EMSGSIZE on the 512 KB transfer body |
+
+Transfer / http3 will start passing once raiha learns to split a
+large stream payload across multiple QUIC packets (PMTUD-aware,
+≤1452 bytes per UDP datagram). That is a separate raiha-side task
+and not tracked here.
 
 ## Supported testcases
 

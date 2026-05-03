@@ -76,7 +76,18 @@ module RaihaInterop
           connection.get_packets_to_send.each do |datagram|
             peer = connection.peer_address
             next unless peer
-            socket.send(datagram, 0, peer[0], peer[1])
+            begin
+              socket.send(datagram, 0, peer[0], peer[1])
+            rescue Errno::EMSGSIZE
+              # raiha can build packets larger than the bridge MTU
+              # during transfer; drop them and let loss detection
+              # rebuild a smaller flight rather than killing the
+              # whole accept loop.
+              log("EMSGSIZE while sending #{datagram.bytesize}B to #{peer.inspect}, dropping")
+            rescue Errno::ECONNREFUSED
+              # ICMP unreachable from a peer that closed the socket.
+              log("peer #{peer.inspect} refused connection, dropping")
+            end
           end
         end
       end
