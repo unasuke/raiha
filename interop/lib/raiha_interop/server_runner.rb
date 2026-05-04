@@ -49,14 +49,20 @@ module RaihaInterop
 
         readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
         if readable
-          data, raw_addr = socket.recvfrom(65535)
-          # UDPSocket#recvfrom yields [family, port, hostname, ip].
-          # Reduce that to [ip, port] so Connection#peer_address (which
-          # stores whatever we pass in) round-trips into a usable
-          # sendto target downstream.
-          peer_address = [raw_addr[3], raw_addr[1]]
-          response = server.handle_packet(data, peer_address)
-          socket.send(response, 0, peer_address[0], peer_address[1]) if response
+          # Same greedy drain as the client: one recvfrom per loop
+          # turn would let a busy connection accumulate packets in
+          # the kernel queue faster than we can process them.
+          loop do
+            begin
+              data, raw_addr = socket.recvfrom_nonblock(65535)
+            rescue IO::WaitReadable
+              break
+            end
+            # UDPSocket#recvfrom yields [family, port, hostname, ip].
+            peer_address = [raw_addr[3], raw_addr[1]]
+            response = server.handle_packet(data, peer_address)
+            socket.send(response, 0, peer_address[0], peer_address[1]) if response
+          end
         end
 
         loop do

@@ -106,14 +106,22 @@ module RaihaInterop
 
           readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
           if readable
-            begin
-              data, _ = socket.recvfrom(65535)
+            # Drain the socket greedily — one recvfrom per loop turn
+            # means a Ruby tick + select round-trip per packet, and
+            # raiha's chunked stream payloads come in fast enough that
+            # the loop falls behind a 60s testcase budget.
+            loop do
+              begin
+                data, _ = socket.recvfrom_nonblock(65535)
+              rescue IO::WaitReadable
+                break
+              rescue Errno::ECONNREFUSED
+                # An ICMP unreachable came back — typically the server
+                # closed the socket between our send and its recvfrom.
+                # Drop it and let loss detection drive the next attempt.
+                break
+              end
               connection.handle_packet(data)
-            rescue Errno::ECONNREFUSED
-              # An ICMP unreachable came back — typically the server
-              # closed the socket between our send and its recvfrom.
-              # Drop it and let loss detection drive the next attempt.
-              next
             end
           end
           connection.tick

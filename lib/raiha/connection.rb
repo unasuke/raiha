@@ -205,6 +205,15 @@ module Raiha
     # Minimum Initial packet size per RFC 9000 Section 14.1
     MIN_INITIAL_PACKET_SIZE = 1200
 
+    # Conservative caps so a single QUIC packet stays inside a typical
+    # Ethernet datagram (1500 - IP - UDP - QUIC header / AEAD tag
+    # margin). MAX_STREAM_FRAME_DATA bounds the data field of any one
+    # STREAM frame; ONE_RTT_PAYLOAD_BUDGET bounds the per-packet
+    # frame total at 1-RTT so big sends spill across multiple
+    # datagrams instead of one oversized sendto.
+    MAX_STREAM_FRAME_DATA = 1100
+    ONE_RTT_PAYLOAD_BUDGET = 1200
+
     # Build a QUIC packet containing the given frames at the specified encryption level
     def build_packet(frames, level:, pad_to_min: false)
       return nil if frames.empty?
@@ -298,6 +307,15 @@ module Raiha
 
       emit_datagram(datagrams, datagram) unless datagram.empty?
 
+      # Drain any remaining 1-RTT frames that didn't fit alongside
+      # the handshake-coalesced datagram into their own datagrams,
+      # one packet per loop iteration capped by ONE_RTT_PAYLOAD_BUDGET.
+      while (extra = build_level_packet(Quic::Handshake::EncryptionLevel::ONE_RTT))
+        extra_datagram = String.new(encoding: "BINARY")
+        extra_datagram << extra
+        emit_datagram(datagrams, extra_datagram)
+      end
+
       datagrams
     end
 
@@ -371,9 +389,22 @@ module Raiha
     end
 
     private def gather_one_rtt_frames(frames)
+      # RFC 9000 §14: keep each 1-RTT packet under the assumed PMTU.
+      # The budget covers everything we put in `frames` here; the
+      # caller is responsible for re-invoking get_packets_to_send /
+      # build_level_packet when the queue still holds data — see
+      # ONE_RTT_PAYLOAD_BUDGET.
+      used = frames.sum { |f| f.serialize.bytesize }
+
       if @pending_stream_frames
-        frames.concat(@pending_stream_frames)
-        @pending_stream_frames = [] #: Array[Quic::Wire::Frames::StreamFrame]
+        while @pending_stream_frames.any?
+          next_frame = @pending_stream_frames.first
+          cost = next_frame.serialize.bytesize
+          break if used + cost > ONE_RTT_PAYLOAD_BUDGET && !frames.empty?
+          @pending_stream_frames.shift
+          frames << next_frame
+          used += cost
+        end
       end
 
       append_flow_control_frames(frames)
@@ -617,14 +648,8 @@ module Raiha
         raise ArgumentError, "stream #{stream_id_value} is not writable by this endpoint"
       end
 
-      stream_frame = Quic::Wire::Frames::StreamFrame.new
-      stream_frame.stream_id = stream_id_value
-      stream_frame.offset = offset
-      stream_frame.data = data
-      stream_frame.fin = fin
-
       @pending_early_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
-      @pending_early_stream_frames << stream_frame
+      enqueue_stream_chunks(@pending_early_stream_frames, stream_id_value, data, offset, fin)
     end
 
     # Queue stream data for sending as a 1-RTT STREAM frame
@@ -635,14 +660,39 @@ module Raiha
         raise ArgumentError, "stream #{stream_id_value} is not writable by this endpoint"
       end
 
-      stream_frame = Quic::Wire::Frames::StreamFrame.new
-      stream_frame.stream_id = stream_id_value
-      stream_frame.offset = offset
-      stream_frame.data = data
-      stream_frame.fin = fin
-
       @pending_stream_frames ||= [] #: Array[Quic::Wire::Frames::StreamFrame]
-      @pending_stream_frames << stream_frame
+      enqueue_stream_chunks(@pending_stream_frames, stream_id_value, data, offset, fin)
+    end
+
+    # Split `data` into MAX_STREAM_FRAME_DATA-sized STREAM frames
+    # whose offsets cover the original payload contiguously, with the
+    # FIN bit only on the very last chunk. Empty payloads still queue
+    # a single empty frame (so a bare FIN goes out).
+    private def enqueue_stream_chunks(queue, stream_id, data, base_offset, fin)
+      data ||= "".b
+      bytes = data.bytesize
+      if bytes <= MAX_STREAM_FRAME_DATA
+        frame = Quic::Wire::Frames::StreamFrame.new
+        frame.stream_id = stream_id
+        frame.offset = base_offset
+        frame.data = data
+        frame.fin = fin
+        queue << frame
+        return
+      end
+
+      cursor = 0
+      while cursor < bytes
+        chunk = data.byteslice(cursor, MAX_STREAM_FRAME_DATA) #: String
+        last = (cursor + chunk.bytesize) >= bytes
+        frame = Quic::Wire::Frames::StreamFrame.new
+        frame.stream_id = stream_id
+        frame.offset = base_offset + cursor
+        frame.data = chunk
+        frame.fin = fin && last
+        queue << frame
+        cursor += chunk.bytesize
+      end
     end
 
     # Earliest wall-clock deadline at which this connection has something to

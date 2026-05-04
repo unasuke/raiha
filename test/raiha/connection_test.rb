@@ -968,6 +968,56 @@ class RaihaConnectionTest < Minitest::Test
     end
   end
 
+  def test_send_stream_data_chunks_payload_into_mtu_sized_frames
+    client = create_connection(perspective: :client)
+    grant_bidi_streams(client, 10)
+    stream = client.open_stream(bidirectional: true)
+
+    # 10 KB payload, well above MAX_STREAM_FRAME_DATA (~1.1 KB) so a
+    # naive single-frame queue would build a packet that exceeds the
+    # bridge MTU and trip EMSGSIZE on the wire.
+    payload = "X".b * 10_000
+    client.send_stream_data(stream.stream_id, payload, fin: true)
+
+    pending = client.instance_variable_get(:@pending_stream_frames)
+    assert_operator pending.length, :>=, 9, "10 KB should split into multiple frames"
+
+    # Offsets are contiguous and only the last frame carries FIN.
+    offset = 0
+    pending.each_with_index do |frame, index|
+      assert_equal offset, frame.offset
+      offset += frame.data.bytesize
+      assert_operator frame.data.bytesize, :<=, Raiha::Connection::MAX_STREAM_FRAME_DATA
+      if index == pending.length - 1
+        assert frame.fin, "only the last chunk should carry FIN"
+      else
+        refute frame.fin
+      end
+    end
+    assert_equal payload.bytesize, offset
+    reassembled = pending.map(&:data).join
+    assert_equal payload, reassembled
+  end
+
+  def test_get_packets_to_send_emits_multiple_datagrams_for_large_stream
+    connection = create_connection(perspective: :client)
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+    stream = connection.open_stream(bidirectional: true)
+
+    # ~10 KB pushes through several MTU-bounded packets at 1-RTT.
+    connection.send_stream_data(stream.stream_id, "Y".b * 10_000, fin: true)
+
+    datagrams = connection.get_packets_to_send
+    assert_operator datagrams.length, :>=, 5, "expected several 1-RTT datagrams"
+    datagrams.each do |d|
+      assert_operator d.bytesize, :<=, 1452,
+        "datagram of #{d.bytesize} B exceeds the assumed PMTU"
+    end
+    assert_empty connection.instance_variable_get(:@pending_stream_frames)
+  end
+
   def test_zero_rtt_packet_coalesces_with_initial
     client = create_connection(perspective: :client)
     cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)
