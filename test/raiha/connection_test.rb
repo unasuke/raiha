@@ -1018,6 +1018,33 @@ class RaihaConnectionTest < Minitest::Test
     assert_empty connection.instance_variable_get(:@pending_stream_frames)
   end
 
+  def test_get_packets_to_send_paces_huge_stream_across_ticks
+    connection = create_connection(perspective: :client)
+    enable_one_rtt(connection)
+    connection.complete_handshake
+    grant_bidi_streams(connection, 10)
+    stream = connection.open_stream(bidirectional: true)
+
+    # 200 KB shapes ~182 frames — more than the per-call cap so the
+    # send has to spill across multiple get_packets_to_send rounds.
+    connection.send_stream_data(stream.stream_id, "Z".b * 200_000, fin: true)
+
+    datagrams = connection.get_packets_to_send
+    assert_operator datagrams.length, :<=, Raiha::Connection::MAX_ONE_RTT_DATAGRAMS_PER_CALL,
+      "first call should respect the pacing cap"
+    refute_empty connection.instance_variable_get(:@pending_stream_frames),
+      "frames beyond the cap should stay queued for the next call"
+
+    # Drain on subsequent ticks until empty.
+    rounds = 1
+    while connection.instance_variable_get(:@pending_stream_frames).any?
+      connection.get_packets_to_send
+      rounds += 1
+      flunk("pacing loop did not converge") if rounds > 50
+    end
+    assert_operator rounds, :>, 1, "pacing should require multiple rounds for a huge send"
+  end
+
   def test_zero_rtt_packet_coalesces_with_initial
     client = create_connection(perspective: :client)
     cipher_suite = Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256)

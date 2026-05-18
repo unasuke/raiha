@@ -106,19 +106,12 @@ module RaihaInterop
 
           readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
           if readable
-            # Drain the socket greedily — one recvfrom per loop turn
-            # means a Ruby tick + select round-trip per packet, and
-            # raiha's chunked stream payloads come in fast enough that
-            # the loop falls behind a 60s testcase budget.
             loop do
               begin
                 data, _ = socket.recvfrom_nonblock(65535)
               rescue IO::WaitReadable
                 break
               rescue Errno::ECONNREFUSED
-                # An ICMP unreachable came back — typically the server
-                # closed the socket between our send and its recvfrom.
-                # Drop it and let loss detection drive the next attempt.
                 break
               end
               connection.handle_packet(data)
@@ -169,6 +162,12 @@ module RaihaInterop
 
     private def build_socket(host, port)
       socket = UDPSocket.new
+      # The Linux default for SO_RCVBUF (~212 KB) is too small for a
+      # multi-MB burst from the server — recvfrom drops the overflow
+      # before raiha gets a chance to read it. 8 MB matches what most
+      # interop runners advertise as initial_max_data.
+      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, 8 * 1024 * 1024)
+      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, 8 * 1024 * 1024)
       socket.connect(host, port)
       socket
     end

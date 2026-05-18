@@ -214,6 +214,17 @@ module Raiha
     MAX_STREAM_FRAME_DATA = 1100
     ONE_RTT_PAYLOAD_BUDGET = 1200
 
+    # Cap on how many 1-RTT datagrams a single get_packets_to_send
+    # call drains. Without this raiha bursts the entire chunked stream
+    # into the kernel UDP buffer in one go, which on Linux is clamped
+    # to net.core.rmem_max (~208 KB) and silently drops anything past
+    # that. Pacing through the event-loop spreads the send across
+    # subsequent ticks so the peer's recv buffer can drain in between.
+    # ~96 packets * ~1170 B = ~110 KB per burst — comfortably under
+    # the default UDP receive buffer while large enough to amortise
+    # the per-call setup cost across thousands of packets.
+    MAX_ONE_RTT_DATAGRAMS_PER_CALL = 96
+
     # Build a QUIC packet containing the given frames at the specified encryption level
     def build_packet(frames, level:, pad_to_min: false)
       return nil if frames.empty?
@@ -310,10 +321,16 @@ module Raiha
       # Drain any remaining 1-RTT frames that didn't fit alongside
       # the handshake-coalesced datagram into their own datagrams,
       # one packet per loop iteration capped by ONE_RTT_PAYLOAD_BUDGET.
-      while (extra = build_level_packet(Quic::Handshake::EncryptionLevel::ONE_RTT))
+      # MAX_ONE_RTT_DATAGRAMS_PER_CALL paces the burst so we don't
+      # overflow the kernel UDP buffer in one go — anything still
+      # pending rides out on the next get_packets_to_send call.
+      emitted_one_rtt = one_rtt_packet ? 1 : 0
+      while emitted_one_rtt < MAX_ONE_RTT_DATAGRAMS_PER_CALL &&
+            (extra = build_level_packet(Quic::Handshake::EncryptionLevel::ONE_RTT))
         extra_datagram = String.new(encoding: "BINARY")
         extra_datagram << extra
         emit_datagram(datagrams, extra_datagram)
+        emitted_one_rtt += 1
       end
 
       datagrams
@@ -1196,7 +1213,14 @@ module Raiha
         perspective: @perspective,
         connection_flow_controller: @connection_flow_controller,
         max_streams_bidi: @transport_parameters.initial_max_streams_bidi,
-        max_streams_uni: @transport_parameters.initial_max_streams_uni
+        max_streams_uni: @transport_parameters.initial_max_streams_uni,
+        # Match the per-stream receive window to whatever we advertise
+        # in transport parameters. Without this, raiha enforces a 64 KB
+        # cap on incoming data even though the peer was told it can
+        # send up to initial_max_stream_data_bidi_local, and exceeding
+        # the local cap raises FlowControlError which silently closes
+        # the connection mid-transfer.
+        stream_receive_window: @transport_parameters.initial_max_stream_data_bidi_local
       )
 
       @crypto_setup = Quic::Handshake::CryptoSetup.new(

@@ -28,8 +28,16 @@ module Raiha::Quic
       end
 
       def update_highest_received(offset, length)
+        # Only the *new* bytes past the current stream high-water mark
+        # count against connection-level flow control. Without this
+        # filter every retransmitted STREAM frame is added to the
+        # connection's highest_received, which blows past
+        # initial_max_data after a handful of retransmits and trips
+        # FlowControlError mid-transfer.
+        previous = @highest_received
         super(offset, length)
-        @connection_flow_controller.update_highest_received(length)
+        delta = @highest_received - previous
+        @connection_flow_controller.update_highest_received(delta) if delta > 0
       end
 
       def add_bytes_read(count)

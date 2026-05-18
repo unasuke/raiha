@@ -39,6 +39,11 @@ module RaihaInterop
       port = (@env["BIND_PORT"] || DEFAULT_BIND_PORT).to_i
       server.listen(host, port)
       socket = server.instance_variable_get(:@socket)
+      # Same reason as the client runner: a multi-MB burst saturates
+      # the kernel's default UDP receive buffer and silently drops
+      # packets before raiha can read them.
+      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, 8 * 1024 * 1024)
+      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, 8 * 1024 * 1024)
       log("listening on #{host}:#{port} testcase=#{@testcase}")
 
       install_signal_handlers

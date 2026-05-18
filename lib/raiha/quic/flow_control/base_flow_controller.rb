@@ -101,8 +101,15 @@ module Raiha::Quic
         remaining_credit < (initial_receive_window * WINDOW_UPDATE_THRESHOLD)
       end
 
+      # Advance the advertised window ahead of the data we've already
+      # received. RFC 9000 §4.1 lets either bytes_read (data consumed
+      # by the application) or the receive position drive the update;
+      # we anchor on highest_received so a peer can keep sending while
+      # the application is still buffering — without that the runner's
+      # `transfer` testcase deadlocks at 1 MB because receive_response
+      # only drains the stream after the full body lands.
       def get_window_update
-        @receive_window = @bytes_read + initial_receive_window
+        @receive_window = @highest_received + initial_receive_window
         @receive_window
       end
 

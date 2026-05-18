@@ -74,4 +74,25 @@ class RaihaQuicFlowControlStreamFlowControllerTest < Minitest::Test
     @stream_controller.set_final_size(5000)
     refute @stream_controller.fully_received?
   end
+
+  def test_window_update_advances_with_received_data_even_when_unread
+    # 76 KB received, nothing read by the application yet — should still
+    # cross the 25 % threshold (initial 100_000 * 0.25 = 25_000) and
+    # advertise 100_000 fresh credit on top of highest_received.
+    @stream_controller.update_highest_received(0, 76_000)
+    assert @stream_controller.should_send_window_update?
+    assert_equal 0, @stream_controller.bytes_read
+
+    new_window = @stream_controller.get_window_update
+    assert_equal 76_000 + 100_000, new_window
+    refute @stream_controller.should_send_window_update?
+  end
+
+  def test_window_update_keeps_growing_across_repeated_advances
+    @stream_controller.update_highest_received(0, 80_000)
+    @stream_controller.get_window_update # ~ 180_000
+    @stream_controller.update_highest_received(80_000, 80_000) # 160_000 total
+    assert @stream_controller.should_send_window_update?
+    assert_equal 160_000 + 100_000, @stream_controller.get_window_update
+  end
 end
