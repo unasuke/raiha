@@ -138,15 +138,33 @@ avoid:
 
 | testcase | result | notes |
 |----------|--------|-------|
-| `handshake` | ✓ | 15 s, file integrity check passes |
+| `handshake` | ✓ | basic 1 KB transfer + handshake check |
+| `transfer` | ✓ | 2 MB + 3 MB + 5 MB, all three streams verified |
+| `http3` | ✓ | HTTP/3 GET, ~512 KB body |
 | `retry` | ✓ | Demuxer issues + validates Retry token end-to-end |
-| `transfer` | ✕ | raiha builds the response into a single UDP datagram (~2 MB) and `sendto` returns EMSGSIZE; needs stream-frame chunking on the QUIC layer |
-| `http3` | ✕ | same EMSGSIZE on the 512 KB transfer body |
 
-Transfer / http3 will start passing once raiha learns to split a
-large stream payload across multiple QUIC packets (PMTUD-aware,
-≤1452 bytes per UDP datagram). That is a separate raiha-side task
-and not tracked here.
+### Cross-implementation matrix
+
+Tried against `martenseemann/quic-go-interop:latest` under the same
+sim-less compose. Results so far:
+
+- `python run.py -c raiha -s quic-go ...`: raiha client gets to
+  "starting" but stops before "handshake complete". quic-go server
+  receives the Initial and replies, but raiha's processing of that
+  reply (in this particular compose environment) doesn't progress
+  the handshake — works in a plain `docker network` smoke between
+  the same two images, so the mismatch is environment-specific
+  rather than a protocol-level gap.
+- `python run.py -c quic-go -s raiha ...`: the compliance pre-check
+  fails because quic-go's interop entrypoint doesn't exit 127 for
+  an unknown testcase in our podman-shim setup, so the runner skips
+  every testcase. The same compliance check passes for raiha, so
+  the gap is in quic-go's run script under this runtime.
+
+Both directions need more environment plumbing (matching the
+expectations of the official Docker Engine + ns-3 sim setup) before
+the matrix produces meaningful verdicts. The self-pair smoke above
+remains the only path that runs end to end here.
 
 ## Supported testcases
 
