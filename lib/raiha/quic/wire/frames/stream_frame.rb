@@ -45,19 +45,26 @@ module Raiha::Quic::Wire::Frames
       frame
     end
 
+    # Memoized so the gather path (which budgets the next packet by
+    # adding up frame sizes) and build_packet (which writes the same
+    # bytes onto the wire) don't pay the varint / buffer work twice.
+    # raiha never mutates a StreamFrame after queuing, so the cache
+    # stays valid for its whole lifetime.
     def serialize
-      type_byte = 0x08
-      type_byte |= 0x04 if @offset > 0
-      type_byte |= 0x02  # Always include length
-      type_byte |= 0x01 if @fin
+      @serialized ||= begin
+        type_byte = 0x08
+        type_byte |= 0x04 if @offset > 0
+        type_byte |= 0x02  # Always include length
+        type_byte |= 0x01 if @fin
 
-      buf = Raiha::Quic::Wire::Buffer.new
-      buf.write_varint(type_byte)
-      buf.write_varint(@stream_id)
-      buf.write_varint(@offset) if @offset > 0
-      buf.write_varint(@data.bytesize)
-      buf.write(@data)
-      buf.to_s
+        buf = Raiha::Quic::Wire::Buffer.new
+        buf.write_varint(type_byte)
+        buf.write_varint(@stream_id)
+        buf.write_varint(@offset) if @offset > 0
+        buf.write_varint(@data.bytesize)
+        buf.write(@data)
+        buf.to_s
+      end
     end
 
     def frame_type

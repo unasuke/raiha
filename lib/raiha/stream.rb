@@ -303,34 +303,55 @@ module Raiha
     end
   end
 
+  # Holds the contiguous prefix of received stream data in a single
+  # String (cheap O(1) append for in-order chunks) and remembers any
+  # higher-offset chunks separately until the gap they're past gets
+  # filled. The previous Hash + sort-and-rebuild merge_chunks was
+  # O(N log N) per push, so a 10 MB transfer of ~9 000 chunks blew
+  # most of the runner's 60 s budget on bookkeeping alone.
   class Stream::ReceiveBuffer
     attr_reader :final_offset
 
     def initialize
-      @chunks = {} #: Hash[Integer, String]
+      @buffer = String.new(encoding: "BINARY")
+      @start_offset = 0
+      @pending = {} #: Hash[Integer, String]
       @final_offset = nil
     end
 
     def push(data, offset)
-      @chunks[offset] = data
-      merge_chunks
+      end_offset = offset + data.bytesize
+      contiguous_end = @start_offset + @buffer.bytesize
+
+      if end_offset <= contiguous_end
+        # Entirely a retransmit of bytes we already buffered.
+        return
+      end
+
+      if offset <= contiguous_end
+        skip = contiguous_end - offset
+        @buffer << data.byteslice(skip, data.bytesize - skip)
+        absorb_pending
+      else
+        # Gap before this chunk — stash and wait for the missing
+        # range to land before we splice it in.
+        existing = @pending[offset]
+        @pending[offset] = data if existing.nil? || existing.bytesize < data.bytesize
+      end
     end
 
     def read(offset, max_bytes)
       return "".b unless has_data_at?(offset)
 
-      chunk_offset, chunk_data = @chunks.find { |start_offset, data| start_offset <= offset && start_offset + data.bytesize > offset }
-      return "".b unless chunk_data
-
-      start_in_chunk = offset - chunk_offset
-      available = chunk_data.bytesize - start_in_chunk
+      start_in_buf = offset - @start_offset
+      available = @buffer.bytesize - start_in_buf
       to_read = max_bytes ? [available, max_bytes].min : available
 
-      chunk_data[start_in_chunk, to_read]
+      @buffer.byteslice(start_in_buf, to_read) || "".b
     end
 
     def has_data_at?(offset)
-      @chunks.any? { |start_offset, data| start_offset <= offset && start_offset + data.bytesize > offset }
+      offset >= @start_offset && offset < @start_offset + @buffer.bytesize
     end
 
     def set_final_offset(offset)
@@ -338,30 +359,35 @@ module Raiha
     end
 
     def clear
-      @chunks = {} #: Hash[Integer, String]
+      @buffer = String.new(encoding: "BINARY")
+      @pending = {} #: Hash[Integer, String]
+      @start_offset = 0
     end
 
-    private def merge_chunks
-      sorted = @chunks.sort_by { |start_offset, _| start_offset }
-      merged = {} #: Hash[Integer, String]
-
-      sorted.each do |offset, data|
-        if merged.empty?
-          merged[offset] = data
-        else
-          last_offset, last_data = merged.to_a.last
-          if last_offset + last_data.bytesize >= offset
-            overlap = last_offset + last_data.bytesize - offset
-            if overlap < data.bytesize
-              merged[last_offset] = last_data + data[overlap..]
-            end
-          else
-            merged[offset] = data
-          end
+    private def absorb_pending
+      return if @pending.empty?
+      loop do
+        contiguous_end = @start_offset + @buffer.bytesize
+        chunk = @pending.delete(contiguous_end)
+        if chunk
+          @buffer << chunk
+          next
         end
+        # Drop chunks whose entire range is already covered.
+        @pending.delete_if { |off, d| off + d.bytesize <= contiguous_end }
+        # Find the earliest pending chunk that overlaps the
+        # contiguous prefix; splice in its non-overlapping suffix.
+        spliced = false
+        @pending.each_pair do |off, d|
+          next unless off < contiguous_end
+          skip = contiguous_end - off
+          @buffer << d.byteslice(skip, d.bytesize - skip)
+          @pending.delete(off)
+          spliced = true
+          break
+        end
+        break unless spliced
       end
-
-      @chunks = merged
     end
   end
 end
