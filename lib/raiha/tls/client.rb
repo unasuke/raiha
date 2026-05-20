@@ -262,6 +262,16 @@ module Raiha
         transition_state(State::WAIT_SEND_FINISHED)
         save_to_sslkeylogfile
         @current_phase = :application
+        # The next inbound record (NewSessionTicket, application data,
+        # close_notify) is encrypted under application traffic keys with
+        # a fresh sequence number space, so the cipher we use to decrypt
+        # incoming records starts at 0 again (RFC 8446 §5.3). We also
+        # reset the outbound cipher so that the still-pending client
+        # Finished and any application data we emit later both start at
+        # seq=0. respond_to_finished still resets again on its own path
+        # to remain idempotent when called directly.
+        @server_cipher.reset_sequence_number
+        @client_cipher.reset_sequence_number
       end
 
       def receive_new_session_ticket(handshake)
