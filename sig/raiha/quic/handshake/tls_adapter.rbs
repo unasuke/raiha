@@ -2,8 +2,9 @@ module Raiha::Quic
   module Handshake
     class TLSAdapter
       attr_reader tls: (Raiha::TLS::Client | Raiha::TLS::Server)
+      attr_reader session_ticket_store: Raiha::TLS::SessionTicketStore?
 
-      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?transport_parameters: Raiha::Quic::Handshake::TransportParameters?, ?alpn_protocols: Array[String]?) -> void
+      def initialize: (perspective: Symbol, crypto_setup: CryptoSetup, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?transport_parameters: Raiha::Quic::Handshake::TransportParameters?, ?alpn_protocols: Array[String]?, ?session_ticket_store: Raiha::TLS::SessionTicketStore?) -> void
       def start: -> void
       def receive_crypto_data: (String data, level: Symbol) -> void
       def handshake_complete?: -> bool

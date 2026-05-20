@@ -21,7 +21,8 @@ module Raiha
 
     MIN_INITIAL_PACKET_SIZE: Integer
 
-    def initialize: (perspective: Quic::Protocol::Perspective | Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?alpn_protocols: Array[String]?) -> void
+    def initialize: (perspective: Quic::Protocol::Perspective | Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?alpn_protocols: Array[String]?, ?session_ticket_store: Raiha::TLS::SessionTicketStore?) -> void
+    def tls_session_ticket_store: -> Raiha::TLS::SessionTicketStore?
     def handle_frames: (Array[Quic::Wire::Frame] frames, ?level: Symbol) -> void
     def early_data_accepted?: -> bool?
     def open_stream: (?bidirectional: bool) -> Stream

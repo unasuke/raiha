@@ -62,7 +62,7 @@ module Raiha
     # validated.
     attr_reader :retry_token
 
-    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil)
+    def initialize(perspective:, src_connection_id:, dest_connection_id:, transport_parameters: nil, tls_config: nil, server_name: nil, alpn_protocols: nil, session_ticket_store: nil)
       @perspective = Quic::Protocol::Perspective.coerce(perspective)
       @src_connection_id = src_connection_id
       @dest_connection_id = dest_connection_id
@@ -71,10 +71,18 @@ module Raiha
       @tls_config = tls_config
       @server_name = server_name
       @alpn_protocols = alpn_protocols
+      @session_ticket_store = session_ticket_store
 
       @transport_parameters.initial_source_connection_id = @src_connection_id.serialize
 
       setup_components
+    end
+
+    # Read-through to the TLS layer's session ticket store. Lets callers
+    # carry the tickets a server issued (or a client received) into a
+    # follow-up Connection so PSK resumption can run there.
+    def tls_session_ticket_store
+      @tls_adapter.session_ticket_store
     end
 
     def handle_frames(frames, level: Quic::Handshake::EncryptionLevel::INITIAL)
@@ -1093,6 +1101,29 @@ module Raiha
       # HANDSHAKE_DONE frame, which is the client's cue to discard Initial
       # and Handshake keys.
       queue_handshake_done if @perspective.server?
+
+      # NST emission is deferred to after the client Finished arrives —
+      # see queue_new_session_ticket_if_ready. complete_handshake fires
+      # on the server right after RECVD_CH (when 1-RTT keys are
+      # installed) but the resumption_master_secret needed for the
+      # ticket only exists after the client Finished.
+      queue_new_session_ticket_if_ready
+    end
+
+    # Try to enqueue a NewSessionTicket at the 1-RTT level. Idempotent
+    # via @new_session_ticket_sent so it can be called from multiple
+    # points (right after complete_handshake on fast paths where the
+    # resumption secret was already derived, and again right after the
+    # client Finished is verified on the slow path).
+    private def queue_new_session_ticket_if_ready
+      return unless @perspective.server?
+      return if @new_session_ticket_sent
+
+      nst_bytes = @tls_adapter.build_new_session_ticket
+      return unless nst_bytes
+
+      @crypto_setup.queue_crypto_data(nst_bytes, level: Quic::Handshake::EncryptionLevel::ONE_RTT)
+      @new_session_ticket_sent = true
     end
 
     private def queue_handshake_done
@@ -1234,7 +1265,8 @@ module Raiha
         tls_config: @tls_config,
         server_name: @server_name,
         transport_parameters: @transport_parameters,
-        alpn_protocols: @alpn_protocols
+        alpn_protocols: @alpn_protocols,
+        session_ticket_store: @session_ticket_store
       )
 
       @crypto_stream_buffers = {} #: Hash[Symbol, untyped]
@@ -1562,6 +1594,13 @@ module Raiha
       if @tls_adapter.handshake_complete? && @state == State::HANDSHAKING
         complete_handshake
       end
+
+      # After the client Finished arrives at HANDSHAKE level, the TLS
+      # adapter derives resumption_master_secret. Try to emit a
+      # NewSessionTicket now if complete_handshake fired too early to
+      # build one (raiha's server reaches CONNECTED right after
+      # ClientHello because 1-RTT keys are derived eagerly).
+      queue_new_session_ticket_if_ready
     end
 
     # RFC 9000 §12.4 Table 3 / RFC 9001 §4: each encryption level only

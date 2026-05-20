@@ -10,6 +10,7 @@ module Raiha
     @closed: bool
     @demuxer: Quic::Demuxer
     @server_connection_id_length: Integer
+    @shared_session_ticket_store: Raiha::TLS::SessionTicketStore
 
     def initialize: (?config: Config?, ?tls_config: Raiha::TLS::Config?, ?alpn_protocols: Array[String]?, ?stateless_reset_key: String?, ?retry_key: String?, ?require_retry: bool, ?server_connection_id_length: Integer) -> void
     def listen: (String host, Integer port) -> self

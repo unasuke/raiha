@@ -18,8 +18,9 @@ module Raiha::Quic
     # - Derives QUIC encryption keys at each handshake stage
     class TLSAdapter
       attr_reader :tls
+      attr_reader :session_ticket_store
 
-      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil, alpn_protocols: nil)
+      def initialize(perspective:, crypto_setup:, tls_config: nil, server_name: nil, transport_parameters: nil, alpn_protocols: nil, session_ticket_store: nil)
         @perspective = Protocol::Perspective.coerce(perspective)
         @crypto_setup = crypto_setup
         @transport_parameters = transport_parameters
@@ -28,6 +29,16 @@ module Raiha::Quic
           @tls = Raiha::TLS::Client.new(config: tls_config, server_name: server_name)
         else
           @tls = Raiha::TLS::Server.new(config: tls_config || Raiha::TLS::Config.server_default)
+        end
+
+        # RFC 9001 §4.6.1: share the caller-supplied ticket store with the
+        # TLS layer so both perspectives can persist (server) or look up
+        # (client) PSK entries.
+        if session_ticket_store
+          @tls.session_ticket_store = session_ticket_store
+          @session_ticket_store = session_ticket_store
+        else
+          @session_ticket_store = @tls.instance_variable_get(:@session_ticket_store)
         end
 
         inject_transport_parameters_extension
@@ -157,6 +168,14 @@ module Raiha::Quic
 
         tls = @tls
         return nil unless tls.is_a?(Raiha::TLS::Server)
+        # Anti-amplification tests drive Connection#complete_handshake
+        # without actually running TLS, so the key schedule has no
+        # resumption_master_secret yet. Issuing a ticket would then
+        # raise inside derive_resumption_psk. resumption_master_secret
+        # is only populated after the client's Finished has been
+        # verified.
+        ks = tls.key_schedule
+        return nil unless ks && ks.instance_variable_get(:@resumption_master_secret)
 
         application_data = @transport_parameters.serialize
         handshake = tls.build_new_session_ticket_handshake(application_data: application_data)

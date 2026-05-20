@@ -3,6 +3,7 @@
 require "socket"
 require_relative "connection"
 require_relative "config"
+require_relative "tls/session_ticket_store"
 require_relative "quic/demuxer"
 require_relative "quic/protocol"
 require_relative "quic/wire/buffer"
@@ -29,6 +30,10 @@ module Raiha
         server_connection_id_length: server_connection_id_length
       )
       @server_connection_id_length = server_connection_id_length
+      # RFC 9001 §4.6.1: tickets issued on one Connection must be
+      # resolvable from a fresh Connection so a returning client can PSK
+      # resume on the same server process.
+      @shared_session_ticket_store = TLS::SessionTicketStore.new
     end
 
     def listen(host, port)
@@ -114,7 +119,8 @@ module Raiha
         dest_connection_id: dest_connection_id,
         transport_parameters: @config.to_transport_parameters,
         tls_config: @tls_config,
-        alpn_protocols: @alpn_protocols
+        alpn_protocols: @alpn_protocols,
+        session_ticket_store: @shared_session_ticket_store
       )
     end
   end
