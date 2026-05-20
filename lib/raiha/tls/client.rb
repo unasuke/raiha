@@ -34,6 +34,7 @@ module Raiha
       attr_reader :encrypted_extensions
       attr_reader :client_hello
       attr_reader :early_data_available
+      attr_writer :session_ticket_store
 
       def initialize(config: nil, server_name: nil)
         super()
@@ -197,6 +198,13 @@ module Raiha
         ee.extensions.any? { |ext| ext.is_a?(Handshake::Extension::EarlyData) }
       end
 
+      # True once a server Certificate has been received and stored. PSK
+      # resumption skips Certificate entirely, so callers can use this to
+      # tell whether the peer was authenticated via X.509 in this handshake.
+      def peer_authenticated?
+        !!(@peer_certificates && !@peer_certificates.empty?)
+      end
+
       # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
       def receive_encrypted_extensions(handshake)
         # handshakes = Handshake.deserialize_multiple(record.content)
@@ -207,8 +215,14 @@ module Raiha
         if encrypted_extensions
           @encrypted_extensions = encrypted_extensions
           @transcript_hash[:encrypted_extensions] = handshake.serialize
-          transition_state(State::WAIT_CERT_CR)
-          # break
+          # RFC 8446 §2.2 / §4.1.1: when the server selected our PSK,
+          # Certificate/CertificateVerify are skipped — go straight to
+          # waiting for the server Finished.
+          if psk_mode?
+            transition_state(State::WAIT_FINISHED)
+          else
+            transition_state(State::WAIT_CERT_CR)
+          end
         end
       end
 
@@ -246,7 +260,6 @@ module Raiha
         derive_application_traffic_secrets
         @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
         transition_state(State::WAIT_SEND_FINISHED)
-        respond_to_finished
         save_to_sslkeylogfile
         @current_phase = :application
       end
@@ -373,6 +386,11 @@ module Raiha
         handshake.handshake_type = Handshake::HANDSHAKE_TYPE[:end_of_early_data]
         handshake.message = Handshake::EndOfEarlyData.new
 
+        # RFC 8446 §4.5: EndOfEarlyData is folded into the handshake
+        # transcript before client Finished is computed, so record it
+        # here even though it travels under the 0-RTT cipher.
+        @transcript_hash[:end_of_early_data] = handshake.serialize
+
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -383,15 +401,13 @@ module Raiha
 
       private def setup_early_data_cipher(psk_entry)
         cipher_suite = @client_hello.cipher_suites.first
-        hash_alg = cipher_suite.hash_algorithm
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
 
         # Set cipher suite on key_schedule so hash_algorithm is available
         @key_schedule.cipher_suite = cipher_suite
 
-        # Derive early_secret from PSK
-        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, psk_entry[:psk])
-        @key_schedule.instance_variable_set(:@ikm, { early_secret: early_secret, handshake_secret: nil, main_secret: nil })
+        # Hand the PSK to the key schedule so derive_secret(:early_secret)
+        # computes the Early Secret from the PSK (RFC 8446 §7.1).
+        @key_schedule.psk = psk_entry[:psk]
 
         # Derive client_early_traffic_secret
         @key_schedule.derive_client_early_traffic_secret(@transcript_hash.hash)
@@ -453,6 +469,20 @@ module Raiha
 
       def respond_to_finished
         records = [] #: Array[String]
+
+        # RFC 8446 §4.5: EndOfEarlyData is only sent when the server
+        # accepted 0-RTT (signalled by echoing EarlyData in EE). If the
+        # server rejected PSK or 0-RTT, the client must not transmit
+        # EOED — anything we already sent at 0-RTT is replayed at 1-RTT.
+        if @early_data_available && @early_cipher && early_data_accepted?
+          eoed = send_end_of_early_data
+          records << eoed if eoed
+        else
+          # Drop early-data state so application-level retransmits go
+          # through the 1-RTT cipher (handled by callers).
+          @early_data_available = false
+          @early_cipher = nil
+        end
 
         if @client_auth_required
           records.concat(send_client_certificate)
@@ -563,6 +593,11 @@ module Raiha
           @state = state
         elsif @state == State::WAIT_EE && state == State::WAIT_CERT_CR
           @state = state
+        elsif @state == State::WAIT_EE && state == State::WAIT_FINISHED
+          # RFC 8446 §A.1 / §2.2: PSK resumption skips Certificate and
+          # CertificateVerify, so EncryptedExtensions hands directly off
+          # to waiting for the server Finished.
+          @state = state
         elsif @state == State::WAIT_CERT_CR && state == State::WAIT_CERT
           @state = state
         elsif @state == State::WAIT_CERT && state == State::WAIT_CV
@@ -584,16 +619,17 @@ module Raiha
         return false unless @server_hello.legacy_session_id_echo == @client_hello.legacy_session_id
         return false unless @client_hello.cipher_suites.map(&:name).include?(@server_hello.cipher_suite.name)
 
-        @server_hello.extensions.any? { |ext|
-          # TODO: validate value by extension itself
+        return false unless @server_hello.extensions.any? { |ext|
           ext.is_a?(Raiha::TLS::Handshake::Extension::SupportedVersions) && ext.extension_data == "\x03\x04"
         }
-        @server_hello.extensions.any? { |ext|
-          # TODO: validate value by extension itself
-          ext.is_a?(Raiha::TLS::Handshake::Extension::KeyShare)
-          # TODO: check pre_shared_key or key_share
-        }
-        # TODO: check returned extensions and send setensions
+        # RFC 8446 §4.1.3: ServerHello must offer a key_share (full
+        # handshake or PSK-DHE-KE) or a PreSharedKey (PSK-only, not yet
+        # supported here but accepted to detect resumption).
+        has_key_share = @server_hello.extensions.any? { |ext| ext.is_a?(Raiha::TLS::Handshake::Extension::KeyShare) }
+        has_pre_shared_key = @server_hello.extensions.any? { |ext| ext.is_a?(Raiha::TLS::Handshake::Extension::PreSharedKey) }
+        return false unless has_key_share || has_pre_shared_key
+
+        true
       end
 
       private def generate_pkey(group)
@@ -614,9 +650,28 @@ module Raiha
         @key_schedule.public_key = server_key_share.groups.first[:key_exchange]
         @key_schedule.pkey = @pkeys.find { |pkeys| pkeys[:group] == server_key_share.groups.first[:group] }[:pkey]
         @key_schedule.compute_shared_secret
+        if psk_mode?
+          # RFC 8446 §7.1: the Early Secret must be derived from the
+          # ticket's PSK so that the salt fed into the Handshake Secret
+          # below matches the server's key schedule. setup_early_data_cipher
+          # may have already set this when 0-RTT was offered, but resumption
+          # without 0-RTT also needs it.
+          psk_entry = @session_ticket_store.get(@server_name || "")
+          @key_schedule.psk = psk_entry[:psk] if psk_entry
+        else
+          # The server rejected our PSK (or we never offered one). Even if
+          # we set the PSK earlier for 0-RTT, the handshake secret derives
+          # from a zero IKM in full-handshake mode (RFC 8446 §7.1).
+          @key_schedule.psk = nil
+        end
         @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.empty_digest)
         @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
         @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)
+      end
+
+      private def psk_mode?
+        return false unless @server_hello
+        @server_hello.extensions.any? { |ext| ext.is_a?(Handshake::Extension::PreSharedKey) }
       end
 
       private def verify_certificate_verify(certificate_verify)

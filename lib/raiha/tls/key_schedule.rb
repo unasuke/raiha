@@ -13,6 +13,7 @@ module Raiha
       attr_accessor :public_key
       attr_accessor :pkey
       attr_accessor :group
+      attr_writer :psk
       attr_reader :shared_secret
       attr_reader :client_handshake_traffic_secret
       attr_reader :server_handshake_traffic_secret
@@ -30,6 +31,7 @@ module Raiha
         @salt = { main_secret: nil }
         @client_application_traffic_secret = []
         @server_application_traffic_secret = []
+        @psk = nil
       end
 
       def compute_shared_secret
@@ -58,7 +60,11 @@ module Raiha
         digest_length = OpenSSL::Digest.new(@hash_algorithm).digest_length
         case secret
         when :early_secret
-          @ikm[:early_secret] = "\x00" * digest_length
+          # RFC 8446 §7.1: Early Secret = HKDF-Extract(0, PSK). OpenSSL::KDF.hkdf
+          # below performs HKDF-Extract+Expand internally, so feeding the PSK
+          # (or zeros when none) as the IKM lets it compute the Early Secret
+          # as its intermediate PRK before applying Derive-Secret(label, ...).
+          @ikm[:early_secret] = @psk || ("\x00" * digest_length)
           @ikm[:handshake_secret] = \
             OpenSSL::KDF.hkdf(@ikm[:early_secret], salt: "", info: hkdf_label(digest_length, label, transcript_hash), length: digest_length, hash: @hash_algorithm)
         when :handshake_secret

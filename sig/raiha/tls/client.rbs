@@ -27,6 +27,7 @@ module Raiha
       attr_reader encrypted_extensions: Handshake::EncryptedExtensions?
       attr_reader client_hello: Handshake::ClientHello?
       attr_reader early_data_available: bool
+      attr_writer session_ticket_store: SessionTicketStore
 
       def initialize: (?config: Config?, ?server_name: String?) -> void
       def build_client_hello: -> Array[String]
@@ -45,6 +46,7 @@ module Raiha
       def receive_finished: (Handshake handshake) -> void
       def receive_new_session_ticket: (Handshake handshake) -> void
       def early_data_accepted?: -> bool?
+      def peer_authenticated?: -> bool
       def receive_key_update: (Handshake handshake) -> void
       def send_early_data: (String data) -> String?
       def send_end_of_early_data: -> String?
@@ -62,6 +64,7 @@ module Raiha
       private def transition_state: (Symbol state) -> void
       private def valid_server_hello?: -> bool
       private def setup_key_schedule: -> void
+      private def psk_mode?: -> bool
       private def verify_certificate_verify: (Handshake certificate_verify) -> void
       private def verify_finished: (Handshake finished) -> void
       private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake | Alert | ApplicationData]

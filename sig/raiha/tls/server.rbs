@@ -20,9 +20,13 @@ module Raiha
       @client_auth_required: bool
       @psk_mode: bool
       @selected_psk: { index: Integer, psk: String, ticket: String?, received_at: Time?, age_add: Integer?, obfuscated_ticket_age: Integer? }?
+      @early_cipher: AEAD?
+      @received_early_data: String?
 
       attr_reader client_hello: Handshake::ClientHello?
       attr_reader early_data_available: bool
+      attr_reader received_early_data: String?
+      attr_writer session_ticket_store: SessionTicketStore
 
       def initialize: (?config: Config) -> void
       def datagrams_to_send: -> Array[String]?
@@ -47,11 +51,13 @@ module Raiha
       def receive_finished: -> void
       def verify_client_finished: (Handshake handshake) -> bool
       def response_flight_bytes: (Symbol level) -> String?
+      def psk_mode?: -> bool
 
       private def save_to_sslkeylogfile: -> void
       private def receive_retry_client_hello: -> void
       private def check_psk: -> void
       private def check_early_data: -> void
+      private def receive_early_data: -> void
       private def early_data_replay_safe?: -> bool
       private def within_age_window?: -> bool
       private def verify_psk_binder: (String psk, String binder, Integer identity_index) -> bool

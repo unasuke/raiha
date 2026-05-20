@@ -31,6 +31,8 @@ module Raiha
 
       attr_reader :client_hello
       attr_reader :early_data_available
+      attr_reader :received_early_data
+      attr_writer :session_ticket_store
 
       def initialize(config: Config.server_default)
         @config = config
@@ -64,6 +66,12 @@ module Raiha
           receive_retry_client_hello
           select_parameters
         when State::NEGOTIATED
+          # RFC 8446 §4.5: when 0-RTT was accepted the client transmits
+          # EndOfEarlyData under the early-data cipher right before the
+          # handshake-encrypted Finished. Drain those records first so
+          # the cipher rolls over before receive_finished hits the
+          # handshake-phase records.
+          receive_early_data if @early_cipher
           receive_finished
         when State::CONNECTED
           receive_application_data
@@ -159,6 +167,12 @@ module Raiha
         check_early_data
         choose_group
         check_key_share_or_retry
+
+        # If the same datagram included 0-RTT app data (raiha pipelines
+        # ClientHello + 0-RTT into one buffer for tests; QUIC packets
+        # arrive separately at the QUIC layer), drain it now so callers
+        # can observe @received_early_data right after select_parameters.
+        receive_early_data if @early_cipher
       end
 
       # RFC 8446 §4.2.10 / RFC 9001 §4.1.4: accept early data when we
@@ -175,21 +189,46 @@ module Raiha
         return unless early_data_ext
         return unless early_data_replay_safe?
 
-        hash_alg = @cipher_suite.hash_algorithm # steep:ignore
-        digest_length = OpenSSL::Digest.new(hash_alg).digest_length
-
         @key_schedule.cipher_suite = @cipher_suite # steep:ignore
-        early_secret = OpenSSL::HMAC.digest(hash_alg, "\x00" * digest_length, @selected_psk[:psk]) # steep:ignore
-        @key_schedule.instance_variable_set(:@ikm, {
-          early_secret: early_secret,
-          handshake_secret: nil,
-          main_secret: nil,
-        })
+        @key_schedule.psk = @selected_psk[:psk] # steep:ignore
         @key_schedule.derive_client_early_traffic_secret(@transcript_hash.hash)
 
         @early_data_available = true
         @early_data_extension = Handshake::Extension::EarlyData.new(on: :encrypted_extensions)
         @session_ticket_store.mark_consumed_for_early_data(@selected_psk[:ticket]) # steep:ignore
+
+        # Decrypt-only AEAD for inbound 0-RTT records. Encrypt mode is
+        # never used on the server but :client picks the
+        # client_early_write_{key,iv} we just derived.
+        @early_cipher = AEAD.new(cipher_suite: @cipher_suite, key_schedule: @key_schedule, mode: :client) # steep:ignore
+      end
+
+      # Drain any 0-RTT records waiting in @received and concatenate
+      # ApplicationData payloads into @received_early_data. Stops on
+      # EndOfEarlyData, which retires the early cipher.
+      private def receive_early_data
+        loop do
+          record = @received.shift
+          break if record.nil?
+          next if record.plaintext? && record.change_cipher_spec?
+
+          inner_plaintext = @early_cipher.decrypt(ciphertext: record, phase: :early) # steep:ignore
+          if inner_plaintext.application_data?
+            @received_early_data ||= String.new(encoding: "BINARY")
+            @received_early_data << ApplicationData.deserialize(inner_plaintext.content).content # steep:ignore
+          elsif inner_plaintext.handshake?
+            Handshake.deserialize_multiple(inner_plaintext.content).each do |hs|
+              next unless hs.message.is_a?(Handshake::EndOfEarlyData)
+              @transcript_hash[:end_of_early_data] = hs.serialize
+              @early_cipher = nil
+            end
+            break if @early_cipher.nil?
+          end
+        end
+      end
+
+      def psk_mode?
+        @psk_mode
       end
 
       # RFC 9001 §5.1 / RFC 8446 §8: 0-RTT replay defenses. A ticket is
@@ -639,6 +678,13 @@ module Raiha
         @key_schedule.public_key = @client_hello.key_share.groups.find { |g| g[:group] == @pkey[:group] }[:key_exchange]
         @key_schedule.pkey = @pkey[:pkey]
         @key_schedule.compute_shared_secret
+        # PSK resumption: the Early Secret must include the selected PSK
+        # so the salt for the Handshake Secret matches the client (RFC
+        # 8446 §7.1). check_early_data already set this for the 0-RTT
+        # path; resumption without 0-RTT needs it here.
+        if @psk_mode && @selected_psk
+          @key_schedule.psk = @selected_psk[:psk]
+        end
         @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.empty_digest)
         @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
         @key_schedule.derive_server_handshake_traffic_secret(@transcript_hash.hash)

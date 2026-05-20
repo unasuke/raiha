@@ -104,6 +104,110 @@ class RaihaTLSSessionResumptionTest < Minitest::Test
       "claimed ticket age outside the window must reject early data"
   end
 
+  def test_psk_resumption_completes_handshake
+    first_client, first_server = establish_connection
+    first_client.receive(first_server.build_new_session_ticket)
+
+    second_client, second_server = make_resumption_pair(first_client, first_server)
+    drive_resumption_handshake(second_client, second_server)
+
+    assert_equal Raiha::TLS::Client::State::CONNECTED, second_client.state
+    assert_equal Raiha::TLS::Server::State::CONNECTED, second_server.state
+    assert second_server.psk_mode?, "second server should be in PSK mode"
+    refute second_client.peer_authenticated?,
+      "PSK resumption skips Certificate; client should not have peer cert"
+  end
+
+  def test_double_resumption_completes_handshake
+    first_client, first_server = establish_connection
+    first_client.receive(first_server.build_new_session_ticket)
+
+    second_client, second_server = make_resumption_pair(first_client, first_server)
+    drive_resumption_handshake(second_client, second_server)
+    assert_equal Raiha::TLS::Client::State::CONNECTED, second_client.state
+    assert second_server.psk_mode?
+
+    client_store = second_client.instance_variable_get(:@session_ticket_store)
+    previous_psk = client_store.instance_variable_get(:@tickets).values.last[:psk]
+
+    # Second ticket issued over the PSK-resumed connection
+    second_client.receive(second_server.build_new_session_ticket)
+
+    third_client, third_server = make_resumption_pair(second_client, second_server)
+    drive_resumption_handshake(third_client, third_server)
+    assert_equal Raiha::TLS::Client::State::CONNECTED, third_client.state
+    assert third_server.psk_mode?, "third server should also resume via PSK"
+
+    latest_psk = client_store.instance_variable_get(:@tickets).values.last[:psk]
+    refute_equal previous_psk, latest_psk,
+      "new ticket should carry a freshly-derived PSK"
+  end
+
+  def test_full_handshake_fallback_when_server_ticket_store_empty
+    first_client, first_server = establish_connection
+    first_client.receive(first_server.build_new_session_ticket)
+
+    second_client = Raiha::TLS::Client.new
+    second_client.instance_variable_set(
+      :@session_ticket_store,
+      first_client.instance_variable_get(:@session_ticket_store)
+    )
+    # Second server has no knowledge of the ticket -> falls back to full handshake
+    second_server = Raiha::TLS::Server.new(config: create_server_config)
+
+    drive_resumption_handshake(second_client, second_server)
+
+    assert_equal Raiha::TLS::Client::State::CONNECTED, second_client.state
+    assert_equal Raiha::TLS::Server::State::CONNECTED, second_server.state
+    refute second_server.psk_mode?, "server with empty ticket store must not PSK-resume"
+    assert second_client.peer_authenticated?,
+      "full handshake fallback should run Certificate path"
+  end
+
+  def test_full_handshake_fallback_when_binder_mismatches
+    first_client, first_server = establish_connection
+    first_client.receive(first_server.build_new_session_ticket)
+
+    server_store = first_server.instance_variable_get(:@session_ticket_store)
+    # Corrupt the server-side PSK so verify_psk_binder must fail
+    server_entry = server_store.instance_variable_get(:@tickets).values.last
+    server_entry[:psk] = ("\xFF".b) * server_entry[:psk].bytesize
+
+    second_client, second_server = make_resumption_pair(first_client, first_server)
+    drive_resumption_handshake(second_client, second_server)
+
+    assert_equal Raiha::TLS::Client::State::CONNECTED, second_client.state
+    assert_equal Raiha::TLS::Server::State::CONNECTED, second_server.state
+    refute second_server.psk_mode?, "binder mismatch must reject PSK"
+    assert second_client.peer_authenticated?,
+      "fallback after binder mismatch should still authenticate via Certificate"
+  end
+
+  def test_psk_resumption_with_0rtt_accepted
+    first_client, first_server = establish_connection
+    first_client.receive(first_server.build_new_session_ticket)
+
+    second_client, second_server = make_resumption_pair(first_client, first_server)
+
+    client_hello_record = second_client.datagrams_to_send.join
+    early_record = second_client.send_early_data("ping-0rtt")
+    refute_nil early_record, "client should produce a 0-RTT record"
+
+    second_server.receive(client_hello_record + early_record)
+    assert second_server.early_data_available, "server should accept 0-RTT"
+    assert_equal "ping-0rtt".b, second_server.received_early_data
+
+    server_flight = second_server.datagrams_to_send.join
+    second_client.receive(server_flight)
+
+    client_finished = second_client.datagrams_to_send.join
+    second_server.receive(client_finished)
+
+    assert_equal Raiha::TLS::Client::State::CONNECTED, second_client.state
+    assert_equal Raiha::TLS::Server::State::CONNECTED, second_server.state
+    assert_equal true, second_client.early_data_accepted?
+  end
+
   private def build_resumption_client_hello
     first_client, first_server = establish_connection
     ticket_record = first_server.build_new_session_ticket
@@ -122,6 +226,35 @@ class RaihaTLSSessionResumptionTest < Minitest::Test
     server = Raiha::TLS::Server.new(config: create_server_config)
     server.instance_variable_set(:@session_ticket_store, ticket_store)
     server
+  end
+
+  # Construct a fresh client/server pair that shares the existing ticket
+  # store with the previous client/server (so a PSK handshake can run).
+  private def make_resumption_pair(prev_client, prev_server)
+    second_client = Raiha::TLS::Client.new
+    second_client.session_ticket_store = prev_client.instance_variable_get(:@session_ticket_store)
+
+    second_server = Raiha::TLS::Server.new(config: create_server_config)
+    second_server.session_ticket_store = prev_server.instance_variable_get(:@session_ticket_store)
+
+    [second_client, second_server]
+  end
+
+  # Standard handshake drive used by the non-0RTT resumption tests.
+  private def drive_resumption_handshake(client, server)
+    ch_records = client.datagrams_to_send.join
+    server.receive(ch_records)
+    server_flight = server.datagrams_to_send.join
+    client.receive(server_flight)
+    client_finished = client.datagrams_to_send.join
+    server.receive(client_finished)
+    {
+      client: client,
+      server: server,
+      ch_records: ch_records,
+      server_flight: server_flight,
+      client_finished: client_finished,
+    }
   end
 
   private def establish_connection
