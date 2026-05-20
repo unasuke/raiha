@@ -11,12 +11,13 @@ module RaihaInterop
       http3
       versionnegotiation
       retry
+      resumption
     ].freeze
 
     # Testcases that change the server's behaviour rather than just
     # extending the client request set.
     SERVER_REQUIRES_RETRY = %w[retry].freeze
-    REQUIRES_HTTP3 = %w[http3 transfer].freeze
+    REQUIRES_HTTP3 = %w[http3 transfer resumption].freeze
 
     def self.supported?(name)
       SUPPORTED.include?(name)

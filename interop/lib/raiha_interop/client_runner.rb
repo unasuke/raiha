@@ -34,13 +34,33 @@ module RaihaInterop
       alpn = use_http3 ? ["h3"] : alpn_protocols_for(@testcase)
 
       log("starting testcase=#{@testcase} target=#{host}:#{port} requests=#{requests.size} alpn=#{alpn.inspect}")
+
+      if @testcase == "resumption"
+        return run_resumption(host: host, port: port, authority: authority,
+                              alpn: alpn, requests: requests)
+      end
+
+      status, _ = run_single(host: host, port: port, authority: authority,
+                             alpn: alpn, requests: requests, use_http3: use_http3)
+      status
+    rescue StandardError => error
+      log("client error: #{error.class}: #{error.message}")
+      log(error.backtrace.first(8).join("\n")) if error.backtrace
+      1
+    end
+
+    # Connect once, run any HTTP/3 requests, then close. Returns
+    # [exit_code, ticket_store_or_nil].
+    private def run_single(host:, port:, authority:, alpn:, requests:,
+                           use_http3:, session_ticket_store: nil)
       socket = build_socket(host, port)
       connection = Raiha::Connection.new(
         perspective: :client,
         src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
         dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
         server_name: authority,
-        alpn_protocols: alpn
+        alpn_protocols: alpn,
+        session_ticket_store: session_ticket_store
       )
 
       enable_observability(connection)
@@ -49,7 +69,7 @@ module RaihaInterop
 
       handshake_deadline = Time.now + DEFAULT_HANDSHAKE_DEADLINE
       until connection.handshake_complete?
-        return 1 if Time.now > handshake_deadline
+        return [1, nil] if Time.now > handshake_deadline
 
         readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
         if readable
@@ -57,10 +77,6 @@ module RaihaInterop
             data, _ = socket.recvfrom(65535)
             connection.handle_packet(data)
           rescue Errno::ECONNREFUSED
-            # ICMP unreachable from a server that hasn't bound yet.
-            # depends_on in compose only waits on container start, not
-            # on the QUIC listener, so absorb a few of these and let
-            # the loss-detection re-send drive the next Initial.
             next
           end
         end
@@ -71,16 +87,66 @@ module RaihaInterop
       log("handshake complete")
 
       if use_http3 && requests.any?
-        return 1 unless run_http3_requests(connection, socket, requests, authority)
+        return [1, nil] unless run_http3_requests(connection, socket, requests, authority)
       end
 
+      # Drain a little extra so a server-side NewSessionTicket (sent
+      # right after our HTTP/3 request finishes) lands before we close.
+      drain_for(connection, socket, seconds: 0.25)
+
+      ticket_store = connection.tls_session_ticket_store
       connection.close
       flush(connection, socket)
-      0
-    rescue StandardError => error
-      log("client error: #{error.class}: #{error.message}")
-      log(error.backtrace.first(8).join("\n")) if error.backtrace
-      1
+      [0, ticket_store]
+    end
+
+    # RFC 8446 §2.2: resumption testcase fetches the requested URL(s)
+    # on one connection, then opens a second connection that re-uses
+    # the issued NewSessionTicket so the handshake completes via PSK.
+    private def run_resumption(host:, port:, authority:, alpn:, requests:)
+      if requests.empty?
+        log("resumption requires REQUESTS")
+        return 1
+      end
+
+      first_batch = [requests.first]
+      second_batch = requests.length > 1 ? requests[1..] : [requests.first]
+
+      log("resumption: first connection requests=#{first_batch.size}")
+      first_status, ticket_store = run_single(
+        host: host, port: port, authority: authority,
+        alpn: alpn, requests: first_batch, use_http3: true
+      )
+      return first_status if first_status != 0
+      if ticket_store.nil? || ticket_store.instance_variable_get(:@tickets).empty?
+        log("resumption: server issued no ticket on first connection")
+        return 1
+      end
+
+      log("resumption: second connection requests=#{second_batch.size}")
+      second_status, _ = run_single(
+        host: host, port: port, authority: authority,
+        alpn: alpn, requests: second_batch, use_http3: true,
+        session_ticket_store: ticket_store
+      )
+      second_status
+    end
+
+    private def drain_for(connection, socket, seconds:)
+      deadline = Time.now + seconds
+      while Time.now < deadline
+        readable, = IO.select([socket], nil, nil, SELECT_TIMEOUT)
+        if readable
+          begin
+            data, _ = socket.recvfrom_nonblock(65535)
+            connection.handle_packet(data)
+          rescue IO::WaitReadable, Errno::ECONNREFUSED
+            break
+          end
+        end
+        connection.tick
+        flush(connection, socket)
+      end
     end
 
     private def run_http3_requests(connection, socket, requests, authority)
