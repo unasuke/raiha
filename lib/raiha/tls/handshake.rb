@@ -74,6 +74,19 @@ module Raiha
         end
         handshakes
       end
+
+      # Parse a single handshake message and also return the raw wire bytes
+      # of that message. Receiving paths feed the returned raw bytes directly
+      # into the TranscriptHash without going through #serialize.
+      def self.deserialize_with_bytes(data)
+        hs = deserialize(data)
+        return nil unless hs
+        [hs, hs.raw_bytes]
+      end
+
+      def self.deserialize_multiple_with_bytes(data)
+        deserialize_multiple(data).map { |hs| [hs, hs.raw_bytes] }
+      end
     end
   end
 end

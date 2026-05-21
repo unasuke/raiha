@@ -11,6 +11,8 @@ module Raiha
       def serialize: -> String
       def self.deserialize: (String data) -> Handshake?
       def self.deserialize_multiple: (String data) -> Array[Handshake]
+      def self.deserialize_with_bytes: (String data) -> [Handshake, String]?
+      def self.deserialize_multiple_with_bytes: (String data) -> Array[[Handshake, String]]
     end
   end
 end

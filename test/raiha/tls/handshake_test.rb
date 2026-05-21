@@ -36,4 +36,32 @@ class RaihaTLSHandShakeTest < Minitest::Test
     assert_equal ::Raiha::TLS::Handshake::ClientHello, handshakes[0].message.class
     assert_equal ::Raiha::TLS::Handshake::ServerHello, handshakes[1].message.class
   end
+
+  def test_deserialize_with_bytes_returns_handshake_and_raw_bytes
+    result = ::Raiha::TLS::Handshake.deserialize_with_bytes(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO)
+    refute_nil result
+    hs, raw_bytes = result
+    assert_equal ::Raiha::TLS::Handshake::ClientHello, hs.message.class
+    assert_equal 192, hs.length
+    assert_equal RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO, raw_bytes
+  end
+
+  def test_deserialize_with_bytes_returns_nil_on_wrong_length
+    too_long = ::Raiha::TLS::Handshake.deserialize_with_bytes(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO + "\x00")
+    assert_nil too_long
+    too_short = ::Raiha::TLS::Handshake.deserialize_with_bytes(RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO[0..-2])
+    assert_nil too_short
+  end
+
+  def test_deserialize_multiple_with_bytes_returns_pairs
+    concatenated = RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO + RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO
+    pairs = ::Raiha::TLS::Handshake.deserialize_multiple_with_bytes(concatenated)
+    assert_equal 2, pairs.size
+    ch_hs, ch_bytes = pairs[0]
+    sh_hs, sh_bytes = pairs[1]
+    assert_equal ::Raiha::TLS::Handshake::ClientHello, ch_hs.message.class
+    assert_equal RFC8448_SIMPLE_1RTT_HANDSHAKE_CLIENT_HELLO, ch_bytes
+    assert_equal ::Raiha::TLS::Handshake::ServerHello, sh_hs.message.class
+    assert_equal RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_HELLO, sh_bytes
+  end
 end
