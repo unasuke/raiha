@@ -3,6 +3,9 @@ module Raiha
     class Error < Raiha::Error
     end
 
+    class TranscriptRoundtripError < Error
+    end
+
     class Context
       @state: untyped
     end

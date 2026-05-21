@@ -12,10 +12,11 @@ module Raiha
       attr_accessor client_private_key: (OpenSSL::PKey::RSA | OpenSSL::PKey::EC)?
       attr_accessor client_ca_store: TrustStore?
       attr_accessor request_client_certificate: bool?
+      attr_accessor transcript_hash_verify: bool
 
       def self.client_default: -> Config
       def self.server_default: -> Config
-      def initialize: (cipher_suites: Array[CipherSuite], supported_groups: Array[String]) -> void
+      def initialize: (cipher_suites: Array[CipherSuite], supported_groups: Array[String], ?transcript_hash_verify: bool) -> void
     end
   end
 end

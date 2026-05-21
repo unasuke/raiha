@@ -1,6 +1,8 @@
 module Raiha
   module TLS
     class Peer
+      @config: Config
+
       attr_reader state: Symbol
       attr_reader key_schedule: KeySchedule
       attr_reader server_hello: Handshake::ServerHello?
@@ -13,6 +15,7 @@ module Raiha
       def encrypt_application_data: (String data) -> String
       def receive_application_data: -> String?
 
+      private def verify_transcript_roundtrip!: (Handshake handshake, String raw_bytes) -> void
       private def setup_cipher: -> void
       private def derive_application_traffic_secrets: -> void
       private def compute_psk_binder: (String psk, String truncated_client_hello, String hash_alg) -> String

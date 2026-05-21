@@ -21,11 +21,13 @@ module Raiha
       attr_accessor :client_private_key
       attr_accessor :client_ca_store
       attr_accessor :request_client_certificate
+      attr_accessor :transcript_hash_verify
 
       def self.client_default
         self.new(
           cipher_suites: DEFAULT_CIPHER_SUITES,
           supported_groups: DEFAULT_SUPPORTED_GROUPS,
+          transcript_hash_verify: ENV["RAIHA_TRANSCRIPT_VERIFY"] == "1",
         )
       end
 
@@ -33,12 +35,14 @@ module Raiha
         self.new(
           cipher_suites: DEFAULT_CIPHER_SUITES,
           supported_groups: DEFAULT_SUPPORTED_GROUPS,
+          transcript_hash_verify: ENV["RAIHA_TRANSCRIPT_VERIFY"] == "1",
         )
       end
 
-      def initialize(cipher_suites:, supported_groups:)
+      def initialize(cipher_suites:, supported_groups:, transcript_hash_verify: false)
         @cipher_suites = cipher_suites
         @supported_groups = supported_groups
+        @transcript_hash_verify = transcript_hash_verify
       end
     end
   end

@@ -3,6 +3,8 @@
 require_relative "../crypto_util"
 require_relative "aead"
 require_relative "application_data"
+require_relative "error"
+require_relative "handshake"
 require_relative "record"
 
 module Raiha
@@ -63,6 +65,28 @@ module Raiha
       private def derive_application_traffic_secrets
         @key_schedule.derive_client_application_traffic_secret(@transcript_hash.hash)
         @key_schedule.derive_server_application_traffic_secret(@transcript_hash.hash)
+      end
+
+      # When Config#transcript_hash_verify is on, assert that the bytes we
+      # are about to place into the TranscriptHash match what Handshake#
+      # serialize produces from the parsed message. For received messages
+      # this catches deserialize/serialize round-trip bugs; for self-
+      # generated messages this catches non-determinism in serialize.
+      # When the flag is off this is a no-op (no extra serialize call).
+      private def verify_transcript_roundtrip!(handshake, raw_bytes)
+        return unless @config&.transcript_hash_verify
+
+        rebuilt = handshake.serialize
+        return if rebuilt == raw_bytes
+
+        type_sym = Handshake::HANDSHAKE_TYPE.key(handshake.handshake_type) || handshake.handshake_type
+        prefix_match = 0
+        raw_bytes.each_byte.with_index do |b, i|
+          break if i >= rebuilt.bytesize || rebuilt.getbyte(i) != b
+          prefix_match += 1
+        end
+        raise TranscriptRoundtripError,
+          "#{type_sym}: raw_bytes=#{raw_bytes.bytesize}B serialize=#{rebuilt.bytesize}B (first diff at byte #{prefix_match})"
       end
 
       # RFC 8446 Section 4.2.11.2: compute the PSK binder over a truncated
