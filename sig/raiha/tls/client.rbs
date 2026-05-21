@@ -35,24 +35,24 @@ module Raiha
       def datagrams_to_send: -> Array[String]?
       def receive: (String datagram) -> String
       def finished?: -> bool
-      def handle_handshake_message: (Handshake handshake) -> void
+      def handle_handshake_message: (Handshake handshake, String raw_bytes) -> void
       def handle_alert_message: (Alert alert) -> void
       def handle_application_data_message: (ApplicationData data) -> String
-      def receive_server_hello: (Handshake handshake) -> void
-      def receive_hello_retry_request: (Handshake handshake) -> void
-      def receive_encrypted_extensions: (Handshake handshake) -> void
-      def receive_certificate_or_certificate_request: (Handshake handshake) -> void
-      def receive_certificate_verify: (Handshake handshake) -> void
-      def receive_finished: (Handshake handshake) -> void
-      def receive_new_session_ticket: (Handshake handshake) -> void
+      def receive_server_hello: (Handshake handshake, String raw_bytes) -> void
+      def receive_hello_retry_request: (Handshake handshake, String raw_bytes) -> void
+      def receive_encrypted_extensions: (Handshake handshake, String raw_bytes) -> void
+      def receive_certificate_or_certificate_request: (Handshake handshake, String raw_bytes) -> void
+      def receive_certificate_verify: (Handshake handshake, String raw_bytes) -> void
+      def receive_finished: (Handshake handshake, String raw_bytes) -> void
+      def receive_new_session_ticket: (Handshake handshake, String raw_bytes) -> void
       def early_data_accepted?: -> bool?
       def peer_authenticated?: -> bool
-      def receive_key_update: (Handshake handshake) -> void
+      def receive_key_update: (Handshake handshake, String raw_bytes) -> void
       def send_early_data: (String data) -> String?
       def send_end_of_early_data: -> String?
       def send_key_update: (?request_update: Symbol) -> Array[String]
       def send_alert: (Symbol level, Symbol description) -> Array[String]
-      def receive_anything_else: (Handshake handshake) -> void
+      def receive_anything_else: (Handshake handshake, String raw_bytes) -> void
       def respond_to_finished: -> Array[String]
 
       private def setup_early_data_cipher: (untyped psk_entry) -> void
@@ -67,8 +67,8 @@ module Raiha
       private def psk_mode?: -> bool
       private def verify_certificate_verify: (Handshake certificate_verify) -> void
       private def verify_finished: (Handshake finished) -> void
-      private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[Handshake | Alert | ApplicationData]
-      private def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[Handshake | Alert | ApplicationData]
+      private def handle_plaintext_record: (Record::TLSPlaintext record) -> Array[[Handshake | Alert | ApplicationData, String?]]
+      private def handle_ciphertext_record: (Record::TLSCiphertext record) -> Array[[Handshake | Alert | ApplicationData, String?]]
       private def send_client_certificate: -> Array[String]
       private def save_to_sslkeylogfile: -> void
     end

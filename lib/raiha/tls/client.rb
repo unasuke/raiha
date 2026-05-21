@@ -103,10 +103,11 @@ module Raiha
             handle_ciphertext_record(received_record)
           end
 
-          records.each do |record|
+          records.each do |record, raw_bytes|
             case record
             when Handshake
-              handle_handshake_message(record)
+              raise Raiha::TLS::Error, "Handshake without raw_bytes" if raw_bytes.nil?
+              handle_handshake_message(record, raw_bytes)
             when Alert
               handle_alert_message(record)
             when ApplicationData
@@ -119,24 +120,24 @@ module Raiha
         buf
       end
 
-      def handle_handshake_message(handshake)
+      def handle_handshake_message(handshake, raw_bytes)
         case handshake.message
         when Handshake::ServerHello
-          receive_server_hello(handshake)
+          receive_server_hello(handshake, raw_bytes)
         when Handshake::EncryptedExtensions
-          receive_encrypted_extensions(handshake)
+          receive_encrypted_extensions(handshake, raw_bytes)
         when Handshake::CertificateRequest, Handshake::Certificate
-          receive_certificate_or_certificate_request(handshake)
+          receive_certificate_or_certificate_request(handshake, raw_bytes)
         when Handshake::CertificateVerify
-          receive_certificate_verify(handshake)
+          receive_certificate_verify(handshake, raw_bytes)
         when Handshake::Finished
-          receive_finished(handshake)
+          receive_finished(handshake, raw_bytes)
         when Handshake::NewSessionTicket
-          receive_new_session_ticket(handshake)
+          receive_new_session_ticket(handshake, raw_bytes)
         when Handshake::KeyUpdate
-          receive_key_update(handshake)
+          receive_key_update(handshake, raw_bytes)
         else
-          receive_anything_else(handshake)
+          receive_anything_else(handshake, raw_bytes)
         end
       end
 
@@ -157,14 +158,15 @@ module Raiha
       end
 
       # Accepts ServerHello message (or HelloRetryRequest message)
-      def receive_server_hello(handshake)
+      def receive_server_hello(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::ServerHello)
 
         if handshake.message.hello_retry_request?
-          receive_hello_retry_request(handshake)
+          receive_hello_retry_request(handshake, raw_bytes)
         else
           @server_hello = handshake.message
-          @transcript_hash[:server_hello] = handshake.serialize
+          @transcript_hash[:server_hello] = raw_bytes
+          verify_transcript_roundtrip!(handshake, raw_bytes)
           if valid_server_hello?
             setup_key_schedule
             setup_cipher
@@ -175,12 +177,13 @@ module Raiha
         end
       end
 
-      def receive_hello_retry_request(handshake)
+      def receive_hello_retry_request(handshake, raw_bytes)
         hrr = handshake.message
 
         # Replace ClientHello1 with message_hash in transcript
         @transcript_hash.replace_client_hello_with_message_hash
-        @transcript_hash[:server_hello] = handshake.serialize
+        @transcript_hash[:server_hello] = raw_bytes
+        verify_transcript_roundtrip!(handshake, raw_bytes)
 
         # Rebuild ClientHello with requested key share group
         requested_group = hrr.key_share&.groups&.first&.dig(:group)
@@ -206,15 +209,15 @@ module Raiha
       end
 
       # Accepts EncryptedExtensions message, if find ChangeCipherSpec message, ignore it
-      def receive_encrypted_extensions(handshake)
-        # handshakes = Handshake.deserialize_multiple(record.content)
+      def receive_encrypted_extensions(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::EncryptedExtensions)
 
         encrypted_extensions = handshake.message
 
         if encrypted_extensions
           @encrypted_extensions = encrypted_extensions
-          @transcript_hash[:encrypted_extensions] = handshake.serialize
+          @transcript_hash[:encrypted_extensions] = raw_bytes
+          verify_transcript_roundtrip!(handshake, raw_bytes)
           # RFC 8446 §2.2 / §4.1.1: when the server selected our PSK,
           # Certificate/CertificateVerify are skipped — go straight to
           # waiting for the server Finished.
@@ -227,36 +230,40 @@ module Raiha
       end
 
       # Accepts CertificateRequest message or Certificate message
-      def receive_certificate_or_certificate_request(handshake)
+      def receive_certificate_or_certificate_request(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::Certificate) ||
                       handshake.message.is_a?(Handshake::CertificateRequest)
 
         if handshake.message.is_a?(Handshake::CertificateRequest)
           @certificate_request = handshake.message
-          @transcript_hash[:certificate_request] = handshake.serialize
+          @transcript_hash[:certificate_request] = raw_bytes
+          verify_transcript_roundtrip!(handshake, raw_bytes)
           @client_auth_required = true
           transition_state(State::WAIT_CERT)
         elsif handshake.message.is_a?(Handshake::Certificate)
           @peer_certificates = handshake.message.certificates
-          @transcript_hash[:certificate] = handshake.serialize
+          @transcript_hash[:certificate] = raw_bytes
+          verify_transcript_roundtrip!(handshake, raw_bytes)
           transition_state(State::WAIT_CV)
         end
       end
 
       # Accepts CertificateVerify message
-      def receive_certificate_verify(handshake)
+      def receive_certificate_verify(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::CertificateVerify)
 
         verify_certificate_verify(handshake)
-        @transcript_hash[:certificate_verify] = handshake.serialize
+        @transcript_hash[:certificate_verify] = raw_bytes
+        verify_transcript_roundtrip!(handshake, raw_bytes)
         transition_state(State::WAIT_FINISHED)
       end
 
-      def receive_finished(handshake)
+      def receive_finished(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::Finished)
 
         verify_finished(handshake)
-        @transcript_hash[:finished] = handshake.serialize
+        @transcript_hash[:finished] = raw_bytes
+        verify_transcript_roundtrip!(handshake, raw_bytes)
         derive_application_traffic_secrets
         @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
         transition_state(State::WAIT_SEND_FINISHED)
@@ -274,7 +281,7 @@ module Raiha
         @client_cipher.reset_sequence_number
       end
 
-      def receive_new_session_ticket(handshake)
+      def receive_new_session_ticket(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::NewSessionTicket)
 
         new_session_ticket = handshake.message
@@ -282,7 +289,7 @@ module Raiha
         @session_ticket_store&.store(@server_name || "", new_session_ticket, psk)
       end
 
-      def receive_key_update(handshake)
+      def receive_key_update(handshake, raw_bytes)
         return unless handshake.message.is_a?(Handshake::KeyUpdate)
 
         key_update = handshake.message
@@ -334,7 +341,7 @@ module Raiha
         end
       end
 
-      def receive_anything_else(handshake)
+      def receive_anything_else(handshake, raw_bytes)
         pp "receive unhandled handshake message: #{handshake.inspect}"
       end
 
@@ -367,7 +374,9 @@ module Raiha
           add_psk_to_client_hello(hs_clienthello, psk_entry)
         end
 
-        @transcript_hash[:client_hello] = hs_clienthello.serialize
+        ch_bytes = hs_clienthello.serialize
+        @transcript_hash[:client_hello] = ch_bytes
+        verify_transcript_roundtrip!(hs_clienthello, ch_bytes)
 
         if @early_data_available
           setup_early_data_cipher(psk_entry)
@@ -399,7 +408,9 @@ module Raiha
         # RFC 8446 §4.5: EndOfEarlyData is folded into the handshake
         # transcript before client Finished is computed, so record it
         # here even though it travels under the 0-RTT cipher.
-        @transcript_hash[:end_of_early_data] = handshake.serialize
+        eoed_bytes = handshake.serialize
+        @transcript_hash[:end_of_early_data] = eoed_bytes
+        verify_transcript_roundtrip!(handshake, eoed_bytes)
 
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
@@ -588,7 +599,9 @@ module Raiha
         end
         hs_clienthello.message.setup_key_share(retry_pkeys)
         @client_hello = hs_clienthello.message
-        @transcript_hash[:client_hello_retry] = hs_clienthello.serialize
+        retry_bytes = hs_clienthello.serialize
+        @transcript_hash[:client_hello_retry] = retry_bytes
+        verify_transcript_roundtrip!(hs_clienthello, retry_bytes)
         @retry_client_hello_record = Record::TLSPlaintext.serialize(hs_clienthello)
       end
 
@@ -700,7 +713,7 @@ module Raiha
 
       private def handle_plaintext_record(record)
         if record.handshake?
-          [record.fragment]
+          [[record.fragment, record.handshake_raw_bytes]]
         else
           # TODO: maybe alert
           []
@@ -710,11 +723,11 @@ module Raiha
       private def handle_ciphertext_record(record)
         inner_plaintext = @server_cipher.decrypt(ciphertext: record, phase: @current_phase)
         if inner_plaintext.handshake?
-          Handshake.deserialize_multiple(inner_plaintext.content)
+          Handshake.deserialize_multiple_with_bytes(inner_plaintext.content)
         elsif inner_plaintext.application_data?
-          [ApplicationData.deserialize(inner_plaintext.content)]
+          [[ApplicationData.deserialize(inner_plaintext.content), nil]]
         elsif inner_plaintext.alert?
-          [Alert.deserialize(inner_plaintext.content)]
+          [[Alert.deserialize(inner_plaintext.content), nil]]
         else
           []
         end
