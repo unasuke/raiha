@@ -32,6 +32,7 @@ module Raiha
         attr_accessor :length
         attr_accessor :fragment
         attr_accessor :legacy_record_version
+        attr_accessor :handshake_raw_bytes
 
         def self.serialize(content)
           bufs = [] #: Array[String]

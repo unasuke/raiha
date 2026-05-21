@@ -35,10 +35,14 @@ module Raiha
           when CONTENT_TYPE[:alert]
             # TODO: deserialized << Alert.deserialize(fragment[:fragment])
           when CONTENT_TYPE[:handshake]
+            parsed = Handshake.deserialize_with_bytes(fragment[:fragment])
+            next if parsed.nil?
+            handshake, raw_bytes = parsed
             deserialized << TLSPlaintext.new.tap do |record|
               record.content_type = fragment[:content_type]
               record.length = fragment[:length]
-              record.fragment = Handshake.deserialize(fragment[:fragment])
+              record.fragment = handshake
+              record.handshake_raw_bytes = raw_bytes
               record.legacy_record_version = fragment[:legacy_record_version]
             end
           when CONTENT_TYPE[:application_data]

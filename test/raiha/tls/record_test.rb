@@ -140,6 +140,14 @@ class RaihaTLSRecordTest < Minitest::Test
     assert_equal_bin OPENSSL_HANDSHAKE_SAMPLE_CLIENT_HELLO, record[0].serialize
   end
 
+  def test_tlsplaintext_deserialize_sets_handshake_raw_bytes
+    record = Raiha::TLS::Record.deserialize(OPENSSL_HANDSHAKE_SAMPLE_CLIENT_HELLO)
+    assert_equal 1, record.length
+    plaintext = record[0]
+    refute_nil plaintext.handshake_raw_bytes
+    assert_equal plaintext.fragment.serialize, plaintext.handshake_raw_bytes
+  end
+
   def test_deserialize_tlsciphertext
     record = Raiha::TLS::Record.deserialize(RFC8448_SIMPLE_1RTT_HANDSHAKE_SERVER_PROTECTED_RECORD)
     assert_equal 1, record.length
