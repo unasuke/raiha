@@ -208,37 +208,22 @@ module Raiha::Quic
           collect_server_response
 
         when EncryptionLevel::HANDSHAKE
-          # Client Finished: feed directly to TLS handler
-          handshakes = Raiha::TLS::Handshake.deserialize_multiple(data)
-          handshakes.each do |handshake|
-            case handshake.message
-            when Raiha::TLS::Handshake::Finished
-              verify_client_finished(handshake)
-            end
+          # RFC 9001 §4.1.4: the client's Certificate / CertificateVerify
+          # / Finished arrive at the Handshake encryption level. Route
+          # them through the unified TLS dispatcher; check_key_derivation
+          # then installs the 1-RTT AEAD secrets once the application
+          # traffic secrets are derived from the post-Finished transcript.
+          Raiha::TLS::Handshake.deserialize_multiple_with_bytes(data).each do |handshake, raw_bytes|
+            @tls.handle_handshake_message(handshake, raw_bytes)
           end
-        end
-      end
-
-      private def verify_client_finished(handshake)
-        return unless @tls.verify_client_finished(handshake)
-
-        key_schedule = @tls.key_schedule
-        server_hello = @tls.server_hello
-        # Handshake complete on server side; install 1-RTT AEAD secrets.
-        unless @crypto_setup.available?(EncryptionLevel::ONE_RTT)
-          @crypto_setup.set_application_keys(
-            client_secret: key_schedule.client_application_traffic_secret.last,
-            server_secret: key_schedule.server_application_traffic_secret.last,
-            cipher_suite: server_hello.cipher_suite
-          )
+          check_key_derivation
         end
       end
 
       private def receive_as_client(data, level)
         # Parse raw handshake messages and feed directly to TLS Client
-        handshakes = Raiha::TLS::Handshake.deserialize_multiple(data)
-        handshakes.each do |handshake|
-          @tls.handle_handshake_message(handshake)
+        Raiha::TLS::Handshake.deserialize_multiple_with_bytes(data).each do |handshake, raw_bytes|
+          @tls.handle_handshake_message(handshake, raw_bytes)
           attach_transport_parameters_to_ticket if handshake.message.is_a?(Raiha::TLS::Handshake::NewSessionTicket)
         end
 

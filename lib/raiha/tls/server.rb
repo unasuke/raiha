@@ -617,6 +617,7 @@ module Raiha
         verify_finished(handshake)
         @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
         transition_state(State::CONNECTED)
+        save_to_sslkeylogfile
         @server_cipher.reset_sequence_number
         @client_cipher.reset_sequence_number
       end
