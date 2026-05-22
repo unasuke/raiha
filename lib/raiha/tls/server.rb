@@ -118,8 +118,11 @@ module Raiha
           break if received.nil?
 
           if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ClientHello)
+            raw_bytes = received.handshake_raw_bytes
+            raise Raiha::TLS::Error, "ClientHello without raw_bytes" if raw_bytes.nil?
             @client_hello = received.fragment.message
-            @transcript_hash[:client_hello] = received.fragment.serialize
+            @transcript_hash[:client_hello] = raw_bytes
+            verify_transcript_roundtrip!(received.fragment, raw_bytes)
             @extensions[:client_hello] = received.fragment.message.extensions
             break
           else
@@ -217,9 +220,10 @@ module Raiha
             @received_early_data ||= String.new(encoding: "BINARY")
             @received_early_data << ApplicationData.deserialize(inner_plaintext.content).content # steep:ignore
           elsif inner_plaintext.handshake?
-            Handshake.deserialize_multiple(inner_plaintext.content).each do |hs|
+            Handshake.deserialize_multiple_with_bytes(inner_plaintext.content).each do |hs, raw_bytes|
               next unless hs.message.is_a?(Handshake::EndOfEarlyData)
-              @transcript_hash[:end_of_early_data] = hs.serialize
+              @transcript_hash[:end_of_early_data] = raw_bytes
+              verify_transcript_roundtrip!(hs, raw_bytes)
               @early_cipher = nil
             end
             break if @early_cipher.nil?
@@ -336,7 +340,9 @@ module Raiha
             ]
           end
         end
-        @transcript_hash[:certificate_request] = handshake.serialize
+        cr_bytes = handshake.serialize
+        @transcript_hash[:certificate_request] = cr_bytes
+        verify_transcript_roundtrip!(handshake, cr_bytes)
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -362,7 +368,9 @@ module Raiha
 
         # Replace ClientHello1 with message_hash in transcript
         @transcript_hash.replace_client_hello_with_message_hash
-        @transcript_hash[:server_hello] = handshake.serialize
+        hrr_bytes = handshake.serialize
+        @transcript_hash[:server_hello] = hrr_bytes
+        verify_transcript_roundtrip!(handshake, hrr_bytes)
 
         Record::TLSPlaintext.serialize(handshake)
       end
@@ -373,8 +381,11 @@ module Raiha
           break if received.nil?
 
           if received.plaintext? && received.handshake? && received.fragment.message.is_a?(Handshake::ClientHello)
+            raw_bytes = received.handshake_raw_bytes
+            raise Raiha::TLS::Error, "ClientHello (retry) without raw_bytes" if raw_bytes.nil?
             @client_hello = received.fragment.message
-            @transcript_hash[:client_hello_retry] = received.fragment.serialize
+            @transcript_hash[:client_hello_retry] = raw_bytes
+            verify_transcript_roundtrip!(received.fragment, raw_bytes)
             @extensions[:client_hello] = received.fragment.message.extensions
             transition_state(State::RECVD_CH)
             break
@@ -461,7 +472,9 @@ module Raiha
             sh.extensions += additional_extensions
           end
         end
-        @transcript_hash[:server_hello] = handshake.serialize
+        sh_bytes = handshake.serialize
+        @transcript_hash[:server_hello] = sh_bytes
+        verify_transcript_roundtrip!(handshake, sh_bytes)
         @server_hello = handshake.message
         setup_key_schedule
         setup_cipher
@@ -484,7 +497,9 @@ module Raiha
             ee.extensions = extensions
           end
         end
-        @transcript_hash[:encrypted_extensions] = handshake.serialize
+        ee_bytes = handshake.serialize
+        @transcript_hash[:encrypted_extensions] = ee_bytes
+        verify_transcript_roundtrip!(handshake, ee_bytes)
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -503,7 +518,9 @@ module Raiha
             )
           end
         end
-        @transcript_hash[:certificate] = handshake.serialize
+        cert_bytes = handshake.serialize
+        @transcript_hash[:certificate] = cert_bytes
+        verify_transcript_roundtrip!(handshake, cert_bytes)
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -521,7 +538,9 @@ module Raiha
             cv.sign(@server_private_key, @transcript_hash.hash, "TLS 1.3, server CertificateVerify")
           end
         end
-        @transcript_hash[:certificate_verify] = handshake.serialize
+        cv_bytes = handshake.serialize
+        @transcript_hash[:certificate_verify] = cv_bytes
+        verify_transcript_roundtrip!(handshake, cv_bytes)
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -537,7 +556,9 @@ module Raiha
           end
         end
 
-        @transcript_hash[:finished] = handshake.serialize
+        fin_bytes = handshake.serialize
+        @transcript_hash[:finished] = fin_bytes
+        verify_transcript_roundtrip!(handshake, fin_bytes)
         innerplaintext = Record::TLSInnerPlaintext.new.tap do |inner|
           inner.content = handshake.serialize
           inner.content_type = Record::CONTENT_TYPE[:handshake]
@@ -555,29 +576,49 @@ module Raiha
 
           next if received.plaintext? && received.change_cipher_spec?
           inner_plaintext = @client_cipher.decrypt(ciphertext: received, phase: :handshake)
-          messages = Handshake.deserialize_multiple(inner_plaintext.content)
-
-          messages.each do |hs|
-            case hs.message
-            when Handshake::Certificate
-              @client_certificates = hs.message.certificates
-            when Handshake::CertificateVerify
-              if @client_certificates&.any?
-                raise unless hs.message.verify_signature(
-                  @client_certificates.first,
-                  @transcript_hash.hash,
-                  "TLS 1.3, client CertificateVerify"
-                )
-              end
-            when Handshake::Finished
-              verify_finished(hs)
-              @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
-              transition_state(State::CONNECTED)
-              @server_cipher.reset_sequence_number
-              @client_cipher.reset_sequence_number
-            end
+          Handshake.deserialize_multiple_with_bytes(inner_plaintext.content).each do |hs, raw_bytes|
+            handle_handshake_message(hs, raw_bytes)
           end
         end
+      end
+
+      def handle_handshake_message(handshake, raw_bytes)
+        case handshake.message
+        when Handshake::Certificate
+          receive_client_certificate(handshake, raw_bytes)
+        when Handshake::CertificateVerify
+          receive_client_certificate_verify(handshake, raw_bytes)
+        when Handshake::Finished
+          receive_client_finished(handshake, raw_bytes)
+        end
+      end
+
+      def receive_client_certificate(handshake, raw_bytes)
+        return unless handshake.message.is_a?(Handshake::Certificate)
+
+        @client_certificates = handshake.message.certificates
+      end
+
+      def receive_client_certificate_verify(handshake, raw_bytes)
+        return unless handshake.message.is_a?(Handshake::CertificateVerify)
+
+        if @client_certificates&.any?
+          raise unless handshake.message.verify_signature(
+            @client_certificates.first,
+            @transcript_hash.hash,
+            "TLS 1.3, client CertificateVerify"
+          )
+        end
+      end
+
+      def receive_client_finished(handshake, raw_bytes)
+        return unless handshake.message.is_a?(Handshake::Finished)
+
+        verify_finished(handshake)
+        @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
+        transition_state(State::CONNECTED)
+        @server_cipher.reset_sequence_number
+        @client_cipher.reset_sequence_number
       end
 
       def connected?

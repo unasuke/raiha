@@ -49,6 +49,10 @@ module Raiha
       def build_certificate_verify: -> String
       def build_finished: -> String
       def receive_finished: -> void
+      def handle_handshake_message: (Handshake handshake, String raw_bytes) -> void
+      def receive_client_certificate: (Handshake handshake, String raw_bytes) -> void
+      def receive_client_certificate_verify: (Handshake handshake, String raw_bytes) -> void
+      def receive_client_finished: (Handshake handshake, String raw_bytes) -> void
       def verify_client_finished: (Handshake handshake) -> bool
       def response_flight_bytes: (Symbol level) -> String?
       def psk_mode?: -> bool
