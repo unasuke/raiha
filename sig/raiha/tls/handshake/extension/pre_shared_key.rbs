@@ -5,9 +5,10 @@ module Raiha
         class PreSharedKey < AbstractExtension
           EXTENSION_TYPE_NUMBER: 41
 
-          class PskIdentity < Struct[untyped]
+          class PskIdentity
             attr_accessor identity: String
             attr_accessor obfuscated_ticket_age: Integer
+            def initialize: (String identity, Integer obfuscated_ticket_age) -> void
           end
 
           attr_accessor identities: Array[PskIdentity]

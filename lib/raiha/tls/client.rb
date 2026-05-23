@@ -723,10 +723,11 @@ module Raiha
       end
 
       private def handle_plaintext_record(record)
-        if record.handshake?
-          [[record.fragment, record.handshake_raw_bytes]]
+        fragment = record.fragment
+        if record.handshake? && fragment.is_a?(Handshake)
+          [[fragment, record.handshake_raw_bytes]]
         else
-          # TODO: maybe alert
+          # TODO: maybe alert; TLS 1.3 silently drops ChangeCipherSpec
           []
         end
       end

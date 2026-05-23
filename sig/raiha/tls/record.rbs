@@ -16,7 +16,7 @@ module Raiha
         attr_accessor legacy_record_version: String
         attr_accessor handshake_raw_bytes: String?
 
-        def self.serialize: (Handshake content)-> Array[String]
+        def self.serialize: (Handshake | Alert | ChangeCipherSpec content) -> Array[String]
         def serialize: -> String
         def invalid?: -> bool
         def change_cipher_spec?: -> bool
