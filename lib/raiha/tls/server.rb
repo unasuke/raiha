@@ -129,8 +129,9 @@ module Raiha
             # TODO: not a client hello
           end
         end
-        if @client_hello
-          if !@client_hello.valid_legacy_version?
+        ch = @client_hello
+        if ch
+          if !ch.valid_legacy_version?
             @buffer << build_error_alert(Alert.new(level: :fatal, description: :illegal_parameter))
             transition_state(State::ERROR_OCCURED)
           else
@@ -141,9 +142,12 @@ module Raiha
       end
 
       def choose_cipher_suite
-        client_suite_names = @client_hello.cipher_suites.select(&:supported?).map(&:name)
+        ch = @client_hello #: Handshake::ClientHello
+        client_suite_names = ch.cipher_suites.select(&:supported?).map(&:name)
         @cipher_suite = @config.cipher_suites.find { |cs| client_suite_names.include?(cs.name) }
-        @transcript_hash.digest_algorithm = @cipher_suite.hash_algorithm
+        cs = @cipher_suite #: CipherSuite
+        @transcript_hash.digest_algorithm = cs.hash_algorithm
+        cs
       end
 
       def choose_group
@@ -294,12 +298,14 @@ module Raiha
       end
 
       private def verify_psk_binder(psk, binder, identity_index)
-        hash_alg = @cipher_suite.hash_algorithm
+        cs = @cipher_suite #: CipherSuite
+        hash_alg = cs.hash_algorithm
 
         # Reconstruct truncated ClientHello for binder verification
         client_hello_serialized = @transcript_hash[:client_hello]
         binders_size = compute_binders_size(identity_index)
-        truncated = client_hello_serialized[0...(client_hello_serialized.bytesize - binders_size)]
+        truncated = client_hello_serialized[0...(client_hello_serialized.bytesize - binders_size)] or
+          raise Raiha::TLS::Error, "TODO: transcript ClientHello shorter than binders size"
 
         expected_binder = compute_psk_binder(psk, truncated, hash_alg)
         binder == expected_binder
@@ -312,7 +318,8 @@ module Raiha
       end
 
       private def check_key_share_or_retry
-        client_key_share = @client_hello.key_share
+        ch = @client_hello #: Handshake::ClientHello
+        client_key_share = ch.key_share
         return unless client_key_share
 
         has_matching_share = client_key_share.groups.any? { |g| g[:group] == @pkey[:group] }
@@ -351,10 +358,12 @@ module Raiha
       end
 
       def build_hello_retry_request
+        ch = @client_hello #: Handshake::ClientHello
+        cs = @cipher_suite #: CipherSuite
         hrr = Handshake::ServerHello.new
         hrr.random = Handshake::ServerHello::HELLO_RETRY_REQUEST_RANDOM
-        hrr.legacy_session_id_echo = @client_hello.legacy_session_id
-        hrr.cipher_suite = @cipher_suite
+        hrr.legacy_session_id_echo = ch.legacy_session_id
+        hrr.cipher_suite = cs
         hrr.extensions = [
           Handshake::Extension::SupportedVersions.generate_for_tls13(on: :server_hello),
           Handshake::Extension::KeyShare.new(on: :hello_retry_request).tap do |ks|
@@ -444,12 +453,14 @@ module Raiha
       end
 
       def build_server_hello
+        ch = @client_hello #: Handshake::ClientHello
+        cs = @cipher_suite #: CipherSuite
         handshake = Handshake.new.tap do |hs|
           hs.handshake_type = Handshake::HANDSHAKE_TYPE[:server_hello]
-          hs.message = Handshake::ServerHello.build_from_client_hello(@client_hello).tap do |sh|
+          hs.message = Handshake::ServerHello.build_from_client_hello(ch).tap do |sh|
             # Use the cipher suite selected by choose_cipher_suite (server preference),
             # not the first one supported by the client (ServerHello default)
-            sh.cipher_suite = @cipher_suite
+            sh.cipher_suite = cs
 
             additional_extensions = [
               Handshake::Extension::KeyShare.new(on: :server_hello).tap do |ks|
@@ -463,9 +474,10 @@ module Raiha
               end
             ]
 
-            if @psk_mode && @selected_psk
+            selected_psk = @selected_psk
+            if @psk_mode && selected_psk
               additional_extensions << Handshake::Extension::PreSharedKey.new(on: :server_hello).tap do |psk|
-                psk.selected_identity = @selected_psk[:index]
+                psk.selected_identity = selected_psk[:index]
               end
             end
 
@@ -645,7 +657,8 @@ module Raiha
         return false unless @key_schedule && @server_hello
 
         expected = @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
-        unless handshake.message.verify_data == expected
+        fin = handshake.message #: Handshake::Finished
+        unless fin.verify_data == expected
           raise Raiha::TLS::Error, "Client Finished verification failed"
         end
         @key_schedule.derive_resumption_master_secret(@transcript_hash.hash)
@@ -660,9 +673,10 @@ module Raiha
       private def save_to_sslkeylogfile
         path = ENV["SSLKEYLOGFILE"]
         return unless path && !path.empty?
-        return unless @client_hello && @key_schedule
+        ch = @client_hello
+        return unless ch && @key_schedule
 
-        client_random = @client_hello.random.unpack1("H*")
+        client_random = ch.random.unpack1("H*")
         body = <<~SSLKEYLOGFILE
           SERVER_HANDSHAKE_TRAFFIC_SECRET #{client_random} #{@key_schedule.server_handshake_traffic_secret.unpack1("H*")}
           SERVER_TRAFFIC_SECRET_0 #{client_random} #{@key_schedule.server_application_traffic_secret[0].unpack1("H*")}
@@ -715,17 +729,23 @@ module Raiha
       end
 
       private def setup_key_schedule
-        @key_schedule.cipher_suite = @cipher_suite
+        ch = @client_hello #: Handshake::ClientHello
+        cs = @cipher_suite #: CipherSuite
+        @key_schedule.cipher_suite = cs
         @key_schedule.group = @pkey[:group]
-        @key_schedule.public_key = @client_hello.key_share.groups.find { |g| g[:group] == @pkey[:group] }[:key_exchange]
+        client_ks = ch.key_share #: Handshake::Extension::KeyShare
+        ks_group = client_ks.groups.find { |g| g[:group] == @pkey[:group] } or
+          raise Raiha::TLS::Error, "TODO: no matching key_share group for #{@pkey[:group]}"
+        @key_schedule.public_key = ks_group[:key_exchange]
         @key_schedule.pkey = @pkey[:pkey]
         @key_schedule.compute_shared_secret
         # PSK resumption: the Early Secret must include the selected PSK
         # so the salt for the Handshake Secret matches the client (RFC
         # 8446 §7.1). check_early_data already set this for the 0-RTT
         # path; resumption without 0-RTT needs it here.
-        if @psk_mode && @selected_psk
-          @key_schedule.psk = @selected_psk[:psk]
+        selected_psk = @selected_psk
+        if @psk_mode && selected_psk
+          @key_schedule.psk = selected_psk[:psk]
         end
         @key_schedule.derive_secret(secret: :early_secret, label: "derived", transcript_hash: @transcript_hash.empty_digest)
         @key_schedule.derive_client_handshake_traffic_secret(@transcript_hash.hash)
@@ -733,7 +753,8 @@ module Raiha
       end
 
       private def verify_finished(finished)
-        raise unless finished.message.verify_data == @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
+        fin = finished.message #: Handshake::Finished
+        raise unless fin.verify_data == @key_schedule.finished_verify_data(@transcript_hash.hash, from: :client)
       end
     end
   end
