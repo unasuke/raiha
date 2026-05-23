@@ -280,7 +280,7 @@ module Raiha::Quic
         content_type = record.getbyte(0)
         return nil unless content_type == 22 # Handshake
 
-        fragment_length = record[3..4].unpack1("n")
+        fragment_length = record[3..4].unpack1("n") # steep:ignore
         record[5, fragment_length]
       end
 

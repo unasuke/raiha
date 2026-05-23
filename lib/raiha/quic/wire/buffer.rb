@@ -8,7 +8,7 @@ module Raiha::Quic
     class Buffer
       extend Forwardable
 
-      def_delegators :@io, :write, :pos, :seek, :eof?
+      def_delegators :@io, :write, :pos, :seek, :eof? # steep:ignore
 
       def read(length)
         @io.read(length) or raise EOFError, "unexpected EOF reading #{length} bytes"
@@ -23,15 +23,15 @@ module Raiha::Quic
       end
 
       def read_uint8
-        @io.read(1).unpack1("C")
+        read(1).unpack1("C") #: Integer
       end
 
       def read_uint16
-        @io.read(2).unpack1("n")
+        read(2).unpack1("n") #: Integer
       end
 
       def read_uint32
-        @io.read(4).unpack1("N")
+        read(4).unpack1("N") #: Integer
       end
 
       def read_varint

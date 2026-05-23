@@ -116,7 +116,7 @@ module Raiha::Quic
         packet_number_bytes = [packet_number].pack("Q>")
 
         8.times do |i|
-          nonce[IV_LENGTH - 8 + i] = (nonce[IV_LENGTH - 8 + i].ord ^ packet_number_bytes[i].ord).chr
+          nonce[IV_LENGTH - 8 + i] = (nonce[IV_LENGTH - 8 + i].ord ^ packet_number_bytes[i].ord).chr # steep:ignore
         end
 
         nonce
