@@ -1,4 +1,5 @@
 require_relative "abstract_extension"
+require_relative "../../../util/io_reader"
 
 module Raiha
   module TLS
@@ -33,11 +34,11 @@ module Raiha
             return if data.nil? || data.empty?
 
             buf = StringIO.new(data)
-            _list_length = buf.read(2).unpack1("n")
-            name_type = buf.read(1).unpack1("C")
+            _list_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            name_type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
             if name_type == 0 # host_name
-              name_length = buf.read(2).unpack1("n")
-              @server_name = buf.read(name_length)
+              name_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+              @server_name = Raiha::Util::IOReader.read_exact(buf, name_length)
             end
           end
 

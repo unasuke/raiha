@@ -4,6 +4,7 @@ require "securerandom"
 require "stringio"
 require_relative "cipher_suite"
 require_relative "error"
+require_relative "../util/io_reader"
 
 module Raiha
   module TLS
@@ -38,12 +39,12 @@ module Raiha
       def self.deserialize(data)
         hs = self.new
         buf = StringIO.new(data)
-        type = buf.read(1).unpack1("C")
+        type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
         raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
 
         hs.handshake_type = type
-        hs.length = ("\x00" + buf.read(3)).unpack1("N")
-        body = buf.read
+        hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
+        body = buf.read || "" #: String
         return nil if body.bytesize != hs.length
 
         hs.message = Message.deserialize(data: body, type: hs.handshake_type)
@@ -54,13 +55,13 @@ module Raiha
         handshakes = [] #: Array[Handshake]
         buf = StringIO.new(data)
         loop do
-          type = buf.read(1).unpack1("C")
+          type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
           raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
 
           hs = self.new
           hs.handshake_type = type
-          hs.length = ("\x00" + buf.read(3)).unpack1("N")
-          body = buf.read(hs.length)
+          hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
+          body = Raiha::Util::IOReader.read_exact(buf, hs.length)
           hs.message = Message.deserialize(data: body, type: hs.handshake_type)
           handshakes << hs
 
@@ -84,13 +85,13 @@ module Raiha
         buf = StringIO.new(data)
         loop do
           start_pos = buf.pos
-          type = buf.read(1).unpack1("C")
+          type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
           raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
 
           hs = self.new
           hs.handshake_type = type
-          hs.length = ("\x00" + buf.read(3)).unpack1("N")
-          body = buf.read(hs.length)
+          hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
+          body = Raiha::Util::IOReader.read_exact(buf, hs.length)
           hs.message = Message.deserialize(data: body, type: hs.handshake_type)
           raw_bytes = data[start_pos, 4 + hs.length] #: String
           pairs << [hs, raw_bytes]

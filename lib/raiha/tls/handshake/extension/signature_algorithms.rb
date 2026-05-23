@@ -1,4 +1,5 @@
 require_relative "abstract_extension"
+require_relative "../../../util/io_reader"
 require "stringio"
 
 module Raiha
@@ -100,9 +101,9 @@ module Raiha
 
             @signature_schemes = []
             buf = StringIO.new(data)
-            signature_schemes_length = buf.read(2).unpack1("n") / 2
+            signature_schemes_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") / 2
             signature_schemes_length.times do
-              signature_scheme_id = buf.read(2)
+              signature_scheme_id = Raiha::Util::IOReader.read_exact(buf, 2)
               signature_scheme = SIGNATURE_SCHEMES.key(signature_scheme_id)
               if signature_scheme
                 @signature_schemes << signature_scheme

@@ -1,3 +1,5 @@
+require_relative "../../../util/io_reader"
+
 module Raiha
   module TLS
     class Handshake
@@ -14,8 +16,8 @@ module Raiha
         def self.deserialize(data)
           ee = self.new
           buf = StringIO.new(data)
-          extensions_bytesize = buf.read(2).unpack1("n")
-          ee.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :encrypted_extensions)
+          extensions_bytesize = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+          ee.extensions = Extension.deserialize_extensions(Raiha::Util::IOReader.read_exact(buf, extensions_bytesize), type: :encrypted_extensions)
           ee
         end
 

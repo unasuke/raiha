@@ -1,4 +1,5 @@
 require_relative "abstract_extension"
+require_relative "../../../util/io_reader"
 require "stringio"
 
 module Raiha
@@ -61,9 +62,9 @@ module Raiha
             @groups = []
 
             buf = StringIO.new(data)
-            group_count = buf.read(2).unpack1("n") / 2
+            group_count = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") / 2
             group_count.times do
-              raw = buf.read(2)
+              raw = Raiha::Util::IOReader.read_exact(buf, 2)
               value = raw.unpack1("n")
               group = NAMED_GROUPS.key(raw)
               if group

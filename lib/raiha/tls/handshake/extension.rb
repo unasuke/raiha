@@ -1,4 +1,5 @@
 require "stringio"
+require_relative "../../util/io_reader"
 
 module Raiha
   module TLS
@@ -49,9 +50,9 @@ module Raiha
           extensions = [] #: Array[AbstractExtension]
           buf = StringIO.new(data)
           until buf.eof?
-            ext_type = buf.read(2).unpack1("n")
-            ext_data_length = buf.read(2).unpack1("n")
-            ext_data = buf.read(ext_data_length)
+            ext_type = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            ext_data_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            ext_data = Raiha::Util::IOReader.read_exact(buf, ext_data_length)
 
             ext_type_name = EXTENSION_TYPE.invert[ext_type] || LEGACY_EXTENSION_TYPE_ALIASES[ext_type]
             if ext_type_name

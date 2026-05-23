@@ -1,3 +1,4 @@
+require_relative "../../../util/io_reader"
 require_relative "abstract_extension"
 
 module Raiha
@@ -18,13 +19,13 @@ module Raiha
           def extension_data=(data)
             @extension_data = data
             buf = StringIO.new(data)
-            list_length = buf.read(2).unpack1("n")
-            list_data = buf.read(list_length)
+            list_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            list_data = Raiha::Util::IOReader.read_exact(buf, list_length)
             list_buf = StringIO.new(list_data)
             @protocol_names = []
             until list_buf.eof?
-              name_length = list_buf.read(1).unpack1("C")
-              @protocol_names << list_buf.read(name_length)
+              name_length = Raiha::Util::IOReader.read_exact(list_buf, 1).unpack1("C")
+              @protocol_names << Raiha::Util::IOReader.read_exact(list_buf, name_length)
             end
           end
 

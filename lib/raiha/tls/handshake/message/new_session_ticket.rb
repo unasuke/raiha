@@ -1,3 +1,5 @@
+require_relative "../../../util/io_reader"
+
 module Raiha
   module TLS
     class Handshake
@@ -30,15 +32,15 @@ module Raiha
         def self.deserialize(data)
           new_session_ticket = self.new
           buf = StringIO.new(data)
-          new_session_ticket.ticket_lifetime = buf.read(4).unpack1("N")
-          new_session_ticket.ticket_age_add = buf.read(4).unpack1("N")
-          ticket_nonce_length = buf.read(1).unpack1("C")
-          new_session_ticket.ticket_nonce = buf.read(ticket_nonce_length)
-          ticket_length = buf.read(2).unpack1("n")
-          new_session_ticket.ticket = buf.read(ticket_length)
-          extensions_bytesize = buf.read(2).unpack1("n")
+          new_session_ticket.ticket_lifetime = Raiha::Util::IOReader.read_exact(buf, 4).unpack1("N")
+          new_session_ticket.ticket_age_add = Raiha::Util::IOReader.read_exact(buf, 4).unpack1("N")
+          ticket_nonce_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          new_session_ticket.ticket_nonce = Raiha::Util::IOReader.read_exact(buf, ticket_nonce_length)
+          ticket_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+          new_session_ticket.ticket = Raiha::Util::IOReader.read_exact(buf, ticket_length)
+          extensions_bytesize = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
           new_session_ticket.extensions =
-            Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :new_session_ticket)
+            Extension.deserialize_extensions(Raiha::Util::IOReader.read_exact(buf, extensions_bytesize), type: :new_session_ticket)
 
           new_session_ticket
         end

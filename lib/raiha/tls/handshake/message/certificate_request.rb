@@ -1,3 +1,5 @@
+require_relative "../../../util/io_reader"
+
 module Raiha
   module TLS
     class Handshake
@@ -22,12 +24,12 @@ module Raiha
           req = new
           buf = StringIO.new(data)
 
-          context_length = buf.read(1).unpack1("C")
-          req.certificate_request_context = buf.read(context_length)
+          context_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          req.certificate_request_context = Raiha::Util::IOReader.read_exact(buf, context_length)
 
-          extensions_length = buf.read(2).unpack1("n")
+          extensions_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
           req.extensions = Extension.deserialize_extensions(
-            buf.read(extensions_length),
+            Raiha::Util::IOReader.read_exact(buf, extensions_length),
             type: :certificate_request
           )
 

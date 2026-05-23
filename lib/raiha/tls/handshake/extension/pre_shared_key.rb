@@ -1,3 +1,4 @@
+require_relative "../../../util/io_reader"
 require_relative "abstract_extension"
 
 module Raiha
@@ -50,7 +51,7 @@ module Raiha
             when :client_hello
               deserialize_offered_psks(buf)
             when :server_hello
-              @selected_identity = buf.read(2).unpack1("n")
+              @selected_identity = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
             end
           end
 
@@ -66,20 +67,20 @@ module Raiha
           end
 
           private def deserialize_offered_psks(buf)
-            identities_length = buf.read(2).unpack1("n")
-            identities_buf = StringIO.new(buf.read(identities_length))
+            identities_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            identities_buf = StringIO.new(Raiha::Util::IOReader.read_exact(buf, identities_length))
             until identities_buf.eof?
-              identity_length = identities_buf.read(2).unpack1("n")
-              identity = identities_buf.read(identity_length)
-              obfuscated_ticket_age = identities_buf.read(4).unpack1("N")
+              identity_length = Raiha::Util::IOReader.read_exact(identities_buf, 2).unpack1("n")
+              identity = Raiha::Util::IOReader.read_exact(identities_buf, identity_length)
+              obfuscated_ticket_age = Raiha::Util::IOReader.read_exact(identities_buf, 4).unpack1("N")
               @identities << PskIdentity.new(identity, obfuscated_ticket_age)
             end
 
-            binders_length = buf.read(2).unpack1("n")
-            binders_buf = StringIO.new(buf.read(binders_length))
+            binders_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            binders_buf = StringIO.new(Raiha::Util::IOReader.read_exact(buf, binders_length))
             until binders_buf.eof?
-              binder_length = binders_buf.read(1).unpack1("C")
-              @binders << binders_buf.read(binder_length)
+              binder_length = Raiha::Util::IOReader.read_exact(binders_buf, 1).unpack1("C")
+              @binders << Raiha::Util::IOReader.read_exact(binders_buf, binder_length)
             end
           end
 

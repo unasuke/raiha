@@ -1,4 +1,5 @@
 require_relative "../extension"
+require_relative "../../../util/io_reader"
 
 module Raiha
   module TLS
@@ -48,16 +49,16 @@ module Raiha
         def self.deserialize(data)
           ch = self.new
           buf = StringIO.new(data)
-          ch.legacy_version = buf.read(2)
-          ch.random = buf.read(32)
-          legacy_session_id_length = buf.read(1).unpack1("C") # 0xc00
-          ch.legacy_session_id = buf.read(legacy_session_id_length)
-          cipher_suites_count = buf.read(2).unpack1("n") / 2
-          ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(buf.read(2)) }
-          legacy_compression_methods_length = buf.read(1).unpack1("C")
-          ch.legacy_compression_methods = buf.read(legacy_compression_methods_length).unpack1("C*")
-          extensions_bytesize = buf.read(2).unpack1("n")
-          ch.extensions = Extension.deserialize_extensions(buf.read(extensions_bytesize), type: :client_hello)
+          ch.legacy_version = Raiha::Util::IOReader.read_exact(buf, 2)
+          ch.random = Raiha::Util::IOReader.read_exact(buf, 32)
+          legacy_session_id_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C") # 0xc00
+          ch.legacy_session_id = Raiha::Util::IOReader.read_exact(buf, legacy_session_id_length)
+          cipher_suites_count = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") / 2
+          ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(Raiha::Util::IOReader.read_exact(buf, 2)) }
+          legacy_compression_methods_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          ch.legacy_compression_methods = Raiha::Util::IOReader.read_exact(buf, legacy_compression_methods_length).unpack1("C*")
+          extensions_bytesize = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+          ch.extensions = Extension.deserialize_extensions(Raiha::Util::IOReader.read_exact(buf, extensions_bytesize), type: :client_hello)
           ch
         end
 

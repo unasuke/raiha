@@ -1,5 +1,6 @@
 require_relative "abstract_extension"
 require_relative "../../error"
+require_relative "../../../util/io_reader"
 require "openssl"
 
 module Raiha
@@ -88,15 +89,15 @@ module Raiha
             @groups = []
             case @on
             when :client_hello
-              client_shares_length = buf.read(2).unpack1("n")
+              client_shares_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
               read_client_shares_length = 0
               loop do
-                raw_group = buf.read(2)
+                raw_group = Raiha::Util::IOReader.read_exact(buf, 2)
                 group_name = NAMED_GROUPS.key(raw_group) || raw_group
                 read_client_shares_length += 2
-                key_exchange_length = buf.read(2).unpack1("n")
+                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
                 read_client_shares_length += 2
-                key_exchange = buf.read(key_exchange_length)
+                key_exchange = Raiha::Util::IOReader.read_exact(buf, key_exchange_length)
                 read_client_shares_length += key_exchange_length
                 @groups << validate_group_and_key_exchange(group_name, key_exchange)
 
@@ -107,14 +108,14 @@ module Raiha
                 end
               end
             when :server_hello
-              raw_group = buf.read(2)
+              raw_group = Raiha::Util::IOReader.read_exact(buf, 2)
               group_name = NAMED_GROUPS.key(raw_group) || raw_group
               if buf.eof?
                 # HelloRetryRequest: only selected_group, no key_exchange
                 @groups << { group: group_name, key_exchange: "" }
               else
-                key_exchange_length = buf.read(2).unpack1("n")
-                key_exchange = buf.read(key_exchange_length)
+                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+                key_exchange = Raiha::Util::IOReader.read_exact(buf, key_exchange_length)
                 @groups << validate_group_and_key_exchange(group_name, key_exchange)
               end
             else

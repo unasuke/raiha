@@ -1,3 +1,4 @@
+require_relative "../../../util/io_reader"
 require_relative "abstract_extension"
 
 module Raiha
@@ -43,10 +44,10 @@ module Raiha
             buf = StringIO.new(data)
             case @on
             when :client_hello
-              length = buf.read(1).unpack1("C") / 2
-              length.times.map { @protocol_versions << buf.read(2) }
+              length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C") / 2
+              length.times.map { @protocol_versions << Raiha::Util::IOReader.read_exact(buf, 2) }
             when :server_hello
-              @protocol_versions << buf.read(2)
+              @protocol_versions << Raiha::Util::IOReader.read_exact(buf, 2)
             end
           end
 

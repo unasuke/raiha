@@ -1,3 +1,4 @@
+require_relative "../../../util/io_reader"
 require_relative "abstract_extension"
 
 module Raiha
@@ -19,8 +20,8 @@ module Raiha
           def extension_data=(data)
             super
             buf = StringIO.new(data)
-            length = buf.read(2).unpack1("n")
-            @cookie = buf.read(length)
+            length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+            @cookie = Raiha::Util::IOReader.read_exact(buf, length)
           end
 
           def serialize

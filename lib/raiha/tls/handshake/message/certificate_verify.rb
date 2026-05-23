@@ -1,6 +1,7 @@
 require "stringio"
 require "openssl"
 require_relative "../../error"
+require_relative "../../../util/io_reader"
 
 module Raiha
   module TLS
@@ -57,11 +58,11 @@ module Raiha
         def self.deserialize(data)
           cert_verify = self.new
           buf = StringIO.new(data)
-          signature_scheme_id = buf.read(2)
+          signature_scheme_id = Raiha::Util::IOReader.read_exact(buf, 2)
           cert_verify.algorithm = SIGNATURE_SCHEMES.key(signature_scheme_id) # TODO: nil check
 
-          signature_length = buf.read(2).unpack1("n")
-          cert_verify.signature = buf.read(signature_length)
+          signature_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+          cert_verify.signature = Raiha::Util::IOReader.read_exact(buf, signature_length)
           raise unless buf.eof?
 
           cert_verify

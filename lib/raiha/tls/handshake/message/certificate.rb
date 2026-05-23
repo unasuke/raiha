@@ -1,3 +1,5 @@
+require_relative "../../../util/io_reader"
+
 module Raiha
   module TLS
     class Handshake
@@ -58,20 +60,20 @@ module Raiha
         def self.deserialize(data)
           cert = self.new
           buf = StringIO.new(data)
-          certificate_request_context_length = buf.read(1).unpack1("C")
-          cert.certificate_request_context = buf.read(certificate_request_context_length)
+          certificate_request_context_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          cert.certificate_request_context = Raiha::Util::IOReader.read_exact(buf, certificate_request_context_length)
 
-          certificate_list_length = ("\x00" + buf.read(3)).unpack1("L>")
-          certificate_list = buf.read(certificate_list_length)
+          certificate_list_length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("L>")
+          certificate_list = Raiha::Util::IOReader.read_exact(buf, certificate_list_length)
 
           certificate_list_buf = StringIO.new(certificate_list)
           loop do
             break if certificate_list_buf.eof?
 
-            cert_length = ("\x00" + certificate_list_buf.read(3)).unpack1("L>")
-            opaque_certificate_data = certificate_list_buf.read(cert_length)
-            extension_length = certificate_list_buf.read(2).unpack1("n")
-            extensions = Handshake::Extension.deserialize_extensions(certificate_list_buf.read(extension_length), type: :certificate)
+            cert_length = ("\x00" + Raiha::Util::IOReader.read_exact(certificate_list_buf, 3)).unpack1("L>")
+            opaque_certificate_data = Raiha::Util::IOReader.read_exact(certificate_list_buf, cert_length)
+            extension_length = Raiha::Util::IOReader.read_exact(certificate_list_buf, 2).unpack1("n")
+            extensions = Handshake::Extension.deserialize_extensions(Raiha::Util::IOReader.read_exact(certificate_list_buf, extension_length), type: :certificate)
             cert.certificate_entries << CertificateEntry.new(opaque_certificate_data: opaque_certificate_data, extensions: extensions)
           end
 
