@@ -20,7 +20,7 @@ module Raiha
         @server = Raiha::TLS::Server.new
         @host = "localhost"
         @port = 4433
-        @socket = TCPServer.new(@host, @port)
+        @socket = TCPServer.new(@host, @port) # steep:ignore
         @logger = Logger.new($stdout)
         @connection = nil
       end

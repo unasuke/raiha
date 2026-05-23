@@ -115,7 +115,7 @@ module Raiha::Quic
       def early_data_accepted?
         return nil unless @perspective.client?
         tls = @tls
-        return nil unless tls.respond_to?(:early_data_accepted?)
+        return nil unless tls.is_a?(Raiha::TLS::Client)
         tls.early_data_accepted?
       end
 
@@ -124,11 +124,12 @@ module Raiha::Quic
       def peer_transport_parameters
         return @peer_transport_parameters if defined?(@peer_transport_parameters) && @peer_transport_parameters
 
+        tls = @tls
         extensions =
-          if @perspective.client?
-            @tls.encrypted_extensions&.extensions
-          else
-            @tls.client_hello&.extensions
+          if @perspective.client? && tls.is_a?(Raiha::TLS::Client)
+            tls.encrypted_extensions&.extensions
+          elsif tls.is_a?(Raiha::TLS::Server)
+            tls.client_hello&.extensions
           end
         return nil unless extensions
 
@@ -249,13 +250,16 @@ module Raiha::Quic
       end
 
       private def collect_server_response
-        if !@server_hello_sent && (bytes = @tls.response_flight_bytes(:initial))
+        tls = @tls
+        return unless tls.is_a?(Raiha::TLS::Server)
+
+        if !@server_hello_sent && (bytes = tls.response_flight_bytes(:initial))
           @crypto_setup.queue_crypto_data(bytes, level: EncryptionLevel::INITIAL)
           @server_hello_sent = true
         end
 
         if !@server_flight_sent && @crypto_setup.available?(EncryptionLevel::HANDSHAKE) &&
-            (bytes = @tls.response_flight_bytes(:handshake))
+            (bytes = tls.response_flight_bytes(:handshake))
           @crypto_setup.queue_crypto_data(bytes, level: EncryptionLevel::HANDSHAKE)
           @server_flight_sent = true
         end
@@ -267,7 +271,9 @@ module Raiha::Quic
         # after the server's Finished has been processed (1-RTT keys ready).
         return unless @crypto_setup.available?(EncryptionLevel::ONE_RTT)
 
-        handshake = @tls.build_client_finished_handshake
+        tls = @tls
+        return unless tls.is_a?(Raiha::TLS::Client)
+        handshake = tls.build_client_finished_handshake
         return unless handshake
 
         @crypto_setup.queue_crypto_data(handshake.serialize, level: EncryptionLevel::HANDSHAKE)
@@ -298,7 +304,7 @@ module Raiha::Quic
 
         ext = @tls.additional_extensions.find { |e|
           e.is_a?(Raiha::TLS::Handshake::Extension::QuicTransportParameters)
-        }
+        } #: Raiha::TLS::Handshake::Extension::QuicTransportParameters?
         return unless ext
 
         ext.transport_parameters_data = @transport_parameters.serialize

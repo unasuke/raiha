@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "header"
+require_relative "../error"
 
 module Raiha::Quic
   module Wire
@@ -39,7 +40,8 @@ module Raiha::Quic
         first_byte |= ((@packet_number_length || 1) - 1)
         buf.write_uint8(first_byte)
 
-        buf.write(@destination_connection_id.serialize)
+        cid = @destination_connection_id or raise Raiha::Quic::Error, "TODO: destination_connection_id not set"
+        buf.write(cid.serialize)
 
         buf.to_s
       end

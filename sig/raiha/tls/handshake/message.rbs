@@ -12,17 +12,17 @@ module Raiha
 
         attr_accessor random: String
         attr_accessor legacy_version: String
-        attr_accessor legacy_session_id: Integer
+        attr_accessor legacy_session_id: String
         attr_accessor cipher_suites: Array[CipherSuite]
         attr_accessor extensions: Array[::Raiha::TLS::Handshake::Extension::AbstractExtension|::Raiha::TLS::Handshake::Extension]
-        attr_accessor legacy_compression_methods: Array[Integer]
+        attr_accessor legacy_compression_methods: Integer
 
         def self.build: -> ClientHello
         def self.deserialize: (String data) -> ClientHello
         def extensions_for_client_hello: -> Array[::Raiha::TLS::Handshake::Extension::AbstractExtension|::Raiha::TLS::Handshake::Extension]
         def serialize_cipher_suites: -> String
         def serialize_extensions: -> String
-        def setup_key_share: (Array[{ group: String, key_exchange: String }] group_and_pkeys) -> void
+        def setup_key_share: (Array[{ group: String, pkey: OpenSSL::PKey::PKey | OpenSSL::PKey::EC }] group_and_pkeys) -> void
         def server_name: (String server_name) -> void
         def server_name=: (String server_name) -> void
         def key_share: -> ::Raiha::TLS::Handshake::Extension::KeyShare?

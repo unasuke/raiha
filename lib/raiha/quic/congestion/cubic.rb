@@ -119,8 +119,8 @@ module Raiha::Quic
       end
 
       private def cubic_increase(acked_bytes)
-        @epoch_start ||= Time.now
-        elapsed = Time.now - @epoch_start
+        epoch_start = (@epoch_start ||= Time.now)
+        elapsed = Time.now - epoch_start
 
         if @w_max > 0
           @k = ((@w_max * (1 - BETA_CUBIC)) / (C_CUBIC * @max_datagram_size)) ** (1.0 / 3.0)

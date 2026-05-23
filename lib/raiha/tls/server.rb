@@ -258,9 +258,9 @@ module Raiha
         psk = @selected_psk
         return false unless psk
 
-        received_at = psk[:received_at] # steep:ignore
-        age_add = psk[:age_add] # steep:ignore
-        obfuscated = psk[:obfuscated_ticket_age] # steep:ignore
+        received_at = psk[:received_at]
+        age_add = psk[:age_add]
+        obfuscated = psk[:obfuscated_ticket_age]
         return false if received_at.nil? || age_add.nil? || obfuscated.nil?
 
         claimed_age_ms = (obfuscated - age_add) & 0xFFFFFFFF

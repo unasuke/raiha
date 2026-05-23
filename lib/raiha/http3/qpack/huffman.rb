@@ -280,7 +280,7 @@ module Raiha
         end
 
         def self.build_tree
-          root = [nil, nil]
+          root = [nil, nil] #: Array[untyped]
           TABLE.each_with_index do |(code, len), sym|
             node = root
             (len - 1).downto(0) do |bit_index|

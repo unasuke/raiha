@@ -70,5 +70,6 @@ module Raiha
     def clear: -> void
 
     private def merge_chunks: -> void
+    private def absorb_pending: -> void
   end
 end

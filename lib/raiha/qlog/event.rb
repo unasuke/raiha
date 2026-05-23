@@ -26,7 +26,7 @@ module Raiha
       end
 
       def to_json(*args)
-        to_h.to_json(*args)
+        to_h.to_json(*args) # steep:ignore
       end
     end
 
@@ -298,7 +298,7 @@ module Raiha
         return nil unless frame.largest_acknowledged && frame.ack_ranges
 
         ranges = [] #: Array[[Integer, Integer]]
-        smallest_of_previous = nil
+        smallest_of_previous = 0
 
         frame.ack_ranges.each_with_index do |r, i|
           largest_in_range = if i.zero?

@@ -29,7 +29,8 @@ module Raiha::Quic
 
       private def build_message
         message = "QUIC Transport Error: #{TransportErrorCode.description(@error_code)}"
-        message += " (frame type: 0x#{@frame_type.to_s(16)})" if @frame_type
+        frame_type = @frame_type
+        message += " (frame type: 0x#{frame_type.to_s(16)})" if frame_type
         message += " - #{@reason_phrase}" unless @reason_phrase.empty?
         message
       end
