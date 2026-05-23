@@ -16,7 +16,7 @@ module Raiha::Quic
 
         def initialize
           @largest_received = nil
-          @received_packet_numbers = []
+          @received_packet_numbers = [] #: Array[Integer]
           @largest_received_time = nil
           @ack_eliciting_count = 0
           @ack_alarm = Timer.new
@@ -26,7 +26,8 @@ module Raiha::Quic
         def record_received(packet_number, ack_eliciting:, ecn: :not_ect)
           @received_packet_numbers << packet_number
 
-          if @largest_received.nil? || packet_number > @largest_received
+          largest = @largest_received
+          if largest.nil? || packet_number > largest
             @largest_received = packet_number
             @largest_received_time = Time.now
           end
@@ -126,11 +127,11 @@ module Raiha::Quic
       private def compute_ack_ranges(sorted_packet_numbers)
         return [] if sorted_packet_numbers.empty?
 
-        ranges = []
+        ranges = [] #: Array[Wire::Frames::AckFrame::AckRange]
         current_start = sorted_packet_numbers.first
         current_end = sorted_packet_numbers.first
 
-        sorted_packet_numbers[1..].each do |packet_number|
+        (sorted_packet_numbers[1..] || []).each do |packet_number|
           if packet_number == current_end - 1
             current_end = packet_number
           else
@@ -152,9 +153,10 @@ module Raiha::Quic
       end
 
       private def compute_ack_delay(space)
-        return 0 unless space.largest_received_time
+        received_at = space.largest_received_time
+        return 0 unless received_at
 
-        delay = Time.now - space.largest_received_time
+        delay = Time.now - received_at
         (delay * 1_000_000).to_i # microseconds
       end
     end

@@ -1,6 +1,22 @@
 module Raiha::Quic
   module AckHandler
     class ReceivedPacketHandler
+      class PacketNumberSpaceState
+        attr_reader largest_received: Integer?
+        attr_reader received_packet_numbers: Array[Integer]
+        attr_reader ack_eliciting_count: Integer
+        attr_reader ecn_counts: Hash[Symbol, Integer]
+        attr_accessor ack_alarm: Timer
+        @largest_received_time: Time?
+
+        def initialize: -> void
+        def record_received: (Integer packet_number, ack_eliciting: bool, ?ecn: Symbol) -> void
+        def any_ecn_mark?: -> bool
+        def should_send_ack?: -> bool
+        def reset_ack_state: -> void
+        def largest_received_time: -> Time?
+      end
+
       MAX_ACK_DELAY: Integer
 
       def initialize: -> void
@@ -10,7 +26,7 @@ module Raiha::Quic
       def get_alarm_timeout: -> Time?
 
       private def compute_ack_ranges: (Array[Integer] sorted_packet_numbers) -> Array[Wire::Frames::AckFrame::AckRange]
-      private def compute_ack_delay: (untyped space) -> Integer
+      private def compute_ack_delay: (PacketNumberSpaceState space) -> Integer
     end
   end
 end

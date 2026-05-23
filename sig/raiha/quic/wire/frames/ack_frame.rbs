@@ -4,6 +4,7 @@ module Raiha::Quic::Wire::Frames
       attr_reader gap: Integer
       attr_reader ack_range_length: Integer
       def initialize: (Integer gap, Integer ack_range_length) -> void
+                    | (gap: Integer, ack_range_length: Integer) -> void
     end
 
     attr_accessor largest_acknowledged: Integer
