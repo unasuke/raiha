@@ -3,6 +3,7 @@
 require "openssl"
 require "securerandom"
 
+require_relative "error"
 require_relative "protocol/connection_id"
 
 module Raiha::Quic
@@ -53,7 +54,8 @@ module Raiha::Quic
       raise ArgumentError, "reset_key must not be empty" if reset_key.nil? || reset_key.empty?
 
       cid_bytes = connection_id.is_a?(Protocol::ConnectionID) ? connection_id.serialize : connection_id
-      OpenSSL::HMAC.digest("SHA256", reset_key, cid_bytes).byteslice(0, TOKEN_LENGTH) # steep:ignore
+      OpenSSL::HMAC.digest("SHA256", reset_key, cid_bytes).byteslice(0, TOKEN_LENGTH) or
+        raise Raiha::Quic::Error, "TODO: HMAC byteslice failed in derive_token"
     end
 
     # Return true when the datagram's trailing 16 bytes match any of the

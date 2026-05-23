@@ -100,7 +100,7 @@ module Raiha::Quic
         cipher.key = hp_key
         cipher.padding = 0
 
-        cipher.update(sample)[0, 5]
+        cipher.update(sample)[0, 5] or raise Raiha::Quic::Error, "TODO: header protection mask slice failed"
       end
 
       private def derive_keys

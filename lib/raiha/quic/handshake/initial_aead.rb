@@ -2,6 +2,7 @@
 
 require "openssl"
 require_relative "../../crypto_util"
+require_relative "../error"
 require_relative "../protocol/perspective"
 require_relative "../protocol/version"
 
@@ -84,7 +85,7 @@ module Raiha::Quic
         cipher.key = hp_key
         cipher.padding = 0
 
-        cipher.update(sample)[0, 5]
+        cipher.update(sample)[0, 5] or raise Raiha::Quic::Error, "TODO: header protection mask slice failed"
       end
 
       private def send_key_iv

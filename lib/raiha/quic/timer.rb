@@ -22,9 +22,10 @@ module Raiha::Quic
     alias stop reset
 
     def expired?
-      return false if @deadline.nil?
+      deadline = @deadline
+      return false if deadline.nil?
 
-      Time.now >= @deadline
+      Time.now >= deadline
     end
 
     def active?
@@ -32,10 +33,11 @@ module Raiha::Quic
     end
 
     def remaining
-      return nil unless active?
+      deadline = @deadline
+      return nil if deadline.nil?
 
-      remaining_time = @deadline - Time.now
-      remaining_time > 0 ? remaining_time : 0
+      remaining_time = deadline - Time.now
+      remaining_time > 0 ? remaining_time : 0.0
     end
   end
 end
