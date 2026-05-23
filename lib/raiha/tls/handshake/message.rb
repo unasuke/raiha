@@ -1,3 +1,5 @@
+require_relative "../error"
+
 module Raiha
   module TLS
     class Handshake
@@ -29,7 +31,7 @@ module Raiha
           when Handshake::HANDSHAKE_TYPE[:end_of_early_data]
             EndOfEarlyData.deserialize(data)
           else
-            puts "unknown message type: #{type}"
+            raise Raiha::TLS::Error, "TODO: unknown handshake message type: #{type.inspect}"
           end
         end
       end

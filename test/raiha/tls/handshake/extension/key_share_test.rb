@@ -72,4 +72,11 @@ class RaihaTLSHandshakeExtensionKeyShareTest < Minitest::Test
     assert_equal 1, deserialized_key_share2.groups.length
     assert_equal "prime256v1", deserialized_key_share2.groups.first[:group]
   end
+
+  def test_serialize_raises_on_unknown_on
+    key_share = Raiha::TLS::Handshake::Extension::KeyShare.new(on: :client_hello)
+    key_share.instance_variable_set(:@on, :encrypted_extensions)
+    error = assert_raises(Raiha::TLS::Error) { key_share.serialize }
+    assert_includes error.message, "TODO"
+  end
 end

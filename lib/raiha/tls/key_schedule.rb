@@ -237,7 +237,7 @@ module Raiha
           t = OpenSSL::HMAC.digest(@hash_algorithm, prk, t + info + [i+1].pack("C"))
           okm += t
         end
-        okm[0...length]
+        okm[0...length] or raise Raiha::TLS::Error, "TODO: HKDF-Expand slice failed (okm size=#{okm.bytesize}, length=#{length})"
       end
     end
   end

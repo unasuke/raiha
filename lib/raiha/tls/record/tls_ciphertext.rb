@@ -1,4 +1,5 @@
 require "stringio"
+require_relative "../error"
 
 module Raiha
   module TLS
@@ -52,12 +53,14 @@ module Raiha
 
         def auth_tag
           # TODO: 16
-          @encrypted_record[-16..-1]
+          @encrypted_record[-16..-1] or
+            raise Raiha::TLS::Error, "TODO: encrypted_record shorter than auth_tag length (#{@encrypted_record.bytesize})"
         end
 
         def encrypted_record_without_auth_tag
           # TODO: 16
-          @encrypted_record[0...-16]
+          @encrypted_record[0...-16] or
+            raise Raiha::TLS::Error, "TODO: encrypted_record shorter than auth_tag length (#{@encrypted_record.bytesize})"
         end
 
         def additional_data
@@ -84,8 +87,10 @@ module Raiha
           tls_inner_plaintext = self.new
           pads = 0
           loop { pads -= 1; break if data[pads] != "\x00" }
-          tls_inner_plaintext.content = data[0..(pads - 1)]
-          tls_inner_plaintext.content_type = data[pads].unpack1("C")
+          tls_inner_plaintext.content = data[0..(pads - 1)] or
+            raise Raiha::TLS::Error, "TODO: TLSInnerPlaintext slice failed (pads=#{pads})"
+          tls_inner_plaintext.content_type = (data[pads] or
+            raise Raiha::TLS::Error, "TODO: TLSInnerPlaintext content_type slice failed").unpack1("C")
           tls_inner_plaintext
         end
 
