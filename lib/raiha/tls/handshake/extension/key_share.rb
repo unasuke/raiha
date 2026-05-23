@@ -132,7 +132,7 @@ module Raiha
             when :hello_retry_request
               serialize_for_hello_retry_request
             else
-              # TODO: raise?
+              raise Raiha::TLS::Error, "TODO: unexpected KeyShare#@on: #{@on.inspect}"
             end
           end
 

@@ -1,5 +1,6 @@
 require "openssl"
 
+require_relative "error"
 require_relative "key_schedule"
 require_relative "cipher_suite"
 require_relative "record"
@@ -57,6 +58,8 @@ module Raiha
           key_and_iv_server(phase)
         when :client
           key_and_iv_client(phase)
+        else
+          raise Raiha::TLS::Error, "TODO: unexpected AEAD mode: #{@mode.inspect}"
         end
       end
 
@@ -72,6 +75,8 @@ module Raiha
             @key_schedule.server_application_write_key,
             @key_schedule.server_application_write_iv,
           ]
+        else
+          raise Raiha::TLS::Error, "TODO: unexpected server AEAD phase: #{phase.inspect}"
         end
       end
 
@@ -92,6 +97,8 @@ module Raiha
             @key_schedule.client_application_write_key,
             @key_schedule.client_application_write_iv,
           ]
+        else
+          raise Raiha::TLS::Error, "TODO: unexpected client AEAD phase: #{phase.inspect}"
         end
       end
 

@@ -1,4 +1,5 @@
 require_relative "../../../util/io_reader"
+require_relative "../../error"
 require_relative "abstract_extension"
 
 module Raiha
@@ -63,6 +64,8 @@ module Raiha
             when :server_hello
               buf = [@selected_identity].pack("n")
               [EXTENSION_TYPE_NUMBER].pack("n") + [buf.bytesize].pack("n") + buf
+            else
+              raise Raiha::TLS::Error, "TODO: unexpected PreSharedKey#@on: #{@on.inspect}"
             end
           end
 

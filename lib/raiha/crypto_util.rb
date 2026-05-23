@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "openssl"
+require_relative "../raiha"
 
 # Utility module for cryptography
 module Raiha::CryptoUtil
@@ -59,7 +60,7 @@ module Raiha::CryptoUtil
       t = OpenSSL::HMAC.digest(hash, prk, t + info + i.chr)
       okm += t
     end
-    okm[0...length]
+    okm[0...length] or raise Raiha::Error, "TODO: HKDF-Expand slice failed (okm size=#{okm.bytesize}, length=#{length})"
   end
   module_function :hkdf_expand
 end

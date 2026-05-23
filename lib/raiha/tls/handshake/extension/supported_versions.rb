@@ -1,4 +1,5 @@
 require_relative "../../../util/io_reader"
+require_relative "../../error"
 require_relative "abstract_extension"
 
 module Raiha
@@ -62,7 +63,7 @@ module Raiha
               data = @protocol_versions.join
               [EXTENSION_TYPE_NUMBER].pack("n") + [data.bytesize].pack("n") + data
             else
-              # TODO: raise?
+              raise Raiha::TLS::Error, "TODO: unexpected SupportedVersions#@on: #{@on.inspect}"
             end
           end
         end
