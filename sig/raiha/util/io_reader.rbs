@@ -1,0 +1,7 @@
+module Raiha
+  module Util
+    module IOReader
+      def self?.read_exact: (StringIO io, Integer n) -> String
+    end
+  end
+end

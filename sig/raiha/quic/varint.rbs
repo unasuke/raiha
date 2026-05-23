@@ -8,7 +8,5 @@ module Raiha::Quic
     def self.encode: (Integer value) -> String
     def self.decode: (StringIO io) -> Integer
     def self.byte_size: (Integer value) -> Integer
-
-    private def self.read_exact: (StringIO io, Integer n) -> String
   end
 end

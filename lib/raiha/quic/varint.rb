@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../util/io_reader"
+
 module Raiha::Quic
   # RFC 9000 Section 16 - Variable-Length Integer Encoding
   #
@@ -38,32 +40,26 @@ module Raiha::Quic
       end
 
       def decode(io)
-        first_byte = read_exact(io, 1).unpack1("C") #: Integer
+        first_byte = Raiha::Util::IOReader.read_exact(io, 1).unpack1("C") #: Integer
         prefix = first_byte >> 6
 
         case prefix
         when 0
           first_byte & 0x3f
         when 1
-          second_byte = read_exact(io, 1).unpack1("C") #: Integer
+          second_byte = Raiha::Util::IOReader.read_exact(io, 1).unpack1("C") #: Integer
           ((first_byte & 0x3f) << 8) | second_byte
         when 2
-          rest = read_exact(io, 3).unpack("CCC") #: Array[Integer]
+          rest = Raiha::Util::IOReader.read_exact(io, 3).unpack("CCC") #: Array[Integer]
           ((first_byte & 0x3f) << 24) | (rest[0] << 16) | (rest[1] << 8) | rest[2]
         when 3
-          rest = read_exact(io, 7).unpack("CCCCCCC") #: Array[Integer]
+          rest = Raiha::Util::IOReader.read_exact(io, 7).unpack("CCCCCCC") #: Array[Integer]
           ((first_byte & 0x3f) << 56) | (rest[0] << 48) | (rest[1] << 40) |
           (rest[2] << 32) | (rest[3] << 24) | (rest[4] << 16) |
           (rest[5] << 8) | rest[6]
         else
           raise "unreachable: varint prefix is always 0..3" # two top bits
         end
-      end
-
-      private def read_exact(io, n)
-        bytes = io.read(n)
-        raise EOFError, "expected #{n} byte(s) for varint, got EOF" if bytes.nil? || bytes.bytesize < n
-        bytes
       end
 
       def byte_size(value)
