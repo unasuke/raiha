@@ -95,7 +95,7 @@ module Raiha
                 raw_group = Raiha::Util::IOReader.read_exact(buf, 2)
                 group_name = NAMED_GROUPS.key(raw_group) || raw_group
                 read_client_shares_length += 2
-                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") #: Integer
                 read_client_shares_length += 2
                 key_exchange = Raiha::Util::IOReader.read_exact(buf, key_exchange_length)
                 read_client_shares_length += key_exchange_length
@@ -114,7 +114,7 @@ module Raiha
                 # HelloRetryRequest: only selected_group, no key_exchange
                 @groups << { group: group_name, key_exchange: "" }
               else
-                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+                key_exchange_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") #: Integer
                 key_exchange = Raiha::Util::IOReader.read_exact(buf, key_exchange_length)
                 @groups << validate_group_and_key_exchange(group_name, key_exchange)
               end

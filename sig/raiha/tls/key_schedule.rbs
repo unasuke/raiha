@@ -13,7 +13,7 @@ module Raiha
 
       @hash_algorithm: String
       @aead_algorithm: String
-      @client_early_traffic_secret: String
+      @client_early_traffic_secret: String?
       @early_exporter_secret: String
       @client_handshake_traffic_secret: String
       @server_handshake_traffic_secret: String

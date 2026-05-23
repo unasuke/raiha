@@ -94,11 +94,15 @@ module Raiha
       end
 
       def client_early_write_key
-        @client_early_write_key ||= hkdf_expand(prk: @client_early_traffic_secret, info: hkdf_label(@key_length, "key", ""), length: @key_length)
+        secret = @client_early_traffic_secret or
+          raise Raiha::TLS::Error, "TODO: client_early_traffic_secret not derived"
+        @client_early_write_key ||= hkdf_expand(prk: secret, info: hkdf_label(@key_length, "key", ""), length: @key_length)
       end
 
       def client_early_write_iv
-        @client_early_write_iv ||= hkdf_expand(prk: @client_early_traffic_secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
+        secret = @client_early_traffic_secret or
+          raise Raiha::TLS::Error, "TODO: client_early_traffic_secret not derived"
+        @client_early_write_iv ||= hkdf_expand(prk: secret, info: hkdf_label(@iv_length, "iv", ""), length: @iv_length)
       end
 
       def derive_client_handshake_traffic_secret(transcript_hash)
