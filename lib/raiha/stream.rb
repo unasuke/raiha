@@ -315,7 +315,8 @@ module Raiha
     def initialize
       @buffer = String.new(encoding: "BINARY")
       @start_offset = 0
-      @pending = {} #: Hash[Integer, String]
+      # @type ivar @pending: Hash[Integer, String]
+      @pending = {}
       @final_offset = nil
     end
 
@@ -360,7 +361,8 @@ module Raiha
 
     def clear
       @buffer = String.new(encoding: "BINARY")
-      @pending = {} #: Hash[Integer, String]
+      # @type ivar @pending: Hash[Integer, String]
+      @pending = {}
       @start_offset = 0
     end
 

@@ -40,7 +40,8 @@ module Raiha
         @cipher_suite = nil
         @client_hello = nil
         @server_hello = nil
-        @buffer = [] #: Array[String]
+        # @type ivar @buffer: Array[String]
+        @buffer = []
         @received = [] #: Array[Record::TLSPlaintext | Record::TLSCiphertext]
         @extensions = {} #: Hash[Symbol, Handshake::Extension::AbstractExtension]
         @key_schedule = KeySchedule.new(mode: :server)

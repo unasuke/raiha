@@ -37,11 +37,12 @@ module Raiha::Quic
         # tagged with the offset at which it must be placed in the TLS
         # stream (RFC 9000 §19.6). Entries are dequeued by get_crypto_data
         # and re-enqueued verbatim when a carrying packet is declared lost.
+        # @type ivar @pending_crypto_data: Hash[Symbol, Array[{offset: Integer, data: String}]]
         @pending_crypto_data = {
           EncryptionLevel::INITIAL => [],
           EncryptionLevel::HANDSHAKE => [],
           EncryptionLevel::ONE_RTT => [],
-        } #: Hash[Symbol, Array[{offset: Integer, data: String}]]
+        }
         # Running offset cursor per level: next contiguous TLS-stream byte
         # index a fresh queue_crypto_data call will claim.
         @next_crypto_offset = {
@@ -51,7 +52,8 @@ module Raiha::Quic
         }
         # ClientHello bytes ever queued at INITIAL level, so a Retry on
         # the client can replay them at offset 0 with the new keys.
-        @initial_crypto_history = [] #: Array[String]
+        # @type ivar @initial_crypto_history: Array[String]
+        @initial_crypto_history = []
       end
 
       def available?(level)
@@ -190,7 +192,8 @@ module Raiha::Quic
         @pending_crypto_data[EncryptionLevel::INITIAL].clear
         @next_crypto_offset[EncryptionLevel::INITIAL] = 0
         history = @initial_crypto_history
-        @initial_crypto_history = [] #: Array[String]
+        # @type ivar @initial_crypto_history: Array[String]
+        @initial_crypto_history = []
         history.each { |data| queue_crypto_data(data, level: EncryptionLevel::INITIAL) }
       end
 
