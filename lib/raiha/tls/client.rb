@@ -492,7 +492,8 @@ module Raiha
       end
 
       def respond_to_finished
-        records = [] #: Array[String]
+        # @type var records: Array[String]
+        records = []
 
         # RFC 8446 §4.5: EndOfEarlyData is only sent when the server
         # accepted 0-RTT (signalled by echoing EarlyData in EE). If the

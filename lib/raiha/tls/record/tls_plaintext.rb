@@ -35,7 +35,8 @@ module Raiha
         attr_accessor :handshake_raw_bytes
 
         def self.serialize(content)
-          bufs = [] #: Array[String]
+          # @type var bufs: Array[String]
+          bufs = []
           data = content.serialize
           count = 0
 

@@ -60,7 +60,8 @@ module Raiha
       end
 
       def self.unwrap_fragments(serialized_records)
-        fragments = [] #: Array[{content_type: Integer, length: Integer, fragment: String, legacy_record_version: String}]
+        # @type var fragments: Array[{content_type: Integer, length: Integer, fragment: String, legacy_record_version: String}]
+        fragments = []
         buf = StringIO.new(serialized_records)
         loop do
           content_type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")

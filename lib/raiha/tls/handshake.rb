@@ -81,7 +81,8 @@ module Raiha
       end
 
       def self.deserialize_multiple_with_bytes(data)
-        pairs = [] #: Array[[Handshake, String]]
+        # @type var pairs: Array[[Handshake, String]]
+        pairs = []
         buf = StringIO.new(data)
         loop do
           start_pos = buf.pos
