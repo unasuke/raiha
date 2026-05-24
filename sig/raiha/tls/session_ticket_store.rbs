@@ -14,7 +14,7 @@ module Raiha
       def get_by_ticket: (String ticket_data) -> (entry | nil)
       def delete: (String server_name) -> void
 
-      private def expired?: ({ received_at: Time, lifetime: Integer } entry) -> bool
+      private def expired?: (entry entry) -> bool
       private def locate_by_ticket: (String ticket_data) -> (entry | nil)
     end
   end

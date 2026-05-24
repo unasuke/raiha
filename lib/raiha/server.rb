@@ -37,8 +37,9 @@ module Raiha
     end
 
     def listen(host, port)
-      @socket = UDPSocket.new
-      @socket.bind(host, port)
+      socket = UDPSocket.new
+      socket.bind(host, port)
+      @socket = socket
       self
     end
 
@@ -77,7 +78,8 @@ module Raiha
       # the application; see RFC 9000 §17.2.5.2 for the ODCID
       # plumbing.
       if (header = parse_long_header(data)) && header.initial?
-        dcid = header.destination_connection_id.serialize
+        cid = header.destination_connection_id or return nil
+        dcid = cid.serialize
         return nil if @connections.key?(dcid)
 
         retry_validated_odcid = @demuxer.validated_original_dcid(dcid)

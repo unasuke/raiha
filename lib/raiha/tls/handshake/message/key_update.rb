@@ -1,3 +1,5 @@
+require_relative "../../error"
+
 module Raiha
   module TLS
     class Handshake
@@ -26,7 +28,8 @@ module Raiha
 
         def self.deserialize(data)
           key_update = new
-          key_update.request_update = REQUEST_UPDATE.key(data.unpack1("C"))
+          key_update.request_update = REQUEST_UPDATE.key(data.unpack1("C")) ||
+            (raise Raiha::TLS::Error, "TODO: unknown KeyUpdateRequest: #{data.unpack1("C")}")
           key_update
         end
 

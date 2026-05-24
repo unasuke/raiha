@@ -25,7 +25,7 @@ module Raiha
 
       # Extract the peer's SETTINGS from a list of parsed frames, or nil if none.
       def self.extract_settings(frames)
-        frames.find { |f| f.is_a?(SettingsFrame) }
+        frames.find { |f| f.is_a?(SettingsFrame) } #: SettingsFrame?
       end
     end
   end

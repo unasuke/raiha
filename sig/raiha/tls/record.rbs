@@ -5,7 +5,7 @@ module Raiha
       LEGACY_RECORD_VERSION: String
 
       def self.deserialize: (String buf) -> Array[TLSPlaintext|TLSCiphertext]
-      def self.unwrap_fragments: (String serialized_records) -> Array[{content_type: Integer, length: Integer, fragment: String}]
+      def self.unwrap_fragments: (String serialized_records) -> Array[{content_type: Integer, length: Integer, fragment: String, legacy_record_version: String}]
 
       class TLSPlaintext
         FRAGMENT_SIZE_LIMIT: Integer

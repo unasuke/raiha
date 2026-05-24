@@ -472,7 +472,7 @@ module Raiha
                   raise Raiha::TLS::Error, "TODO: #{@pkey[:group]}"
                 end
               end
-            ]
+            ] #: Array[Handshake::Extension::AbstractExtension]
 
             selected_psk = @selected_psk
             if @psk_mode && selected_psk

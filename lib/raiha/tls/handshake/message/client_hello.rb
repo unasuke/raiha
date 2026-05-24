@@ -105,7 +105,7 @@ module Raiha
         end
 
         def key_share
-          @extensions.find { |ext| ext.is_a?(Extension::KeyShare) }
+          @extensions.find { |ext| ext.is_a?(Extension::KeyShare) } #: Extension::KeyShare?
         end
 
         def valid_legacy_version?
@@ -113,7 +113,7 @@ module Raiha
         end
 
         def server_name=(server_name)
-          ext = @extensions.find { |e| e.is_a?(Extension::ServerName) }
+          ext = @extensions.find { |e| e.is_a?(Extension::ServerName) } #: Extension::ServerName?
           if ext
             ext.server_name = server_name
           else

@@ -43,7 +43,8 @@ module Raiha
             break if sh.random != HELLO_RETRY_REQUEST_RANDOM
           end
           sh.legacy_session_id_echo = client_hello.legacy_session_id
-          sh.cipher_suite = client_hello.cipher_suites.find(&:supported?)
+          sh.cipher_suite = client_hello.cipher_suites.find(&:supported?) ||
+            (raise Raiha::TLS::Error, "TODO: no supported cipher_suite in ClientHello")
           sh
         end
 
@@ -96,7 +97,7 @@ module Raiha
         end
 
         def key_share
-          @extensions.find { |ext| ext.is_a?(Extension::KeyShare) }
+          @extensions.find { |ext| ext.is_a?(Extension::KeyShare) } #: Extension::KeyShare?
         end
       end
     end

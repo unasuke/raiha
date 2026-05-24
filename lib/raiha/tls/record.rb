@@ -3,6 +3,7 @@
 require "stringio"
 require_relative "record/tls_plaintext"
 require_relative "record/tls_ciphertext"
+require_relative "../util/io_reader"
 
 module Raiha
   module TLS
@@ -59,14 +60,14 @@ module Raiha
       end
 
       def self.unwrap_fragments(serialized_records)
-        fragments = [] #: Array[Hash[Symbol, untyped]]
+        fragments = [] #: Array[{content_type: Integer, length: Integer, fragment: String, legacy_record_version: String}]
         buf = StringIO.new(serialized_records)
         loop do
-          content_type = buf.read(1).unpack1("C")
-          legacy_record_version = buf.read(2) # [MUST] Ignore legacy_record_version field
+          content_type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          legacy_record_version = Raiha::Util::IOReader.read_exact(buf, 2) # [MUST] Ignore legacy_record_version field
 
-          length = buf.read(2).unpack1("n")
-          fragment = buf.read(length)
+          length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
+          fragment = Raiha::Util::IOReader.read_exact(buf, length)
           raise if fragment.bytesize != length
 
           fragments << { content_type: content_type, length: length, fragment: fragment, legacy_record_version: legacy_record_version }

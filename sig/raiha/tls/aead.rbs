@@ -7,11 +7,11 @@ module Raiha
       @key_schedule: KeySchedule
 
       def initialize:(cipher_suite: CipherSuite, key_schedule: KeySchedule, ?mode: (:client | :server)) -> void
-      def decrypt:(ciphertext: Record::TLSCiphertext, phase: (:handshake | :application)) -> Record::TLSInnerPlaintext
-      def encrypt:(plaintext: Record::TLSPlaintext, phase: (:handshake | :application)) -> Record::TLSCiphertext
+      def decrypt:(ciphertext: Record::TLSCiphertext, phase: (:early | :handshake | :application)) -> Record::TLSInnerPlaintext
+      def encrypt:(plaintext: Record::TLSInnerPlaintext, phase: (:early | :handshake | :application)) -> Record::TLSCiphertext
       def reset_sequence_number: -> Integer
       private def nonce: (String key) -> String
-      private def key_and_iv_from_phase: ((:handshake | :application) phase) -> [String, String]
+      private def key_and_iv_from_phase: ((:early | :handshake | :application) phase) -> [String, String]
       private def key_and_iv_server: (Symbol phase) -> [String, String]
       private def key_and_iv_client: (Symbol phase) -> [String, String]
     end

@@ -59,7 +59,8 @@ module Raiha
           cert_verify = self.new
           buf = StringIO.new(data)
           signature_scheme_id = Raiha::Util::IOReader.read_exact(buf, 2)
-          cert_verify.algorithm = SIGNATURE_SCHEMES.key(signature_scheme_id) # TODO: nil check
+          cert_verify.algorithm = SIGNATURE_SCHEMES.key(signature_scheme_id) ||
+            (raise Raiha::TLS::Error, "TODO: unknown signature scheme: #{signature_scheme_id.unpack1("H*")}")
 
           signature_length = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n")
           cert_verify.signature = Raiha::Util::IOReader.read_exact(buf, signature_length)
