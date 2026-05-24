@@ -39,7 +39,8 @@ module Raiha
           inner.content = ApplicationData.new.tap { |appdata| appdata.content = data }.serialize
           inner.content_type = Record::CONTENT_TYPE[:application_data]
         end
-        own_cipher.encrypt(plaintext: innerplaintext, phase: :application).serialize
+        cipher = own_cipher or raise Raiha::TLS::Error, "TODO: own_cipher not ready"
+        cipher.encrypt(plaintext: innerplaintext, phase: :application).serialize
       end
 
       def receive_application_data
@@ -48,7 +49,8 @@ module Raiha
           break if received.nil?
           next if received.plaintext?
 
-          inner_plaintext = peer_cipher.decrypt(ciphertext: received, phase: :application)
+          cipher = peer_cipher or raise Raiha::TLS::Error, "TODO: peer_cipher not ready"
+          inner_plaintext = cipher.decrypt(ciphertext: received, phase: :application)
           inner_plaintext.content
         end
       end
@@ -56,7 +58,8 @@ module Raiha
       # Install handshake AEAD ciphers for both directions using the negotiated
       # cipher suite and the current key schedule.
       private def setup_cipher
-        cipher_suite = negotiated_cipher_suite
+        cipher_suite = negotiated_cipher_suite or
+          raise Raiha::TLS::Error, "TODO: cipher suite not negotiated"
         @server_cipher = AEAD.new(cipher_suite: cipher_suite, key_schedule: @key_schedule, mode: :server)
         @client_cipher = AEAD.new(cipher_suite: cipher_suite, key_schedule: @key_schedule, mode: :client)
       end

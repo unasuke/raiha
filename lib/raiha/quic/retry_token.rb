@@ -59,7 +59,7 @@ module Raiha::Quic
       expected_hmac = OpenSSL::HMAC.digest("SHA256", retry_key, payload)
       return nil unless OpenSSL.fixed_length_secure_compare(expected_hmac, received_hmac)
 
-      expiry = payload.byteslice(0, EXPIRY_BYTES).unpack1("Q>") # steep:ignore
+      expiry = payload.byteslice(0, EXPIRY_BYTES).unpack1("Q>")
       return nil if now.to_i > expiry
 
       odcid_length = payload.getbyte(EXPIRY_BYTES)

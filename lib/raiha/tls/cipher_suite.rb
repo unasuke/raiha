@@ -15,9 +15,9 @@ module Raiha
       attr_reader :value
 
       def initialize(cipher_name)
-        raise Raiha::TLS::Error, "unknown cipher suite: #{cipher_name.inspect}" unless CIPHER_SUITES.any? { |c| c[:name] == cipher_name }
+        cipher_suite = CIPHER_SUITES.find { |c| c[:name] == cipher_name } or
+          raise Raiha::TLS::Error, "unknown cipher suite: #{cipher_name.inspect}"
 
-        cipher_suite = CIPHER_SUITES.find { |c| c[:name] == cipher_name }
         @name = cipher_suite[:name]
         @value = cipher_suite[:value]
         @supported = cipher_suite[:supported]

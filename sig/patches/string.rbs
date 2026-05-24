@@ -1,0 +1,22 @@
+# String#unpack1 / #unpack format-string specific overloads. The bundled
+# rbs core declaration returns `(Integer | Float | String)?` regardless
+# of the format string, but raiha's binary parsers always rely on
+# unsigned-integer formats (`C`, `n`, `N`, `Q>`) which deterministically
+# yield an Integer. Without these overloads every parse site would need
+# its own `#: Integer` annotation, which is impractical to write inside
+# chained expressions.
+class String
+  def unpack1: ("C" template, ?offset: int) -> Integer
+             | ("n" template, ?offset: int) -> Integer
+             | ("N" template, ?offset: int) -> Integer
+             | ("Q>" template, ?offset: int) -> Integer
+             | ("L>" template, ?offset: int) -> Integer
+             | ("C*" template, ?offset: int) -> Integer
+             | ("H*" template, ?offset: int) -> String
+             | (string template, ?offset: int) -> (Integer | Float | String)?
+
+  def unpack: ("CCC" template, ?offset: int) -> Array[Integer]
+            | ("CCCCCCC" template, ?offset: int) -> Array[Integer]
+            | ("C*" template, ?offset: int) -> Array[Integer]
+            | (string template, ?offset: int) -> Array[(Integer | Float | String)?]
+end

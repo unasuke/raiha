@@ -60,15 +60,16 @@ module Raiha::Quic::Wire::Frames
       buf.write_varint(@ack_ranges.length - 1)
       buf.write_varint(@ack_ranges.first.ack_range_length)
 
-      @ack_ranges[1..].each do |range|
+      (@ack_ranges[1..] || []).each do |range|
         buf.write_varint(range.gap)
         buf.write_varint(range.ack_range_length)
       end
 
-      if ecn?
-        buf.write_varint(@ecn_counts[:ect0])
-        buf.write_varint(@ecn_counts[:ect1])
-        buf.write_varint(@ecn_counts[:ecn_ce])
+      ecn_counts = @ecn_counts
+      if ecn_counts
+        buf.write_varint(ecn_counts[:ect0])
+        buf.write_varint(ecn_counts[:ect1])
+        buf.write_varint(ecn_counts[:ecn_ce])
       end
 
       buf.to_s

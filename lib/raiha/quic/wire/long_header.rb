@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "header"
+require_relative "../error"
 
 module Raiha::Quic
   module Wire
@@ -74,19 +75,24 @@ module Raiha::Quic
 
         buf.write_uint32(@version)
 
-        buf.write_uint8(@destination_connection_id.length)
-        buf.write(@destination_connection_id.serialize)
-        buf.write_uint8(@source_connection_id.length)
-        buf.write(@source_connection_id.serialize)
+        dcid = @destination_connection_id or raise Raiha::Quic::Error, "TODO: destination_connection_id not set"
+        scid = @source_connection_id or raise Raiha::Quic::Error, "TODO: source_connection_id not set"
+        buf.write_uint8(dcid.length)
+        buf.write(dcid.serialize)
+        buf.write_uint8(scid.length)
+        buf.write(scid.serialize)
 
         case @packet_type
         when PacketType::INITIAL
-          buf.write_varint(@token.bytesize)
-          buf.write(@token) unless @token.empty?
+          token = @token or raise Raiha::Quic::Error, "TODO: token not set"
+          buf.write_varint(token.bytesize)
+          buf.write(token) unless token.empty?
 
         when PacketType::RETRY
-          buf.write(@retry_token)
-          buf.write(@retry_integrity_tag)
+          retry_token = @retry_token or raise Raiha::Quic::Error, "TODO: retry_token not set"
+          retry_tag = @retry_integrity_tag or raise Raiha::Quic::Error, "TODO: retry_integrity_tag not set"
+          buf.write(retry_token)
+          buf.write(retry_tag)
         end
 
         buf.to_s

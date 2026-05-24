@@ -51,7 +51,7 @@ module Raiha
           buf = StringIO.new(data)
           ch.legacy_version = Raiha::Util::IOReader.read_exact(buf, 2)
           ch.random = Raiha::Util::IOReader.read_exact(buf, 32)
-          legacy_session_id_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C") # 0xc00
+          legacy_session_id_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
           ch.legacy_session_id = Raiha::Util::IOReader.read_exact(buf, legacy_session_id_length)
           cipher_suites_count = Raiha::Util::IOReader.read_exact(buf, 2).unpack1("n") / 2
           ch.cipher_suites = (1..cipher_suites_count).map { CipherSuite.deserialize(Raiha::Util::IOReader.read_exact(buf, 2)) }

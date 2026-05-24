@@ -1,4 +1,5 @@
 require_relative "../../../util/io_reader"
+require_relative "../../error"
 
 module Raiha
   module TLS
@@ -60,19 +61,19 @@ module Raiha
         def self.deserialize(data)
           cert = self.new
           buf = StringIO.new(data)
-          certificate_request_context_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
+          certificate_request_context_length = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C") #: Integer
           cert.certificate_request_context = Raiha::Util::IOReader.read_exact(buf, certificate_request_context_length)
 
-          certificate_list_length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("L>")
+          certificate_list_length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("L>") #: Integer
           certificate_list = Raiha::Util::IOReader.read_exact(buf, certificate_list_length)
 
           certificate_list_buf = StringIO.new(certificate_list)
           loop do
             break if certificate_list_buf.eof?
 
-            cert_length = ("\x00" + Raiha::Util::IOReader.read_exact(certificate_list_buf, 3)).unpack1("L>")
+            cert_length = ("\x00" + Raiha::Util::IOReader.read_exact(certificate_list_buf, 3)).unpack1("L>") #: Integer
             opaque_certificate_data = Raiha::Util::IOReader.read_exact(certificate_list_buf, cert_length)
-            extension_length = Raiha::Util::IOReader.read_exact(certificate_list_buf, 2).unpack1("n")
+            extension_length = Raiha::Util::IOReader.read_exact(certificate_list_buf, 2).unpack1("n") #: Integer
             extensions = Handshake::Extension.deserialize_extensions(Raiha::Util::IOReader.read_exact(certificate_list_buf, extension_length), type: :certificate)
             cert.certificate_entries << CertificateEntry.new(opaque_certificate_data: opaque_certificate_data, extensions: extensions)
           end
@@ -89,12 +90,16 @@ module Raiha
 
           certificate_list = ""
           @certificate_entries.each do |entry|
-            certificate_list += [entry.opaque_certificate_data.bytesize].pack("L>")[1..]
+            uint24 = [entry.opaque_certificate_data.bytesize].pack("L>")[1..] or
+              raise Raiha::TLS::Error, "TODO: opaque_certificate_data uint24 slice failed"
+            certificate_list += uint24
             certificate_list += entry.opaque_certificate_data
             certificate_list += serialize_extensions(entry.extensions)
           end
 
-          buf << [certificate_list.bytesize].pack("L>")[1..]
+          list_uint24 = [certificate_list.bytesize].pack("L>")[1..] or
+            raise Raiha::TLS::Error, "TODO: certificate_list uint24 slice failed"
+          buf << list_uint24
           buf << certificate_list
         end
 
@@ -124,7 +129,7 @@ module Raiha
         private def valid_chain?(trust_store)
           store = trust_store || default_trust_store
           leaf = certificates.first
-          chain = certificates[1..]
+          chain = certificates[1..] || []
           store.verify(leaf, chain: chain)
         end
 
@@ -135,7 +140,9 @@ module Raiha
         private def valid_time?
           now = Time.now
           certificates.all? do |cert|
-            cert.not_before <= now && now <= cert.not_after
+            nb = cert.not_before
+            na = cert.not_after
+            nb && na && nb <= now && now <= na
           end
         end
 
@@ -149,14 +156,14 @@ module Raiha
           end
 
           cn = leaf.subject.to_a.find { |attr| attr[0] == "CN" }&.dig(1)
-          return match_hostname?(cn, hostname) if cn
+          return match_hostname?(cn, hostname) if cn.is_a?(String)
 
           false
         end
 
         private def match_hostname?(pattern, hostname)
           if pattern.start_with?("*.")
-            suffix = pattern[2..]
+            suffix = pattern[2..] or return false
             hostname.end_with?(suffix) && hostname.count(".") == pattern.count(".")
           else
             pattern == hostname
