@@ -1229,7 +1229,9 @@ module Raiha
       @sent_packet_handler = Quic::AckHandler::SentPacketHandler.new(
         congestion_controller: @congestion_controller,
         rtt_stats: @rtt_stats,
-        on_packet_lost: method(:on_packet_lost),
+        # steep does not coerce `Method` to `^(SentPacket, Symbol) -> void` when
+        # the proc type carries a concrete (non-untyped) parameter type.
+        on_packet_lost: method(:on_packet_lost), # steep:ignore
         on_pto_fired: method(:on_pto_fired)
       )
 

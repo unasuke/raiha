@@ -3,23 +3,23 @@ module Raiha::Quic
     class SentPacketHandler
       class PacketNumberSpace
         attr_reader encryption_level: Symbol
-        attr_reader sent_packets: Hash[Integer, untyped]
+        attr_reader sent_packets: Hash[Integer, SentPacket]
         attr_reader largest_acked: Integer?
         attr_accessor loss_time: Time?
 
         def initialize: (Symbol encryption_level) -> void
         def next_packet_number: -> Protocol::PacketNumber
-        def add_sent_packet: (untyped packet) -> void
-        def remove_sent_packet: (Integer packet_number) -> untyped
+        def add_sent_packet: (SentPacket packet) -> void
+        def remove_sent_packet: (Integer packet_number) -> SentPacket?
         def update_largest_acked: (Integer value) -> void
       end
 
       attr_reader bytes_in_flight: Integer
       attr_reader pto_count: Integer
 
-      def initialize: (?congestion_controller: untyped?, ?rtt_stats: untyped?, ?on_packet_lost: (^(untyped, Symbol) -> void)?, ?on_pto_fired: (^() -> void)?) -> void
+      def initialize: (?congestion_controller: untyped?, ?rtt_stats: untyped?, ?on_packet_lost: (^(SentPacket, Symbol) -> void)?, ?on_pto_fired: (^() -> void)?) -> void
       def get_next_packet_number: (Symbol pn_space) -> Protocol::PacketNumber
-      def sent_packet: (packet_number: Protocol::PacketNumber, frames: Array[untyped], size: Integer, ack_eliciting: bool, pn_space: Symbol, ?sent_time: Time) -> void
+      def sent_packet: (packet_number: Protocol::PacketNumber, frames: Array[Wire::Frame], size: Integer, ack_eliciting: bool, pn_space: Symbol, ?sent_time: Time) -> void
       def received_ack: (Wire::Frames::AckFrame ack_frame, pn_space: Symbol, ?ack_delay: Float, ?now: Time) -> void
       def get_alarm_timeout: -> Time?
       def discard_space: (Symbol pn_space) -> void
@@ -27,9 +27,9 @@ module Raiha::Quic
       def on_loss_detection_timeout: (?now: Time) -> void
       def pto_deadline: -> Time?
 
-      private def detect_and_remove_acked_packets: (Wire::Frames::AckFrame ack_frame, PacketNumberSpace space) -> Array[untyped]
+      private def detect_and_remove_acked_packets: (Wire::Frames::AckFrame ack_frame, PacketNumberSpace space) -> Array[SentPacket]
       private def acknowledged_packet_numbers: (Wire::Frames::AckFrame ack_frame) -> Array[Integer]
-      private def detect_lost_packets: (PacketNumberSpace space, ?now: Time) -> Array[untyped]?
+      private def detect_lost_packets: (PacketNumberSpace space, ?now: Time) -> Array[SentPacket]?
       private def process_ecn: (Wire::Frames::AckFrame ack_frame, pn_space: Symbol) -> void
       private def pn_space_for: (PacketNumberSpace space) -> Symbol?
       private def ack_eliciting_in_flight?: -> bool

@@ -134,7 +134,7 @@ class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
 
   def test_time_threshold_declares_old_packet_lost_on_ack
     rtt_stats = Raiha::Quic::Congestion::RTTStats.new
-    lost = [] #: Array[untyped]
+    lost = [] #: Array[Raiha::Quic::AckHandler::SentPacketHandler::SentPacket]
     handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
       rtt_stats: rtt_stats,
       on_packet_lost: ->(packet, _space) { lost << packet }
@@ -288,7 +288,7 @@ class RaihaQuicAckHandlerSentPacketHandlerTest < Minitest::Test
 
   def test_on_loss_detection_timeout_declares_time_threshold_losses
     rtt_stats = Raiha::Quic::Congestion::RTTStats.new
-    lost = [] #: Array[untyped]
+    lost = [] #: Array[Raiha::Quic::AckHandler::SentPacketHandler::SentPacket]
     handler = Raiha::Quic::AckHandler::SentPacketHandler.new(
       rtt_stats: rtt_stats,
       on_packet_lost: ->(packet, _space) { lost << packet }

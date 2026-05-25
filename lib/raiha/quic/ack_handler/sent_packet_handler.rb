@@ -113,7 +113,7 @@ module Raiha::Quic
         newly_acked_packets = detect_and_remove_acked_packets(ack_frame, space)
         return if newly_acked_packets.empty?
 
-        latest_acked = newly_acked_packets.max_by { |packet| packet.packet_number.value }
+        latest_acked = newly_acked_packets.max_by { |packet| packet.packet_number.value } #: SentPacket
         if latest_acked.packet_number.value == ack_frame.largest_acknowledged && @rtt_stats
           rtt_sample = now - latest_acked.sent_time
           @rtt_stats.update_rtt(rtt_sample, ack_delay)
@@ -208,7 +208,7 @@ module Raiha::Quic
       end
 
       private def detect_and_remove_acked_packets(ack_frame, space)
-        acked = [] #: Array[untyped]
+        acked = [] #: Array[SentPacket]
 
         acknowledged_packet_numbers(ack_frame).each do |packet_number|
           sent = space.remove_sent_packet(packet_number)
@@ -251,7 +251,7 @@ module Raiha::Quic
         packet_threshold = 3
         loss_delay = @rtt_stats ? @rtt_stats.loss_delay : 0.333
         time_threshold = now - loss_delay
-        lost_packets = [] #: Array[untyped]
+        lost_packets = [] #: Array[SentPacket]
         next_loss_time = nil #: Time?
 
         space.sent_packets.each do |packet_number, sent|
