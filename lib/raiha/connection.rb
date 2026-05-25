@@ -311,7 +311,8 @@ module Raiha
       # RFC 9000 §10.2.1: closing endpoints emit only CONNECTION_CLOSE.
       return emit_connection_close if @state == State::CLOSING
 
-      datagrams = [] #: Array[String]
+      # @type var datagrams: Array[String]
+      datagrams = []
 
       initial_packet = build_level_packet(Quic::Handshake::EncryptionLevel::INITIAL)
       zero_rtt_packet = build_level_packet(Quic::Handshake::EncryptionLevel::ZERO_RTT)
@@ -345,7 +346,8 @@ module Raiha
     end
 
     private def emit_connection_close
-      datagrams = [] #: Array[String]
+      # @type var datagrams: Array[String]
+      datagrams = []
       return datagrams unless @pending_close_frame
       return datagrams unless @close_frame
 
@@ -466,14 +468,12 @@ module Raiha
         @pending_handshake_done = false
       end
 
-      if @pending_new_tokens
-        @pending_new_tokens.each do |token|
-          nt = Quic::Wire::Frames::NewTokenFrame.new
-          nt.token = token
-          frames << nt
-        end
-        @pending_new_tokens = [] #: Array[String]
+      @pending_new_tokens.each do |token|
+        nt = Quic::Wire::Frames::NewTokenFrame.new
+        nt.token = token
+        frames << nt
       end
+      @pending_new_tokens.clear
     end
 
     private def append_flow_control_frames(frames)
@@ -808,7 +808,6 @@ module Raiha
     def send_new_token(token)
       raise Raiha::Error, "NEW_TOKEN may only be sent by the server" unless @perspective.server?
 
-      @pending_new_tokens ||= [] #: Array[String]
       @pending_new_tokens << token
     end
 
@@ -874,7 +873,6 @@ module Raiha
       when Quic::Wire::Frames::HandshakeDoneFrame
         @pending_handshake_done = true
       when Quic::Wire::Frames::NewTokenFrame
-        @pending_new_tokens ||= [] #: Array[String]
         @pending_new_tokens << frame.token
       # ACK / PADDING / PATH_CHALLENGE / PATH_RESPONSE / PING /
       # MAX_* / CONNECTION_CLOSE aren't retransmitted here: ACK and
@@ -1285,8 +1283,9 @@ module Raiha
       # RFC 9000 §8.2: path validation. Endpoints may initiate a PATH_CHALLENGE
       # and track outstanding 8-byte challenges until a matching PATH_RESPONSE
       # comes back.
+      # @type ivar @outstanding_path_challenges: Array[String]
       @pending_path_challenges = [] #: Array[Quic::Wire::Frames::PathChallengeFrame]
-      @outstanding_path_challenges = [] #: Array[String]
+      @outstanding_path_challenges = []
       @peer_path_validated = false
 
       # RFC 9000 §5.1: alternate connection IDs the peer has issued to us,
@@ -1316,7 +1315,14 @@ module Raiha
       @migration_count = 0
       # Outstanding PATH_CHALLENGE data we sent as part of a migration
       # probe. A matching PATH_RESPONSE triggers §9.4 cwnd/RTT reset.
-      @migration_challenges = [] #: Array[String]
+      # @type ivar @migration_challenges: Array[String]
+      @migration_challenges = []
+
+      # RFC 9000 §8.1.3: NEW_TOKEN tokens the server has queued for the
+      # client. Initialised here so the `[]` literal carries a typed
+      # context once and the per-method `<<` / clear sites stay simple.
+      # @type ivar @pending_new_tokens: Array[String]
+      @pending_new_tokens = []
 
       @idle_timer = Quic::Timer.new
       reset_idle_timer
