@@ -20,6 +20,9 @@ module Raiha
     attr_reader retry_token: String?
 
     MIN_INITIAL_PACKET_SIZE: Integer
+    MAX_STREAM_FRAME_DATA: Integer
+    ONE_RTT_PAYLOAD_BUDGET: Integer
+    MAX_ONE_RTT_DATAGRAMS_PER_CALL: Integer
 
     def initialize: (perspective: Quic::Protocol::Perspective | Symbol, src_connection_id: Quic::Protocol::ConnectionID, dest_connection_id: Quic::Protocol::ConnectionID, ?transport_parameters: Quic::Handshake::TransportParameters?, ?tls_config: Raiha::TLS::Config?, ?server_name: String?, ?alpn_protocols: Array[String]?, ?session_ticket_store: Raiha::TLS::SessionTicketStore?) -> void
     def tls_session_ticket_store: -> Raiha::TLS::SessionTicketStore?
