@@ -114,7 +114,7 @@ GEM
     terminal-table (4.0.0)
       unicode-display_width (>= 1.1.1, < 4)
     tsort (0.2.0)
-    tttls1.3 (0.3.6)
+    tttls1.3 (0.3.7)
       ech_config (~> 0.0.3)
       hpke (~> 1.0.0)
       logger
@@ -188,7 +188,7 @@ CHECKSUMS
   strscan (3.1.8) sha256=aae2db611a225559f21ffbb71765c9a4e60fd262534a9ea84f4f11c7f32f679e
   terminal-table (4.0.0) sha256=f504793203f8251b2ea7c7068333053f0beeea26093ec9962e62ea79f94301d2
   tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
-  tttls1.3 (0.3.6) sha256=830a494556991850b74338526da5f9917f889b91b3b9c261f7f7222844d484c2
+  tttls1.3 (0.3.7) sha256=bb796d19b9cddf43b51b3d6b590f236a9e349527907986799a7c6599670047b1
   unicode-display_width (3.2.0) sha256=0cdd96b5681a5949cdbc2c55e7b420facae74c4aaf9a9815eee1087cb1853c42
   unicode-emoji (4.2.0) sha256=519e69150f75652e40bf736106cfbc8f0f73aa3fb6a65afe62fefa7f80b0f80f
   uri (1.1.1) sha256=379fa58d27ffb1387eaada68c749d1426738bd0f654d812fcc07e7568f5c57c6
