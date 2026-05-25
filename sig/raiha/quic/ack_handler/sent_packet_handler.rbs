@@ -14,8 +14,6 @@ module Raiha::Quic
         def update_largest_acked: (Integer value) -> void
       end
 
-      SentPacket: untyped
-
       attr_reader bytes_in_flight: Integer
       attr_reader pto_count: Integer
 

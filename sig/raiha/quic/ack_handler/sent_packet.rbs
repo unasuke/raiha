@@ -1,0 +1,36 @@
+module Raiha::Quic
+  module AckHandler
+    class SentPacketHandler
+      class SentPacket
+        attr_reader packet_number: Protocol::PacketNumber
+        attr_reader frames: Array[Wire::Frame]
+        attr_reader sent_time: Time
+        attr_reader size: Integer
+        attr_reader ack_eliciting: bool
+        attr_reader in_flight: bool
+
+        def initialize: (
+          packet_number: Protocol::PacketNumber,
+          frames: Array[Wire::Frame],
+          sent_time: Time,
+          size: Integer,
+          ack_eliciting: bool,
+          in_flight: bool
+        ) -> void
+
+        def to_h: -> {
+          packet_number: Protocol::PacketNumber,
+          frames: Array[Wire::Frame],
+          sent_time: Time,
+          size: Integer,
+          ack_eliciting: bool,
+          in_flight: bool
+        }
+        def ==: (untyped other) -> bool
+        alias eql? ==
+        def hash: -> Integer
+        def inspect: -> String
+      end
+    end
+  end
+end

@@ -2,6 +2,7 @@
 
 require_relative "../protocol/packet_number"
 require_relative "../timer"
+require_relative "sent_packet"
 
 module Raiha::Quic
   module AckHandler
@@ -37,15 +38,6 @@ module Raiha::Quic
           @largest_acked = value
         end
       end
-
-      SentPacket = Data.define(
-        :packet_number,
-        :frames,
-        :sent_time,
-        :size,
-        :ack_eliciting,
-        :in_flight
-      )
 
       attr_reader :bytes_in_flight
 
