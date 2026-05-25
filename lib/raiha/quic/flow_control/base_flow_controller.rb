@@ -84,9 +84,10 @@ module Raiha::Quic
       end
 
       # Returns the limit at which we were blocked and clears the pending
-      # flag. The connection calls this when it emits the frame.
+      # flag. The connection calls this when it emits the frame; callers
+      # must gate on `pending_blocked_signal?` first.
       def take_blocked_signal
-        limit = @pending_blocked_limit
+        limit = @pending_blocked_limit || raise("take_blocked_signal called without a pending signal")
         @pending_blocked_limit = nil
         limit
       end

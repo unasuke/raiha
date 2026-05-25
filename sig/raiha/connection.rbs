@@ -62,7 +62,7 @@ module Raiha
     def closing?: -> bool
 
     private def setup_components: -> void
-    private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> void
+    private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> Integer?
     private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> void
     private def decode_packet_number: (String bytes) -> Integer
     private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame, ?level: Symbol) -> void
@@ -114,7 +114,7 @@ module Raiha
     private def encode_packet_number: (Integer packet_number) -> String
     private def apply_header_protection: (String packet, Integer header_length, Integer packet_number_length, Symbol level) -> String
     private def level_to_pn_space: (Symbol level) -> Symbol
-    private def level_to_packet_type: (Symbol level) -> Symbol?
+    private def level_to_packet_type: (Symbol level) -> Symbol
     private def log_event: (Qlog::Event event) -> void
     private def log_packet_sent: (level: Symbol, packet_number: Integer, frames: Array[untyped]) -> void
     private def log_packet_received: (level: Symbol, packet_number: Integer, frames: Array[untyped]) -> void

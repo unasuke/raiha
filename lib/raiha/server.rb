@@ -109,7 +109,8 @@ module Raiha
       # into the Retry, and the Connection should adopt that so
       # routing for follow-up packets stays stable.
       src_connection_id = if retry_validated_odcid
-                            header.destination_connection_id
+                            header.destination_connection_id ||
+                              raise(Raiha::Error, "Retry-validated Initial missing destination_connection_id")
                           else
                             Quic::Protocol::ConnectionID.generate(length: @server_connection_id_length)
                           end

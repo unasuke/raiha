@@ -37,15 +37,11 @@ module Raiha
     end
 
     def open_stream(bidirectional: true)
-      raise Raiha::Error, "Not connected" unless @connection
-
-      @connection.open_stream(bidirectional: bidirectional)
+      (@connection || raise(Raiha::Error, "Not connected")).open_stream(bidirectional: bidirectional)
     end
 
     def accept_stream
-      raise Raiha::Error, "Not connected" unless @connection
-
-      @connection.accept_stream
+      (@connection || raise(Raiha::Error, "Not connected")).accept_stream
     end
 
     def close(error_code: 0, reason: "")

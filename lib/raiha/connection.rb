@@ -148,7 +148,11 @@ module Raiha
 
     def enable_qlog(output:, title: nil)
       @qlog_writer = Qlog::Writer.new(output: output, title: title)
-      @qlog_writer.start_trace(
+      # steep doesn't narrow `@qlog_writer` from `Qlog::Writer?` to
+      # `Qlog::Writer` after the assignment one line above, so the next
+      # method call trips on the nilable ivar type. The writer was just
+      # constructed; it cannot be nil here.
+      @qlog_writer.start_trace( # steep:ignore
         vantage_point: @perspective,
         connection_id: @src_connection_id.serialize.unpack1("H*")
       )
@@ -1422,8 +1426,11 @@ module Raiha
       # Packet number starts at current buffer position
       packet_number_offset = buffer.pos
 
-      # Total packet size: header + payload_length (which includes PN + encrypted data)
-      total_packet_size = packet_number_offset + header.payload_length
+      # Total packet size: header + payload_length (which includes PN + encrypted data).
+      # `header.payload_length` is `Integer?` in RBS because `LongHeader#parse`
+      # only assigns it for INITIAL/HANDSHAKE/0-RTT; RETRY and the `else`
+      # branch already returned above, so it is non-nil here.
+      total_packet_size = packet_number_offset + header.payload_length # steep:ignore
 
       return nil unless @crypto_setup.available?(level)
 
@@ -1460,9 +1467,10 @@ module Raiha
       # AAD is the unprotected header including packet number
       aad = unprotected_data[0, packet_number_offset + packet_number_length]
 
-      # Encrypted payload starts after packet number
+      # Encrypted payload starts after packet number. See note above:
+      # `header.payload_length` is non-nil for the packet types reaching here.
       encrypted_payload_offset = packet_number_offset + packet_number_length
-      encrypted_payload_length = header.payload_length - packet_number_length
+      encrypted_payload_length = header.payload_length - packet_number_length # steep:ignore
       encrypted_payload = data[encrypted_payload_offset, encrypted_payload_length]
 
       begin
@@ -1555,10 +1563,13 @@ module Raiha
         @dest_connection_id = header.source_connection_id
       elsif @perspective.server? && !@initial_keys_rederived
         @dest_connection_id = header.source_connection_id if header.source_connection_id
-        # RFC 9000 Section 7.3: record original DCID for transport parameters validation
-        @transport_parameters.original_destination_connection_id = header.destination_connection_id.serialize
+        # RFC 9000 Section 7.3: record original DCID for transport parameters validation.
+        # `header.destination_connection_id` is typed nullable in RBS but
+        # `LongHeader#parse` always assigns it for the long-header packet
+        # types that reach this method, so it is non-nil here.
+        @transport_parameters.original_destination_connection_id = header.destination_connection_id.serialize # steep:ignore
         # RFC 9001 Section 5.2: derive Initial keys from client's chosen DCID
-        @crypto_setup.rederive_initial_keys(connection_id: header.destination_connection_id)
+        @crypto_setup.rederive_initial_keys(connection_id: header.destination_connection_id) # steep:ignore
         @initial_keys_rederived = true
       end
     end
@@ -1852,6 +1863,7 @@ module Raiha
       when Quic::Handshake::EncryptionLevel::HANDSHAKE then :handshake
       when Quic::Handshake::EncryptionLevel::ZERO_RTT then :"0RTT"
       when Quic::Handshake::EncryptionLevel::ONE_RTT then :"1RTT"
+      else raise ArgumentError, "unknown encryption level: #{level.inspect}"
       end
     end
 

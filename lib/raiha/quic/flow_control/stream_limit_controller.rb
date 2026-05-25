@@ -68,13 +68,13 @@ module Raiha::Quic
       end
 
       def take_bidi_blocked_signal
-        limit = @pending_blocked_bidi
+        limit = @pending_blocked_bidi || raise("take_bidi_blocked_signal called without a pending signal")
         @pending_blocked_bidi = nil
         limit
       end
 
       def take_uni_blocked_signal
-        limit = @pending_blocked_uni
+        limit = @pending_blocked_uni || raise("take_uni_blocked_signal called without a pending signal")
         @pending_blocked_uni = nil
         limit
       end

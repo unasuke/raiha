@@ -11,8 +11,8 @@ module Raiha::Quic
       def accept_stream: (Protocol::StreamID stream_id) -> void
       def pending_bidi_blocked_signal?: -> bool
       def pending_uni_blocked_signal?: -> bool
-      def take_bidi_blocked_signal: -> Integer?
-      def take_uni_blocked_signal: -> Integer?
+      def take_bidi_blocked_signal: -> Integer
+      def take_uni_blocked_signal: -> Integer
     end
   end
 end
