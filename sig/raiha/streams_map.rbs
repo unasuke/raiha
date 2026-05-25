@@ -1,6 +1,6 @@
 module Raiha
   class StreamsMap
-    def initialize: (perspective: Symbol, connection_flow_controller: Quic::FlowControl::ConnectionFlowController, ?max_streams_bidi: Integer, ?max_streams_uni: Integer, ?stream_receive_window: Integer) -> void
+    def initialize: (perspective: Quic::Protocol::Perspective | Symbol, connection_flow_controller: Quic::FlowControl::ConnectionFlowController, ?max_streams_bidi: Integer, ?max_streams_uni: Integer, ?stream_receive_window: Integer) -> void
     def open_bidirectional_stream: -> Stream
     def open_unidirectional_stream: -> Stream
     def accept_stream: -> Stream

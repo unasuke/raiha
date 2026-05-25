@@ -5,7 +5,7 @@ module Raiha::Quic
 
       attr_reader key_phase: bool
 
-      def initialize: (client_secret: String, server_secret: String, perspective: Symbol, cipher_suite: Raiha::TLS::CipherSuite) -> void
+      def initialize: (client_secret: String, server_secret: String, perspective: Protocol::Perspective | Symbol, cipher_suite: Raiha::TLS::CipherSuite) -> void
       def ready?: -> bool
       def rotate_keys: -> void
       def encrypt: (String plaintext, packet_number: Integer, aad: String) -> String

@@ -12,7 +12,7 @@ module Raiha::Quic
       attr_reader client_hp_key: String
       attr_reader server_hp_key: String
 
-      def initialize: (connection_id: Protocol::ConnectionID, perspective: Symbol, ?version: Integer) -> void
+      def initialize: (connection_id: Protocol::ConnectionID, perspective: Protocol::Perspective | Symbol, ?version: Integer) -> void
       def ready?: -> bool
       def encrypt: (String plaintext, packet_number: Integer, aad: String) -> String
       def decrypt: (String ciphertext_with_tag, packet_number: Integer, aad: String) -> String

@@ -1,9 +1,9 @@
 module Raiha::Quic
   module Handshake
     class CryptoSetup
-      attr_reader perspective: Symbol
+      attr_reader perspective: Protocol::Perspective
 
-      def initialize: (perspective: Symbol, connection_id: Protocol::ConnectionID, ?version: Integer) -> void
+      def initialize: (perspective: Protocol::Perspective | Symbol, connection_id: Protocol::ConnectionID, ?version: Integer) -> void
       def available?: (Symbol level) -> bool
       def handshake_complete?: -> bool
       def rederive_initial_keys: (connection_id: Protocol::ConnectionID) -> void
