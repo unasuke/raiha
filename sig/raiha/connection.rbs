@@ -82,6 +82,8 @@ module Raiha
     private def requeue_lost_frame: (Quic::Wire::Frame frame, level: Symbol) -> void
     private def pn_space_to_level: (Symbol pn_space) -> Symbol
     private def queue_handshake_done: -> void
+    private def queue_new_session_ticket_if_ready: -> void
+    private def enqueue_stream_chunks: (Array[Quic::Wire::Frames::StreamFrame] queue, Integer stream_id, String? data, Integer base_offset, bool fin) -> void
     private def handle_new_token_frame: (Quic::Wire::Frames::NewTokenFrame frame) -> void
     private def handle_version_negotiation: (String data) -> void
     private def handle_retry_packet: (String data, Quic::Wire::LongHeader header) -> void
