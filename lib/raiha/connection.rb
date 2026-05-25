@@ -1226,13 +1226,15 @@ module Raiha
 
       @congestion_controller = Quic::Congestion::Cubic.new(rtt_stats: @rtt_stats)
 
+      # steep does not coerce a bound `Method` into the declared proc type
+      # (`^(SentPacket, Symbol) -> void` / `^() -> void`). The runtime call is
+      # fine because `SentPacketHandler` only invokes these via `.call`, so we
+      # suppress the diagnostic per callback line.
       @sent_packet_handler = Quic::AckHandler::SentPacketHandler.new(
         congestion_controller: @congestion_controller,
         rtt_stats: @rtt_stats,
-        # steep does not coerce `Method` to `^(SentPacket, Symbol) -> void` when
-        # the proc type carries a concrete (non-untyped) parameter type.
         on_packet_lost: method(:on_packet_lost), # steep:ignore
-        on_pto_fired: method(:on_pto_fired)
+        on_pto_fired: method(:on_pto_fired) # steep:ignore
       )
 
       @received_packet_handler = Quic::AckHandler::ReceivedPacketHandler.new
