@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec rake test:unit
 
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: bundle exec rake test:interop:aioquic
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - uses: dtolnay/rust-toolchain@stable
       - name: Clone quiche (for rust-cache key derivation)
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec rake test:interop:openssl
 
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0'
           bundler-cache: true
       - name: Install picotls build dependencies
         run: |
