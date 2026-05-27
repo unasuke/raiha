@@ -8,6 +8,11 @@
 #
 # Usage:
 #   bundle exec ruby -Ilib examples/qlog_roundtrips.rb
+#   ROUNDTRIPS=50 bundle exec ruby -Ilib examples/qlog_roundtrips.rb
+#
+# ROUNDTRIPS overrides the default 20. Note the server's default
+# initial_max_streams_bidi is 100, so values above ~50 will run into the
+# stream-limit ceiling.
 #
 # Expected output:
 #   qlog written: tmp/raiha-example-qlog-roundtrips-client.qlog
@@ -20,7 +25,7 @@ require "socket"
 require "timeout"
 require_relative "_certificate"
 
-ROUNDTRIPS = 20
+ROUNDTRIPS = Integer(ENV.fetch("ROUNDTRIPS", 20))
 PAYLOAD_SIZE = 512
 CLIENT_QLOG_PATH = "tmp/raiha-example-qlog-roundtrips-client.qlog"
 SERVER_QLOG_PATH = "tmp/raiha-example-qlog-roundtrips-server.qlog"
