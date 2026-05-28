@@ -38,6 +38,7 @@
 
 require "raiha/connection"
 require "raiha/http3"
+require "fileutils"
 require "socket"
 require "timeout"
 require "uri"
@@ -86,6 +87,7 @@ def fetch(url)
   path = "#{path}?#{uri.query}" if uri.query
   authority = port == 443 ? host : "#{host}:#{port}"
   ip = resolve_ip(host)
+  qlog_path = "tmp/raiha-http3-public-#{Time.now.to_i}-#{host}.qlog"
 
   socket = UDPSocket.new
   socket.bind("0.0.0.0", 0)
@@ -97,6 +99,7 @@ def fetch(url)
     alpn_protocols: ["h3"],
     server_name: host
   )
+  connection.enable_qlog(output: qlog_path, title: "raiha #{url}")
   http3 = Raiha::HTTP3::Client.new(connection: connection)
 
   begin
@@ -133,6 +136,8 @@ def fetch(url)
       connection.close
       flush(connection, socket, ip, port)
     end
+    connection.flush_qlog
+    puts "qlog written: #{qlog_path}"
     socket.close
   end
 end
@@ -152,6 +157,8 @@ def print_error(url, error)
 end
 
 targets = ARGV.empty? ? DEFAULT_TARGETS : ARGV
+
+FileUtils.mkdir_p("tmp")
 
 targets.each do |url|
   begin
