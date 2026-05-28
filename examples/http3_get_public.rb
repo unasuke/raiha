@@ -28,13 +28,19 @@
 #     splits packets across frontends that don't share QUIC connection
 #     state and stalls the connection mid-flight.
 #   - Not every public HTTP/3 server interoperates cleanly with raiha's
-#     current HTTP/3 / QPACK implementation. cloudflare-quic.com and
+#     current QUIC / HTTP/3 implementation. cloudflare-quic.com and
 #     quic.nginx.org return 200 OK reliably and are in the default list.
-#     nghttp2.org completes the QUIC handshake but its HTTP/3 server
-#     (nghttpx) does not reply on the request stream (it opens control /
-#     QPACK streams as expected but withholds the response body), so it
-#     is left commented out in DEFAULT_TARGETS. Failures print
-#     "error: ..." and the script continues with the next target.
+#     nghttp2.org completes the QUIC handshake and accepts raiha's first
+#     1RTT batch (the server's CONTROL / QPACK encoder / QPACK decoder
+#     unidirectional streams arrive intact) but every subsequent 1RTT
+#     packet from the server is dropped locally with
+#     `quic:packet_dropped` `decryption_failure` events in the qlog.
+#     The response HEADERS / DATA frames never reach the request stream,
+#     so the script times out. This is a raiha-side 1RTT decryption bug,
+#     not a server-side stall, and is tracked separately from the HTTP/3
+#     layer. nghttp2.org is left commented out in DEFAULT_TARGETS until
+#     that bug is fixed. Failures print "error: ..." and the script
+#     continues with the next target.
 
 require "raiha/connection"
 require "raiha/http3"
