@@ -1462,7 +1462,7 @@ module Raiha
 
       # Read packet number from unprotected data
       packet_number_bytes = unprotected_data[packet_number_offset, packet_number_length]
-      packet_number = decode_packet_number(packet_number_bytes)
+      packet_number = decode_packet_number(packet_number_bytes, level)
 
       # AAD is the unprotected header including packet number
       aad = unprotected_data[0, packet_number_offset + packet_number_length]
@@ -1522,7 +1522,7 @@ module Raiha
       end
 
       packet_number_bytes = unprotected_data[packet_number_offset, packet_number_length]
-      packet_number = decode_packet_number(packet_number_bytes)
+      packet_number = decode_packet_number(packet_number_bytes, level)
 
       aad = unprotected_data[0, packet_number_offset + packet_number_length]
 
@@ -1574,11 +1574,45 @@ module Raiha
       end
     end
 
-    private def decode_packet_number(bytes)
+    # RFC 9000 §A.3: Sample Packet Number Decoding Algorithm.
+    #
+    # The wire carries only the low N*8 bits of the 62-bit packet number,
+    # where N is the Packet Number Length (1..4). The receiver expands the
+    # truncated value back to the full packet number using the largest
+    # packet number previously received in the same packet number space.
+    # AEAD nonce construction depends on the full value, so an incorrect
+    # expansion makes every subsequent packet decrypt-fail. Implementations
+    # that only feed the wire bytes into the AEAD happen to work when the
+    # peer's packet numbers stay within the truncated range (e.g.
+    # Cloudflare's QUIC servers start from 0 and stay below 256 for a
+    # while) and break against peers that start from a large value
+    # (nghttp3 / nghttpx).
+    private def decode_packet_number(bytes, level)
+      truncated_pn = bytes_to_integer(bytes)
+      pn_nbits = bytes.bytesize * 8
+      pn_win = 1 << pn_nbits
+      pn_hwin = pn_win / 2
+      pn_mask = pn_win - 1
+
+      largest_pn = @received_packet_handler.largest_received(level_to_pn_space(level))
+      expected_pn = (largest_pn || -1) + 1
+
+      candidate_pn = (expected_pn & ~pn_mask) | truncated_pn
+
+      if candidate_pn + pn_hwin <= expected_pn && candidate_pn < (1 << 62) - pn_win
+        candidate_pn + pn_win
+      elsif candidate_pn > expected_pn + pn_hwin && candidate_pn >= pn_win
+        candidate_pn - pn_win
+      else
+        candidate_pn
+      end
+    end
+
+    private def bytes_to_integer(bytes)
       case bytes.bytesize
       when 1 then bytes.unpack1("C")
       when 2 then bytes.unpack1("n")
-      when 3 then ("\x00" + bytes).unpack1("N")
+      when 3 then ("\x00".b + bytes).unpack1("N")
       when 4 then bytes.unpack1("N")
       else 0
       end

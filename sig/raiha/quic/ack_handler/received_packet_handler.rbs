@@ -20,6 +20,7 @@ module Raiha::Quic
       MAX_ACK_DELAY: Integer
 
       def initialize: -> void
+      def largest_received: (Symbol pn_space) -> Integer?
       def received_packet: (packet_number: Integer, pn_space: Symbol, ack_eliciting: bool, ?ecn: Symbol) -> bool
       def should_send_ack?: (Symbol pn_space) -> bool
       def get_ack_frame: (Symbol pn_space) -> Wire::Frames::AckFrame?

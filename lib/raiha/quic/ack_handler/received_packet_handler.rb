@@ -68,6 +68,14 @@ module Raiha::Quic
         }
       end
 
+      # Largest packet number observed in the given packet number space, or nil
+      # if no packet has been received in that space yet. Used by the receiver
+      # to expand a wire-truncated packet number back into the full 62-bit value
+      # via RFC 9000 §A.3.
+      def largest_received(pn_space)
+        @spaces[pn_space].largest_received
+      end
+
       def received_packet(packet_number:, pn_space:, ack_eliciting:, ecn: :not_ect)
         space = @spaces[pn_space]
 

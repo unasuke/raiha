@@ -64,7 +64,8 @@ module Raiha
     private def setup_components: -> void
     private def handle_long_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> Integer?
     private def handle_short_header_packet: (String data, Quic::Wire::Buffer buffer, ?ecn: Symbol) -> void
-    private def decode_packet_number: (String bytes) -> Integer
+    private def decode_packet_number: (String bytes, Symbol level) -> Integer
+    private def bytes_to_integer: (String bytes) -> Integer
     private def handle_ack_frame: (Quic::Wire::Frames::AckFrame frame, ?level: Symbol) -> void
     private def decode_ack_delay: (Integer encoded) -> Float
     private def pending_ack_frame: (Symbol level) -> Quic::Wire::Frames::AckFrame?
