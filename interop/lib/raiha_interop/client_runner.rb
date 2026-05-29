@@ -152,6 +152,7 @@ module RaihaInterop
     private def run_http3_requests(connection, socket, requests, authority)
       http3 = Raiha::HTTP3::Client.new(connection: connection)
       http3.setup_control_stream
+      http3.setup_qpack_streams
       flush(connection, socket)
 
       requests.each do |raw|

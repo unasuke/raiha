@@ -21,18 +21,41 @@ module Raiha
         @encoder = QPACK::Encoder.new
         @decoder = QPACK::Decoder.new
         @control_stream = nil
+        @qpack_encoder_stream = nil
+        @qpack_decoder_stream = nil
       end
 
       # Open the local control stream and send an initial SETTINGS frame (RFC 9114 Section 6.2.1).
       # Must be called after the QUIC handshake completes.
-      def setup_control_stream(settings: default_settings)
-        @control_stream = @connection.open_stream(bidirectional: false)
+      def setup_control_stream(settings: default_settings) # steep:ignore MethodBodyTypeMismatch
         settings_frame = SettingsFrame.new
         settings.each { |id, value| settings_frame.settings[id] = value }
-
-        payload = Quic::Varint.encode(StreamType::CONTROL) + settings_frame.serialize
-        @connection.send_stream_data(@control_stream.stream_id.value, payload)
+        @control_stream = open_unidirectional_with_type(StreamType::CONTROL, extra_data: settings_frame.serialize)
         @control_stream
+      end
+
+      # Open the local QPACK encoder and decoder unidirectional streams
+      # (RFC 9204 Section 4.2). raiha runs QPACK in static-only mode, so
+      # neither stream carries any QPACK instructions, but stricter peers
+      # (e.g. nghttp3) expect both streams to exist. Must be called after
+      # setup_control_stream.
+      def setup_qpack_streams
+        @qpack_encoder_stream = open_unidirectional_with_type(StreamType::QPACK_ENCODER)
+        @qpack_decoder_stream = open_unidirectional_with_type(StreamType::QPACK_DECODER)
+        nil
+      end
+
+      # Open a unidirectional stream and prepend its HTTP/3 stream type
+      # varint (RFC 9114 Section 6.2). `extra_data` is concatenated after
+      # the type byte so the whole payload reaches the peer in a single
+      # send_stream_data call, avoiding the 2-call pattern that would
+      # require manual offset tracking on the caller side.
+      private def open_unidirectional_with_type(type, extra_data: nil)
+        stream = @connection.open_stream(bidirectional: false)
+        payload = Quic::Varint.encode(type)
+        payload = payload + extra_data if extra_data
+        @connection.send_stream_data(stream.stream_id.value, payload)
+        stream
       end
 
       private def default_settings

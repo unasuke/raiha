@@ -108,6 +108,7 @@ def fetch(url)
     end
 
     http3.setup_control_stream
+    http3.setup_qpack_streams
     request_stream = http3.send_request(
       method: "GET",
       scheme: "https",

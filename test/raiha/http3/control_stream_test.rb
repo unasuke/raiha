@@ -41,6 +41,7 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
     client_control = http3_client.setup_control_stream(
       settings: { Raiha::HTTP3::SettingsFrame::SETTINGS[:qpack_max_table_capacity] => 128 }
     )
+    http3_client.setup_qpack_streams
     refute_predicate client_control.stream_id, :bidirectional?
 
     client_conn.get_packets_to_send.each { |p| server_conn.handle_packet(p) }
@@ -62,6 +63,7 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
     server_control = http3_server.setup_control_stream(
       settings: { Raiha::HTTP3::SettingsFrame::SETTINGS[:max_field_section_size] => 65536 }
     )
+    http3_server.setup_qpack_streams
 
     server_conn.get_packets_to_send.each { |p| client_conn.handle_packet(p) }
 
@@ -71,6 +73,56 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
     peer_settings = http3_client.receive_peer_control_stream(client_side_stream)
     refute_nil peer_settings
     assert_equal 65536, peer_settings.max_field_section_size
+  end
+
+  def test_client_setup_qpack_streams_opens_encoder_and_decoder
+    client_conn, server_conn = complete_handshake
+
+    http3_client = Raiha::HTTP3::Client.new(connection: client_conn)
+
+    http3_client.setup_control_stream
+    http3_client.setup_qpack_streams
+    client_conn.get_packets_to_send.each { |p| server_conn.handle_packet(p) }
+
+    encoder_stream_id = http3_client.instance_variable_get(:@qpack_encoder_stream).stream_id.value
+    decoder_stream_id = http3_client.instance_variable_get(:@qpack_decoder_stream).stream_id.value
+
+    encoder_peer = server_conn.streams.get_stream(encoder_stream_id)
+    decoder_peer = server_conn.streams.get_stream(decoder_stream_id)
+
+    refute_nil encoder_peer, "server should observe the QPACK encoder unidirectional stream"
+    refute_nil decoder_peer, "server should observe the QPACK decoder unidirectional stream"
+
+    encoder_type, _ = Raiha::HTTP3::ControlStream.parse_incoming(encoder_peer.read)
+    decoder_type, _ = Raiha::HTTP3::ControlStream.parse_incoming(decoder_peer.read)
+
+    assert_equal Raiha::HTTP3::StreamType::QPACK_ENCODER, encoder_type
+    assert_equal Raiha::HTTP3::StreamType::QPACK_DECODER, decoder_type
+  end
+
+  def test_server_setup_qpack_streams_opens_encoder_and_decoder
+    client_conn, server_conn = complete_handshake
+
+    http3_server = Raiha::HTTP3::Server.new(connection: server_conn)
+
+    http3_server.setup_control_stream
+    http3_server.setup_qpack_streams
+    server_conn.get_packets_to_send.each { |p| client_conn.handle_packet(p) }
+
+    encoder_stream_id = http3_server.instance_variable_get(:@qpack_encoder_stream).stream_id.value
+    decoder_stream_id = http3_server.instance_variable_get(:@qpack_decoder_stream).stream_id.value
+
+    encoder_peer = client_conn.streams.get_stream(encoder_stream_id)
+    decoder_peer = client_conn.streams.get_stream(decoder_stream_id)
+
+    refute_nil encoder_peer, "client should observe the QPACK encoder unidirectional stream"
+    refute_nil decoder_peer, "client should observe the QPACK decoder unidirectional stream"
+
+    encoder_type, _ = Raiha::HTTP3::ControlStream.parse_incoming(encoder_peer.read)
+    decoder_type, _ = Raiha::HTTP3::ControlStream.parse_incoming(decoder_peer.read)
+
+    assert_equal Raiha::HTTP3::StreamType::QPACK_ENCODER, encoder_type
+    assert_equal Raiha::HTTP3::StreamType::QPACK_DECODER, decoder_type
   end
 
   private def complete_handshake

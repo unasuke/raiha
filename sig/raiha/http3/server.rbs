@@ -1,8 +1,13 @@
 module Raiha
   module HTTP3
     class Server
+      @control_stream: Raiha::Stream?
+      @qpack_encoder_stream: Raiha::Stream?
+      @qpack_decoder_stream: Raiha::Stream?
+
       def initialize: (connection: Raiha::Connection) -> void
       def setup_control_stream: (?settings: Hash[Integer, Integer]) -> Raiha::Stream
+      def setup_qpack_streams: -> nil
       def receive_peer_control_stream: (Raiha::Stream stream) -> SettingsFrame?
       def receive_request: (Raiha::Stream stream) -> Request
       def send_response: (Raiha::Stream stream, status: Integer, ?headers: Array[[String, String]], ?body: String?) -> void
@@ -10,6 +15,7 @@ module Raiha
       def serve_static: (Raiha::Stream stream, Request request, root: String) -> void
 
       private def default_settings: -> Hash[Integer, Integer]
+      private def open_unidirectional_with_type: (Integer type, ?extra_data: String?) -> Raiha::Stream
       private def resolve_static_path: (String? request_path, String root) -> String?
     end
   end

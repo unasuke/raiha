@@ -49,6 +49,7 @@ class RaihaHTTP3QuicheServerInteropTest < Minitest::Test
     Timeout.timeout(30) do
       client_addr = complete_handshake(server_connection, server_socket)
       http3_server.setup_control_stream
+      http3_server.setup_qpack_streams
       flush(server_connection, server_socket, client_addr)
 
       request_stream, request = wait_for_request(http3_server, server_connection, server_socket, client_addr)

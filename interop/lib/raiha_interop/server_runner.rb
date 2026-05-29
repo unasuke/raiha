@@ -127,6 +127,7 @@ module RaihaInterop
 
       unless @control_setup[connection.object_id]
         http3.setup_control_stream
+        http3.setup_qpack_streams
         @control_setup[connection.object_id] = true
       end
 

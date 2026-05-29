@@ -57,6 +57,7 @@ class RaihaHTTP3QuicheInteropTest < Minitest::Test
 
       # 2. HTTP/3 control streams + request
       http3_client.setup_control_stream
+      http3_client.setup_qpack_streams
 
       request_stream = http3_client.send_request(
         method: "GET", scheme: "https", authority: "example.com", path: "/index.html"
