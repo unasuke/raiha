@@ -125,6 +125,52 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
     assert_equal Raiha::HTTP3::StreamType::QPACK_DECODER, decoder_type
   end
 
+  def test_client_process_peer_unidirectional_streams_collects_peer_settings
+    client_conn, server_conn = complete_handshake
+
+    http3_client = Raiha::HTTP3::Client.new(connection: client_conn)
+    http3_server = Raiha::HTTP3::Server.new(connection: server_conn)
+
+    http3_server.setup_control_stream(
+      settings: { Raiha::HTTP3::SettingsFrame::SETTINGS[:max_field_section_size] => 65536 }
+    )
+    http3_server.setup_qpack_streams
+    server_conn.get_packets_to_send.each { |p| client_conn.handle_packet(p) }
+
+    http3_client.process_peer_unidirectional_streams
+
+    peer_settings = http3_client.instance_variable_get(:@peer_settings)
+    refute_nil peer_settings
+    assert_instance_of Raiha::HTTP3::SettingsFrame, peer_settings
+    assert_equal 65536, peer_settings.max_field_section_size
+
+    accepted = http3_client.instance_variable_get(:@accepted_uni_streams)
+    assert_equal 3, accepted.size
+  end
+
+  def test_server_process_peer_unidirectional_streams_collects_peer_settings
+    client_conn, server_conn = complete_handshake
+
+    http3_client = Raiha::HTTP3::Client.new(connection: client_conn)
+    http3_server = Raiha::HTTP3::Server.new(connection: server_conn)
+
+    http3_client.setup_control_stream(
+      settings: { Raiha::HTTP3::SettingsFrame::SETTINGS[:qpack_max_table_capacity] => 128 }
+    )
+    http3_client.setup_qpack_streams
+    client_conn.get_packets_to_send.each { |p| server_conn.handle_packet(p) }
+
+    http3_server.process_peer_unidirectional_streams
+
+    peer_settings = http3_server.instance_variable_get(:@peer_settings)
+    refute_nil peer_settings
+    assert_instance_of Raiha::HTTP3::SettingsFrame, peer_settings
+    assert_equal 128, peer_settings.qpack_max_table_capacity
+
+    accepted = http3_server.instance_variable_get(:@accepted_uni_streams)
+    assert_equal 3, accepted.size
+  end
+
   private def complete_handshake
     dest_cid = Raiha::Quic::Protocol::ConnectionID.generate
     client_conn = Raiha::Connection.new(

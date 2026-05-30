@@ -121,6 +121,7 @@ def fetch(url)
       loop do
         flush(connection, socket, ip, port)
         drain(socket, connection, timeout: 0.5)
+        http3.process_peer_unidirectional_streams
 
         client_stream = connection.streams.get_stream(request_stream.stream_id.value)
         next unless client_stream&.fin_received?

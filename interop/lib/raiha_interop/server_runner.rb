@@ -131,6 +131,8 @@ module RaihaInterop
         @control_setup[connection.object_id] = true
       end
 
+      http3.process_peer_unidirectional_streams
+
       connection.streams.each_stream do |stream|
         next unless stream.stream_id.bidirectional? && stream.stream_id.client_initiated?
         next unless stream.fin_received?

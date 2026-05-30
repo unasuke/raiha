@@ -186,6 +186,7 @@ module RaihaInterop
           end
           connection.tick
           flush(connection, socket)
+          http3.process_peer_unidirectional_streams
 
           peer_stream = connection.streams.get_stream(stream.stream_id.value)
           break if peer_stream && peer_stream.fin_received?

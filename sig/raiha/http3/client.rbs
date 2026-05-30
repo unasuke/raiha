@@ -4,16 +4,22 @@ module Raiha
       @control_stream: Raiha::Stream?
       @qpack_encoder_stream: Raiha::Stream?
       @qpack_decoder_stream: Raiha::Stream?
+      @accepted_uni_streams: Hash[Integer, Hash[Symbol, untyped]]
+      @peer_settings: SettingsFrame?
 
       def initialize: (connection: Raiha::Connection) -> void
       def setup_control_stream: (?settings: Hash[Integer, Integer]) -> Raiha::Stream
       def setup_qpack_streams: -> nil
+      def process_peer_unidirectional_streams: -> nil
+      # Deprecated: use process_peer_unidirectional_streams instead.
       def receive_peer_control_stream: (Raiha::Stream stream) -> SettingsFrame?
       def send_request: (method: String, scheme: String, authority: String, path: String, ?headers: Array[[String, String]], ?body: String?) -> Raiha::Stream
       def receive_response: (Raiha::Stream stream) -> Response
 
       private def default_settings: -> Hash[Integer, Integer]
       private def open_unidirectional_with_type: (Integer type, ?extra_data: String?) -> Raiha::Stream
+      private def consume_control_frames: (Hash[Symbol, untyped] entry) -> void
+      private def peer_initiated_stream?: (Raiha::Stream stream) -> bool
     end
   end
 end
