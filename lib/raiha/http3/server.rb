@@ -142,16 +142,6 @@ module Raiha
         stream.stream_id.client_initiated?
       end
 
-      # Deprecated: use {process_peer_unidirectional_streams} to drain
-      # peer-initiated unidirectional streams. This method will be removed.
-      #
-      # Parse the peer's control stream payload and return the peer's SETTINGS, or nil.
-      def receive_peer_control_stream(stream)
-        data = stream.read
-        _, frames = ControlStream.parse_incoming(data)
-        ControlStream.extract_settings(frames)
-      end
-
       # Parse frames from a stream's receive buffer and build a Request object.
       def receive_request(stream)
         data = stream.read

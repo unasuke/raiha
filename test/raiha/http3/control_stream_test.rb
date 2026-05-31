@@ -32,7 +32,7 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
     assert_nil Raiha::HTTP3::ControlStream.extract_settings([Raiha::HTTP3::GoawayFrame.new(0)])
   end
 
-  def test_client_setup_control_stream_and_server_reads_settings
+  def test_client_control_stream_is_unidirectional_and_delivers_settings
     client_conn, server_conn = complete_handshake
 
     http3_client = Raiha::HTTP3::Client.new(connection: client_conn)
@@ -46,15 +46,14 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
 
     client_conn.get_packets_to_send.each { |p| server_conn.handle_packet(p) }
 
-    server_side_stream = server_conn.streams.get_stream(client_control.stream_id.value)
-    refute_nil server_side_stream
+    http3_server.process_peer_unidirectional_streams
 
-    peer_settings = http3_server.receive_peer_control_stream(server_side_stream)
+    peer_settings = http3_server.instance_variable_get(:@peer_settings)
     refute_nil peer_settings
     assert_equal 128, peer_settings.qpack_max_table_capacity
   end
 
-  def test_server_setup_control_stream_and_client_reads_settings
+  def test_server_control_stream_is_unidirectional_and_delivers_settings
     client_conn, server_conn = complete_handshake
 
     http3_client = Raiha::HTTP3::Client.new(connection: client_conn)
@@ -64,13 +63,13 @@ class RaihaHTTP3ControlStreamTest < Minitest::Test
       settings: { Raiha::HTTP3::SettingsFrame::SETTINGS[:max_field_section_size] => 65536 }
     )
     http3_server.setup_qpack_streams
+    refute_predicate server_control.stream_id, :bidirectional?
 
     server_conn.get_packets_to_send.each { |p| client_conn.handle_packet(p) }
 
-    client_side_stream = client_conn.streams.get_stream(server_control.stream_id.value)
-    refute_nil client_side_stream
+    http3_client.process_peer_unidirectional_streams
 
-    peer_settings = http3_client.receive_peer_control_stream(client_side_stream)
+    peer_settings = http3_client.instance_variable_get(:@peer_settings)
     refute_nil peer_settings
     assert_equal 65536, peer_settings.max_field_section_size
   end

@@ -11,8 +11,6 @@ module Raiha
       def setup_control_stream: (?settings: Hash[Integer, Integer]) -> Raiha::Stream
       def setup_qpack_streams: -> nil
       def process_peer_unidirectional_streams: -> nil
-      # Deprecated: use process_peer_unidirectional_streams instead.
-      def receive_peer_control_stream: (Raiha::Stream stream) -> SettingsFrame?
       def receive_request: (Raiha::Stream stream) -> Request
       def send_response: (Raiha::Stream stream, status: Integer, ?headers: Array[[String, String]], ?body: String?) -> void
       def pending_request_stream: -> Raiha::Stream?
