@@ -1184,22 +1184,33 @@ module Raiha
     class CryptoStreamBuffer
       def initialize
         @buffer = String.new(encoding: "BINARY")
-        @write_end = 0
         @read_offset = 0
+        # Byte ranges actually received so far, as merged, sorted [start, end)
+        # pairs. CRYPTO frames can arrive out of order and with gaps (e.g.
+        # ngtcp2 fragments the ClientHello across packets and sends later
+        # offsets first), so we must track which bytes are genuinely present
+        # rather than trusting the zero-fill that `push` writes into gaps.
+        @ranges = []
       end
 
       def push(offset, data)
+        return if data.empty?
+
         end_pos = offset + data.bytesize
         if end_pos > @buffer.bytesize
           @buffer << ("\x00" * (end_pos - @buffer.bytesize))
         end
         @buffer[offset, data.bytesize] = data
-        @write_end = [@write_end, end_pos].max
+        record_range(offset, end_pos)
       end
 
       # Returns complete TLS handshake messages from the read offset, or nil if incomplete
       def read
-        available = @buffer[@read_offset, @write_end - @read_offset]
+        # Only read bytes that have actually been received contiguously from
+        # the read offset; never read across a gap into zero-filled
+        # placeholder bytes (which would be misparsed as bogus handshake
+        # messages of type 0).
+        available = @buffer[@read_offset, contiguous_end - @read_offset]
         return nil if available.nil? || available.bytesize < 4
 
         # Try to read complete handshake messages (type[1] + length[3] + body[length])
@@ -1218,6 +1229,32 @@ module Raiha
 
         @read_offset += pos
         result
+      end
+
+      # Highest offset N such that every byte in [0, N) has been received.
+      private def contiguous_end
+        first = @ranges.first
+        return 0 if first.nil? || first[0] > 0
+
+        first[1]
+      end
+
+      # Insert [start, stop) into @ranges, keeping it sorted and merged so
+      # that adjacent or overlapping ranges coalesce.
+      private def record_range(start, stop)
+        ranges = @ranges + [[start, stop]]
+        ranges.sort_by! { |range| range[0] }
+
+        merged = [] #: Array[[Integer, Integer]]
+        ranges.each do |range|
+          last = merged.last
+          if last && range[0] <= last[1]
+            last[1] = range[1] if range[1] > last[1]
+          else
+            merged << [range[0], range[1]]
+          end
+        end
+        @ranges = merged
       end
     end
 

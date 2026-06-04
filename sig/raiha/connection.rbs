@@ -123,9 +123,16 @@ module Raiha
     private def log_state_updated: (old_state: Symbol, new_state: Symbol) -> void
 
     class CryptoStreamBuffer
+      @buffer: String
+      @read_offset: Integer
+      @ranges: Array[[ Integer, Integer ]]
+
       def initialize: -> void
       def push: (Integer offset, String data) -> void
       def read: -> String?
+
+      private def contiguous_end: -> Integer
+      private def record_range: (Integer start, Integer stop) -> void
     end
   end
 end
