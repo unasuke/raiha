@@ -1,3 +1,9 @@
+GIT
+  remote: https://github.com/unasuke/quic-ruby.git
+  revision: ed2701625635a0c0ac784887673eda595ec323a5
+  specs:
+    quic (0.0.1)
+
 PATH
   remote: .
   specs:
@@ -130,6 +136,7 @@ PLATFORMS
 DEPENDENCIES
   debug
   minitest
+  quic!
   raiha!
   rake
   rbs
@@ -167,6 +174,7 @@ CHECKSUMS
   prettyprint (0.2.0) sha256=2bc9e15581a94742064a3cc8b0fb9d45aae3d03a1baa6ef80922627a0766f193
   prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
   psych (5.3.1) sha256=eb7a57cef10c9d70173ff74e739d843ac3b2c019a003de48447b2963d81b1974
+  quic (0.0.1)
   racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
   raiha (0.1.0)
   rainbow (3.1.1) sha256=039491aa3a89f42efa1d6dec2fc4e62ede96eb6acd95e52f1ad581182b79bc6a

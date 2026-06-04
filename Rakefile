@@ -45,7 +45,8 @@ namespace :test do
       quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
       quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
       openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
-      picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls }
+      picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
+      quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem }
     }.freeze
 
     INTEROP_SPEC.each do |name, spec|
@@ -98,10 +99,17 @@ namespace :interop do
     task :openssl do
       sh "openssl version"
     end
+
+    desc "Install the quic gem (github: unasuke/quic-ruby) into the interop bundle group"
+    task :quic_gem do
+      ENV["BUNDLE_WITH"] = "interop" # also inherited by the Rake::TestTask ruby subprocess
+      sh "bundle config set --local with interop"
+      sh "bundle install"
+    end
   end
 
   desc "Build every interop peer implementation"
-  task build: %w[build:aioquic build:quicgo build:quiche build:openssl build:picotls]
+  task build: %w[build:aioquic build:quicgo build:quiche build:openssl build:picotls build:quic_gem]
 end
 
 task :default => :test
