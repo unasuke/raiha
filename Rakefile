@@ -44,6 +44,7 @@ namespace :test do
       quiche: { file: "test/interop/quic/quiche_test.rb", build: :quiche },
       quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
       quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
+      h3i: { file: "test/interop/http3/h3i_test.rb", build: :h3i },
       openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
       picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
       quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem }
@@ -80,6 +81,13 @@ namespace :interop do
       sh "cargo build --release --manifest-path tmp/quiche/Cargo.toml --package quiche_apps"
     end
 
+    desc "Build the h3i conformance test harness (uses the tmp/quiche clone)"
+    task h3i: :quiche do
+      sh({ "CARGO_TARGET_DIR" => File.expand_path("tmp/h3i_harness") },
+         "cargo", "build", "--release",
+         "--manifest-path", "test/support/h3i_harness/Cargo.toml")
+    end
+
     desc "Clone and build h2o/picotls into tmp/picotls"
     task :picotls do
       unless Dir.exist?("tmp/picotls")
@@ -109,7 +117,7 @@ namespace :interop do
   end
 
   desc "Build every interop peer implementation"
-  task build: %w[build:aioquic build:quicgo build:quiche build:openssl build:picotls build:quic_gem]
+  task build: %w[build:aioquic build:quicgo build:quiche build:h3i build:openssl build:picotls build:quic_gem]
 end
 
 task :default => :test

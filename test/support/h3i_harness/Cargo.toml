@@ -1,0 +1,12 @@
+[package]
+name = "h3i_harness"
+version = "0.1.0"
+edition = "2021"
+
+# Keep this package out of the tmp/quiche cargo workspace that the
+# path dependency below points into.
+[workspace]
+
+[dependencies]
+h3i = { path = "../../../tmp/quiche/h3i" }
+serde_json = "1"
