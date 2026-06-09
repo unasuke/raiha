@@ -59,6 +59,31 @@ fn build_case(case: &str) -> Option<Vec<h3i::actions::h3::Action>> {
             wait_for_headers(0),
             connection_close(),
         ]),
+
+        // A SETTINGS frame as the first frame on a request stream. SETTINGS
+        // is only allowed on the control stream, so the server must close
+        // the connection with H3_FRAME_UNEXPECTED (RFC 9114 Section 7.2.4).
+        "settings_on_request_stream" => Some(vec![
+            send_frame(0, false, empty_settings_frame()),
+            wait_for_headers(0),
+        ]),
+
+        // A request that declares content-length: 5 but sends only 4 bytes
+        // of body. This is a malformed request per RFC 9114 Section 4.1.2;
+        // the server may answer 400 or reset the stream with
+        // H3_MESSAGE_ERROR.
+        "content_length_mismatch" => Some(vec![
+            h3i::actions::h3::send_headers_frame(0, false, content_length_headers()),
+            send_frame(
+                0,
+                true,
+                h3i::quiche::h3::frame::Frame::Data {
+                    payload: b"test".to_vec(),
+                },
+            ),
+            wait_for_headers(0),
+        ]),
+
         _ => None,
     }
 }
@@ -70,6 +95,40 @@ fn request_headers() -> Vec<h3i::quiche::h3::Header> {
         h3i::quiche::h3::Header::new(b":authority", b"127.0.0.1"),
         h3i::quiche::h3::Header::new(b":path", b"/test"),
     ]
+}
+
+fn content_length_headers() -> Vec<h3i::quiche::h3::Header> {
+    vec![
+        h3i::quiche::h3::Header::new(b":method", b"POST"),
+        h3i::quiche::h3::Header::new(b":scheme", b"https"),
+        h3i::quiche::h3::Header::new(b":authority", b"127.0.0.1"),
+        h3i::quiche::h3::Header::new(b":path", b"/test"),
+        h3i::quiche::h3::Header::new(b"content-length", b"5"),
+    ]
+}
+
+fn empty_settings_frame() -> h3i::quiche::h3::frame::Frame {
+    h3i::quiche::h3::frame::Frame::Settings {
+        max_field_section_size: None,
+        qpack_max_table_capacity: None,
+        qpack_blocked_streams: None,
+        connect_protocol_enabled: None,
+        h3_datagram: None,
+        grease: None,
+        additional_settings: None,
+        raw: None,
+    }
+}
+
+fn send_frame(
+    stream_id: u64, fin_stream: bool, frame: h3i::quiche::h3::frame::Frame,
+) -> h3i::actions::h3::Action {
+    h3i::actions::h3::Action::SendFrame {
+        stream_id,
+        fin_stream,
+        frame,
+        expected_result: h3i::actions::h3::ExpectedStreamSendResult::default(),
+    }
 }
 
 fn wait_for_headers(stream_id: u64) -> h3i::actions::h3::Action {
