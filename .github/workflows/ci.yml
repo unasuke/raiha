@@ -73,6 +73,23 @@ jobs:
           workspaces: tmp/quiche
       - run: bundle exec rake test:interop:quiche test:interop:quiche_http3_client test:interop:quiche_http3_server
 
+  interop-h3i:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - run: git clone --depth 1 https://github.com/cloudflare/quiche.git tmp/quiche
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: |
+            tmp/quiche
+            test/support/h3i_harness -> ../../../tmp/h3i_harness
+      - run: bundle exec rake test:interop:h3i
+
   interop-tls-openssl:
     name: interop (TLS, openssl)
     runs-on: ubuntu-latest
