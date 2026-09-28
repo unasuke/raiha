@@ -7,7 +7,7 @@ require "tempfile"
 require "securerandom"
 
 # Interop tests between the quic gem (github: unasuke/quic-ruby, a thin ngtcp2
-# + LibreSSL binding) acting as the client and raiha acting as the server. The
+# + picotls binding) acting as the client and raiha acting as the server. The
 # quic gem ships a client only, so this is the sole possible direction.
 #
 # The quic gem owns its own blocking I/O loop (Client#bind(sock).run,

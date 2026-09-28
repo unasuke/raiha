@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Interop echo client driven by the quic gem (github: unasuke/quic-ruby), a
-# thin ngtcp2 + LibreSSL binding. Counterpart to test/support/aioquic_client.py.
+# thin ngtcp2 + picotls binding. Counterpart to test/support/aioquic_client.py.
 #
 # Connects to a raiha QUIC server over loopback UDP, completes the handshake,
 # and (when --data is given) opens a client-initiated bidirectional stream,
@@ -38,8 +38,9 @@ begin
   sock = UDPSocket.new
   sock.connect(options[:host], options[:port])
 
-  settings = Quic::Settings.default.with(alpn: [options[:alpn]])
-  client = Quic::Connection::Client.new(
+  # raiha serves a self-signed test certificate, so skip verification.
+  settings = QUIC::Settings.default.with(alpn: [options[:alpn]], verify_mode: :none)
+  client = QUIC::Connection::Client.new(
     host: options[:host],
     port: options[:port],
     settings: settings
