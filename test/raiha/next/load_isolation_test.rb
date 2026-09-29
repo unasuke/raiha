@@ -18,6 +18,7 @@ class RaihaNextLoadIsolationTest < Minitest::Test
   # Entry point => the layers it must leave undefined.
   FORBIDDEN_LAYERS = {
     "raiha/next/tls" => %i[QUIC HTTP3 Runtime],
+    "raiha/next/tls/test" => %i[QUIC HTTP3 Runtime],
     "raiha/next/quic" => %i[HTTP3 Runtime],
     "raiha/next/http3" => %i[TLS QUIC Runtime],
     "raiha/next/runtime" => %i[],
