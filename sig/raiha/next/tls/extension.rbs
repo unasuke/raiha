@@ -1,0 +1,160 @@
+module Raiha::Next::TLS
+  module Extension
+    # The contract every extension value meets, typed or not.
+    interface _Extension
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class Opaque < Data
+      attr_reader type: Integer
+      attr_reader data: String
+
+      def self.new: (type: Integer, data: String) -> instance
+                  | (Integer type, String data) -> instance
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    module ServerName
+      TYPE: Integer
+      HOST_NAME: Integer
+
+      class CH < Data
+        attr_reader host_name: String
+
+        def self.new: (host_name: String) -> instance
+                    | (String host_name) -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class EE < Data
+        def self.new: () -> instance
+        def self.parse: (String data) -> EE
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+
+    class SupportedGroups < Data
+      TYPE: Integer
+
+      attr_reader named_group_list: Array[Integer]
+
+      def self.new: (named_group_list: Array[Integer]) -> instance
+                  | (Array[Integer] named_group_list) -> instance
+      def self.parse: (String data) -> SupportedGroups
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class SignatureAlgorithms < Data
+      TYPE: Integer
+
+      attr_reader supported_signature_algorithms: Array[Integer]
+
+      def self.new: (supported_signature_algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] supported_signature_algorithms) -> instance
+      def self.parse: (String data) -> SignatureAlgorithms
+      def self.parse_schemes: (String data) -> Array[Integer]
+      def self.encode_schemes: (Array[Integer] schemes) -> String
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class SignatureAlgorithmsCert < Data
+      TYPE: Integer
+
+      attr_reader supported_signature_algorithms: Array[Integer]
+
+      def self.new: (supported_signature_algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] supported_signature_algorithms) -> instance
+      def self.parse: (String data) -> SignatureAlgorithmsCert
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class Alpn < Data
+      TYPE: Integer
+
+      attr_reader protocol_name_list: Array[String]
+
+      def self.new: (protocol_name_list: Array[String]) -> instance
+                  | (Array[String] protocol_name_list) -> instance
+      def self.parse: (String data) -> Alpn
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class PskKeyExchangeModes < Data
+      TYPE: Integer
+
+      attr_reader ke_modes: Array[Integer]
+
+      def self.new: (ke_modes: Array[Integer]) -> instance
+                  | (Array[Integer] ke_modes) -> instance
+      def self.parse: (String data) -> PskKeyExchangeModes
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class Cookie < Data
+      TYPE: Integer
+
+      attr_reader cookie: String
+
+      def self.new: (cookie: String) -> instance
+                  | (String cookie) -> instance
+      def self.parse: (String data) -> Cookie
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class RecordSizeLimit < Data
+      TYPE: Integer
+
+      attr_reader record_size_limit: Integer
+
+      def self.new: (record_size_limit: Integer) -> instance
+                  | (Integer record_size_limit) -> instance
+      def self.parse: (String data) -> RecordSizeLimit
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class CertificateAuthorities < Data
+      TYPE: Integer
+
+      attr_reader authorities: Array[String]
+
+      def self.new: (authorities: Array[String]) -> instance
+                  | (Array[String] authorities) -> instance
+      def self.parse: (String data) -> CertificateAuthorities
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class PostHandshakeAuth < Data
+      TYPE: Integer
+
+      def self.new: () -> instance
+      def self.parse: (String data) -> PostHandshakeAuth
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class CompressCertificate < Data
+      TYPE: Integer
+
+      attr_reader algorithms: Array[Integer]
+
+      def self.new: (algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] algorithms) -> instance
+      def self.parse: (String data) -> CompressCertificate
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+  end
+end
