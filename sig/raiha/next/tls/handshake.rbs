@@ -90,5 +90,99 @@ module Raiha::Next::TLS
       def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id_echo: String, ?cipher_suite: Integer,
                  ?legacy_compression_method: Integer, ?extensions: Array[Extension::_Extension]) -> instance
     end
+
+    class EncryptedExtensions < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (extensions: Array[Extension::_Extension]) -> instance
+                  | (Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> EncryptedExtensions
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class CertificateRequest < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader certificate_request_context: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (certificate_request_context: String, extensions: Array[Extension::_Extension]) -> instance
+                  | (String certificate_request_context, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> CertificateRequest
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?certificate_request_context: String, ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class CertificateEntry < Data
+      include ExtensionLookup
+
+      attr_reader cert_data: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (cert_data: String, extensions: Array[Extension::_Extension]) -> instance
+                  | (String cert_data, Array[Extension::_Extension] extensions) -> instance
+      def self.read: (Codec::Reader r, registry: Extension::Registry) -> CertificateEntry
+      def write: (Codec::Writer w) -> void
+      def with: (?cert_data: String, ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class Certificate < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      attr_reader certificate_request_context: String
+      attr_reader certificate_list: Array[CertificateEntry]
+
+      def self.new: (certificate_request_context: String, certificate_list: Array[CertificateEntry]) -> instance
+                  | (String certificate_request_context, Array[CertificateEntry] certificate_list) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> Certificate
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?certificate_request_context: String, ?certificate_list: Array[CertificateEntry]) -> instance
+    end
+
+    class CertificateVerify < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      attr_reader algorithm: Integer
+      attr_reader signature: String
+
+      def self.new: (algorithm: Integer, signature: String) -> instance
+                  | (Integer algorithm, String signature) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> CertificateVerify
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?algorithm: Integer, ?signature: String) -> instance
+    end
+
+    class Finished < Data
+      include Message
+      include MaskedInspect
+
+      MSG_TYPE: Integer
+
+      attr_reader verify_data: String
+
+      def self.new: (verify_data: String) -> instance
+                  | (String verify_data) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> Finished
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def masked_members: () -> Array[Symbol]
+    end
   end
 end
