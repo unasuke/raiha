@@ -66,6 +66,11 @@ class RaihaNextTLSCodecReaderTest < Minitest::Test
     assert_equal 0xff, r.u8
   end
 
+  def test_vector_returns_what_the_block_returns
+    r = Codec::Reader.new("\x02ab".b)
+    assert_equal "ab".b, r.vector(1, max: 255) { |v| v.bytes(2) }
+  end
+
   def test_vector_view_cannot_read_past_its_end
     r = Codec::Reader.new("\x01\xaa\xbb".b)
     assert_raises(Codec::Truncated) { r.vector(1, max: 255) { |v| v.u16 } }

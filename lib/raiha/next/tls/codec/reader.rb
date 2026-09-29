@@ -59,17 +59,17 @@ module Raiha::Next::TLS::Codec
       bytes(read_length(len_bytes, min, max))
     end
 
-    # Yields a view over the vector's contents and raises TrailingData if the
-    # block leaves any of it unread.
+    # Yields a view over the vector's contents, raises TrailingData if the
+    # block leaves any of it unread, and returns what the block returns.
     def vector(len_bytes, max:, min: 0)
       len = read_length(len_bytes, min, max)
       i = @pos
       raise Truncated if i + len > @limit
       sub = Reader.new(@buf, i, i + len)
-      yield sub
+      result = yield sub
       sub.finish!
       @pos = i + len
-      nil
+      result
     end
 
     def eof? = @pos >= @limit

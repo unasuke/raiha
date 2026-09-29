@@ -36,7 +36,7 @@ module Raiha::Next::TLS::Codec
     def u32: () -> Integer
     def bytes: (Integer n) -> String
     def opaque: (Integer len_bytes, max: Integer, ?min: Integer) -> String
-    def vector: (Integer len_bytes, max: Integer, ?min: Integer) { (Reader) -> void } -> nil
+    def vector: [T] (Integer len_bytes, max: Integer, ?min: Integer) { (Reader) -> T } -> T
     def eof?: () -> bool
     def remaining: () -> Integer
     def finish!: () -> void
