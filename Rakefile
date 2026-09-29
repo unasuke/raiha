@@ -30,6 +30,13 @@ namespace :test do
     t.test_files = FileList["test/raiha/tls/**/*_test.rb"]
   end
 
+  Rake::TestTask.new(:next) do |t|
+    t.description = "Run tests for the next release of raiha (lib/raiha/next)"
+    t.libs << "test"
+    t.libs << "lib"
+    t.test_files = FileList["test/raiha/next/**/*_test.rb"]
+  end
+
   Rake::TestTask.new(:interop) do |t|
     t.description = "Run all cross-language interop tests"
     t.libs << "test"
