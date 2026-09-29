@@ -6,7 +6,39 @@ module Raiha::Next::TLS
       def encode: () -> String
     end
 
+    # What a PLACEMENT row or a registered module maps a context to.
+    interface _Parser
+      def parse: (String data) -> _Extension
+    end
+
+    PLACEMENT: Hash[Integer, Hash[Handshake::context, _Parser]]
+
+    class Registry < Data
+      CONTEXTS: Array[Handshake::context]
+      BUILTIN: Registry
+
+      attr_reader codecs: Hash[Integer, Hash[Handshake::context, _Parser]]
+
+      def self.new: (codecs: Hash[Integer, Hash[Handshake::context, _Parser]]) -> instance
+                  | (Hash[Integer, Hash[Handshake::context, _Parser]] codecs) -> instance
+      def lookup: (Integer type, Handshake::context context) -> _Parser?
+      def registered?: (Integer type) -> bool
+      def with: (*Module modules) -> Registry
+    end
+
+    def self.read_list: (Codec::Reader r, context: Handshake::context, registry: Registry, ?min: Integer) -> Array[_Extension]
+    def self.parse_one: (Integer type, String data, Handshake::context context, Registry registry) -> _Extension
+    def self.write_list: (Codec::Writer w, Array[_Extension] extensions, ?min: Integer) -> void
+
     class Opaque < Data
+      class Parser < Data
+        attr_reader type: Integer
+
+        def self.new: (type: Integer) -> instance
+                    | (Integer type) -> instance
+        def parse: (String data) -> Opaque
+      end
+
       attr_reader type: Integer
       attr_reader data: String
 

@@ -1,0 +1,9 @@
+module Raiha::Next::TLS
+  module Handshake
+    # The message an extension block belongs to. A HelloRetryRequest and a
+    # CertificateEntry have placement rules of their own.
+    type context = :client_hello | :server_hello | :hello_retry_request
+                 | :encrypted_extensions | :certificate | :certificate_request
+                 | :new_session_ticket | :certificate_entry
+  end
+end
