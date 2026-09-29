@@ -46,14 +46,18 @@ module Raiha::Next::TLS::Codec
     end
 
     # Writes a `len_bytes`-byte length prefix followed by whatever the block
-    # writes. The length is filled in after the block returns.
-    def vector(len_bytes)
+    # writes. The length is filled in after the block returns. `min:` and
+    # `max:` are the bounds from the vector's definition, the same ones
+    # `Reader#vector` checks, so nothing written here fails to parse for its
+    # length.
+    def vector(len_bytes, min: 0, max: nil)
       pad = PAD[len_bytes] or raise ArgumentError, "length prefix must be 1 to 3 bytes: #{len_bytes}"
       pos = @buf.bytesize
       @buf << pad
       yield
       len = @buf.bytesize - pos - len_bytes
       raise EncodeError, "vector too long: #{len} bytes" if len >= (1 << (8 * len_bytes))
+      raise EncodeError, "vector length #{len} is out of range #{min}..#{max}" if len < min || (max && len > max)
       case len_bytes
       when 1
         @buf.setbyte(pos, len)

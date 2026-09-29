@@ -70,6 +70,16 @@ class RaihaNextTLSCodecWriterTest < Minitest::Test
     assert_equal 256, w.to_s.bytesize
   end
 
+  def test_vector_bounds
+    w = Codec::Writer.new
+    assert_raises(Codec::EncodeError) { w.vector(2, min: 2, max: 0xfffe) { nil } }
+    w = Codec::Writer.new
+    assert_raises(Codec::EncodeError) { w.vector(1, min: 1, max: 2) { w.bytes("abc") } }
+    w = Codec::Writer.new
+    w.vector(1, min: 2, max: 2) { w.bytes("ab") }
+    assert_equal_bin "\x02ab".b, w.to_s
+  end
+
   def test_rejects_a_length_prefix_wider_than_three_bytes
     assert_raises(ArgumentError) { Codec::Writer.new.vector(4) { nil } }
   end

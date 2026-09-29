@@ -55,7 +55,7 @@ module Raiha::Next::TLS::Codec
     def u24: (Integer v) -> nil
     def u32: (Integer v) -> nil
     def bytes: (String s) -> nil
-    def vector: (Integer len_bytes) { () -> void } -> nil
+    def vector: (Integer len_bytes, ?min: Integer, ?max: Integer?) { () -> void } -> nil
     def to_s: () -> String
 
     private def check_range: (Integer v, Integer max) -> void
