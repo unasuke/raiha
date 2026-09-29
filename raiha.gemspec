@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.version       = Raiha::VERSION
   spec.authors       = ["Yusuke Nakamura"]
   spec.email         = ["yusuke1994525@gmail.com"]
-  spec.required_ruby_version = '>= 3'
+  spec.required_ruby_version = '>= 4.0'
 
   spec.summary       = %q{Super wip gem.}
   spec.description   = %q{Super wip.}
