@@ -7,3 +7,4 @@ module Raiha::Next::TLS
 end
 
 require_relative "tls/codec"
+require_relative "tls/iana"
