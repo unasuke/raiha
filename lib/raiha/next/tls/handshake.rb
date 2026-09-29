@@ -10,6 +10,9 @@ require_relative "handshake/certificate_request"
 require_relative "handshake/certificate"
 require_relative "handshake/certificate_verify"
 require_relative "handshake/finished"
+require_relative "handshake/new_session_ticket"
+require_relative "handshake/end_of_early_data"
+require_relative "handshake/key_update"
 
 module Raiha::Next::TLS
   # Handshake messages as values (RFC 9846 "Handshake Protocol"). Fields keep
@@ -19,11 +22,14 @@ module Raiha::Next::TLS
     TYPES = {
       ClientHello::MSG_TYPE => ClientHello,
       ServerHello::MSG_TYPE => ServerHello,
+      NewSessionTicket::MSG_TYPE => NewSessionTicket,
+      EndOfEarlyData::MSG_TYPE => EndOfEarlyData,
       EncryptedExtensions::MSG_TYPE => EncryptedExtensions,
       Certificate::MSG_TYPE => Certificate,
       CertificateRequest::MSG_TYPE => CertificateRequest,
       CertificateVerify::MSG_TYPE => CertificateVerify,
       Finished::MSG_TYPE => Finished,
+      KeyUpdate::MSG_TYPE => KeyUpdate,
       # Only ever synthesized into the transcript after a HelloRetryRequest;
       # it never appears on the wire.
       254 => :message_hash

@@ -184,5 +184,57 @@ module Raiha::Next::TLS
       def write_body: (Codec::Writer w) -> void
       def masked_members: () -> Array[Symbol]
     end
+
+    class NewSessionTicket < Data
+      include Message
+      include ExtensionLookup
+      include MaskedInspect
+
+      MSG_TYPE: Integer
+
+      attr_reader ticket_lifetime: Integer
+      attr_reader ticket_age_add: Integer
+      attr_reader ticket_nonce: String
+      attr_reader ticket: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (ticket_lifetime: Integer, ticket_age_add: Integer, ticket_nonce: String, ticket: String,
+                     extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer ticket_lifetime, Integer ticket_age_add, String ticket_nonce, String ticket,
+                     Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> NewSessionTicket
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def masked_members: () -> Array[Symbol]
+      def with: (?ticket_lifetime: Integer, ?ticket_age_add: Integer, ?ticket_nonce: String, ?ticket: String,
+                 ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class EndOfEarlyData < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      def self.new: () -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> EndOfEarlyData
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> nil
+    end
+
+    class KeyUpdate < Data
+      include Message
+
+      MSG_TYPE: Integer
+      UPDATE_NOT_REQUESTED: Integer
+      UPDATE_REQUESTED: Integer
+
+      attr_reader request_update: Integer
+
+      def self.new: (request_update: Integer) -> instance
+                  | (Integer request_update) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> KeyUpdate
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+    end
   end
 end
