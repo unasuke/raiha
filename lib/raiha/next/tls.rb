@@ -9,3 +9,4 @@ end
 require_relative "tls/codec"
 require_relative "tls/iana"
 require_relative "tls/extension"
+require_relative "tls/handshake"

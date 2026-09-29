@@ -5,5 +5,64 @@ module Raiha::Next::TLS
     type context = :client_hello | :server_hello | :hello_retry_request
                  | :encrypted_extensions | :certificate | :certificate_request
                  | :new_session_ticket | :certificate_entry
+
+    interface _Message
+      def msg_type: () -> Integer
+      def encode: () -> String
+    end
+
+    interface _BodyParser
+      def parse_body: (String body, registry: Extension::Registry) -> _Message
+    end
+
+    TYPES: Hash[Integer, _BodyParser | :message_hash]
+
+    def self.parse: (String bytes, registry: Extension::Registry) -> _Message
+    def self.parse_body: (Integer msg_type, String body, registry: Extension::Registry) -> _Message
+
+    interface _Body
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+    end
+
+    module Message : _Body
+      def encode: () -> String
+    end
+
+    interface _Extensions
+      def extensions: () -> Array[Extension::_Extension]
+    end
+
+    module ExtensionLookup : _Extensions
+      def extension: (Integer type) -> Extension::_Extension?
+    end
+
+    class ClientHello < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader legacy_version: Integer
+      attr_reader random: String
+      attr_reader legacy_session_id: String
+      attr_reader cipher_suites: Array[Integer]
+      attr_reader legacy_compression_methods: Array[Integer]
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (legacy_version: Integer, random: String, legacy_session_id: String, cipher_suites: Array[Integer],
+                     legacy_compression_methods: Array[Integer], extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer legacy_version, String random, String legacy_session_id, Array[Integer] cipher_suites,
+                     Array[Integer] legacy_compression_methods, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> ClientHello
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def encode: () -> String
+      def binders_wire_length: () -> Integer
+      def encode_truncated: () -> String
+      def with_binders: (Array[String] binders) -> ClientHello
+      def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id: String, ?cipher_suites: Array[Integer],
+                 ?legacy_compression_methods: Array[Integer], ?extensions: Array[Extension::_Extension]) -> instance
+    end
   end
 end
