@@ -64,5 +64,31 @@ module Raiha::Next::TLS
       def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id: String, ?cipher_suites: Array[Integer],
                  ?legacy_compression_methods: Array[Integer], ?extensions: Array[Extension::_Extension]) -> instance
     end
+
+    class ServerHello < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+      HELLO_RETRY_REQUEST_RANDOM: String
+
+      attr_reader legacy_version: Integer
+      attr_reader random: String
+      attr_reader legacy_session_id_echo: String
+      attr_reader cipher_suite: Integer
+      attr_reader legacy_compression_method: Integer
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (legacy_version: Integer, random: String, legacy_session_id_echo: String, cipher_suite: Integer,
+                     legacy_compression_method: Integer, extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer legacy_version, String random, String legacy_session_id_echo, Integer cipher_suite,
+                     Integer legacy_compression_method, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> ServerHello
+      def msg_type: () -> Integer
+      def hello_retry_request?: () -> bool
+      def write_body: (Codec::Writer w) -> void
+      def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id_echo: String, ?cipher_suite: Integer,
+                 ?legacy_compression_method: Integer, ?extensions: Array[Extension::_Extension]) -> instance
+    end
   end
 end

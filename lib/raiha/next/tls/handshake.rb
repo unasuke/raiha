@@ -4,6 +4,7 @@ require_relative "codec"
 require_relative "extension"
 require_relative "handshake/message"
 require_relative "handshake/client_hello"
+require_relative "handshake/server_hello"
 
 module Raiha::Next::TLS
   # Handshake messages as values (RFC 9846 "Handshake Protocol"). Fields keep
@@ -12,6 +13,7 @@ module Raiha::Next::TLS
   module Handshake
     TYPES = {
       ClientHello::MSG_TYPE => ClientHello,
+      ServerHello::MSG_TYPE => ServerHello,
       # Only ever synthesized into the transcript after a HelloRetryRequest;
       # it never appears on the wire.
       254 => :message_hash
