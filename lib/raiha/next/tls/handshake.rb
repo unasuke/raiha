@@ -3,6 +3,7 @@
 require_relative "codec"
 require_relative "extension"
 require_relative "handshake/message"
+require_relative "handshake/violation"
 require_relative "handshake/client_hello"
 require_relative "handshake/server_hello"
 require_relative "handshake/encrypted_extensions"

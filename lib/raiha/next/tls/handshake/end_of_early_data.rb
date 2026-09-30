@@ -2,6 +2,7 @@
 
 require_relative "../codec"
 require_relative "message"
+require_relative "violation"
 
 module Raiha::Next::TLS
   module Handshake
@@ -17,6 +18,9 @@ module Raiha::Next::TLS
       end
 
       def msg_type = MSG_TYPE
+
+      # Nothing to check without context.
+      def validate = nil
 
       def write_body(w) = nil
     end

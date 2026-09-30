@@ -2,6 +2,7 @@
 
 require_relative "../codec"
 require_relative "message"
+require_relative "violation"
 
 module Raiha::Next::TLS
   module Handshake
@@ -23,6 +24,11 @@ module Raiha::Next::TLS
       end
 
       def msg_type = MSG_TYPE
+
+      def validate
+        return nil if request_update == UPDATE_NOT_REQUESTED || request_update == UPDATE_REQUESTED
+        Violation.new(alert: :illegal_parameter, reason: :request_update)
+      end
 
       def write_body(w)
         w.u8(request_update)

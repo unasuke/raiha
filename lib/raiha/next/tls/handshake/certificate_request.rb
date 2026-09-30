@@ -3,6 +3,7 @@
 require_relative "../codec"
 require_relative "../extension"
 require_relative "message"
+require_relative "violation"
 
 module Raiha::Next::TLS
   module Handshake
@@ -21,6 +22,13 @@ module Raiha::Next::TLS
       end
 
       def msg_type = MSG_TYPE
+
+      def validate
+        case extension(Extension::SignatureAlgorithms::TYPE)
+        when Extension::SignatureAlgorithms then nil
+        else Violation.new(alert: :missing_extension, reason: :signature_algorithms)
+        end
+      end
 
       def write_body(w)
         w.vector(1, max: 0xff) { w.bytes(certificate_request_context) }
