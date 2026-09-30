@@ -60,5 +60,9 @@ module Raiha::Next::TLS::Test::RFC8448
     SERVER_HELLO: String
     HELLO_TRANSCRIPT_HASH: String
     SERVER_FINISHED_TRANSCRIPT_HASH: String
+    ENCRYPTED_EXTENSIONS: String
+    CERTIFICATE: String
+    CERTIFICATE_VERIFY: String
+    SERVER_FINISHED: String
   end
 end

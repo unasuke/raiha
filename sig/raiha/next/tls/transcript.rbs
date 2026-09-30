@@ -1,0 +1,22 @@
+module Raiha::Next::TLS
+  class Transcript
+    TRANSCRIPT_MESSAGES: Set[Integer]
+    MESSAGE_HASH: Integer
+
+    @digests: Hash[Symbol, Crypto::Digest]
+    @selected: Symbol?
+    @header: String
+    @length: Integer
+    @restarted: bool
+
+    def initialize: (hashes: Array[Symbol]) -> void
+    def selected: () -> Symbol?
+    def <<: (String bytes) -> self
+    def digest: (?Symbol? hash) -> String
+    def select!: (Symbol hash) -> self
+    def restart_with_message_hash!: (?digest: String?) -> self
+
+    private def running: (Symbol hash) -> Crypto::Digest
+    private def only_client_hello?: () -> bool
+  end
+end

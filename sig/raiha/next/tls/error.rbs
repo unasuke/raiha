@@ -1,0 +1,4 @@
+module Raiha::Next::TLS
+  class UsageError < StandardError
+  end
+end
