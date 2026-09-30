@@ -266,5 +266,22 @@ module Raiha::Next::TLS
       def msg_type: () -> Integer
       def write_body: (Codec::Writer w) -> void
     end
+
+    class Reassembler
+      @limits: ^(Integer) -> Integer
+      @expected: Set[Integer]
+      @buf: String
+      @header_checked: bool
+      @status: :ok | :overflow | :unexpected
+
+      def initialize: (limits: ^(Integer) -> Integer) -> void
+      def expect: (Set[Integer] types) -> nil
+      def <<: (String bytes) -> (:ok | :overflow | :unexpected)
+      def each_message: () { (Integer, String) -> void } -> (:ok | :overflow | :unexpected)
+      def pending?: () -> bool
+
+      private def check_header: () -> (:ok | :overflow | :unexpected)
+      private def message_length: () -> Integer?
+    end
   end
 end
