@@ -27,7 +27,7 @@ module Raiha::Next::TLS
           list.freeze
         end
         legacy_compression_methods = r.opaque(1, min: 1, max: 0xff).bytes.freeze
-        extensions = Extension.read_list(r, context: :client_hello, registry:, min: 7)
+        extensions = Extension.read_list(r, context: :client_hello, registry:, min: 8)
         r.finish!
         new(legacy_version:, random:, legacy_session_id:, cipher_suites:, legacy_compression_methods:, extensions:)
       end
@@ -40,7 +40,7 @@ module Raiha::Next::TLS
         w.vector(1, max: 32) { w.bytes(legacy_session_id) }
         w.vector(2, min: 2, max: 0xfffe) { cipher_suites.each { |suite| w.u16(suite) } }
         w.vector(1, min: 1, max: 0xff) { legacy_compression_methods.each { |method| w.u8(method) } }
-        Extension.write_list(w, extensions, min: 7)
+        Extension.write_list(w, extensions, min: 8)
       end
 
       # Raises EncodeError when pre_shared_key is present but not last, which

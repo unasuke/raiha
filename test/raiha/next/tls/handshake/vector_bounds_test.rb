@@ -35,7 +35,7 @@ class RaihaNextTLSHandshakeVectorBoundsTest < Minitest::Test
   end
 
   RANDOM = "\x11".b * 32
-  VERSIONS_CH = "\x00\x2b\x00\x03\x02\x03\x04".b
+  VERSIONS_CH = "\x00\x2b\x00\x05\x04\x03\x04\x03\x03".b
   VERSIONS_SH = "\x00\x2b\x00\x02\x03\x04".b
 
   def self.ch_wire(sid: "", suites: "\x13\x01", compression: "\x00", extensions: VERSIONS_CH)
@@ -45,7 +45,7 @@ class RaihaNextTLSHandshakeVectorBoundsTest < Minitest::Test
 
   CH = Handshake::ClientHello.new(legacy_version: 0x0303, random: RANDOM, legacy_session_id: "".b,
     cipher_suites: [0x1301], legacy_compression_methods: [0],
-    extensions: [Extension::SupportedVersions::CH.new(versions: [0x0304])])
+    extensions: [Extension::SupportedVersions::CH.new(versions: [0x0304, 0x0303])])
 
   def self.sh_wire(sid: "", extensions: VERSIONS_SH)
     return nil if extensions.nil?
@@ -84,7 +84,7 @@ class RaihaNextTLSHandshakeVectorBoundsTest < Minitest::Test
       ->(n) { ch_wire(suites: "\x13" * n) }, ->(n) { n.even? ? CH.with(cipher_suites: [0x1301] * (n / 2)) : nil }],
     ["client_hello_legacy_compression_methods", 1, 0xff, 1,
       ->(n) { ch_wire(compression: "\x00" * n) }, ->(n) { CH.with(legacy_compression_methods: [0] * n) }],
-    ["client_hello_extensions", 7, 0xffff, 2,
+    ["client_hello_extensions", 8, 0xffff, 2,
       ->(n) { ch_wire(extensions: block(n)) }, ->(n) { (list = opaques(n)) && CH.with(extensions: list) }],
     ["server_hello_legacy_session_id_echo", 0, 32, 1,
       ->(n) { sh_wire(sid: "x" * n) }, ->(n) { SH.with(legacy_session_id_echo: "x".b * n) }],
