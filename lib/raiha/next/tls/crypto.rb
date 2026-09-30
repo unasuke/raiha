@@ -13,3 +13,4 @@ end
 require_relative "crypto/hash"
 require_relative "crypto/digest"
 require_relative "crypto/hkdf"
+require_relative "crypto/ecdh"

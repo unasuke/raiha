@@ -26,3 +26,20 @@ module Raiha::Next::TLS
     end
   end
 end
+
+module Raiha::Next::TLS
+  module Crypto
+    module ECDH
+      CURVES: Hash[Symbol, String]
+      POINT_LENGTHS: Hash[Symbol, Integer]
+      X25519_LENGTH: Integer
+
+      def self.groups: () -> Array[Symbol]
+      def self.generate: (Symbol group) -> OpenSSL::PKey::PKey
+      def self.private_key: (Symbol group, String bytes) -> OpenSSL::PKey::PKey
+      def self.public_bytes: (Symbol group, OpenSSL::PKey::PKey key) -> String
+      def self.derive: (Symbol group, OpenSSL::PKey::PKey key, String peer_public_bytes) -> String?
+      def self.curve_name: (Symbol group) -> String
+    end
+  end
+end

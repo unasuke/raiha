@@ -2,6 +2,7 @@
 module OpenSSL
   module PKey
     def self.new_raw_public_key: (String group, String key_exchange) -> PKey
+    def self.new_raw_private_key: (String algorithm, String key) -> PKey
     def self.generate_key: (String group) -> PKey
 
     class PKey
