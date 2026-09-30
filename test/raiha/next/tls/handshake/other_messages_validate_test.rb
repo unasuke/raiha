@@ -17,7 +17,7 @@ class RaihaNextTLSHandshakeOtherMessagesValidateTest < Minitest::Test
   end
 
   def test_certificate_verify_rejects_pkcs1_and_sha1
-    [0x0201, 0x0202, 0x0203, 0x0401, 0x0501, 0x0601].each do |algorithm|
+    [0x0201, 0x0203, 0x0401, 0x0501, 0x0601].each do |algorithm|
       cv = Handshake::CertificateVerify.new(algorithm:, signature: "s".b)
       assert_equal Handshake::Violation.new(alert: :illegal_parameter, reason: :signature_algorithm), cv.validate, format("0x%04x", algorithm)
     end
@@ -25,6 +25,14 @@ class RaihaNextTLSHandshakeOtherMessagesValidateTest < Minitest::Test
       assert_nil Handshake::CertificateVerify.new(algorithm:, signature: "s".b).validate
     end
     assert_nil Handshake.parse(RFC8448::CERTIFICATE_VERIFY, registry: REGISTRY).validate
+  end
+
+  # Code points that are not schemes, reserved ones and GREASE included, are
+  # left to the state machine, which rejects any scheme it did not offer.
+  def test_certificate_verify_leaves_undefined_schemes_to_the_state_machine
+    [0x0202, 0x0a0a, 0xfe00].each do |algorithm|
+      assert_nil Handshake::CertificateVerify.new(algorithm:, signature: "s".b).validate
+    end
   end
 
   def test_key_update_request_update

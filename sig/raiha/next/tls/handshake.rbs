@@ -186,8 +186,6 @@ module Raiha::Next::TLS
 
       def self.new: (algorithm: Integer, signature: String) -> instance
                   | (Integer algorithm, String signature) -> instance
-      FORBIDDEN_ALGORITHMS: Array[Integer]
-
       def self.parse_body: (String body, ?registry: Extension::Registry?) -> CertificateVerify
       def validate: () -> Violation?
       def msg_type: () -> Integer
