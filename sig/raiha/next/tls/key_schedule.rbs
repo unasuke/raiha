@@ -1,0 +1,10 @@
+module Raiha::Next::TLS
+  module KeySchedule
+    PREFIX: String
+    LABELS: Hash[Symbol, String]
+
+    def self.extract: (salt: String, ikm: String, hash: Symbol) -> String
+    def self.expand_label: (secret: String, label: String, length: Integer, hash: Symbol, ?context: String) -> String
+    def self.derive_secret: (secret: String, label: String, transcript_hash: String, hash: Symbol) -> String
+  end
+end

@@ -245,6 +245,85 @@ module Raiha::Next::TLS::Test::RFC8448
       7d e6 50 5e 5b fb c3 88 e9 33 43 69 40 93 93 4a
       e4 d3 57 00 08 00 2a 00 04 00 00 04 00
     HEX
+
+    EARLY_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      33 ad 0a 1c 60 7e c0 3b 09 e6 cd 98 93 68 0c e2
+      10 ad f3 00 aa 1f 26 60 e1 b2 2e 10 f1 70 f9 2a
+    HEX
+
+    # The hash of an empty string, the context of each "derived" step.
+    EMPTY_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      e3 b0 c4 42 98 fc 1c 14 9a fb f4 c8 99 6f b9 24
+      27 ae 41 e4 64 9b 93 4c a4 95 99 1b 78 52 b8 55
+    HEX
+
+    HANDSHAKE_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      1d c8 26 e9 36 06 aa 6f dc 0a ad c1 2f 74 1b 01
+      04 6a a6 b9 9f 69 1e d2 21 a9 f0 ca 04 3f be ac
+    HEX
+
+    # The transcript hash over ClientHello and ServerHello.
+    HELLO_TRANSCRIPT_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      86 0c 06 ed c0 78 58 ee 8e 78 f0 e7 42 8c 58 ed
+      d6 b4 3f 2c a3 e6 e9 5f 02 ed 06 3c f0 e1 ca d8
+    HEX
+
+    # "tls13 derived", the salt for the main secret.
+    DERIVED_SECRET_FOR_MAIN = [<<~HEX.delete(" \n")].pack("H*").freeze
+      43 de 77 e0 c7 77 13 85 9a 94 4d b9 db 25 90 b5
+      31 90 a6 5b 3e e2 e4 f1 2d d7 a0 bb 7c e2 54 b4
+    HEX
+
+    MAIN_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      18 df 06 84 3d 13 a0 8b f2 a4 49 84 4c 5f 8a 47
+      80 01 bc 4d 4c 62 79 84 d5 a4 1d a8 d0 40 29 19
+    HEX
+
+    SERVER_FINISHED_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      00 8d 3b 66 f8 16 ea 55 9f 96 b5 37 e8 85 c3 1f
+      c0 68 bf 49 2c 65 2f 01 f2 88 a1 d8 cd c1 9f c8
+    HEX
+
+    # The transcript hash from ClientHello through the server Finished.
+    SERVER_FINISHED_TRANSCRIPT_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      96 08 10 2a 0f 1c cc 6d b6 25 0b 7b 7e 41 7b 1a
+      00 0e aa da 3d aa e4 77 7a 76 86 c9 ff 83 df 13
+    HEX
+
+    EXPORTER_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      fe 22 f8 81 17 6e da 18 eb 8f 44 52 9e 67 92 c5
+      0c 9a 3f 89 45 2f 68 d8 ae 31 1b 43 09 d3 cf 50
+    HEX
+
+    CLIENT_HANDSHAKE_WRITE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      db fa a6 93 d1 76 2c 5b 66 6a f5 d9 50 25 8d 01
+    HEX
+
+    CLIENT_HANDSHAKE_WRITE_IV = [<<~HEX.delete(" \n")].pack("H*").freeze
+      5b d3 c7 1b 83 6e 0b 76 bb 73 26 5f
+    HEX
+
+    CLIENT_FINISHED_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      b8 0a d0 10 15 fb 2f 0b d6 5f f7 d4 da 5d 6b f8
+      3f 84 82 1d 1f 87 fd c7 d3 c7 5b 5a 7b 42 d9 c4
+    HEX
+
+    # The transcript hash from ClientHello through the client Finished.
+    CLIENT_FINISHED_TRANSCRIPT_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      20 91 45 a9 6e e8 e2 a1 22 ff 81 00 47 cc 95 26
+      84 65 8d 60 49 e8 64 29 42 6d b8 7c 54 ad 14 3d
+    HEX
+
+    RESUMPTION_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      7d f2 35 f2 03 1d 2a 05 12 87 d0 2b 02 41 b0 bf
+      da f8 6c c8 56 23 1f 2d 5a ba 46 c4 34 ec 19 6c
+    HEX
+
+    # The PSK of the NewSessionTicket, whose ticket_nonce is 00 00.
+    TICKET_PSK = [<<~HEX.delete(" \n")].pack("H*").freeze
+      4e cd 0e b6 ec 3b 4d 87 f5 d6 02 8f 92 2c a4 c5
+      85 1a 27 7f d4 13 11 c9 e6 2d 2c 94 92 e1 c4 f3
+    HEX
   end
 
   # RFC 8448 §4, Resumed 0-RTT Handshake.
@@ -403,6 +482,18 @@ module Raiha::Next::TLS::Test::RFC8448
       93 05 2b d8 5b 4c 8d e6 77 6f 5b 04 ac 07 d8 35
       40 ea b3 e3 d9 c5 47 bc 65 28 c4 31 7d 29 46 86
       09 3a 6c ad 7d 00 2b 00 02 03 04
+    HEX
+
+    # The transcript hash over message_hash(ClientHello1), HelloRetryRequest, ClientHello2 and ServerHello.
+    HELLO_TRANSCRIPT_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      8a a8 e8 28 ec 2f 8a 88 4f ec 95 a3 13 9d e0 1c
+      15 a3 da a7 ff 5b fc 3f 4b fc c2 1b 43 8d 7b f8
+    HEX
+
+    # The transcript hash from message_hash(ClientHello1) through the server Finished.
+    SERVER_FINISHED_TRANSCRIPT_HASH = [<<~HEX.delete(" \n")].pack("H*").freeze
+      50 f6 3c bf 36 b0 dd 04 9e 7a 0b a2 7d 64 55 74
+      5e a2 aa ac 54 bb 16 7f 99 50 b2 b7 ce 95 09 da
     HEX
   end
 end
