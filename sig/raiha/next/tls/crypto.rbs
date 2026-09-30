@@ -1,0 +1,28 @@
+module Raiha::Next::TLS
+  module Crypto
+    HASHES: Hash[Symbol, String]
+    HASH_LENGTHS: Hash[Symbol, Integer]
+
+    def self.hash_length: (Symbol hash) -> Integer
+    def self.digest_name: (Symbol hash) -> String
+    def self.hash: (Symbol hash, String data) -> String
+    def self.hmac: (hash: Symbol, key: String, data: String) -> String
+    def self.secure_compare: (String a, String b) -> bool
+
+    class Digest
+      @digest: OpenSSL::Digest
+
+      attr_reader hash_name: Symbol
+
+      def initialize: (Symbol hash_name) -> void
+      def <<: (String bytes) -> self
+      def digest: () -> String
+      def initialize_copy: (Digest other) -> void
+    end
+
+    module HKDF
+      def self.extract: (hash: Symbol, salt: String, ikm: String) -> String
+      def self.expand: (hash: Symbol, prk: String, info: String, length: Integer) -> String
+    end
+  end
+end
