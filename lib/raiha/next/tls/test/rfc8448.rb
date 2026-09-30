@@ -549,5 +549,47 @@ module Raiha::Next::TLS::Test::RFC8448
       33 6a 70 ae 42 6e 96 8e 3e b8 84 94 5b 96 85 6d
       ba 39 76 d1
     HEX
+
+    CLIENT_X25519_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0e d0 2f 8e 81 17 ef c7 5c a7 ac 32 aa 7e 34 ed
+      a6 4c dc 0d da d1 54 a5 e8 52 89 f9 59 f6 32 04
+    HEX
+
+    CLIENT_X25519_PUBLIC_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      e8 e8 e3 f3 b9 3a 25 ed 97 a1 4a 7d ca cb 8a 27
+      2c 62 88 e5 85 c6 48 4d 05 26 2f ca d0 62 ad 1f
+    HEX
+
+    CLIENT_SECP256R1_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      ab 54 73 46 7e 19 34 6c eb 0a 04 14 e4 1d a2 1d
+      4d 24 45 bc 30 25 af e9 7c 4e 8d c8 d5 13 da 39
+    HEX
+
+    CLIENT_SECP256R1_PUBLIC_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      04 a6 da 73 92 ec 59 1e 17 ab fd 53 59 64 b9 98
+      94 d1 3b ef b2 21 b3 de f2 eb e3 83 0e ac 8f 01
+      51 81 26 77 c4 d6 d2 23 7e 85 cf 01 d6 91 0c fb
+      83 95 4e 76 ba 73 52 83 05 34 15 98 97 e8 06 57
+      80
+    HEX
+
+    SERVER_SECP256R1_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      8c 51 06 01 f9 76 5b fb 8e d6 93 44 9a 48 98 98
+      59 b5 cf a8 79 cb 9f 54 43 c4 1c 5f f1 06 34 ed
+    HEX
+
+    SERVER_SECP256R1_PUBLIC_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      04 58 3e 05 4b 7a 66 67 2a e0 20 ad 9d 26 86 fc
+      c8 5b 5a d4 1a 13 4a 0f 03 ee 72 b8 93 05 2b d8
+      5b 4c 8d e6 77 6f 5b 04 ac 07 d8 35 40 ea b3 e3
+      d9 c5 47 bc 65 28 c4 31 7d 29 46 86 09 3a 6c ad
+      7d
+    HEX
+
+    # The P-256 shared secret.
+    HANDSHAKE_IKM = [<<~HEX.delete(" \n")].pack("H*").freeze
+      c1 42 ce 13 ca 11 b5 c2 23 36 52 e6 3a d3 d9 78
+      44 f1 62 1f bf b9 de 69 d5 47 dc 8f ed ea be b4
+    HEX
   end
 end

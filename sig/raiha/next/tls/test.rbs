@@ -1,4 +1,16 @@
-module Raiha::Next::TLS::Test
+module Raiha::Next::TLS
+  module Test
+    class FixedKEM
+      @private_keys: Hash[Symbol, String]
+      @provider: KeyExchange::OpenSSL
+
+      def initialize: (Hash[Symbol, String] private_keys) -> void
+      def supported_groups: () -> Array[Symbol]
+      def generate: (Symbol group) -> KeyExchange::KeyPair
+      def encapsulate: (Symbol group, String peer_public_bytes) -> [String, String]?
+      def decapsulate: (KeyExchange::KeyPair key_pair, String ciphertext) -> String?
+    end
+  end
 end
 
 module Raiha::Next::TLS::Test::RFC8448
@@ -64,5 +76,12 @@ module Raiha::Next::TLS::Test::RFC8448
     CERTIFICATE: String
     CERTIFICATE_VERIFY: String
     SERVER_FINISHED: String
+    CLIENT_X25519_PRIVATE_KEY: String
+    CLIENT_X25519_PUBLIC_KEY: String
+    CLIENT_SECP256R1_PRIVATE_KEY: String
+    CLIENT_SECP256R1_PUBLIC_KEY: String
+    SERVER_SECP256R1_PRIVATE_KEY: String
+    SERVER_SECP256R1_PUBLIC_KEY: String
+    HANDSHAKE_IKM: String
   end
 end

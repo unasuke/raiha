@@ -8,3 +8,4 @@ module Raiha::Next::TLS::Test
 end
 
 require_relative "test/rfc8448"
+require_relative "test/fixed_kem"
