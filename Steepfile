@@ -9,6 +9,7 @@
 target :next do
   signature "sig/raiha/next", "sig/raiha.rbs", "sig/patches"
   check "lib/raiha/next"
+  library "ipaddr"
 end
 
 target :lib do
