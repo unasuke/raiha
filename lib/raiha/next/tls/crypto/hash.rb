@@ -14,10 +14,9 @@ module Raiha::Next::TLS
 
     def self.hmac(hash:, key:, data:) = OpenSSL::HMAC.digest(digest_name(hash), key, data)
 
-    # Compares two strings in time that depends only on their length.
-    def self.secure_compare(a, b)
-      return false unless a.bytesize == b.bytesize
-      OpenSSL.fixed_length_secure_compare(a, b)
-    end
+    # Compares two secrets of the same, public length in constant time.
+    # Different lengths raise ArgumentError: the caller must have checked the
+    # length already, and answering false would hide a missing length check.
+    def self.fixed_length_secure_compare(a, b) = OpenSSL.fixed_length_secure_compare(a, b)
   end
 end

@@ -7,7 +7,7 @@ module Raiha::Next::TLS
     def self.digest_name: (Symbol hash) -> String
     def self.hash: (Symbol hash, String data) -> String
     def self.hmac: (hash: Symbol, key: String, data: String) -> String
-    def self.secure_compare: (String a, String b) -> bool
+    def self.fixed_length_secure_compare: (String a, String b) -> bool
 
     class Digest
       @digest: OpenSSL::Digest

@@ -29,9 +29,14 @@ class RaihaNextTLSCryptoDigestTest < Minitest::Test
     assert_raises(ArgumentError) { Crypto::Digest.new(:sha1) }
   end
 
-  def test_secure_compare
-    assert Crypto.secure_compare("abc".b, "abc".b)
-    refute Crypto.secure_compare("abc".b, "abd".b)
-    refute Crypto.secure_compare("abc".b, "ab".b)
+  def test_fixed_length_secure_compare
+    assert Crypto.fixed_length_secure_compare("abc".b, "abc".b)
+    refute Crypto.fixed_length_secure_compare("abc".b, "abd".b)
+  end
+
+  # A length mismatch is a bug in the caller, which must check the length
+  # first; answering false would hide that.
+  def test_fixed_length_secure_compare_rejects_different_lengths
+    assert_raises(ArgumentError) { Crypto.fixed_length_secure_compare("abc".b, "ab".b) }
   end
 end
