@@ -1,0 +1,92 @@
+module Raiha::Next::TLS
+  module Trace
+    # Anything with `#tls_trace(value)`.
+    interface _Tracer
+      def tls_trace: (t value) -> void
+    end
+
+    class TranscriptUpdated < Data
+      attr_reader msg_type: Integer
+      attr_reader length: Integer
+      attr_reader digest: String
+
+      def self.new: (msg_type: Integer, length: Integer, digest: String) -> instance
+                  | (Integer msg_type, Integer length, String digest) -> instance
+    end
+
+    class PskRejected < Data
+      attr_reader index: Integer
+      attr_reader reason: Symbol
+
+      def self.new: (index: Integer, reason: Symbol) -> instance
+                  | (Integer index, Symbol reason) -> instance
+    end
+
+    class EarlyDataRejected < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
+    class TicketNotIssued < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
+    class ExtensionDropped < Data
+      attr_reader type: Integer
+
+      def self.new: (type: Integer) -> instance
+                  | (Integer type) -> instance
+    end
+
+    class ServerNameIgnored < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
+    class EarlyDataNotAttempted < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
+    class PeerCertificateVerified < Data
+      attr_reader purpose: :server | :client
+
+      def self.new: (purpose: :server | :client) -> instance
+                  | (:server | :client purpose) -> instance
+    end
+
+    class PeerSignatureVerified < Data
+      attr_reader algorithm: Symbol
+
+      def self.new: (algorithm: Symbol) -> instance
+                  | (Symbol algorithm) -> instance
+    end
+
+    class BinderVerified < Data
+      attr_reader index: Integer
+
+      def self.new: (index: Integer) -> instance
+                  | (Integer index) -> instance
+    end
+
+    class PeerFinishedVerified < Data
+      attr_reader transcript_hash: String
+
+      def self.new: (transcript_hash: String) -> instance
+                  | (String transcript_hash) -> instance
+    end
+
+    type t = TranscriptUpdated | PskRejected | EarlyDataRejected | TicketNotIssued | ExtensionDropped
+           | ServerNameIgnored | EarlyDataNotAttempted | PeerCertificateVerified | PeerSignatureVerified
+           | BinderVerified | PeerFinishedVerified
+  end
+end

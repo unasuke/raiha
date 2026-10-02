@@ -1,0 +1,25 @@
+module Raiha::Next::TLS
+  class Profile < Data
+    QUIC_TRANSPORT_PARAMETERS: Integer
+    TCP: Profile
+    QUIC: Profile
+
+    attr_reader record_layer: bool
+    attr_reader compatibility_mode: bool
+    attr_reader reject_nonempty_session_id: bool
+    attr_reader send_end_of_early_data: bool
+    attr_reader allow_key_update_message: bool
+    attr_reader required_extensions: Array[Integer]
+    attr_reader forbidden_extensions: Array[Integer]
+    attr_reader max_early_data_size_policy: :free | :sentinel
+    attr_reader never_select_cipher_suites: Array[Symbol]
+    attr_reader all_alerts_fatal: bool
+    attr_reader protocol_violation_reasons: Array[Symbol]
+
+    def self.new: (record_layer: bool, compatibility_mode: bool, reject_nonempty_session_id: bool,
+                   send_end_of_early_data: bool, allow_key_update_message: bool, required_extensions: Array[Integer],
+                   forbidden_extensions: Array[Integer], max_early_data_size_policy: :free | :sentinel,
+                   never_select_cipher_suites: Array[Symbol], all_alerts_fatal: bool,
+                   protocol_violation_reasons: Array[Symbol]) -> instance
+  end
+end

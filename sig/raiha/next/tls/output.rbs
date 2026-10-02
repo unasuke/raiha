@@ -1,0 +1,37 @@
+module Raiha::Next::TLS
+  module Output
+    type direction = :read | :write
+
+    class Message < Data
+      attr_reader epoch: epoch
+      attr_reader bytes: String
+
+      def self.new: (epoch: epoch, bytes: String) -> instance
+                  | (epoch epoch, String bytes) -> instance
+    end
+
+    class Secret < Data
+      include MaskedInspect
+
+      attr_reader epoch: epoch
+      attr_reader direction: direction
+      attr_reader secret: String
+      attr_reader cipher_suite: CipherSuite
+
+      def self.new: (epoch: epoch, direction: direction, secret: String, cipher_suite: CipherSuite) -> instance
+                  | (epoch epoch, direction direction, String secret, CipherSuite cipher_suite) -> instance
+      def masked_members: () -> Array[Symbol]
+    end
+
+    class Alert < Data
+      attr_reader level: :warning | :fatal
+      attr_reader description: Symbol
+      attr_reader epoch: epoch
+
+      def self.new: (level: :warning | :fatal, description: Symbol, epoch: epoch) -> instance
+                  | (:warning | :fatal level, Symbol description, epoch epoch) -> instance
+    end
+
+    type t = Message | Secret | Alert
+  end
+end
