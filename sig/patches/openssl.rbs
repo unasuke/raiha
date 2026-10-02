@@ -9,8 +9,11 @@ module OpenSSL
       def raw_public_key: -> String
       def verify_pss: (String digest, String signature, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> bool
       def sign_pss: (String digest, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> String
-      def verify: (String | OpenSSL::Digest digest, String signature, String data) -> bool
-      def sign: (String | OpenSSL::Digest digest, String data) -> String
+      # A nil digest for Ed25519 and Ed448, which hash on their own.
+      def verify: (String | OpenSSL::Digest | nil digest, String signature, String data) -> bool
+      def sign: (String | OpenSSL::Digest | nil digest, String data) -> String
+      def oid: () -> String
+      def private?: () -> bool
     end
   end
 end

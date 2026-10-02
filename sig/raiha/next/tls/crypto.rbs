@@ -43,3 +43,22 @@ module Raiha::Next::TLS
     end
   end
 end
+
+module Raiha::Next::TLS
+  module Crypto
+    module Signature
+      DIGESTS: Hash[Symbol, String]
+      CURVES: Hash[String, Symbol]
+
+      def self.private_key: (String der) -> OpenSSL::PKey::PKey?
+      def self.key_matches?: (SignatureScheme scheme, OpenSSL::PKey::PKey key) -> bool
+      def self.sign: (SignatureScheme scheme, OpenSSL::PKey::PKey key, String data) -> String
+      def self.verify: (SignatureScheme scheme, OpenSSL::PKey::PKey key, String signature, String data) -> bool
+      def self.digest_name: (SignatureScheme scheme) -> String
+    end
+
+    module Certificate
+      def self.parse: (String der) -> OpenSSL::X509::Certificate?
+    end
+  end
+end
