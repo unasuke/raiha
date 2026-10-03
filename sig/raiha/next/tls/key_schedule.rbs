@@ -1,10 +1,53 @@
 module Raiha::Next::TLS
-  module KeySchedule
+  class KeySchedule
+    type side = :client | :server
+    type stage = :early | :handshake | :main | :resumption | :discarded
+    type binder_kind = :external | :resumption
+
     PREFIX: String
     LABELS: Hash[Symbol, String]
+    BINDER_LABELS: Hash[Symbol, Symbol]
 
     def self.extract: (salt: String, ikm: String, hash: Symbol) -> String
     def self.expand_label: (secret: String, label: String, length: Integer, hash: Symbol, ?context: String) -> String
     def self.derive_secret: (secret: String, label: String, transcript_hash: String, hash: Symbol) -> String
+    def self.export: (inner_value: String, context: String, length: Integer, hash: Symbol) -> String
+
+    @hash_length: Integer
+    @empty_hash: String
+    @secret: String
+    @finished_keys: Hash[side, String]
+    @application_traffic_secrets: Hash[side, String]
+
+    attr_reader hash_algorithm: Symbol
+    attr_reader stage: stage
+
+    def initialize: (hash: Symbol, ?psk: String?) -> void
+    def binder: (kind: binder_kind, transcript_hash: String) -> String
+    def verify_binder: (kind: binder_kind, transcript_hash: String, binder: String) -> bool
+    def client_early_traffic_secret: (String transcript_hash) -> String
+    def handshake!: (String shared_secret) -> self
+    def client_handshake_traffic_secret: (String transcript_hash) -> String
+    def server_handshake_traffic_secret: (String transcript_hash) -> String
+    def main!: () -> self
+    def client_application_traffic_secret: (String transcript_hash) -> String
+    def server_application_traffic_secret: (String transcript_hash) -> String
+    def exporter_values: (Array[String] labels, String transcript_hash) -> Hash[String, String]
+    def finished_verify_data: (side side, String transcript_hash) -> String
+    def verify_finished: (side side, String transcript_hash, String verify_data) -> bool
+    def resumption!: (String transcript_hash) -> self
+    def ticket_psk: (String ticket_nonce) -> String
+    def update_application_traffic_secret!: (side side) -> String
+    def discard!: () -> self
+
+    private def instance_variables_to_inspect: () -> Array[Symbol]
+    private def handshake_traffic_secret: (side side, String transcript_hash) -> String
+    private def application_traffic_secret: (side side, String transcript_hash) -> String
+    private def advance: (stage from, stage to) { (String previous) -> String } -> self
+    private def next_stage: (String secret, String ikm) -> String
+    private def stage_secret: (stage stage) -> String
+    private def derive: (String secret, Symbol label, String transcript_hash) -> String
+    private def expand: (String secret, Symbol label, Integer length) -> String
+    private def mac: (String key, String data) -> String
   end
 end
