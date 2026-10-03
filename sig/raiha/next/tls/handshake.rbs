@@ -283,3 +283,27 @@ module Raiha::Next::TLS
     end
   end
 end
+
+module Raiha::Next::TLS
+  module Handshake
+    module ClientHelloBuilder
+      class Built < Data
+        attr_reader client_hello: ClientHello
+        attr_reader key_pairs: Array[KeyExchange::KeyPair]
+
+        def self.new: (client_hello: ClientHello, key_pairs: Array[KeyExchange::KeyPair]) -> instance
+                    | (ClientHello client_hello, Array[KeyExchange::KeyPair] key_pairs) -> instance
+      end
+
+      TLS13: Integer
+      LEGACY_VERSION: Integer
+      FIXED_ORDER: Array[Integer]
+      PADDING: Integer
+      GREASE_SLOTS: Hash[Symbol, Integer]
+
+      def self.build: (config: Config, keyring: Keyring, server_name: String?, ?extensions: Array[Extension::_Extension]) -> Built
+      def self.retry: (ClientHello ch1, ServerHello hrr) { (Integer group) -> Extension::KeyShare::Entry } -> ClientHello
+      def self.grease_value: (String seed, Integer slot) -> Integer
+    end
+  end
+end
