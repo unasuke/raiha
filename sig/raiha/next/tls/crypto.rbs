@@ -58,6 +58,9 @@ module Raiha::Next::TLS
     end
 
     module Certificate
+      SIGNATURE_SCHEMES: Hash[String, Integer]
+
+      def self.signature_scheme_id: (OpenSSL::X509::Certificate certificate) -> Integer?
       def self.parse: (String der) -> OpenSSL::X509::Certificate?
     end
   end

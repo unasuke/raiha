@@ -32,6 +32,7 @@ module Raiha::Next::TLS
     def main!: () -> self
     def client_application_traffic_secret: (String transcript_hash) -> String
     def server_application_traffic_secret: (String transcript_hash) -> String
+    def application_traffic_secret: (side side) -> String
     def exporter_values: (Array[String] labels, String transcript_hash) -> Hash[String, String]
     def finished_verify_data: (side side, String transcript_hash) -> String
     def verify_finished: (side side, String transcript_hash, String verify_data) -> bool
@@ -42,7 +43,7 @@ module Raiha::Next::TLS
 
     private def instance_variables_to_inspect: () -> Array[Symbol]
     private def handshake_traffic_secret: (side side, String transcript_hash) -> String
-    private def application_traffic_secret: (side side, String transcript_hash) -> String
+    private def derive_application_traffic_secret: (side side, String transcript_hash) -> String
     private def advance: (stage from, stage to) { (String previous) -> String } -> self
     private def next_stage: (String secret, String ikm) -> String
     private def stage_secret: (stage stage) -> String

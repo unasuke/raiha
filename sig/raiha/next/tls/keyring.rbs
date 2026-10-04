@@ -37,11 +37,18 @@ module Raiha::Next::TLS
     attr_reader credentials: Array[Credential]
     attr_reader key_exchange: KeyExchange::_Provider
     attr_reader verifier: Verifier::_Verifier
+    attr_reader trust_anchor_subjects: Array[String]
 
     def initialize: (config: Config, identities: Array[Identity], random: _Random, key_exchange: KeyExchange::_Provider,
                      verifier: Verifier::_Verifier?) -> void
     def random_bytes: (Integer length) -> String
     def peer_verified?: () -> bool
+    def client_credential: (signature_algorithms: Array[Integer], certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?
+    def server_credential: (server_name: String?, signature_algorithms: Array[Integer], signature_algorithms_cert: Array[Integer]?,
+                            certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?
+
+    private def scheme_for: (Credential credential, Array[Integer] offered) -> SignatureScheme?
+    private def chain_signatures_acceptable?: (Credential credential, Array[Integer] schemes) -> bool
 
     private def instance_variables_to_inspect: () -> Array[Symbol]
     private def parse: (Identity identity) -> Credential

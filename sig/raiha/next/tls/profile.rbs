@@ -14,12 +14,13 @@ module Raiha::Next::TLS
     attr_reader max_early_data_size_policy: :free | :sentinel
     attr_reader never_select_cipher_suites: Array[Symbol]
     attr_reader all_alerts_fatal: bool
+    attr_reader require_alpn: bool
     attr_reader protocol_violation_reasons: Array[Symbol]
 
     def self.new: (record_layer: bool, compatibility_mode: bool, reject_nonempty_session_id: bool,
                    send_end_of_early_data: bool, allow_key_update_message: bool, required_extensions: Array[Integer],
                    forbidden_extensions: Array[Integer], max_early_data_size_policy: :free | :sentinel,
                    never_select_cipher_suites: Array[Symbol], all_alerts_fatal: bool,
-                   protocol_violation_reasons: Array[Symbol]) -> instance
+                   require_alpn: bool, protocol_violation_reasons: Array[Symbol]) -> instance
   end
 end

@@ -81,3 +81,66 @@ class RaihaNextTLSKeyringTest < Minitest::Test
     assert_includes identity.inspect, "key_der=[#{leaf.key_der.bytesize} bytes]"
   end
 end
+
+# Choosing an identity to answer with (RFC 9846 "Certificate Selection").
+class RaihaNextTLSKeyringSelectionTest < Minitest::Test
+  TLS = Raiha::Next::TLS
+  Keyring = TLS::Keyring
+  PKI = NextTestPKI
+
+  def ca = @ca ||= PKI.ca
+
+  def identity(names: ["DNS:localhost"], key: PKI.key(:p256), issuer: ca)
+    leaf = PKI.leaf(issuer, names:, key:)
+    Keyring::Identity.new(cert_der: [leaf.der, issuer.der], key_der: leaf.key_der)
+  end
+
+  ECDSA = [0x0403].freeze
+  PSS = [0x0804].freeze
+
+  def server(identities)
+    Keyring.server(config: TLS::Config.server, identities:)
+  end
+
+  def select(keyring, server_name: "localhost", signature_algorithms: ECDSA + PSS, signature_algorithms_cert: nil, certificate_authorities: nil)
+    credential, scheme = keyring.server_credential(server_name:, signature_algorithms:, signature_algorithms_cert:, certificate_authorities:)
+    [keyring.credentials.index(credential), scheme&.name]
+  end
+
+  def test_server_picks_a_key_the_client_can_verify
+    keyring = server([identity(key: PKI.key(:rsa)), identity(key: PKI.key(:p256))])
+    assert_equal [0, :rsa_pss_rsae_sha256], select(keyring)
+    assert_equal [1, :ecdsa_secp256r1_sha256], select(keyring, signature_algorithms: ECDSA)
+    assert_equal [nil, nil], select(keyring, signature_algorithms: [0x0807])
+  end
+
+  def test_server_prefers_a_valid_name_then_the_order
+    keyring = server([identity(names: ["DNS:other.example"]), identity(names: ["DNS:localhost"], key: PKI.key(:second))])
+    assert_equal [1, :ecdsa_secp256r1_sha256], select(keyring)
+    assert_equal [0, :ecdsa_secp256r1_sha256], select(keyring, server_name: "nowhere.example")
+    assert_equal [0, :ecdsa_secp256r1_sha256], select(keyring, server_name: nil)
+  end
+
+  def test_server_prefers_a_chain_the_client_accepts_and_a_named_ca
+    other_ca = PKI.ca(name: "Other CA", key: PKI.key(:other_ca))
+    keyring = server([identity, identity(issuer: other_ca, key: PKI.key(:third))])
+    # Both chains are signed with ecdsa-with-SHA256; only the CA differs.
+    assert_equal [1, :ecdsa_secp256r1_sha256], select(keyring, certificate_authorities: [other_ca.certificate.subject.to_der])
+    assert_equal [0, :ecdsa_secp256r1_sha256], select(keyring, signature_algorithms_cert: [0x0804])
+  end
+
+  def test_client_answers_a_certificate_request
+    keyring = Keyring.client(config: TLS::Config.client(trust_anchors: [ca.der]), identities: [identity(key: PKI.key(:rsa)), identity])
+    credential, scheme = keyring.client_credential(signature_algorithms: ECDSA, certificate_authorities: nil)
+    assert_equal [1, :ecdsa_secp256r1_sha256], [keyring.credentials.index(credential), scheme.name]
+    assert_nil keyring.client_credential(signature_algorithms: [0x0807], certificate_authorities: nil)
+    assert_nil keyring.client_credential(signature_algorithms: ECDSA, certificate_authorities: ["\x30\x00".b])
+    credential, = keyring.client_credential(signature_algorithms: ECDSA, certificate_authorities: [ca.certificate.subject.to_der])
+    assert_equal 1, keyring.credentials.index(credential)
+  end
+
+  def test_trust_anchor_subjects
+    keyring = Keyring.client(config: TLS::Config.client(trust_anchors: [ca.der]))
+    assert_equal [ca.certificate.subject.to_der], keyring.trust_anchor_subjects
+  end
+end

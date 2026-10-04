@@ -100,21 +100,20 @@ module Raiha::Next::TLS
       # by construction, order included. The block makes the key share for
       # the group the server asked for.
       #
-      # - key_share: a single entry for the requested group, in place.
+      # - key_share: a single entry for the requested group, in place; kept
+      #   when the HelloRetryRequest asks only for a cookie.
       # - early_data: removed.
       # - cookie: the server's, replacing ours or inserted before
       #   pre_shared_key or padding, whichever comes first, or at the end.
       def self.retry(ch1, hrr)
-        group = case (requested = hrr.extension(Extension::KeyShare::TYPE))
-          when Extension::KeyShare::HRR then requested.selected_group
-          else raise ArgumentError, "the HelloRetryRequest selects no group"
+        share = case (requested = hrr.extension(Extension::KeyShare::TYPE))
+          when Extension::KeyShare::HRR then yield(requested.selected_group)
           end
-        share = yield(group)
         cookie = hrr.extension(Extension::Cookie::TYPE)
         extensions = ch1.extensions.filter_map do |ext|
           case ext.extension_type
           when Extension::EarlyData::TYPE then nil
-          when Extension::KeyShare::TYPE then Extension::KeyShare::CH.new(client_shares: [share])
+          when Extension::KeyShare::TYPE then share ? Extension::KeyShare::CH.new(client_shares: [share]) : ext
           when Extension::Cookie::TYPE then cookie
           else ext
           end

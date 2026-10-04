@@ -44,6 +44,10 @@ module Raiha::Next::TLS
 
     attr_reader :config, :credentials, :key_exchange, :verifier
 
+    # The subjects of the Config's trust anchors, as DER, for the
+    # certificate_authorities extension of a CertificateRequest.
+    attr_reader :trust_anchor_subjects
+
     def initialize(config:, identities:, random:, key_exchange:, verifier:)
       @config = config
       @credentials = identities.map { |identity| parse(identity) }.freeze
@@ -57,6 +61,10 @@ module Raiha::Next::TLS
       end
       @key_exchange = key_exchange
       @verifier = verifier || default_verifier(config)
+      @trust_anchor_subjects = config.trust_anchors.map do |der|
+        anchor = Crypto::Certificate.parse(der) or raise ArgumentError, "a trust anchor is not a DER certificate"
+        anchor.subject.to_der.freeze
+      end.freeze
       freeze
     end
 
@@ -68,6 +76,61 @@ module Raiha::Next::TLS
       case @verifier
       when Verifier::None then false
       else true
+      end
+    end
+
+    # The client's answer to a CertificateRequest (RFC 9846 "Certificate
+    # Selection"): the first identity whose key signs with a scheme the
+    # server lists, and, when the server names CAs, whose chain has an issuer
+    # among them; with the scheme, in our order of preference. nil when none
+    # fits, and the client then sends an empty Certificate.
+    def client_credential(signature_algorithms:, certificate_authorities:)
+      @credentials.each do |credential|
+        scheme = scheme_for(credential, signature_algorithms) or next
+        if certificate_authorities && credential.chain.none? { |cert| certificate_authorities.include?(cert.issuer.to_der) }
+          next
+        end
+        return [credential, scheme]
+      end
+      nil
+    end
+
+    # The server's certificate when no PSK was selected. Candidates are the
+    # identities whose key signs with a scheme the client lists; among them
+    # the best by, in order: valid for `server_name` (RFC 9525), every
+    # signature in the chain acceptable to the client, an issuer among the
+    # client's certificate_authorities. Ties go to the order of the
+    # identities, and with no candidate at all the result is nil.
+    def server_credential(server_name:, signature_algorithms:, signature_algorithms_cert:, certificate_authorities:)
+      chain_schemes = signature_algorithms_cert || signature_algorithms
+      candidates = @credentials.filter_map.with_index do |credential, index|
+        scheme = scheme_for(credential, signature_algorithms) or next
+        rank = [
+          server_name && Verifier::HostName.match?(credential.leaf, server_name) ? 0 : 1,
+          chain_signatures_acceptable?(credential, chain_schemes) ? 0 : 1,
+          certificate_authorities && credential.chain.any? { |cert| certificate_authorities.include?(cert.issuer.to_der) } ? 0 : 1,
+          index
+        ]
+        [rank, credential, scheme]
+      end
+      best = candidates.min_by(&:first) or return nil
+      [best[1], best[2]]
+    end
+
+    # Our preferred scheme the credential's key signs with, among `offered`.
+    private def scheme_for(credential, offered)
+      @config.signature_algorithms.each do |name|
+        scheme = Config::SCHEMES_BY_NAME.fetch(name)
+        return scheme if offered.include?(scheme.id) && Crypto::Signature.key_matches?(scheme, credential.key)
+      end
+      nil
+    end
+
+    # Every signature in the chain but a self-signed one's is one of
+    # `schemes`.
+    private def chain_signatures_acceptable?(credential, schemes)
+      credential.chain.all? do |cert|
+        cert.subject.to_der == cert.issuer.to_der || schemes.include?(Crypto::Certificate.signature_scheme_id(cert))
       end
     end
 

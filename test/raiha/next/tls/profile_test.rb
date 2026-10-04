@@ -21,6 +21,7 @@ class RaihaNextTLSProfileTest < Minitest::Test
     assert_equal [[], [:TLS_AES_128_CCM_8_SHA256]],
       [Profile::TCP.never_select_cipher_suites, Profile::QUIC.never_select_cipher_suites]
     assert_equal [false, true], [Profile::TCP.all_alerts_fatal, Profile::QUIC.all_alerts_fatal]
+    assert_equal [false, true], [Profile::TCP.require_alpn, Profile::QUIC.require_alpn]
   end
 
   def test_protocol_violation_reasons

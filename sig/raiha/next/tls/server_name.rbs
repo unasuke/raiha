@@ -1,0 +1,10 @@
+module Raiha::Next::TLS
+  module ServerName
+    MAX_LENGTH: Integer
+    LABEL: Regexp
+
+    def self.for_client: (String name) -> [String?, String]
+    def self.for_server: (String host_name) -> [String?, Symbol?]
+    def self.normalize: (String name) -> String?
+  end
+end

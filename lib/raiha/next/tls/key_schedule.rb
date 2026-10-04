@@ -129,9 +129,17 @@ module Raiha::Next::TLS
       advance(:handshake, :main) { |handshake| next_stage(handshake, "\x00".b * @hash_length) }
     end
 
-    def client_application_traffic_secret(transcript_hash) = application_traffic_secret(:client, transcript_hash)
+    def client_application_traffic_secret(transcript_hash) = derive_application_traffic_secret(:client, transcript_hash)
 
-    def server_application_traffic_secret(transcript_hash) = application_traffic_secret(:server, transcript_hash)
+    def server_application_traffic_secret(transcript_hash) = derive_application_traffic_secret(:server, transcript_hash)
+
+    # A copy of `side`'s current application traffic secret: a server
+    # derives the client's at its own Finished and hands it out only once the
+    # client's Finished verifies.
+    def application_traffic_secret(side)
+      current = @application_traffic_secrets[side] or raise UsageError, "no #{side} application traffic secret yet"
+      current.dup
+    end
 
     # The inner exporter value of each label, Derive-Secret(exporter_secret,
     # label, ""), from which `KeySchedule.export` makes any length. The
@@ -208,7 +216,7 @@ module Raiha::Next::TLS
 
     # Keeps the secret for KeyUpdate and returns a copy, since the copy
     # handed out cannot be cleared from here.
-    private def application_traffic_secret(side, transcript_hash)
+    private def derive_application_traffic_secret(side, transcript_hash)
       label = side == :client ? :client_application_traffic : :server_application_traffic
       traffic_secret = derive(stage_secret(:main), label, transcript_hash)
       @application_traffic_secrets[side]&.clear

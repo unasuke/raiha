@@ -16,6 +16,7 @@ module Raiha::Next::TLS
     :max_early_data_size_policy,
     :never_select_cipher_suites,
     :all_alerts_fatal,
+    :require_alpn,
     :protocol_violation_reasons
   )
     QUIC_TRANSPORT_PARAMETERS = 0x39
@@ -34,6 +35,7 @@ module Raiha::Next::TLS
       max_early_data_size_policy: :free,
       never_select_cipher_suites: [],
       all_alerts_fatal: false,
+      require_alpn: false,
       protocol_violation_reasons: []
     ))
 
@@ -61,6 +63,9 @@ module Raiha::Next::TLS
       never_select_cipher_suites: %i[TLS_AES_128_CCM_8_SHA256],
       # QUIC carries only fatal errors, as CONNECTION_CLOSE.
       all_alerts_fatal: true,
+      # RFC 9001 "Application-Layer Protocol Negotiation": QUIC endpoints must
+      # agree on a protocol with ALPN, failing with no_application_protocol.
+      require_alpn: true,
       # Failures the TLS core detects for which RFC 9001 asks for
       # PROTOCOL_VIOLATION rather than CRYPTO_ERROR. The QUIC binding looks up
       # Event::Failed#reason here.

@@ -84,7 +84,8 @@ class RaihaNextTLSClientHelloBuilderTest < Minitest::Test
   end
 
   def hello_retry_request(group:, cookie: nil)
-    extensions = [Extension::KeyShare::HRR.new(selected_group: group), Extension::SupportedVersions::SH.new(selected_version: 0x0304)]
+    extensions = [Extension::SupportedVersions::SH.new(selected_version: 0x0304)]
+    extensions.unshift(Extension::KeyShare::HRR.new(selected_group: group)) if group
     extensions << Extension::Cookie.new(cookie:) if cookie
     TLS::Handshake::ServerHello.new(legacy_version: 0x0303, random: TLS::Handshake::ServerHello::HELLO_RETRY_REQUEST_RANDOM,
       legacy_session_id_echo: "".b, cipher_suite: 0x1301, legacy_compression_method: 0, extensions:)
@@ -119,6 +120,13 @@ class RaihaNextTLSClientHelloBuilderTest < Minitest::Test
     assert_equal [44, 21, 41], types(ch2).last(3)
     refute_includes types(ch2), Extension::EarlyData::TYPE
     assert_includes types(ch1), Extension::EarlyData::TYPE
+  end
+
+  def test_retry_for_a_cookie_only_keeps_the_key_share
+    ch1 = build.client_hello
+    ch2 = Builder.retry(ch1, hello_retry_request(group: nil, cookie: "c".b)) { flunk "no group was requested" }
+    assert_equal ch1.extension(51), ch2.extension(51)
+    assert_equal types(ch1) + [44], types(ch2)
   end
 
   def test_retry_without_a_cookie
