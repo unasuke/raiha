@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/tls_pair"
+require "timeout"
 
 # A client and a server Machine against each other: the full handshake,
 # HelloRetryRequest, client authentication, and what comes out.
@@ -225,5 +226,26 @@ class RaihaNextTLSMachineTest < Minitest::Test
     client = Pair.client(server_name: "192.0.2.1")
     hello = TLS::Handshake.parse(client.outputs.first.bytes, registry: TLS::Extension::Registry::BUILTIN)
     assert_nil hello.extension(0)
+  end
+end
+
+# The self round trip of the API design, as written there: no records, no
+# sockets, the server taking its ClientHello through `receive`.
+class RaihaNextTLSSixLineRoundTripTest < Minitest::Test
+  TLS = Raiha::Next::TLS
+
+  def test_six_lines
+    c, s, now = NextTLSPair.client_config, NextTLSPair.server_config, NextTLSPair::NOW
+    ck, sk = TLS::Keyring.client(config: c), NextTLSPair.server_keyring(config: s)
+    client = TLS::Handshake::Machine.client(config: c, keyring: ck, server_name: "localhost", now:)
+    server = TLS::Handshake::Machine.server(config: s, keyring: sk, now:)
+
+    Timeout.timeout(5) do
+      until client.complete? && server.complete?
+        client.outputs.each { |o| server.receive(o.bytes, epoch: o.epoch, now:) if o in TLS::Output::Message }
+        server.outputs.each { |o| client.receive(o.bytes, epoch: o.epoch, now:) if o in TLS::Output::Message }
+      end
+    end
+    refute client.failed?
   end
 end

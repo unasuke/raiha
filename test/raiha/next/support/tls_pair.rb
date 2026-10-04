@@ -37,9 +37,13 @@ module NextTLSPair
     TLS::Keyring.server(config:, identities:, **options)
   end
 
+  # A server given the client's first flight through `receive`, as a server
+  # that does not choose its Config by the ClientHello is.
   def server(client_hello, config: server_config, keyring: nil, extensions: [], tracer: nil, now: NOW)
     keyring ||= server_keyring(config:)
-    TLS::Handshake::Machine.server(config:, keyring:, client_hello:, extensions:, tracer:, now:)
+    server = TLS::Handshake::Machine.server(config:, keyring:, extensions:, tracer:, now:)
+    server.receive(client_hello, epoch: :initial, now:)
+    server
   end
 
   # Passes Messages each way until both complete or one fails, and returns

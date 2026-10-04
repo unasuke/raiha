@@ -238,24 +238,25 @@ module Raiha::Next::TLS
     class Machine
       @config: Config
       @conductor: Conductor
+      @acceptor: Acceptor?
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
-      def self.server: (config: Config, keyring: Keyring, client_hello: String, now: Time,
+      def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
                                       substitutions: Hash[Integer, Array[String]]?) -> Machine
-      private def self.start_server: (config: Config, keyring: Keyring, client_hello: String, now: Time,
+      private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
                                       substitutions: Hash[Integer, Array[String]]?) -> Machine
       private def self.check: (Config config, Keyring keyring, Array[Extension::_Extension] extensions) -> void
       private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?,
-                             substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: String?) { (Conductor) -> _Side } -> Machine
+                             substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> Machine
 
       def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, substitutions: Hash[Integer, Array[String]]?,
-                       now: Time, client_hello: String?) { (Conductor) -> _Side } -> void
+                       now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> void
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
       def each_output: () { (Output::t) -> void } -> void
                      | () -> Enumerator[Output::t, void]
@@ -277,6 +278,60 @@ module Raiha::Next::TLS
       def max_flight_size: (epoch epoch) -> Integer
       def discard: () -> nil
       def inspect: () -> String
+    end
+  end
+end
+
+module Raiha::Next::TLS
+  module Handshake
+    class ClientHelloInfo < Data
+      attr_reader server_name: String?
+      attr_reader alpn_protocols: Array[String]
+      attr_reader cipher_suites: Array[Integer]
+      attr_reader supported_groups: Array[Integer]
+      attr_reader signature_algorithms: Array[Integer]
+      attr_reader extension_types: Array[Integer]
+      attr_reader psk_offered: bool
+      attr_reader early_data_offered: bool
+      attr_reader after_hello_retry_request: bool
+
+      def self.new: (server_name: String?, alpn_protocols: Array[String], cipher_suites: Array[Integer],
+                     supported_groups: Array[Integer], signature_algorithms: Array[Integer], extension_types: Array[Integer],
+                     psk_offered: bool, early_data_offered: bool, after_hello_retry_request: bool) -> instance
+    end
+
+    class Accepted < Data
+      attr_reader bytes: String
+      attr_reader info: ClientHelloInfo
+
+      def self.new: (bytes: String, info: ClientHelloInfo) -> instance
+                  | (String bytes, ClientHelloInfo info) -> instance
+    end
+
+    class Acceptor
+      MAX_CLIENT_HELLO_SIZE: Integer
+      REJECT_ALERTS: Array[Symbol]
+      EXPECTED: Set[Integer]
+      NOTHING: Set[Integer]
+
+      @reassembler: Reassembler
+      @outputs: Array[Output::Alert]
+
+      @accepted: Accepted?
+
+      attr_reader alert: Symbol?
+      attr_reader reason: Symbol?
+
+      def initialize: () -> void
+      def failed?: () -> bool
+      def accepted: () -> Accepted?
+      def receive: (String bytes, epoch: epoch, now: Time) -> nil
+      def each_output: () { (Output::Alert) -> void } -> void
+      def reject: (Symbol description) -> nil
+
+      private def accept: (String body) -> (:ok | nil)
+      private def info: (ClientHello ch) -> ClientHelloInfo
+      private def fail!: (Symbol alert, Symbol reason) -> nil
     end
   end
 end

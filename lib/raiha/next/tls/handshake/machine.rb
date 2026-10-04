@@ -5,6 +5,7 @@ require_relative "../error"
 require_relative "../key_schedule"
 require_relative "../keyring"
 require_relative "../server_name"
+require_relative "acceptor"
 require_relative "client_side"
 require_relative "conductor"
 require_relative "server_side"
@@ -28,9 +29,11 @@ module Raiha::Next::TLS
         start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, substitutions: nil)
       end
 
-      # Starts a server on a ClientHello, given as its bytes, header
-      # included. Everything up to the first flight happens here.
-      def self.server(config:, keyring:, client_hello:, now:, extensions: [], tracer: nil)
+      # Starts a server on the ClientHello an Acceptor offered; everything up
+      # to the first flight happens here. Without one, the Machine takes the
+      # ClientHello through `receive` with an Acceptor of its own, for a
+      # server that does not choose its Config by the ClientHello.
+      def self.server(config:, keyring:, now:, client_hello: nil, extensions: [], tracer: nil)
         start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, substitutions: nil)
       end
 
@@ -47,7 +50,7 @@ module Raiha::Next::TLS
       private_class_method def self.start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, substitutions:)
         raise ArgumentError, "Machine.server takes a server Config" unless config.server?
         check(config, keyring, extensions)
-        new(config:, keyring:, tracer:, substitutions:, now:, client_hello:) do |conductor|
+        new(config:, keyring:, tracer:, substitutions:, now:, client_hello: client_hello || Acceptor.new) do |conductor|
           ServerSide.new(conductor, extensions:, tracer:)
         end
       end
@@ -61,21 +64,34 @@ module Raiha::Next::TLS
 
       private_class_method :new
 
-      # A client starts by sending; a server by receiving its ClientHello.
+      # A client starts by sending; a server by receiving its ClientHello,
+      # given or still to come through its Acceptor.
       def initialize(config:, keyring:, tracer:, substitutions:, now:, client_hello:, &side)
         @config = config
         @conductor = Conductor.new(config:, keyring:, tracer:, substitutions:, &side)
-        if client_hello
-          @conductor.receive_message(:initial, client_hello, now:)
-        else
-          @conductor.start(now:)
+        @acceptor = nil #: Acceptor?
+        case client_hello
+        when Accepted then @conductor.receive_message(:initial, client_hello.bytes, now:)
+        when Acceptor then @acceptor = client_hello
+        else @conductor.start(now:)
         end
       end
 
       # The peer's handshake bytes of `epoch`, in order; a message may be
       # split anywhere. Ignored once failed.
       def receive(bytes, epoch:, now:)
-        @conductor.receive(bytes, epoch:, now:)
+        if (acceptor = @acceptor)
+          acceptor.receive(bytes, epoch:, now:)
+          if (failure = acceptor.alert)
+            @acceptor = nil
+            @conductor.fail!(failure, acceptor.reason || :unexpected_message)
+          elsif (accepted = acceptor.accepted)
+            @acceptor = nil
+            @conductor.receive_message(:initial, accepted.bytes, now:)
+          end
+        else
+          @conductor.receive(bytes, epoch:, now:)
+        end
         nil
       end
 
