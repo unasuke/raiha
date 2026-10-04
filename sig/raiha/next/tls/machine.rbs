@@ -53,6 +53,7 @@ module Raiha::Next::TLS
       def alpn: () -> String?
       def peer_certificates: () -> Array[OpenSSL::X509::Certificate]
       def exporter_values: () -> Hash[String, String]
+      def before_application_data: () -> nil
       def class: () -> (singleton(ClientSide) | singleton(ServerSide))
     end
 
@@ -84,6 +85,7 @@ module Raiha::Next::TLS
       def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, ?substitutions: Hash[Integer, Array[String]]?) { (Conductor) -> _Side } -> void
       def failed?: () -> bool
       def start: (now: Time) -> nil
+      def before_application_data: () -> nil
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
       def receive_message: (epoch epoch, String raw, now: Time) -> nil
       def each_output: () { (Output::t) -> void } -> void
@@ -122,12 +124,19 @@ module Raiha::Next::TLS
 
       @conductor: Conductor
       @key_updates: Integer
+      @key_update_owed: bool
+
+      def before_application_data: () -> nil
 
       private def key_schedule: () -> KeySchedule
       private def suite: () -> CipherSuite
+      private def own_side: () -> KeySchedule::side
+      private def peer_side: () -> KeySchedule::side
       private def fail!: (Symbol alert, Symbol reason) -> nil
 
-      private def receive_key_update: (KeyUpdate message, peer: KeySchedule::side, own: KeySchedule::side) -> void
+      private def start_key_updates: () -> void
+      private def receive_key_update: (KeyUpdate message) -> nil
+      private def send_key_update: () -> void
     end
 
     class ClientSide
@@ -269,6 +278,7 @@ module Raiha::Next::TLS
       def read_epoch: () -> epoch
       def write_epoch: () -> epoch
       def complete?: () -> bool
+      def before_application_data: () -> nil
       def failed?: () -> bool
       def alert: () -> Symbol?
       def cipher_suite: () -> Symbol?

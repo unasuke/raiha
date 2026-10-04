@@ -142,20 +142,24 @@ class RaihaNextTLSMachineTest < Minitest::Test
     assert_raises(TLS::UsageError) { Pair.client.export_keying_material(label: labels.first, length: 32) }
   end
 
-  # RFC 9846 "Key and Initialization Vector Update": the next read Secret,
-  # then our own KeyUpdate under the old key, then our next write Secret.
+  # RFC 9846 "Key and Initialization Vector Update": the next read Secret at
+  # once; our own KeyUpdate under the old key, then our next write Secret,
+  # right before our next application data.
   def test_key_update_over_tcp
     pair = Pair.run(Pair.client)
     old_write = pair.client_outputs.grep(TLS::Output::Secret).find { |s| s.epoch == :application && s.direction == :write }
     requested = TLS::Handshake::KeyUpdate.new(request_update: 1).encode
     pair.client.receive(requested, epoch: :application, now: NOW)
+    assert_equal [[:secret, :application, :read]], Pair.shape(pair.client.outputs)
+    pair.client.before_application_data
     outputs = pair.client.outputs
-    assert_equal [[:secret, :application, :read], [:message, :application, 24], [:secret, :application, :write]], Pair.shape(outputs)
+    assert_equal [[:message, :application, 24], [:secret, :application, :write]], Pair.shape(outputs)
     expected = TLS::KeySchedule.expand_label(secret: old_write.secret, label: "traffic upd", length: 32, hash: :sha256)
     assert_equal expected, outputs.last.secret
-    assert_equal 0, TLS::Handshake.parse(outputs[1].bytes, registry: TLS::Extension::Registry::BUILTIN).request_update
+    assert_equal 0, TLS::Handshake.parse(outputs[0].bytes, registry: TLS::Extension::Registry::BUILTIN).request_update
 
     pair.client.receive(TLS::Handshake::KeyUpdate.new(request_update: 0).encode, epoch: :application, now: NOW)
+    pair.client.before_application_data
     assert_equal [[:secret, :application, :read]], Pair.shape(pair.client.outputs)
   end
 

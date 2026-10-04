@@ -126,6 +126,11 @@ module Raiha::Next::TLS
       # Our Finished is sent and the peer's verified.
       def complete? = @conductor.state == :connected
 
+      # The TCP binding calls this right before it sends application data,
+      # which is when a KeyUpdate the peer asked for goes out (RFC 9846 "Key
+      # and Initialization Vector Update").
+      def before_application_data = @conductor.before_application_data
+
       def failed? = @conductor.failed?
 
       def alert = @conductor.alert

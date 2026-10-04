@@ -78,6 +78,12 @@ module Raiha::Next::TLS
         guard { @side.start(now:) }
       end
 
+      # Application data is about to go out: a KeyUpdate owed goes first.
+      def before_application_data
+        guard { @side.before_application_data } if @state == :connected
+        nil
+      end
+
       def receive(bytes, epoch:, now:)
         guard do
           next if @state.nil? || failed?

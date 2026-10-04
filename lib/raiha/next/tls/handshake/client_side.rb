@@ -65,7 +65,7 @@ module Raiha::Next::TLS
         # @type var exporter_values: Hash[String, String]
         exporter_values = {}
         @exporter_values = exporter_values
-        @key_updates = 0
+        start_key_updates
       end
 
       # Sends the ClientHello.
@@ -102,7 +102,7 @@ module Raiha::Next::TLS
         when CertificateVerify then certificate_verify(message, transcript_hash_before) # steep:ignore
         when Finished then finished(message, transcript_hash_before) # steep:ignore
         when NewSessionTicket then new_session_ticket(message)
-        when KeyUpdate then key_update(message)
+        when KeyUpdate then receive_key_update(message)
         end
       end
 
@@ -117,6 +117,10 @@ module Raiha::Next::TLS
       private def key_schedule = @conductor.key_schedule || raise("the key schedule has not started")
 
       private def suite = @cipher_suite || raise("no cipher suite was negotiated")
+
+      private def own_side = :client
+
+      private def peer_side = :server
 
       private def fail!(alert, reason) = @conductor.fail!(alert, reason)
 
@@ -345,7 +349,6 @@ module Raiha::Next::TLS
         end
       end
 
-      private def key_update(message) = receive_key_update(message, peer: :server, own: :client)
 
       private def key_share_groups(client_hello)
         # @type var none: Array[Integer]
