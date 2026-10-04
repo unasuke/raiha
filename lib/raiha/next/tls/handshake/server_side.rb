@@ -47,7 +47,7 @@ module Raiha::Next::TLS
 
       PSK_DHE_KE = 1
 
-      attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values
+      attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
       def initialize(conductor, extensions:, tracer:)
         @conductor = conductor
@@ -62,6 +62,7 @@ module Raiha::Next::TLS
         @cipher_suite = nil #: CipherSuite?
         @group = nil #: Symbol?
         @alpn = nil #: String?
+        @peer_record_size_limit = nil #: Integer?
         # @type var peer_certificates: Array[OpenSSL::X509::Certificate]
         peer_certificates = []
         @peer_certificates = peer_certificates
@@ -278,6 +279,9 @@ module Raiha::Next::TLS
         extensions << Extension::ServerName::EE.new if @server_name
         alpn = @alpn
         extensions << Extension::Alpn.new(protocol_name_list: [alpn]) if alpn
+        case (ext = ch.extension(Extension::RecordSizeLimit::TYPE))
+        when Extension::RecordSizeLimit then @peer_record_size_limit = ext.record_size_limit
+        end
         limit = @config.record_size_limit
         if limit && offered.include?(Extension::RecordSizeLimit::TYPE)
           extensions << Extension::RecordSizeLimit.new(record_size_limit: limit)

@@ -40,7 +40,7 @@ module Raiha::Next::TLS
       # max_early_data_size.
       EARLY_DATA_SENTINEL = 0xffffffff
 
-      attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values
+      attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
       def initialize(conductor, server_name:, sni:, extensions:, tracer:)
         @conductor = conductor
@@ -58,6 +58,7 @@ module Raiha::Next::TLS
         @cipher_suite = nil #: CipherSuite?
         @group = nil #: Symbol?
         @alpn = nil #: String?
+        @peer_record_size_limit = nil #: Integer?
         @certificate_request = nil #: CertificateRequest?
         # @type var peer_certificates: Array[OpenSSL::X509::Certificate]
         peer_certificates = []
@@ -252,6 +253,9 @@ module Raiha::Next::TLS
         return fail!(:missing_extension, :required_extension) unless missing.empty?
 
         @alpn = alpn&.first
+        case (ext = message.extension(Extension::RecordSizeLimit::TYPE))
+        when Extension::RecordSizeLimit then @peer_record_size_limit = ext.record_size_limit
+        end
         message.extensions.each do |ext|
           next if Config::RESERVED_EXTENSIONS.include?(ext.extension_type)
           @conductor.event!(Event::PeerExtension.new(type: ext.extension_type, data: ext.encode, message: EncryptedExtensions::MSG_TYPE))

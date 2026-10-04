@@ -163,6 +163,21 @@ class RaihaNextTLSMachineTest < Minitest::Test
     assert_equal [[:secret, :application, :read]], Pair.shape(pair.client.outputs)
   end
 
+  # RFC 8449: each side learns the limit the other sent. A server without
+  # its own still learns the client's; the client then learns none.
+  def test_peer_record_size_limit
+    {
+      [1000, 2000] => [2000, 1000],
+      [1000, nil] => [nil, 1000],
+      [nil, 2000] => [nil, nil]
+    }.each do |(client_limit, server_limit), expected|
+      pair = Pair.run(Pair.client(config: Pair.client_config(record_size_limit: client_limit)),
+        { config: Pair.server_config(record_size_limit: server_limit) })
+      assert pair.client.complete?
+      assert_equal expected, [pair.client.peer_record_size_limit, pair.server.peer_record_size_limit], [client_limit, server_limit].inspect
+    end
+  end
+
   # RFC 9001 "Key Update": no KeyUpdate message in QUIC.
   def test_no_key_update_in_quic
     pair = quic_pair

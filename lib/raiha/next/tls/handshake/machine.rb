@@ -144,6 +144,12 @@ module Raiha::Next::TLS
       # How many KeyUpdates we have sent.
       def key_update_epoch = @conductor.side.key_updates
 
+      # The record_size_limit the peer sent (RFC 8449), the most our
+      # protected records to it may carry, content type included; nil
+      # without one. A client learns it from EncryptedExtensions, a server
+      # from the ClientHello.
+      def peer_record_size_limit = @conductor.side.peer_record_size_limit
+
       def failed? = @conductor.failed?
 
       def alert = @conductor.alert
