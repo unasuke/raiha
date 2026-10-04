@@ -6,6 +6,49 @@
 # Taken from rfcs/rfc8448.txt. The section 3 values match the ones the
 # old implementation kept in test/support/rfc8448_test_vector.rb.
 module Raiha::Next::TLS::Test::RFC8448
+  # The RSA key of the server's certificate in sections 3 to 5, from section
+  # 2, as a PKCS #1 RSAPrivateKey in DER.
+  SERVER_RSA_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+    30 82 02 5c 02 01 00 02 81 81 00 b4 bb 49 8f 82
+    79 30 3d 98 08 36 39 9b 36 c6 98 8c 0c 68 de 55
+    e1 bd b8 26 d3 90 1a 24 61 ea fd 2d e4 9a 91 d0
+    15 ab bc 9a 95 13 7a ce 6c 1a f1 9e aa 6a f9 8c
+    7c ed 43 12 09 98 e1 87 a8 0e e0 cc b0 52 4b 1b
+    01 8c 3e 0b 63 26 4d 44 9a 6d 38 e2 2a 5f da 43
+    08 46 74 80 30 53 0e f0 46 1c 8c a9 d9 ef bf ae
+    8e a6 d1 d0 3e 2b d1 93 ef f0 ab 9a 80 02 c4 74
+    28 a6 d3 5a 8d 88 d7 9f 7f 1e 3f 02 03 01 00 01
+    02 81 80 04 de a7 05 d4 3a 6e a7 20 9d d8 07 21
+    11 a8 3c 81 e3 22 a5 92 78 b3 34 80 64 1e af 7c
+    0a 69 85 b8 e3 1c 44 f6 de 62 e1 b4 c2 30 9f 61
+    26 e7 7b 7c 41 e9 23 31 4b bf a3 88 13 05 dc 12
+    17 f1 6c 81 9c e5 38 e9 22 f3 69 82 8d 0e 57 19
+    5d 8c 84 88 46 02 07 b2 fa a7 26 bc f7 08 bb d7
+    db 7f 67 9f 89 34 92 fc 2a 62 2e 08 97 0a ac 44
+    1c e4 e0 c3 08 8d f2 5a e6 79 23 3d f8 a3 bd a2
+    ff 99 41 02 41 00 e4 35 fb 7c c8 37 37 75 6d ac
+    ea 96 ab 7f 59 a2 cc 10 69 db 7d eb 19 0e 17 e3
+    3a 53 2b 27 3f 30 a3 27 aa 0a aa bc 58 cd 67 46
+    6a f9 84 5f ad c6 75 fe 09 4a f9 2c 4b d1 f2 c1
+    bc 33 dd 2e 05 15 02 41 00 ca bd 3b c0 e0 43 86
+    64 c8 d4 cc 9f 99 97 7a 94 d9 bb fe ad 8e 43 87
+    0a ba e3 f7 eb 8b 4e 0e ee 8a f1 d9 b4 71 9b a6
+    19 6c f2 cb ba ee eb f8 b3 49 0a fe 9e 9f fa 74
+    a8 8a a5 1f c6 45 62 93 03 02 40 3f 57 34 5c 27
+    fe 1b 68 7e 6e 76 16 27 b7 8b 1b 82 64 33 dd 76
+    0f a0 be a6 a6 ac f3 94 90 aa 1b 47 cd a4 86 9d
+    68 f5 84 dd 5b 50 29 bd 32 09 3b 82 58 66 1f e7
+    15 02 5e 5d 70 a4 5a 08 d3 d3 19 02 40 18 3d a0
+    13 63 bd 2f 28 85 ca cb dc 99 64 bf 47 64 f1 51
+    76 36 f8 64 01 28 6f 71 89 3c 52 cc fe 40 a6 c2
+    3d 0d 08 6b 47 c6 fb 10 d8 fd 10 41 e0 4d ef 7e
+    9a 40 ce 95 7c 41 77 94 e1 04 12 d1 39 02 41 00
+    83 9c a9 a0 85 e4 28 6b 2c 90 e4 66 99 7a 2c 68
+    1f 21 33 9a a3 47 78 14 e4 de c1 18 33 05 0e d5
+    0d d1 3c c0 38 04 8a 43 c5 9b 2a cc 41 68 89 c0
+    37 66 5f e5 af a6 05 96 9f 8c 01 df a5 ca 96 9d
+  HEX
+
   # RFC 8448 §3, Simple 1-RTT Handshake.
   module Simple1RTT
     CLIENT_X25519_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
@@ -590,6 +633,189 @@ module Raiha::Next::TLS::Test::RFC8448
     HANDSHAKE_IKM = [<<~HEX.delete(" \n")].pack("H*").freeze
       c1 42 ce 13 ca 11 b5 c2 23 36 52 e6 3a d3 d9 78
       44 f1 62 1f bf b9 de 69 d5 47 dc 8f ed ea be b4
+    HEX
+
+    CLIENT_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      15 8a a7 ab 88 55 07 35 82 b4 1d 67 4b 40 55 ca
+      bc c5 34 72 8f 65 93 14 86 1b 4e 08 e2 01 15 66
+    HEX
+
+    SERVER_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      34 03 e7 81 e2 af 7b 65 08 da 28 57 4f 6e 95 a1
+      ab f1 62 de 83 a9 79 27 c3 76 72 a4 a0 ce f8 a1
+    HEX
+
+    CLIENT_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      75 ec f4 b9 72 52 5a a0 dc d0 57 c9 94 4d 4c d5
+      d8 26 71 d8 84 31 41 d7 dc 2a 4f f1 5a 21 dc 51
+    HEX
+
+    SERVER_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      5c 74 f8 7d f0 42 25 db 0f 82 09 c9 de 64 29 e4
+      94 35 fd ef a7 ca d6 18 64 87 4d 12 f3 1c fc 8d
+    HEX
+
+    CLIENT_FINISHED = [<<~HEX.delete(" \n")].pack("H*").freeze
+      14 00 00 20 23 f5 2f db 07 09 a5 5b d7 f7 9b 99
+      1f 25 48 40 87 bc fd 4d 43 80 b1 23 26 a5 2a 28
+      b2 e3 68 e1
+    HEX
+  end
+
+  # RFC 8448 §6, Client Authentication. The server's certificate is ECDSA
+  # P-256 and the client's RSA; neither private key is published.
+  module ClientAuthentication
+    CLIENT_X25519_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      c0 40 b2 bb 8f 3a dd d2 0f d4 05 8c 54 70 03 a3
+      c6 f9 c1 cd 91 5d 5e 53 5c 87 d8 d1 91 aa f0 71
+    HEX
+
+    CLIENT_HELLO = [<<~HEX.delete(" \n")].pack("H*").freeze
+      01 00 00 bc 03 03 6a 47 22 36 32 8b 83 af 40 38
+      6d 3a 3e 1f 1c e6 24 fa 4e d8 9a b8 65 a4 ff 0f
+      41 44 ce 3a e2 33 00 00 06 13 01 13 03 13 02 01
+      00 00 8d 00 00 00 0b 00 09 00 00 06 73 65 72 76
+      65 72 ff 01 00 01 00 00 0a 00 14 00 12 00 1d 00
+      17 00 18 00 19 01 00 01 01 01 02 01 03 01 04 00
+      33 00 26 00 24 00 1d 00 20 08 9c c2 67 1f 73 8d
+      9a 67 1e 5b 2e 46 49 81 d0 5b 76 e3 61 aa 22 ae
+      a9 1f 1d 49 ca 10 a7 a3 62 00 2b 00 03 02 03 04
+      00 0d 00 20 00 1e 04 03 05 03 06 03 02 03 08 04
+      08 05 08 06 04 01 05 01 06 01 02 01 04 02 05 02
+      06 02 02 02 00 2d 00 02 01 01 00 1c 00 02 40 01
+    HEX
+
+    SERVER_X25519_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      73 82 a5 ad 1c dd 20 56 ae 18 cc 70 8b d0 07 d9
+      81 30 db e2 cd 4d 9e ad 9b 96 95 2b ec bb 08 88
+    HEX
+
+    SERVER_HELLO = [<<~HEX.delete(" \n")].pack("H*").freeze
+      02 00 00 56 03 03 3b 50 fd f1 c3 d5 72 e4 0e 68
+      95 3e 7f ff 4e 27 58 45 9c 59 af a0 58 2c 0e a0
+      32 87 42 55 fe 6e 00 13 01 00 00 2e 00 33 00 24
+      00 1d 00 20 6c 2e 50 e8 65 91 9a 6b 5a 12 df af
+      91 8f 92 b4 42 56 7b 0f 89 bc 54 47 8c 69 21 36
+      66 58 f0 62 00 2b 00 02 03 04
+    HEX
+
+    CLIENT_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      ce c7 a3 0c 68 72 07 0f 22 a7 ee b0 65 76 8d b6
+      7c 45 e2 95 33 db 87 99 08 ce 6d c6 6f 59 11 de
+    HEX
+
+    SERVER_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      8b 02 d3 c0 04 42 a2 72 2c 40 98 eb e8 67 5b 23
+      e8 01 51 0f 0d 7e d7 78 d8 eb 0b 8f 42 a1 9a 5e
+    HEX
+
+    ENCRYPTED_EXTENSIONS = [<<~HEX.delete(" \n")].pack("H*").freeze
+      08 00 00 24 00 22 00 0a 00 14 00 12 00 1d 00 17
+      00 18 00 19 01 00 01 01 01 02 01 03 01 04 00 1c
+      00 02 40 01 00 00 00 00
+    HEX
+
+    CERTIFICATE_REQUEST = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0d 00 00 27 00 00 24 00 0d 00 20 00 1e 04 03 05
+      03 06 03 02 03 08 04 08 05 08 06 04 01 05 01 06
+      01 02 01 04 02 05 02 06 02 02 02
+    HEX
+
+    SERVER_CERTIFICATE = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0b 00 01 3b 00 00 01 37 00 01 32 30 82 01 2e 30
+      81 d5 a0 03 02 01 02 02 01 07 30 0a 06 08 2a 86
+      48 ce 3d 04 03 02 30 13 31 11 30 0f 06 03 55 04
+      03 13 08 65 63 64 73 61 32 35 36 30 1e 17 0d 31
+      36 30 37 33 30 30 31 32 34 30 30 5a 17 0d 32 36
+      30 37 33 30 30 31 32 34 30 30 5a 30 13 31 11 30
+      0f 06 03 55 04 03 13 08 65 63 64 73 61 32 35 36
+      30 59 30 13 06 07 2a 86 48 ce 3d 02 01 06 08 2a
+      86 48 ce 3d 03 01 07 03 42 00 04 08 d5 30 16 15
+      75 f4 cf e7 f1 54 ee 34 48 18 00 86 00 1e 88 43
+      1a 79 ee 62 ee 6e 2f 83 ef 38 ba 61 e9 fb 37 f3
+      4e 00 7a 7d f4 d2 f5 b5 6d 1f 04 ec e4 5d 62 1f
+      46 84 06 f5 c3 a1 51 58 94 8d d0 a3 1a 30 18 30
+      09 06 03 55 1d 13 04 02 30 00 30 0b 06 03 55 1d
+      0f 04 04 03 02 07 80 30 0a 06 08 2a 86 48 ce 3d
+      04 03 02 03 48 00 30 45 02 21 00 df 30 fd 45 07
+      f5 ed d2 2c 1a 6f f8 6d b4 79 ca 69 3f ee ca 3b
+      71 b3 f9 ef 55 6b 29 37 c0 59 4d 02 20 62 e2 a4
+      72 50 d3 20 fe a8 3c 7e 2d cb 5b 76 a5 0e 02 00
+      c0 9a db d1 3f ee 94 6e 51 3e 01 1d 11 00 00
+    HEX
+
+    SERVER_CERTIFICATE_VERIFY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0f 00 00 4b 04 03 00 47 30 45 02 21 00 d7 a4 d3
+      4b d5 4f 55 fe e1 a8 96 25 67 8c 3d d5 e5 f6 0d
+      ac 73 ec 94 0c 5c 7b 93 04 a0 20 84 a9 02 20 28
+      9f 59 5e d4 88 b9 ac 68 9a 3d 19 2b 1a 8b b3 8f
+      34 af 78 74 c0 59 c9 80 6a 1f 38 26 93 53 e8
+    HEX
+
+    SERVER_FINISHED = [<<~HEX.delete(" \n")].pack("H*").freeze
+      14 00 00 20 93 b7 0c df 47 81 98 5b 96 34 5c aa
+      c7 01 b4 e7 50 d3 04 2d f1 a6 89 d8 fa ca 81 22
+      51 11 3c 11
+    HEX
+
+    CLIENT_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      73 c2 e8 90 fa 8d 06 72 58 d6 d5 0f a9 2f e4 56
+      b0 98 cf 00 d9 72 7e ed 91 e8 89 2e f4 e6 f8 60
+    HEX
+
+    SERVER_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      c4 9a 91 fa f5 7f 8c 54 5d 50 48 a0 15 bf 84 9f
+      f6 39 42 e4 a7 ed cd 31 9f 8b 43 8a 97 c5 2e 21
+    HEX
+
+    CLIENT_CERTIFICATE = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0b 00 01 bf 00 00 01 bb 00 01 b6 30 82 01 b2 30
+      82 01 1b a0 03 02 01 02 02 01 01 30 0d 06 09 2a
+      86 48 86 f7 0d 01 01 0b 05 00 30 11 31 0f 30 0d
+      06 03 55 04 03 13 06 63 6c 69 65 6e 74 30 1e 17
+      0d 31 36 30 37 33 30 30 31 32 33 35 39 5a 17 0d
+      32 36 30 37 33 30 30 31 32 33 35 39 5a 30 11 31
+      0f 30 0d 06 03 55 04 03 13 06 63 6c 69 65 6e 74
+      30 81 9f 30 0d 06 09 2a 86 48 86 f7 0d 01 01 01
+      05 00 03 81 8d 00 30 81 89 02 81 81 00 c3 81 75
+      e0 04 a6 8d 09 3f 82 3b 9c 37 9d 20 1f bc 0b b7
+      a1 c7 91 90 5e 3f bf 76 84 7e 44 e7 51 eb bc d3
+      60 bd 94 5c 81 e5 22 2b cc 88 46 d3 a8 a0 f9 3e
+      9b f5 be ba bd 92 ed f1 de 1f f1 90 21 70 3e 7a
+      b6 c0 90 15 13 f9 7e 39 b1 11 f0 9c 93 48 97 1c
+      7b 21 19 84 a7 54 cd 45 fe 09 5a f0 ea 42 36 82
+      9b cc f7 a7 fe 9b 28 88 e7 8a b4 77 69 0a 5b 9e
+      1c cb e9 1c 6a 4a 0f 97 a7 e0 28 42 01 02 03 01
+      00 01 a3 1a 30 18 30 09 06 03 55 1d 13 04 02 30
+      00 30 0b 06 03 55 1d 0f 04 04 03 02 07 80 30 0d
+      06 09 2a 86 48 86 f7 0d 01 01 0b 05 00 03 81 81
+      00 1a 7a 5a 01 85 32 b0 22 af 07 67 d4 86 16 0c
+      ff 2d 16 7a 19 15 d2 38 35 b5 45 94 91 6d c6 80
+      be 5d 2e 62 60 76 c5 d5 27 22 eb cc 77 5d 7d 99
+      f9 80 be 2f c9 4d 34 ac f6 cc 00 ba 90 cb cf b0
+      60 8a a1 e7 e3 97 1e f0 c0 7a 41 d4 7a d8 34 5d
+      1f 81 fe 41 8a 1c f4 10 54 42 9f d2 17 bd 77 7d
+      c1 cf 08 f0 5d f9 07 99 c6 59 36 1e 0f 1a 8e e4
+      ac 0f 78 97 42 0b db c8 23 da 80 a2 f2 ba 23 08
+      1c 00 00
+    HEX
+
+    CLIENT_CERTIFICATE_VERIFY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      0f 00 00 84 08 04 00 80 18 6b 22 23 b5 03 a7 59
+      c3 5d ba 0e 97 21 b4 b5 79 13 8d 5f 0f 5e 6e c7
+      fe aa f2 7f 3a d7 f3 86 c2 c7 bd 7c b2 be 52 fb
+      f5 ed 83 93 f4 06 ee 79 36 96 92 ec 7a c6 95 65
+      1d 85 82 19 e6 72 a8 eb 7b 2a 67 7b 64 0b 46 ab
+      63 0e dc 5f 3f 2f 82 72 b9 c0 d9 06 f8 1f 84 dd
+      c5 b8 c7 bc f9 55 c7 8a 3c f9 9e 50 16 f7 3e 04
+      eb 7d fc b2 88 33 f1 3e 8f 75 ec 2f f3 58 1e 2f
+      09 8a d4 15 7f d6 d6 ad
+    HEX
+
+    CLIENT_FINISHED = [<<~HEX.delete(" \n")].pack("H*").freeze
+      14 00 00 20 9a fe 2b a2 f6 3a 09 d2 29 d8 a4 29
+      e5 b3 7f fd 9f cc 73 bd b5 91 1b 82 42 59 72 aa
+      28 92 44 0f
     HEX
   end
 end

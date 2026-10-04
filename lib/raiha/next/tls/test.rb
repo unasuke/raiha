@@ -9,3 +9,5 @@ end
 
 require_relative "test/rfc8448"
 require_relative "test/fixed_kem"
+require_relative "test/fixed_random"
+require_relative "test/rfc8448_handshakes"

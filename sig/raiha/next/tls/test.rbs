@@ -1,5 +1,12 @@
 module Raiha::Next::TLS
   module Test
+    class FixedRandom
+      @chunks: Array[String]
+
+      def initialize: (*String chunks) -> void
+      def bytes: (Integer length) -> String
+    end
+
     class FixedKEM
       @private_keys: Hash[Symbol, String]
       @provider: KeyExchange::OpenSSL
@@ -14,6 +21,13 @@ module Raiha::Next::TLS
 end
 
 module Raiha::Next::TLS::Test::RFC8448
+  SERVER_RSA_PRIVATE_KEY: String
+
+  type section = :simple_1rtt | :hello_retry_request | :client_authentication
+
+  def self.machine: (section section, :client | :server role, now: Time) -> Raiha::Next::TLS::Handshake::Machine
+  def self.server_identity: () -> Raiha::Next::TLS::Keyring::Identity
+
   module Simple1RTT
     CLIENT_X25519_PRIVATE_KEY: String
     CLIENT_X25519_PUBLIC_KEY: String
@@ -83,5 +97,29 @@ module Raiha::Next::TLS::Test::RFC8448
     SERVER_SECP256R1_PRIVATE_KEY: String
     SERVER_SECP256R1_PUBLIC_KEY: String
     HANDSHAKE_IKM: String
+    CLIENT_HANDSHAKE_TRAFFIC_SECRET: String
+    SERVER_HANDSHAKE_TRAFFIC_SECRET: String
+    CLIENT_APPLICATION_TRAFFIC_SECRET_0: String
+    SERVER_APPLICATION_TRAFFIC_SECRET_0: String
+    CLIENT_FINISHED: String
+  end
+
+  module ClientAuthentication
+    CLIENT_X25519_PRIVATE_KEY: String
+    CLIENT_HELLO: String
+    SERVER_X25519_PRIVATE_KEY: String
+    SERVER_HELLO: String
+    CLIENT_HANDSHAKE_TRAFFIC_SECRET: String
+    SERVER_HANDSHAKE_TRAFFIC_SECRET: String
+    ENCRYPTED_EXTENSIONS: String
+    CERTIFICATE_REQUEST: String
+    SERVER_CERTIFICATE: String
+    SERVER_CERTIFICATE_VERIFY: String
+    SERVER_FINISHED: String
+    CLIENT_APPLICATION_TRAFFIC_SECRET_0: String
+    SERVER_APPLICATION_TRAFFIC_SECRET_0: String
+    CLIENT_CERTIFICATE: String
+    CLIENT_CERTIFICATE_VERIFY: String
+    CLIENT_FINISHED: String
   end
 end
