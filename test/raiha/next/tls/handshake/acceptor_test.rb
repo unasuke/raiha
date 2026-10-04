@@ -106,6 +106,23 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     assert_nil acceptor.accepted.info.server_name
   end
 
+  # Names of a type other than host_name are skipped, and a list of only
+  # such names is no SNI at all.
+  def test_other_name_types_in_sni
+    other = ["01000462696e64"].pack("H*")
+    host = ["0000096c6f63616c686f7374"].pack("H*")
+    assert_equal "localhost", sni_seen([other, host])
+    assert_nil sni_seen([other])
+  end
+
+  # The server name an Acceptor reports for a ServerNameList of `names`.
+  def sni_seen(names)
+    entries = names.join
+    acceptor = Acceptor.new
+    acceptor.receive(client_hello_with_sni_list([entries.bytesize].pack("n") + entries), epoch: :initial, now: NOW)
+    acceptor.accepted.info.server_name
+  end
+
   # A server Machine without a ClientHello uses an Acceptor of its own, and
   # reports its failure as its own.
   def test_machine_with_its_own_acceptor
@@ -127,9 +144,11 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     assert_equal [:message, :initial, 2], NextTLSPair.shape(server.outputs).fetch(3)
   end
 
-  def client_hello_with_sni(name)
+  def client_hello_with_sni(name) = client_hello_with_sni_list(Extension::ServerName::CH.new(host_name: name).encode)
+
+  def client_hello_with_sni_list(list)
     hello = TLS::Handshake.parse(client_hello, registry: Extension::Registry::BUILTIN)
-    extensions = hello.extensions.map { |ext| ext.extension_type == 0 ? Extension::ServerName::CH.new(host_name: name) : ext }
+    extensions = hello.extensions.map { |ext| ext.extension_type == 0 ? Extension::Opaque.new(type: 0, data: list) : ext }
     hello.with(extensions:).encode
   end
 end

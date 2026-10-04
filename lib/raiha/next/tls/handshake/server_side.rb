@@ -351,7 +351,8 @@ module Raiha::Next::TLS
       private def server_name(ch)
         case (ext = ch.extension(Extension::ServerName::TYPE))
         when Extension::ServerName::CH
-          name, ignored = ServerName.for_server(ext.host_name)
+          host_name = ext.host_name or return nil
+          name, ignored = ServerName.for_server(host_name)
           @conductor.trace(Trace::ServerNameIgnored.new(reason: ignored)) if ignored && @conductor.tracing?
           name
         end

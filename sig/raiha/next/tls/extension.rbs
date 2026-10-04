@@ -53,10 +53,10 @@ module Raiha::Next::TLS
       HOST_NAME: Integer
 
       class CH < Data
-        attr_reader host_name: String
+        attr_reader host_name: String?
 
-        def self.new: (host_name: String) -> instance
-                    | (String host_name) -> instance
+        def self.new: (host_name: String?) -> instance
+                    | (String? host_name) -> instance
         def self.parse: (String data) -> CH
         def extension_type: () -> Integer
         def encode: () -> String

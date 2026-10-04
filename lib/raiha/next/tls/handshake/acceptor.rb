@@ -112,7 +112,7 @@ module Raiha::Next::TLS
 
       private def info(ch)
         name = case (ext = ch.extension(Extension::ServerName::TYPE))
-          when Extension::ServerName::CH then ServerName.for_server(ext.host_name).first
+          when Extension::ServerName::CH then ext.host_name&.then { |host_name| ServerName.for_server(host_name).first }
           end
         # @type var alpn: Array[String]
         alpn = case (ext = ch.extension(Extension::Alpn::TYPE))
