@@ -277,6 +277,7 @@ module Raiha::Next::TLS
       def <<: (String bytes) -> (:ok | :overflow | :unexpected)
       def each_message: () { (Integer, String) -> void } -> (:ok | :overflow | :unexpected)
       def pending?: () -> bool
+      def next_type: () -> Integer?
 
       private def check_header: () -> (:ok | :overflow | :unexpected)
       private def message_length: () -> Integer?

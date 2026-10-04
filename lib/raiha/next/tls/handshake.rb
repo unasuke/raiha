@@ -16,6 +16,7 @@ require_relative "handshake/end_of_early_data"
 require_relative "handshake/key_update"
 require_relative "handshake/reassembler"
 require_relative "handshake/client_hello_builder"
+require_relative "handshake/machine"
 
 module Raiha::Next::TLS
   # Handshake messages as values (RFC 9846 "Handshake Protocol"). Fields keep

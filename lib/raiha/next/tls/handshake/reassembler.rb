@@ -59,6 +59,10 @@ module Raiha::Next::TLS
       # epoch while this is true.
       def pending? = !@buf.empty?
 
+      # The type of the next message, once its first byte is here: after an
+      # `:unexpected`, the type that was not expected.
+      def next_type = @buf.getbyte(0)
+
       private def check_header
         return @status unless @status == :ok
         return :ok if @header_checked

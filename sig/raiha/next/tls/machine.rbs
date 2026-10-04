@@ -1,0 +1,282 @@
+module Raiha::Next::TLS
+  module Handshake
+    class AuthenticationMessages
+      SERVER_CONTEXT: String
+      CLIENT_CONTEXT: String
+
+      class Parameters < Data
+        CLIENT: Parameters
+        SERVER: Parameters
+
+        attr_reader own_side: KeySchedule::side
+        attr_reader peer_side: KeySchedule::side
+        attr_reader own_context: String
+        attr_reader peer_context: String
+
+        def self.new: (own_side: KeySchedule::side, peer_side: KeySchedule::side, own_context: String, peer_context: String) -> instance
+      end
+
+      class Failure < Data
+        attr_reader alert: Symbol
+        attr_reader reason: Symbol
+
+        def self.new: (alert: Symbol, reason: Symbol) -> instance
+                    | (Symbol alert, Symbol reason) -> instance
+      end
+
+      @tracer: Trace::_Tracer?
+
+      attr_reader parameters: Parameters
+
+      def initialize: (Parameters parameters, tracer: Trace::_Tracer?) -> void
+      def verify_certificate: (Certificate certificate, keyring: Keyring, server_name: String?, now: Time,
+                               max_chain_length: Integer, context: String) -> (Array[OpenSSL::X509::Certificate] | Failure)
+      def verify_certificate_verify: (CertificateVerify certificate_verify, OpenSSL::X509::Certificate leaf,
+                                      offered: Array[Integer], transcript_hash: String) -> (true | Failure)
+      def verify_finished: (Finished finished, KeySchedule key_schedule, String transcript_hash) -> (true | Failure)
+      def certificate: (Keyring::Credential? credential, ?context: String) -> Certificate
+      def certificate_verify: (Keyring::Credential credential, SignatureScheme scheme, String transcript_hash) -> CertificateVerify
+      def finished: (KeySchedule key_schedule, String transcript_hash) -> Finished
+
+      private def signed_content: (String context, String transcript_hash) -> String
+    end
+
+    # What Conductor needs of ClientSide and ServerSide.
+    interface _Side
+      def start: (now: Time) -> void
+      def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
+      def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
+      def handle: (_Message message, raw: String, transcript_hash_before: String?, now: Time) -> void
+      def forget_secrets!: () -> nil
+      def cipher_suite: () -> CipherSuite?
+      def group: () -> Symbol?
+      def alpn: () -> String?
+      def peer_certificates: () -> Array[OpenSSL::X509::Certificate]
+      def exporter_values: () -> Hash[String, String]
+      def class: () -> (singleton(ClientSide) | singleton(ServerSide))
+    end
+
+    class Conductor
+      CERTIFICATE_MESSAGES: Set[Integer]
+      CHECKED_AGAINST_PREVIOUS_TRANSCRIPT: Set[Integer]
+
+      type secret_entry = [epoch, Output::direction, String]
+
+      @tracer: Trace::_Tracer?
+      @substitutions: Hash[Integer, Array[String]]?
+      @reassemblers: Hash[epoch, Reassembler]
+      @transcript: Transcript
+      @trace_hash: Symbol
+      @outputs: Array[Output::t]
+      @events: Array[Event::t]
+      @flight_secrets: Array[Output::Secret]
+      @flight_messages: Array[Output::Message]
+
+      attr_reader config: Config
+      attr_reader keyring: Keyring
+      attr_reader side: _Side
+      attr_reader state: Symbol?
+      attr_reader read_epoch: epoch
+      attr_reader write_epoch: epoch
+      attr_reader alert: Symbol?
+      attr_reader key_schedule: KeySchedule?
+
+      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, ?substitutions: Hash[Integer, Array[String]]?) { (Conductor) -> _Side } -> void
+      def failed?: () -> bool
+      def start: (now: Time) -> nil
+      def receive: (String bytes, epoch: epoch, now: Time) -> nil
+      def receive_message: (epoch epoch, String raw, now: Time) -> nil
+      def each_output: () { (Output::t) -> void } -> void
+      def next_event: () -> Event::t?
+      def expected_types: () -> Set[Integer]
+      def pending_input?: () -> bool
+      def transcript_hash: () -> String
+      def start_key_schedule: (hash: Symbol, ?psk: String?) -> KeySchedule
+      def event!: (Event::t event) -> nil
+      def tracing?: () -> bool
+      def trace: (Trace::t value) -> nil
+      def transition!: (Symbol to) -> Symbol
+      def change_epochs!: (cipher_suite: CipherSuite, ?read: epoch?, ?write: epoch?, ?secrets: Array[secret_entry]) -> bool
+      def fail!: (Symbol alert, Symbol reason) -> nil
+      def discard!: () -> nil
+      def emit_message!: [M < _Message] (epoch epoch, M message) -> M
+      def emit_server_hello!: (ServerHello message, Symbol hash) -> ServerHello
+      def record_server_hello!: (String raw, Symbol hash) -> nil
+      def receive_hello_retry_request!: (String raw, Symbol hash) -> nil
+      def emit_hello_retry_request!: (ServerHello message, Symbol hash) -> ServerHello
+      def close_flight!: () -> nil
+
+      private def guard: () { () -> void } -> nil
+      private def drain: (Reassembler reassembler, epoch epoch, Time now) -> (:ok | :overflow | :unexpected)
+      private def process: (epoch epoch, Integer msg_type, String body, Time now) -> void
+      private def reassembly_failed: (:overflow | :unexpected status, Reassembler reassembler) -> nil
+      private def reassembler_for: (epoch epoch) -> Reassembler
+      private def message_limit: (Integer msg_type) -> Integer
+      private def substitute: [M < _Message] (M message) -> [String, M]
+      private def trace_transcript: (Integer msg_type, Integer length) -> void
+      private def forget_secrets!: () -> void
+    end
+
+    module KeyUpdateHandling
+      MAX_KEY_UPDATES: Integer
+
+      @conductor: Conductor
+      @key_updates: Integer
+
+      private def key_schedule: () -> KeySchedule
+      private def suite: () -> CipherSuite
+
+      private def receive_key_update: (KeyUpdate message, peer: KeySchedule::side, own: KeySchedule::side) -> void
+    end
+
+    class ClientSide
+      include KeyUpdateHandling
+
+      STATES: Array[Symbol]
+      EXPECTED: Hash[Symbol, Hash[epoch, Set[Integer]]]
+      NONE: Set[Integer]
+      EARLY_DATA_SENTINEL: Integer
+
+      @conductor: Conductor
+      @config: Config
+      @keyring: Keyring
+      @server_name: String
+      @sni: String?
+      @extensions: Array[Extension::_Extension]
+      @authentication: AuthenticationMessages
+      @client_hello: ClientHello?
+      @hello_retry_request: ServerHello?
+      @key_pairs: Array[KeyExchange::KeyPair]
+      @certificate_request: CertificateRequest?
+      @key_updates: Integer
+
+      attr_reader cipher_suite: CipherSuite?
+      attr_reader group: Symbol?
+      attr_reader alpn: String?
+      attr_reader peer_certificates: Array[OpenSSL::X509::Certificate]
+      attr_reader exporter_values: Hash[String, String]
+
+      def initialize: (Conductor conductor, server_name: String, sni: String?, extensions: Array[Extension::_Extension],
+                       tracer: Trace::_Tracer?) -> void
+      def start: (now: Time) -> void
+      def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
+      def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
+      def handle: (_Message message, raw: String, transcript_hash_before: String?, now: Time) -> void
+      def forget_secrets!: () -> nil
+
+      private def client_hello: () -> ClientHello
+      private def key_schedule: () -> KeySchedule
+      private def suite: () -> CipherSuite
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+      private def offered_types: () -> Array[Integer]
+      private def server_hello: (ServerHello message, String raw) -> void
+      private def hello_retry_request: (ServerHello hrr, String raw, CipherSuite suite) -> void
+      private def accept_server_hello: (ServerHello message, String raw, CipherSuite suite, ServerHello? hrr) -> void
+      private def encrypted_extensions: (EncryptedExtensions message) -> void
+      private def certificate_request: (CertificateRequest message) -> void
+      private def certificate: (Certificate message, Time now) -> void
+      private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
+      private def finished: (Finished message, String transcript_hash) -> void
+      private def send_client_flight: (KeySchedule schedule) -> void
+      private def new_session_ticket: (NewSessionTicket message) -> void
+      private def key_update: (KeyUpdate message) -> void
+      private def key_share_groups: (ClientHello client_hello) -> Array[Integer]
+    end
+
+    class ServerSide
+      include KeyUpdateHandling
+
+      STATES: Array[Symbol]
+      EXPECTED: Hash[Symbol, Hash[epoch, Set[Integer]]]
+      NONE: Set[Integer]
+      ALLOWED_TO_CHANGE: Array[Integer]
+      PSK_DHE_KE: Integer
+
+      @conductor: Conductor
+      @config: Config
+      @keyring: Keyring
+      @extensions: Array[Extension::_Extension]
+      @tracer: Trace::_Tracer?
+      @authentication: AuthenticationMessages
+      @client_hello: ClientHello?
+      @hello_retry_request: ServerHello?
+      @server_name: String?
+      @key_updates: Integer
+
+      attr_reader cipher_suite: CipherSuite?
+      attr_reader group: Symbol?
+      attr_reader alpn: String?
+      attr_reader peer_certificates: Array[OpenSSL::X509::Certificate]
+      attr_reader exporter_values: Hash[String, String]
+
+      def initialize: (Conductor conductor, extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?) -> void
+      def start: (now: Time) -> nil
+      def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
+      def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
+      def handle: (_Message message, raw: String, transcript_hash_before: String?, now: Time) -> void
+      def forget_secrets!: () -> nil
+
+      private def key_schedule: () -> KeySchedule
+      private def suite: () -> CipherSuite
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+      private def client_hello: (ClientHello ch) -> void
+      private def check_second_client_hello: (ClientHello first, ClientHello second) -> Violation?
+      private def hello_retry_request: (ClientHello ch, CipherSuite suite, Integer group) -> void
+      private def send_first_flight: (ClientHello ch, Extension::KeyShare::Entry share, String shared_secret,
+                                      Keyring::Credential credential, SignatureScheme scheme) -> void
+      private def encrypted_extensions: (ClientHello ch) -> Array[Extension::_Extension]
+      private def certificate_request: () -> CertificateRequest
+      private def certificate: (Certificate message, Time now) -> void
+      private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
+      private def finished: (Finished message, String transcript_hash) -> void
+      private def server_name: (ClientHello ch) -> String?
+      private def psk_dhe_ke?: (ClientHello ch) -> bool
+      private def signature_algorithms_cert: (ClientHello ch) -> Array[Integer]?
+      private def certificate_authorities: (ClientHello ch) -> Array[String]?
+    end
+
+    class Machine
+      @config: Config
+      @conductor: Conductor
+
+      def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
+      def self.server: (config: Config, keyring: Keyring, client_hello: String, now: Time,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
+
+      private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
+                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
+                                      substitutions: Hash[Integer, Array[String]]?) -> Machine
+      private def self.start_server: (config: Config, keyring: Keyring, client_hello: String, now: Time,
+                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
+                                      substitutions: Hash[Integer, Array[String]]?) -> Machine
+      private def self.check: (Config config, Keyring keyring, Array[Extension::_Extension] extensions) -> void
+      private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?,
+                             substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: String?) { (Conductor) -> _Side } -> Machine
+
+      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, substitutions: Hash[Integer, Array[String]]?,
+                       now: Time, client_hello: String?) { (Conductor) -> _Side } -> void
+      def receive: (String bytes, epoch: epoch, now: Time) -> nil
+      def each_output: () { (Output::t) -> void } -> void
+                     | () -> Enumerator[Output::t, void]
+      def outputs: () -> Array[Output::t]
+      def next_event: () -> Event::t?
+      def each_event: () { (Event::t) -> void } -> void
+                    | () -> Enumerator[Event::t, void]
+      def read_epoch: () -> epoch
+      def write_epoch: () -> epoch
+      def complete?: () -> bool
+      def failed?: () -> bool
+      def alert: () -> Symbol?
+      def cipher_suite: () -> Symbol?
+      def group: () -> Symbol?
+      def alpn: () -> String?
+      def peer_certificates: () -> Array[OpenSSL::X509::Certificate]
+      def export_keying_material: (label: String, length: Integer, ?context: String) -> String
+      def skip_early_data_limit: () -> Integer?
+      def max_flight_size: (epoch epoch) -> Integer
+      def discard: () -> nil
+      def inspect: () -> String
+    end
+  end
+end
