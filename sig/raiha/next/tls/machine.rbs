@@ -54,6 +54,7 @@ module Raiha::Next::TLS
       def peer_certificates: () -> Array[OpenSSL::X509::Certificate]
       def exporter_values: () -> Hash[String, String]
       def before_application_data: () -> nil
+      def application_data_received: () -> nil
       def class: () -> (singleton(ClientSide) | singleton(ServerSide))
     end
 
@@ -86,6 +87,7 @@ module Raiha::Next::TLS
       def failed?: () -> bool
       def start: (now: Time) -> nil
       def before_application_data: () -> nil
+      def application_data_received: () -> nil
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
       def receive_message: (epoch epoch, String raw, now: Time) -> nil
       def each_output: () { (Output::t) -> void } -> void
@@ -121,12 +123,15 @@ module Raiha::Next::TLS
 
     module KeyUpdateHandling
       MAX_KEY_UPDATES: Integer
+      MAX_CONSECUTIVE_KEY_UPDATES: Integer
 
       @conductor: Conductor
       @key_updates: Integer
+      @consecutive_key_updates: Integer
       @key_update_owed: bool
 
       def before_application_data: () -> nil
+      def application_data_received: () -> nil
 
       private def key_schedule: () -> KeySchedule
       private def suite: () -> CipherSuite
@@ -279,6 +284,7 @@ module Raiha::Next::TLS
       def write_epoch: () -> epoch
       def complete?: () -> bool
       def before_application_data: () -> nil
+      def application_data_received: () -> nil
       def failed?: () -> bool
       def alert: () -> Symbol?
       def cipher_suite: () -> Symbol?

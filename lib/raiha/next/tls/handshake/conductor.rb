@@ -84,6 +84,11 @@ module Raiha::Next::TLS
         nil
       end
 
+      def application_data_received
+        @side.application_data_received if @state == :connected
+        nil
+      end
+
       def receive(bytes, epoch:, now:)
         guard do
           next if @state.nil? || failed?

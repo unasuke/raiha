@@ -1,7 +1,8 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/tls_pair"
 
-# KeyUpdate after a TCP handshake.
+# KeyUpdate after a TCP handshake: answered once, right before our next
+# application data, and limited to a run of 32 without application data.
 class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
   TLS = Raiha::Next::TLS
   Pair = NextTLSPair
@@ -73,6 +74,21 @@ class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
     machine.receive(REQUESTED, epoch: :application, now: NOW)
     machine.before_application_data
     assert_equal [[:secret, :application, :read]], Pair.shape(machine.outputs)
+  end
+
+  def test_thirty_two_in_a_row_and_no_more
+    machine = connected.server
+    32.times { machine.receive(NOT_REQUESTED, epoch: :application, now: NOW) }
+    refute machine.failed?
+    machine.application_data_received
+    32.times { machine.receive(REQUESTED, epoch: :application, now: NOW) }
+    refute machine.failed?
+    machine.receive(NOT_REQUESTED, epoch: :application, now: NOW)
+    assert machine.failed?
+    assert_equal TLS::Event::Failed.new(alert: :unexpected_message, reason: :too_many_key_updates), failure(machine)
+    assert_equal [:alert, :application, :unexpected_message], Pair.shape(machine.outputs).last
+    machine.before_application_data
+    assert_empty machine.outputs
   end
 
   # RFC 9846: a KeyUpdate changes keys, so it ends its record. Each

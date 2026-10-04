@@ -131,6 +131,10 @@ module Raiha::Next::TLS
       # and Initialization Vector Update").
       def before_application_data = @conductor.before_application_data
 
+      # The TCP binding calls this when a record of application data, not
+      # empty, arrives: the peer's run of KeyUpdates ends there.
+      def application_data_received = @conductor.application_data_received
+
       def failed? = @conductor.failed?
 
       def alert = @conductor.alert
