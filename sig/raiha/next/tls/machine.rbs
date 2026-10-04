@@ -171,7 +171,8 @@ module Raiha::Next::TLS
       private def offered_types: () -> Array[Integer]
       private def server_hello: (ServerHello message, String raw) -> void
       private def hello_retry_request: (ServerHello hrr, String raw, CipherSuite suite) -> void
-      private def accept_server_hello: (ServerHello message, String raw, CipherSuite suite, ServerHello? hrr) -> void
+      private def check_after_hello_retry_request: (ServerHello message, ServerHello hrr) -> Violation?
+      private def accept_server_hello: (ServerHello message, String raw, CipherSuite suite) -> void
       private def encrypted_extensions: (EncryptedExtensions message) -> void
       private def certificate_request: (CertificateRequest message) -> void
       private def certificate: (Certificate message, Time now) -> void

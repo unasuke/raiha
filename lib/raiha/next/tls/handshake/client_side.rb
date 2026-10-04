@@ -124,17 +124,16 @@ module Raiha::Next::TLS
 
       private def server_hello(message, raw)
         hrr = @hello_retry_request
+        # 0a to 0c, after a HelloRetryRequest, before everything else.
         if hrr
-          # 0a: RFC 9846 "Hello Retry Request" allows one.
-          return fail!(:unexpected_message, :second_hello_retry_request) if message.hello_retry_request?
+          failure = check_after_hello_retry_request(message, hrr)
+          return fail!(failure.alert, failure.reason) if failure
         end
         # 1
         suite = CipherSuite.find(message.cipher_suite)
         unless suite && client_hello.cipher_suites.include?(suite.id) && @config.cipher_suite_ids.include?(suite.id)
           return fail!(:illegal_parameter, :cipher_suite_not_offered)
         end
-        # 0b
-        return fail!(:illegal_parameter, :cipher_suite_changed) if hrr && hrr.cipher_suite != suite.id
         # 2
         unless message.legacy_session_id_echo == client_hello.legacy_session_id
           return fail!(:illegal_parameter, :legacy_session_id_echo)
@@ -145,7 +144,27 @@ module Raiha::Next::TLS
         unless message.extensions.all? { |ext| allowed.include?(ext.extension_type) }
           return fail!(:unsupported_extension, :unsolicited_extension)
         end
-        message.hello_retry_request? ? hello_retry_request(message, raw, suite) : accept_server_hello(message, raw, suite, hrr)
+        message.hello_retry_request? ? hello_retry_request(message, raw, suite) : accept_server_hello(message, raw, suite)
+      end
+
+      # RFC 9846 "Hello Retry Request" and "Key Share": one
+      # HelloRetryRequest, then the same suite and the group it asked for.
+      private def check_after_hello_retry_request(message, hrr)
+        # 0a
+        return Violation.new(alert: :unexpected_message, reason: :second_hello_retry_request) if message.hello_retry_request?
+        # 0b
+        return Violation.new(alert: :illegal_parameter, reason: :cipher_suite_changed) unless message.cipher_suite == hrr.cipher_suite
+        # 0c
+        share = message.extension(Extension::KeyShare::TYPE)
+        requested = hrr.extension(Extension::KeyShare::TYPE)
+        case requested
+        when Extension::KeyShare::HRR
+          case share
+          when Extension::KeyShare::SH
+            return Violation.new(alert: :illegal_parameter, reason: :key_share_group_changed) unless share.server_share.group == requested.selected_group
+          end
+        end
+        nil
       end
 
       private def hello_retry_request(hrr, raw, suite)
@@ -176,17 +195,10 @@ module Raiha::Next::TLS
         @conductor.transition!(:wait_sh2)
       end
 
-      private def accept_server_hello(message, raw, suite, hrr)
+      private def accept_server_hello(message, raw, suite)
         share = case (ext = message.extension(Extension::KeyShare::TYPE))
           when Extension::KeyShare::SH then ext.server_share
           end
-        # 0c
-        if hrr && share
-          case (requested = hrr.extension(Extension::KeyShare::TYPE))
-          when Extension::KeyShare::HRR
-            return fail!(:illegal_parameter, :key_share_group_changed) unless share.group == requested.selected_group
-          end
-        end
         # 7: without a PSK there is no key exchange but this one.
         return fail!(:illegal_parameter, :missing_key_share) unless share
         # 8
