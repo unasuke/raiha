@@ -31,9 +31,6 @@ module Raiha::Next::TLS
     class PeerExtension < Data.define(:type, :data, :message)
     end
 
-    class KeyUpdateRequested < Data.define(:requested)
-    end
-
     # The alert sent and a Symbol naming the check that failed. A QUIC
     # binding maps a reason listed in Profile#protocol_violation_reasons to
     # PROTOCOL_VIOLATION.

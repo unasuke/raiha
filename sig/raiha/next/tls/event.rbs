@@ -41,13 +41,6 @@ module Raiha::Next::TLS
                   | (Integer type, String data, Integer message) -> instance
     end
 
-    class KeyUpdateRequested < Data
-      attr_reader requested: bool
-
-      def self.new: (requested: bool) -> instance
-                  | (bool requested) -> instance
-    end
-
     class Failed < Data
       attr_reader alert: Symbol
       attr_reader reason: Symbol
@@ -56,7 +49,6 @@ module Raiha::Next::TLS
                   | (Symbol alert, Symbol reason) -> instance
     end
 
-    type t = HandshakeComplete | EarlyDataRejected | SessionNotOffered | PeerExtension
-           | KeyUpdateRequested | Failed
+    type t = HandshakeComplete | EarlyDataRejected | SessionNotOffered | PeerExtension | Failed
   end
 end
