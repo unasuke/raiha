@@ -133,3 +133,48 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     hello.with(extensions:).encode
   end
 end
+
+# A server choosing its Config and Keyring by SNI, in the ten lines the API
+# design promises.
+class RaihaNextTLSAcceptByServerNameTest < Minitest::Test
+  TLS = Raiha::Next::TLS
+  Pair = NextTLSPair
+  NOW = Pair::NOW
+  Site = Data.define(:config, :keyring)
+
+  def sites
+    %w[a.example b.example].to_h do |name|
+      config = Pair.server_config(alpn: ["h3"])
+      [name, Site.new(config:, keyring: Pair.server_keyring(config:, identities: [Pair.server_identity(names: ["DNS:#{name}"])]))]
+    end
+  end
+
+  def accept(sites, bytes)
+    acceptor = TLS::Handshake::Acceptor.new
+    acceptor.receive(bytes, epoch: :initial, now: NOW)
+    if (hello = acceptor.accepted)
+      site = sites[hello.info.server_name] or return acceptor.tap { |a| a.reject(:unrecognized_name) }
+      TLS::Handshake::Machine.server(config: site.config, keyring: site.keyring, client_hello: hello, now: NOW)
+    end
+  end
+
+  def test_picks_the_site_by_name
+    sites = self.sites
+    %w[a.example b.example].each do |name|
+      client = Pair.client(config: Pair.client_config(alpn: ["h3"]), server_name: name)
+      server = accept(sites, client.outputs.first.bytes)
+      Pair.deliver(server.outputs, client)
+      Pair.deliver(client.outputs, server)
+      assert client.complete?, name
+      assert_equal name, client.each_event.grep(TLS::Event::HandshakeComplete).first.server_name
+      assert_equal ["DNS:#{name}"], [client.peer_certificates.first.extensions.find { |e| e.oid == "subjectAltName" }.value]
+    end
+  end
+
+  def test_unknown_name_is_rejected
+    acceptor = accept(sites, Pair.client(server_name: "c.example").outputs.first.bytes)
+    alerts = []
+    acceptor.each_output { |output| alerts << output.description }
+    assert_equal [:unrecognized_name], alerts
+  end
+end
