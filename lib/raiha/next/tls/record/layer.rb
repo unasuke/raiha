@@ -130,6 +130,7 @@ module Raiha::Next::TLS
         return Failure.new(alert: :unexpected_message, reason: :unexpected_record) if name.nil? || name == :application_data
         return Failure.new(alert: :record_overflow, reason: :record_too_large) if fragment.bytesize > MAX_PLAINTEXT
         return Failure.new(alert: :unexpected_message, reason: :empty_handshake_record) if name == :handshake && fragment.empty?
+        return change_cipher_spec(:initial, fragment) if name == :change_cipher_spec
         Plaintext.new(content_type: name, payload: fragment)
       end
 
@@ -139,10 +140,20 @@ module Raiha::Next::TLS
       private def protected(epoch, type, header, fragment)
         case CONTENT_TYPE_NAMES[type]
         when :application_data then open(epoch, header, fragment)
-        when :change_cipher_spec then unprotected(type, fragment)
+        when :change_cipher_spec then change_cipher_spec(epoch, fragment)
         when :alert then epoch == :handshake ? unprotected(type, fragment) : Failure.new(alert: :unexpected_message, reason: :unprotected_record)
         else Failure.new(alert: :unexpected_message, reason: :unprotected_record)
         end
+      end
+
+      # The single byte 0x01 a middlebox-compatible peer sends, which only
+      # comes before the peer's Finished, that is, before the :application
+      # read keys (RFC 9846 "Record Protocol"). Anything else is an
+      # unexpected record. Whether one may come before the first ClientHello
+      # is the caller's to judge.
+      private def change_cipher_spec(epoch, fragment)
+        return Failure.new(alert: :unexpected_message, reason: :unexpected_change_cipher_spec) if epoch == :application || fragment != "\x01".b
+        Plaintext.new(content_type: :change_cipher_spec, payload: fragment)
       end
 
       private def open(epoch, header, fragment)

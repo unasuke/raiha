@@ -46,6 +46,7 @@ module Raiha::Next::TLS
       private def fragments: (String payload, Integer size) -> Array[String]
       private def unprotected: (Integer type, String fragment) -> (Plaintext | Failure)
       private def protected: (epoch epoch, Integer type, String header, String fragment) -> (Plaintext | Failure)
+      private def change_cipher_spec: (epoch epoch, String fragment) -> (Plaintext | Failure)
       private def open: (epoch epoch, String header, String fragment) -> (Plaintext | Failure)
     end
 

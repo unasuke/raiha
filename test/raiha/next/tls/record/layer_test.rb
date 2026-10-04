@@ -128,6 +128,22 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
     end
   end
 
+  # Only the one byte 0x01, and only before the peer's Finished, that is,
+  # before the :application read keys.
+  def test_change_cipher_spec_rules
+    reader, = reader_and_sealer
+    reader.install(direction: :read, epoch: :application, secret: SECRET, cipher_suite: SUITE)
+    unexpected = failure(:unexpected_message, :unexpected_change_cipher_spec)
+    { :initial => "\x01", :handshake => "\x01" }.each do |epoch, payload|
+      reader << plaintext_record(20, payload)
+      assert_equal plaintext(:change_cipher_spec, "\x01".b), reader.read(epoch:)
+    end
+    [[:initial, "\x02"], [:handshake, "\x01\x01"], [:initial, ""], [:application, "\x01"]].each do |epoch, payload|
+      reader << plaintext_record(20, payload)
+      assert_equal unexpected, reader.read(epoch:), [epoch, payload].inspect
+    end
+  end
+
   # After the handshake keys, an alert in the clear is a protocol error.
   def test_unprotected_alert_under_application_keys
     rec = layer
