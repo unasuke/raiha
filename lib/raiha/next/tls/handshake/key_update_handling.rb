@@ -16,7 +16,10 @@ module Raiha::Next::TLS
     module KeyUpdateHandling
       MAX_KEY_UPDATES = (1 << 48) - 1
 
+      # A KeyUpdate changes keys, so it has to end its record (RFC 9846
+      # "Record Protocol"); bytes after it fail before anything changes.
       private def receive_key_update(message, peer:, own:)
+        return fail!(:unexpected_message, :handshake_data_spans_key_change) if @conductor.pending_input?
         schedule = key_schedule
         @conductor.change_epochs!(cipher_suite: suite,
           secrets: [[:application, :read, schedule.update_application_traffic_secret!(peer)]])

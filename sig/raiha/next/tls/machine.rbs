@@ -125,6 +125,7 @@ module Raiha::Next::TLS
 
       private def key_schedule: () -> KeySchedule
       private def suite: () -> CipherSuite
+      private def fail!: (Symbol alert, Symbol reason) -> nil
 
       private def receive_key_update: (KeyUpdate message, peer: KeySchedule::side, own: KeySchedule::side) -> void
     end
