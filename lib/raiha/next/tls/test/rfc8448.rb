@@ -289,6 +289,55 @@ module Raiha::Next::TLS::Test::RFC8448
       e4 d3 57 00 08 00 2a 00 04 00 00 04 00
     HEX
 
+    # The records after the handshake, each under the sender's first
+    # application traffic key: the server's NewSessionTicket, then these 50
+    # bytes each way, then close_notify each way.
+    APPLICATION_DATA = (0x00..0x31).to_a.pack("C*").freeze
+
+    NEW_SESSION_TICKET_RECORD = [<<~HEX.delete(" \n")].pack("H*").freeze
+      17 03 03 00 de 3a 6b 8f 90 41 4a 97 d6 95 9c 34
+      87 68 0d e5 13 4a 2b 24 0e 6c ff ac 11 6e 95 d4
+      1d 6a f8 f6 b5 80 dc f3 d1 1d 63 c7 58 db 28 9a
+      01 59 40 25 2f 55 71 3e 06 1d c1 3e 07 88 91 a3
+      8e fb cf 57 53 ad 8e f1 70 ad 3c 73 53 d1 6d 9d
+      a7 73 b9 ca 7f 2b 9f a1 b6 c0 d4 a3 d0 3f 75 e0
+      9c 30 ba 1e 62 97 2a c4 6f 75 f7 b9 81 be 63 43
+      9b 29 99 ce 13 06 46 15 13 98 91 d5 e4 c5 b4 06
+      f1 6e 3f c1 81 a7 7c a4 75 84 00 25 db 2f 0a 77
+      f8 1b 5a b0 5b 94 c0 13 46 75 5f 69 23 2c 86 51
+      9d 86 cb ee ac 87 aa c3 47 d1 43 f9 60 5d 64 f6
+      50 db 4d 02 3e 70 e9 52 ca 49 fe 51 37 12 1c 74
+      bc 26 97 68 7e 24 87 46 d6 df 35 30 05 f3 bc e1
+      86 96 12 9c 81 53 55 6b 3b 6c 67 79 b3 7b f1 59
+      85 68 4f
+    HEX
+
+    CLIENT_APPLICATION_DATA_RECORD = [<<~HEX.delete(" \n")].pack("H*").freeze
+      17 03 03 00 43 a2 3f 70 54 b6 2c 94 d0 af fa fe
+      82 28 ba 55 cb ef ac ea 42 f9 14 aa 66 bc ab 3f
+      2b 98 19 a8 a5 b4 6b 39 5b d5 4a 9a 20 44 1e 2b
+      62 97 4e 1f 5a 62 92 a2 97 70 14 bd 1e 3d ea e6
+      3a ee bb 21 69 49 15 e4
+    HEX
+
+    SERVER_APPLICATION_DATA_RECORD = [<<~HEX.delete(" \n")].pack("H*").freeze
+      17 03 03 00 43 2e 93 7e 11 ef 4a c7 40 e5 38 ad
+      36 00 5f c4 a4 69 32 fc 32 25 d0 5f 82 aa 1b 36
+      e3 0e fa f9 7d 90 e6 df fc 60 2d cb 50 1a 59 a8
+      fc c4 9c 4b f2 e5 f0 a2 1c 00 47 c2 ab f3 32 54
+      0d d0 32 e1 67 c2 95 5d
+    HEX
+
+    CLIENT_ALERT_RECORD = [<<~HEX.delete(" \n")].pack("H*").freeze
+      17 03 03 00 13 c9 87 27 60 65 56 66 b7 4d 7f f1
+      15 3e fd 6d b6 d0 b0 e3
+    HEX
+
+    SERVER_ALERT_RECORD = [<<~HEX.delete(" \n")].pack("H*").freeze
+      17 03 03 00 13 b5 8f d6 71 66 eb f5 99 d2 47 20
+      cf be 7e fa 7a 88 64 a9
+    HEX
+
     EARLY_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
       33 ad 0a 1c 60 7e c0 3b 09 e6 cd 98 93 68 0c e2
       10 ad f3 00 aa 1f 26 60 e1 b2 2e 10 f1 70 f9 2a

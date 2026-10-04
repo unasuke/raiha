@@ -1,0 +1,22 @@
+module Raiha::Next::TLS
+  module Record
+    class Protection
+      CONTENT_TYPE_APPLICATION_DATA: Integer
+      LEGACY_RECORD_VERSION: Integer
+
+      @iv: String
+      @aead: Crypto::AEAD
+
+      attr_reader cipher_suite: CipherSuite
+      attr_reader sequence_number: Integer
+
+      def initialize: (secret: String, cipher_suite: CipherSuite) -> void
+      def seal: (String inner_plaintext) -> String
+      def open: (String header, String encrypted_record) -> String?
+      def discard!: () -> void
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def next_nonce: () -> String
+    end
+  end
+end

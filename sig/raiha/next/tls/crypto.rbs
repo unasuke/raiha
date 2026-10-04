@@ -24,6 +24,24 @@ module Raiha::Next::TLS
       def self.extract: (hash: Symbol, salt: String, ikm: String) -> String
       def self.expand: (hash: Symbol, prk: String, info: String, length: Integer) -> String
     end
+
+    class AEAD
+      CIPHERS: Hash[Symbol, String]
+      TAG_LENGTH: Integer
+
+      @name: String
+      @key: String
+      @sealer: OpenSSL::Cipher?
+      @opener: OpenSSL::Cipher?
+
+      def initialize: (Symbol algorithm, String key) -> void
+      def seal: (nonce: String, aad: String, plaintext: String) -> String
+      def open: (nonce: String, aad: String, ciphertext: String) -> String?
+      def discard!: () -> void
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def context: (:encrypt | :decrypt direction) -> OpenSSL::Cipher
+    end
   end
 end
 
