@@ -26,6 +26,11 @@ module Raiha::Next::TLS::Codec
     def alert = :illegal_parameter
   end
 
+  # A field whose value its definition forbids, though it parses.
+  class IllegalValue < Malformed
+    def alert = :illegal_parameter
+  end
+
   # A handshake message type this implementation does not know. On the state
   # machine's path `Reassembler#expect` rejects it before parsing, so only
   # direct callers of `Handshake.parse` see this.

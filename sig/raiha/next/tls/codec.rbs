@@ -18,6 +18,9 @@ module Raiha::Next::TLS::Codec
   class IllegalPlacement < Malformed
   end
 
+  class IllegalValue < Malformed
+  end
+
   class UnknownMessageType < Malformed
   end
 

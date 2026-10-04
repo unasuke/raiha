@@ -59,6 +59,15 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     assert_equal [[:alert, :initial, :protocol_version]], NextTLSPair.shape(outputs(acceptor))
   end
 
+  # RFC 8449: a record_size_limit under 64 is illegal_parameter.
+  def test_record_size_limit_under_sixty_four
+    hello = TLS::Handshake.parse(client_hello, registry: Extension::Registry::BUILTIN)
+    extensions = hello.extensions + [Extension::Opaque.new(type: Extension::RecordSizeLimit::TYPE, data: "\x00\x3f".b)]
+    acceptor = Acceptor.new
+    acceptor.receive(hello.with(extensions:).encode, epoch: :initial, now: NOW)
+    assert_equal [:illegal_parameter, :malformed_message], [acceptor.alert, acceptor.reason]
+  end
+
   def test_errors
     {
       "\x01\x00\x00\x02\x03\x03".b => :decode_error,

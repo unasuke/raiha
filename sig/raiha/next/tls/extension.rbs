@@ -146,6 +146,7 @@ module Raiha::Next::TLS
 
     class RecordSizeLimit < Data
       TYPE: Integer
+      MINIMUM: Integer
 
       attr_reader record_size_limit: Integer
 
