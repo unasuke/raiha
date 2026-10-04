@@ -24,9 +24,12 @@ module Raiha::Next::TLS
       # BoringSSL's kMaxKeyUpdates, which rustls uses too.
       MAX_CONSECUTIVE_KEY_UPDATES = 32
 
+      # How many KeyUpdates we have sent: the epoch RFC 9846 limits.
+      attr_reader :key_updates
+
       # Owes the peer an answer before our next application data.
       def before_application_data
-        send_key_update if @key_update_owed
+        send_key_update(KeyUpdate::UPDATE_NOT_REQUESTED) if @key_update_owed
         nil
       end
 
@@ -36,10 +39,22 @@ module Raiha::Next::TLS
         nil
       end
 
+      # A KeyUpdate of our own. A KeyUpdate we owe goes first and also
+      # serves for one that does not ask for the peer's. While our request
+      # waits for the peer's KeyUpdate, another one cannot ask again.
+      def request_key_update(request_peer_update:)
+        owed = @key_update_owed
+        before_application_data
+        return nil if owed && !request_peer_update
+        send_key_update(request_peer_update ? KeyUpdate::UPDATE_REQUESTED : KeyUpdate::UPDATE_NOT_REQUESTED)
+        nil
+      end
+
       private def start_key_updates
         @key_updates = 0
         @consecutive_key_updates = 0
         @key_update_owed = false
+        @awaiting_peer_update = false
       end
 
       # A KeyUpdate changes keys, so it has to end its record (RFC 9846
@@ -51,17 +66,20 @@ module Raiha::Next::TLS
         return fail!(:unexpected_message, :too_many_key_updates) if @consecutive_key_updates > MAX_CONSECUTIVE_KEY_UPDATES
         @conductor.change_epochs!(cipher_suite: suite,
           secrets: [[:application, :read, key_schedule.update_application_traffic_secret!(peer_side)]])
+        @awaiting_peer_update = false
         @key_update_owed = true if message.request_update == KeyUpdate::UPDATE_REQUESTED
         nil
       end
 
       # Sent under the old key, then the next write Secret.
-      private def send_key_update
+      private def send_key_update(request)
         @key_update_owed = false
         return if @key_updates >= MAX_KEY_UPDATES
-        @conductor.emit_message!(:application, KeyUpdate.new(request_update: KeyUpdate::UPDATE_NOT_REQUESTED))
+        request = KeyUpdate::UPDATE_NOT_REQUESTED if @awaiting_peer_update
+        @conductor.emit_message!(:application, KeyUpdate.new(request_update: request))
         @conductor.close_flight!
         @key_updates += 1
+        @awaiting_peer_update = true if request == KeyUpdate::UPDATE_REQUESTED
         @conductor.change_epochs!(cipher_suite: suite,
           secrets: [[:application, :write, key_schedule.update_application_traffic_secret!(own_side)]])
       end

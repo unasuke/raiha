@@ -126,6 +126,12 @@ module Raiha::Next::TLS
       # Our Finished is sent and the peer's verified.
       def complete? = @conductor.state == :connected
 
+      # A KeyUpdate of our own over TCP: Message(:application, KeyUpdate)
+      # under the old key, then the next Secret(:application, :write). A
+      # KeyUpdate the peer asked for goes first. Raises UsageError before the
+      # handshake is complete and with Profile::QUIC.
+      def request_key_update(request_peer_update: false) = @conductor.request_key_update(request_peer_update:)
+
       # The TCP binding calls this right before it sends application data,
       # which is when a KeyUpdate the peer asked for goes out (RFC 9846 "Key
       # and Initialization Vector Update").
@@ -134,6 +140,9 @@ module Raiha::Next::TLS
       # The TCP binding calls this when a record of application data, not
       # empty, arrives: the peer's run of KeyUpdates ends there.
       def application_data_received = @conductor.application_data_received
+
+      # How many KeyUpdates we have sent.
+      def key_update_epoch = @conductor.side.key_updates
 
       def failed? = @conductor.failed?
 

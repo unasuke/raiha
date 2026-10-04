@@ -53,8 +53,10 @@ module Raiha::Next::TLS
       def alpn: () -> String?
       def peer_certificates: () -> Array[OpenSSL::X509::Certificate]
       def exporter_values: () -> Hash[String, String]
+      def key_updates: () -> Integer
       def before_application_data: () -> nil
       def application_data_received: () -> nil
+      def request_key_update: (request_peer_update: bool) -> nil
       def class: () -> (singleton(ClientSide) | singleton(ServerSide))
     end
 
@@ -86,6 +88,7 @@ module Raiha::Next::TLS
       def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, ?substitutions: Hash[Integer, Array[String]]?) { (Conductor) -> _Side } -> void
       def failed?: () -> bool
       def start: (now: Time) -> nil
+      def request_key_update: (request_peer_update: bool) -> nil
       def before_application_data: () -> nil
       def application_data_received: () -> nil
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
@@ -129,9 +132,13 @@ module Raiha::Next::TLS
       @key_updates: Integer
       @consecutive_key_updates: Integer
       @key_update_owed: bool
+      @awaiting_peer_update: bool
+
+      attr_reader key_updates: Integer
 
       def before_application_data: () -> nil
       def application_data_received: () -> nil
+      def request_key_update: (request_peer_update: bool) -> nil
 
       private def key_schedule: () -> KeySchedule
       private def suite: () -> CipherSuite
@@ -141,7 +148,7 @@ module Raiha::Next::TLS
 
       private def start_key_updates: () -> void
       private def receive_key_update: (KeyUpdate message) -> nil
-      private def send_key_update: () -> void
+      private def send_key_update: (Integer request) -> void
     end
 
     class ClientSide
@@ -283,8 +290,10 @@ module Raiha::Next::TLS
       def read_epoch: () -> epoch
       def write_epoch: () -> epoch
       def complete?: () -> bool
+      def request_key_update: (?request_peer_update: bool) -> nil
       def before_application_data: () -> nil
       def application_data_received: () -> nil
+      def key_update_epoch: () -> Integer
       def failed?: () -> bool
       def alert: () -> Symbol?
       def cipher_suite: () -> Symbol?

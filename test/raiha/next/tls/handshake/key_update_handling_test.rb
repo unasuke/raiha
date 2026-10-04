@@ -13,6 +13,14 @@ class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
 
   def connected = Pair.run(Pair.client)
 
+  def quic_pair
+    tp = TLS::Extension::Opaque
+    client = Pair.client(config: Pair.client_config(profile: TLS::Profile::QUIC, alpn: ["h3"]), extensions: [tp.new(type: 0x39, data: "c".b)])
+    pair = Pair.run(client, { config: Pair.server_config(profile: TLS::Profile::QUIC, alpn: ["h3"]), extensions: [tp.new(type: 0x39, data: "s".b)] })
+    assert pair.client.complete?
+    pair
+  end
+
   def failure(machine) = machine.each_event.grep(TLS::Event::Failed).first
 
   def request_updates(outputs)
@@ -31,6 +39,7 @@ class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
       assert_equal [KeyUpdate::UPDATE_NOT_REQUESTED], request_updates(outputs)
       machine.before_application_data
       assert_empty machine.outputs
+      assert_equal 1, machine.key_update_epoch
     end
   end
 
@@ -73,7 +82,54 @@ class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
     side.instance_variable_set(:@key_updates, TLS::Handshake::KeyUpdateHandling::MAX_KEY_UPDATES)
     machine.receive(REQUESTED, epoch: :application, now: NOW)
     machine.before_application_data
+    machine.request_key_update
     assert_equal [[:secret, :application, :read]], Pair.shape(machine.outputs)
+  end
+
+  # Each side's secrets follow the other's through updates both ways.
+  def test_both_sides_stay_in_step
+    pair = connected
+    3.times do
+      pair.client.request_key_update(request_peer_update: true)
+      Pair.deliver(pair.client.outputs, pair.server)
+      pair.server.before_application_data
+      Pair.deliver(pair.server.outputs, pair.client)
+    end
+    assert_equal [3, 3], [pair.client.key_update_epoch, pair.server.key_update_epoch]
+    refute pair.client.failed? || pair.server.failed?
+  end
+
+  # A KeyUpdate we owe goes before our own, and stands for one that does
+  # not ask for the peer's.
+  def test_request_key_update_with_an_owed_answer
+    machine = connected.client
+    machine.receive(REQUESTED, epoch: :application, now: NOW)
+    machine.outputs
+    machine.request_key_update(request_peer_update: false)
+    assert_equal [KeyUpdate::UPDATE_NOT_REQUESTED], request_updates(machine.outputs)
+    machine.receive(REQUESTED, epoch: :application, now: NOW)
+    machine.outputs
+    machine.request_key_update(request_peer_update: true)
+    assert_equal [KeyUpdate::UPDATE_NOT_REQUESTED, KeyUpdate::UPDATE_REQUESTED], request_updates(machine.outputs)
+  end
+
+  # Until the peer's KeyUpdate arrives, another request cannot ask again.
+  def test_one_request_at_a_time
+    machine = connected.client
+    machine.request_key_update(request_peer_update: true)
+    machine.request_key_update(request_peer_update: true)
+    assert_equal [KeyUpdate::UPDATE_REQUESTED, KeyUpdate::UPDATE_NOT_REQUESTED], request_updates(machine.outputs)
+    machine.receive(NOT_REQUESTED, epoch: :application, now: NOW)
+    machine.request_key_update(request_peer_update: true)
+    assert_equal [KeyUpdate::UPDATE_REQUESTED], request_updates(machine.outputs)
+  end
+
+  def test_request_key_update_misuse
+    assert_raises(TLS::UsageError) { Pair.client.request_key_update }
+    assert_raises(TLS::UsageError) { quic_pair.client.request_key_update }
+    failed = connected.client
+    failed.discard
+    assert_raises(TLS::UsageError) { failed.request_key_update }
   end
 
   def test_thirty_two_in_a_row_and_no_more
