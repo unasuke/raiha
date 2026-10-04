@@ -1,5 +1,54 @@
 module Raiha::Next::TLS
   module Record
+    type content_type = :change_cipher_spec | :alert | :handshake | :application_data
+
+    CONTENT_TYPES: Hash[content_type, Integer]
+    CONTENT_TYPE_NAMES: Hash[Integer, content_type]
+    HEADER_LENGTH: Integer
+    MAX_PLAINTEXT: Integer
+    MAX_EXPANSION: Integer
+    DEFAULT_SIZE_LIMIT: Integer
+
+    class Plaintext < Data
+      attr_reader content_type: content_type
+      attr_reader payload: String
+
+      def self.new: (content_type: content_type, payload: String) -> instance
+                  | (content_type content_type, String payload) -> instance
+    end
+
+    class Failure < Data
+      attr_reader alert: Symbol
+      attr_reader reason: Symbol
+
+      def self.new: (alert: Symbol, reason: Symbol) -> instance
+                  | (Symbol alert, Symbol reason) -> instance
+    end
+
+    class Layer
+      @buffer: String
+      @read: Hash[epoch, Protection]
+      @write: Hash[epoch, Protection]
+      @send_size_limit: Integer
+      @receive_size_limit: Integer
+
+      def initialize: (profile: Profile) -> void
+      def install: (direction: Output::direction, epoch: epoch, secret: String, cipher_suite: CipherSuite) -> nil
+      def limit_sizes: (?send: Integer, ?receive: Integer) -> nil
+      def <<: (String bytes) -> self
+      def pending_bytes: () -> Integer
+      def read: (epoch: epoch) -> (Plaintext | Failure | nil)
+      def write: (content_type: content_type, payload: String, epoch: epoch) -> String
+      def records_written: (epoch epoch) -> Integer
+      def key_update_due?: (epoch epoch) -> bool
+      def discard!: () -> nil
+
+      private def fragments: (String payload, Integer size) -> Array[String]
+      private def unprotected: (Integer type, String fragment) -> (Plaintext | Failure)
+      private def protected: (epoch epoch, Integer type, String header, String fragment) -> (Plaintext | Failure)
+      private def open: (epoch epoch, String header, String fragment) -> (Plaintext | Failure)
+    end
+
     class Protection
       CONTENT_TYPE_APPLICATION_DATA: Integer
       LEGACY_RECORD_VERSION: Integer

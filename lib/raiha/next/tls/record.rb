@@ -8,3 +8,4 @@ module Raiha::Next::TLS
 end
 
 require_relative "record/protection"
+require_relative "record/layer"
