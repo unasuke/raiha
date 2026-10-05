@@ -42,11 +42,11 @@ module Raiha::Next::TLS
     end
 
     class Failed < Data
-      attr_reader alert: Symbol
+      attr_reader alert: Symbol?
       attr_reader reason: Symbol
 
-      def self.new: (alert: Symbol, reason: Symbol) -> instance
-                  | (Symbol alert, Symbol reason) -> instance
+      def self.new: (alert: Symbol?, reason: Symbol) -> instance
+                  | (Symbol? alert, Symbol reason) -> instance
     end
 
     type t = HandshakeComplete | EarlyDataRejected | SessionNotOffered | PeerExtension | Failed

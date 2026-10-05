@@ -36,4 +36,15 @@ class RaihaNextTLSTCPClosureTest < Minitest::Test
     assert_equal 1, Pair.records(Pair.take(pair.client)).size
     assert_empty Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert)
   end
+
+  # During the handshake the peer is not yet authenticated: a failure, and
+  # no alert back.
+  def test_close_notify_during_the_handshake
+    client = Pair.client
+    Pair.take(client)
+    client.receive("\x15\x03\x03\x00\x02\x01\x00".b, now: NOW)
+    assert client.failed?
+    assert_empty Pair.take(client)
+    assert_equal [TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)], Pair.events(client)
+  end
 end

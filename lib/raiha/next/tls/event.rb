@@ -33,7 +33,8 @@ module Raiha::Next::TLS
 
     # The alert sent and a Symbol naming the check that failed. A QUIC
     # binding maps a reason listed in Profile#protocol_violation_reasons to
-    # PROTOCOL_VIOLATION.
+    # PROTOCOL_VIOLATION. The alert is nil when none was sent: over TCP, a
+    # peer that closed during the handshake gets none back.
     class Failed < Data.define(:alert, :reason)
     end
   end

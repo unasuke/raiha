@@ -153,13 +153,19 @@ module Raiha::Next::TLS
 
       # RFC 9846 "Closure Alerts": close_notify after the handshake closes
       # the peer's side only; ours stays open and sends nothing back, as
-      # answering at once is what TLS 1.2 did, inviting truncation. RFC 9846
-      # "Error Alerts": every other alert ends the connection, whatever its
-      # level, and none is sent back.
+      # answering at once is what TLS 1.2 did, inviting truncation. During
+      # the handshake it is a failure, unauthenticated as the peer still is.
+      # RFC 9846 "Error Alerts": every other alert ends the connection,
+      # whatever its level, and none is sent back.
       private def receive_alert(payload)
         return fail!(:decode_error, :malformed_alert) unless payload.bytesize == 2
         level, description = payload.unpack("C2").map(&:to_i)
-        return close_read if IANA.alert_name(description) == :close_notify && @machine.complete?
+        if IANA.alert_name(description) == :close_notify
+          return close_read if @machine.complete?
+          @machine.discard
+          @events << ::Raiha::Next::TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)
+          return stop
+        end
         @events << Event::PeerAlert.new(level:, description:)
         @machine.discard
         stop
