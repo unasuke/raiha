@@ -22,5 +22,19 @@ module Raiha::Next::TLS
     def self.line(name, client_random, secret)
       "#{LABELS.fetch(name)} #{client_random.unpack1("H*")} #{secret.unpack1("H*")}\n"
     end
+
+    # A keylog to give a Machine: `path` opened for appending and readable by
+    # its owner only, even when it was there already.
+    class File
+      def initialize(path)
+        @io = ::File.open(path, ::File::WRONLY | ::File::APPEND | ::File::CREAT, 0o600)
+        @io.chmod(0o600)
+        @io.sync = true
+      end
+
+      def write(line) = @io.write(line)
+
+      def close = @io.close
+    end
   end
 end

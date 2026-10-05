@@ -2,6 +2,7 @@ require "raiha/next/test_helper"
 require "raiha/next/tls/test"
 require "raiha/next/support/tls_pair"
 require "stringio"
+require "tmpdir"
 
 class RaihaNextTLSKeylogTest < Minitest::Test
   TLS = Raiha::Next::TLS
@@ -58,5 +59,18 @@ class RaihaNextTLSKeylogTest < Minitest::Test
     assert client.failed?
     assert_empty client.outputs
     assert_empty client.each_event.to_a
+  end
+
+  def test_file_is_owner_only_and_appended
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "keylog.txt")
+      File.write(path, "existing\n")
+      File.chmod(0o644, path)
+      file = TLS::Keylog::File.new(path)
+      file.write("a\n")
+      file.close
+      assert_equal "existing\na\n", File.read(path)
+      assert_equal 0o600, File.stat(path).mode & 0o777
+    end
   end
 end
