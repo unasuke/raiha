@@ -69,6 +69,26 @@ namespace :test do
   end
 end
 
+namespace :test do
+  namespace :next do
+    namespace :interop do
+      NEXT_INTEROP_SPEC = {
+        openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl }
+      }.freeze
+
+      NEXT_INTEROP_SPEC.each do |name, spec|
+        Rake::TestTask.new(name) do |t|
+          t.description = "Run #{name} interop tests of the next release of raiha (auto-builds the peer implementation)"
+          t.libs << "test"
+          t.libs << "lib"
+          t.test_files = [spec[:file]]
+        end
+        task name => "interop:build:#{spec[:build]}"
+      end
+    end
+  end
+end
+
 namespace :interop do
   namespace :build do
     desc "Build quic-go interop client/server binaries"
