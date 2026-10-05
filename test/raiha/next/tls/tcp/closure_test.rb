@@ -37,6 +37,34 @@ class RaihaNextTLSTCPClosureTest < Minitest::Test
     assert_empty Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert)
   end
 
+  # Our side closes; the peer's stays open for its reply.
+  def test_close_notify
+    pair = Pair.connect
+    pair.client.write("request")
+    pair.client.close_notify
+    pair.client.close_notify
+    assert_equal [[23, 24], [23, 19]], Pair.records(sent = Pair.take(pair.client))
+    pair.server.receive(sent, now: NOW)
+    assert_equal ["request", nil], [pair.server.read(100), pair.server.read(100)]
+    assert_raises(TLS::UsageError) { pair.client.write("more") }
+    assert_raises(TLS::UsageError) { pair.client.request_key_update }
+    pair.server.write("reply")
+    pair.server.close_notify
+    Pair.pump(pair.client, pair.server)
+    assert_equal ["reply", nil], [pair.client.read(100), pair.client.read(100)]
+    refute pair.client.failed? || pair.server.failed?
+  end
+
+  # Once our side is closed, not even an alert goes out.
+  def test_nothing_after_close_notify
+    pair, server = connected_with_server_writer
+    pair.client.close_notify
+    Pair.take(pair.client)
+    pair.client.receive(server.seal("\x18\x00\x00\x01\x05\x16".b), now: NOW)
+    assert pair.client.failed?
+    assert_empty Pair.take(pair.client)
+  end
+
   # RFC 9846 "Closure Alerts": read on after user_canceled.
   def test_user_canceled
     pair, server = connected_with_server_writer

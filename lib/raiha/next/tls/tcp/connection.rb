@@ -48,6 +48,7 @@ module Raiha::Next::TLS
         @events = events
         @failed = false
         @read_closed = false
+        @write_closed = false
         @handshake_received = false
         @record_size_limits_set = false
         @change_cipher_spec_sent = !config.profile.compatibility_mode
@@ -81,6 +82,7 @@ module Raiha::Next::TLS
       # as 1-RTT data once it does.
       def write(data)
         raise UsageError, "the connection failed" if @failed
+        raise UsageError, "our side is closed" if @write_closed
         room = WRITE_BUFFER_LIMIT - @unsent.bytesize - @outgoing.bytesize
         taken = data.byteslice(0, room.clamp(0..)).to_s
         @unsent << taken
@@ -102,8 +104,22 @@ module Raiha::Next::TLS
       # failed.
       def request_key_update(request_peer_update: false)
         raise UsageError, "the connection failed" if @failed
+        raise UsageError, "our side is closed" if @write_closed
         @machine.request_key_update(request_peer_update:)
         drain_machine
+        nil
+      end
+
+      # Closes our side (RFC 9846 "Closure Alerts"): a close_notify under the
+      # epoch the peer reads, and nothing more after it, not even an alert.
+      # The peer's side stays open. Data held for a handshake that has not
+      # completed is dropped.
+      def close_notify
+        raise UsageError, "the connection failed" if @failed
+        return nil if @write_closed
+        send_alert(@machine.write_epoch, :warning, :close_notify)
+        @write_closed = true
+        @unsent.clear
         nil
       end
 
@@ -207,6 +223,7 @@ module Raiha::Next::TLS
       # client sends one ChangeCipherSpec before its first protected record,
       # a server right after its first handshake record.
       private def send_record(content_type, payload, epoch)
+        return if @write_closed
         change_cipher_spec if @config.client? && epoch != :initial
         @outgoing << @record.write(content_type:, payload:, epoch:)
         change_cipher_spec if @config.server? && content_type == :handshake
