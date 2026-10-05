@@ -74,7 +74,9 @@ namespace :test do
     namespace :interop do
       NEXT_INTEROP_SPEC = {
         openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl },
-        picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls }
+        picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls },
+        # A gem in the bundle: nothing to build.
+        tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
       }.freeze
 
       NEXT_INTEROP_SPEC.each do |name, spec|
@@ -84,7 +86,7 @@ namespace :test do
           t.libs << "lib"
           t.test_files = [spec[:file]]
         end
-        task name => "interop:build:#{spec[:build]}"
+        task name => "interop:build:#{spec[:build]}" if spec[:build]
       end
     end
   end
