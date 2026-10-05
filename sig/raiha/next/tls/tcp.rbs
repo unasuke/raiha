@@ -12,6 +12,33 @@ module Raiha::Next::TLS
 
     type event = ::Raiha::Next::TLS::Event::t | Event::PeerAlert
 
+    class Acceptor
+      MAX_HELD_BYTES: Integer
+
+      @acceptor: Handshake::Acceptor
+      @record: Record::Layer
+      @outgoing: String
+      @alert: Symbol?
+      @reason: Symbol?
+      @peer_alerted: bool
+      @handed_over: bool
+
+      def initialize: () -> void
+      def receive: (String bytes, now: Time) -> nil
+      def each_output: () { (String bytes) -> void } -> void
+      def accepted: () -> Handshake::Accepted?
+      def reject: (Symbol description) -> nil
+      def failed?: () -> bool
+      def alert: () -> Symbol?
+      def reason: () -> Symbol?
+      def hand_over: () -> [Handshake::Accepted, Record::Layer]
+
+      private def take: (Record::Plaintext record, Time now) -> void
+      private def hold: () -> nil
+      private def send_alerts: () -> nil
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+    end
+
     class Connection
       WRITE_BUFFER_LIMIT: Integer
       ALERT_LEVELS: Hash[Symbol, Integer]
