@@ -39,6 +39,7 @@ module Raiha::Next::TLS
       def each_output: () { (String bytes) -> void } -> void
       def write: (String data) -> Integer
       def read: (Integer max_bytes) -> String
+      def request_key_update: (?request_peer_update: bool) -> nil
       def handshake_complete?: () -> bool
       def failed?: () -> bool
       def next_event: () -> event?

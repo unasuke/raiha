@@ -93,6 +93,17 @@ module Raiha::Next::TLS
         @received.slice!(0, max_bytes).to_s
       end
 
+      # A KeyUpdate of our own, and of the peer's too with
+      # `request_peer_update: true` (Machine#request_key_update). Raises
+      # UsageError before the handshake completes and once the connection
+      # failed.
+      def request_key_update(request_peer_update: false)
+        raise UsageError, "the connection failed" if @failed
+        @machine.request_key_update(request_peer_update:)
+        drain_machine
+        nil
+      end
+
       def handshake_complete? = @machine.complete?
 
       def failed? = @failed

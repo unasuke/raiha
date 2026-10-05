@@ -21,6 +21,20 @@ class RaihaNextTLSTCPKeyUpdateTest < Minitest::Test
     pair
   end
 
+  def test_request_key_update
+    pair = Pair.connect
+    pair.client.request_key_update
+    sent = Pair.take(pair.client)
+    # The KeyUpdate message alone: 5 bytes, its content type and the tag.
+    assert_equal [[23, 22]], Pair.records(sent)
+    pair.server.receive(sent, now: NOW)
+    pair.client.write("after")
+    Pair.pump(pair.client, pair.server)
+    refute pair.server.failed?
+    assert_equal "after", pair.server.read(10)
+    assert_raises(TLS::UsageError) { Pair.client.request_key_update }
+  end
+
   # RFC 9846 "Limits on Key Usage": with room for 3 records under the first
   # key, the third is a KeyUpdate, and the peer follows it. The next key
   # comes from the Machine with the suite's own limit.
