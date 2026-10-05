@@ -35,6 +35,21 @@ class RaihaNextTLSTCPKeyUpdateTest < Minitest::Test
     assert_raises(TLS::UsageError) { Pair.client.request_key_update }
   end
 
+  # Asked for one, the server answers right before its next application
+  # data, and not before.
+  def test_an_owed_key_update_goes_before_application_data
+    pair = Pair.connect
+    pair.client.request_key_update(request_peer_update: true)
+    Pair.pump(pair.client, pair.server)
+    assert_empty Pair.take(pair.server)
+    pair.server.write("x")
+    sent = Pair.take(pair.server)
+    assert_equal [[23, 22], [23, 18]], Pair.records(sent)
+    pair.client.receive(sent, now: NOW)
+    refute pair.client.failed?
+    assert_equal "x", pair.client.read(10)
+  end
+
   # RFC 9846 "Limits on Key Usage": with room for 3 records under the first
   # key, the third is a KeyUpdate, and the peer follows it. The next key
   # comes from the Machine with the suite's own limit.

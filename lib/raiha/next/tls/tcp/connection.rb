@@ -196,9 +196,13 @@ module Raiha::Next::TLS
         @outgoing << @record.write(content_type: :change_cipher_spec, payload: "\x01".b, epoch: :initial)
       end
 
-      # One record at a time, so the key can change between two.
+      # A KeyUpdate the peer asked for first (RFC 9846 "Key and
+      # Initialization Vector Update"), then one record at a time, so the key
+      # can change between two.
       private def send_application_data
         return if @unsent.empty? || !@machine.complete? || @failed
+        @machine.before_application_data
+        drain_machine
         until @unsent.empty?
           update_keys_at_the_limit
           chunk = @unsent.byteslice(0, @record.fragment_size(:application)).to_s
