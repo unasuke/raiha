@@ -73,7 +73,8 @@ namespace :test do
   namespace :next do
     namespace :interop do
       NEXT_INTEROP_SPEC = {
-        openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl }
+        openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl },
+        picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls }
       }.freeze
 
       NEXT_INTEROP_SPEC.each do |name, spec|
