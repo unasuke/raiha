@@ -1,0 +1,56 @@
+module Raiha::Next::TLS
+  module TCP
+    module Event
+      class PeerAlert < Data
+        attr_reader level: Integer
+        attr_reader description: Integer
+
+        def self.new: (level: Integer, description: Integer) -> instance
+                    | (Integer level, Integer description) -> instance
+      end
+    end
+
+    type event = ::Raiha::Next::TLS::Event::t | Event::PeerAlert
+
+    class Connection
+      WRITE_BUFFER_LIMIT: Integer
+      ALERT_LEVELS: Hash[Symbol, Integer]
+
+      @machine: Handshake::Machine
+      @config: Config
+      @record: Record::Layer
+      @outgoing: String
+      @unsent: String
+      @received: String
+      @events: Array[event]
+      @failed: bool
+      @handshake_received: bool
+      @change_cipher_spec_sent: bool
+
+      def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
+      def self.server: (config: Config, keyring: Keyring, now: Time,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
+      private def self.new: (Handshake::Machine machine, Config config) -> Connection
+
+      def initialize: (Handshake::Machine machine, Config config) -> void
+      def receive: (String bytes, now: Time) -> nil
+      def each_output: () { (String bytes) -> void } -> void
+      def write: (String data) -> Integer
+      def read: (Integer max_bytes) -> String
+      def handshake_complete?: () -> bool
+      def failed?: () -> bool
+      def next_event: () -> event?
+
+      private def take: (Record::Plaintext record, Time now) -> void
+      private def receive_alert: (String payload) -> nil
+      private def drain_machine: () -> void
+      private def send_alert: (epoch epoch, Symbol level, Symbol description) -> void
+      private def send_record: (Record::content_type content_type, String payload, epoch epoch) -> void
+      private def change_cipher_spec: () -> void
+      private def send_application_data: () -> void
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+      private def stop: () -> nil
+    end
+  end
+end

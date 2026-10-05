@@ -69,9 +69,10 @@ class RaihaNextTLSHandshakeHygieneTest < Minitest::Test
   end
 
   # The Acceptor has a fail! of its own: it runs before any Machine exists.
+  # An alert from the peer (TCP::Event::PeerAlert) is not one of ours.
   def test_alerts_are_built_in_one_place
     assert_equal [["handshake/acceptor.rb", :fail!], [CONDUCTOR, :fail!]],
-      sites { |node| new_of?(node, "Output::Alert.new") || new_of?(node, "Alert") }
+      sites { |node| new_of?(node, "::Alert") || (new_of?(node, "Alert") && node.receiver&.slice == "Alert") }
   end
 
   # The transcript is added to when receiving or sending a message, and
