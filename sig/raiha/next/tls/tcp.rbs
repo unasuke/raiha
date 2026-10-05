@@ -24,6 +24,7 @@ module Raiha::Next::TLS
       @received: String
       @events: Array[event]
       @failed: bool
+      @read_closed: bool
       @handshake_received: bool
       @record_size_limits_set: bool
       @change_cipher_spec_sent: bool
@@ -38,7 +39,7 @@ module Raiha::Next::TLS
       def receive: (String bytes, now: Time) -> nil
       def each_output: () { (String bytes) -> void } -> void
       def write: (String data) -> Integer
-      def read: (Integer max_bytes) -> String
+      def read: (Integer max_bytes) -> String?
       def request_key_update: (?request_peer_update: bool) -> nil
       def handshake_complete?: () -> bool
       def failed?: () -> bool
@@ -47,6 +48,7 @@ module Raiha::Next::TLS
       private def take: (Record::Plaintext record, Time now) -> void
       private def limit_record_sizes: () -> void
       private def receive_alert: (String payload) -> nil
+      private def close_read: () -> nil
       private def drain_machine: () -> void
       private def send_alert: (epoch epoch, Symbol level, Symbol description) -> void
       private def send_record: (Record::content_type content_type, String payload, epoch epoch) -> void

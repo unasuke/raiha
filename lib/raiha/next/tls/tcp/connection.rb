@@ -47,17 +47,19 @@ module Raiha::Next::TLS
         events = []
         @events = events
         @failed = false
+        @read_closed = false
         @handshake_received = false
         @record_size_limits_set = false
         @change_cipher_spec_sent = !config.profile.compatibility_mode
         drain_machine
       end
 
-      # Bytes read from the socket, in any pieces.
+      # Bytes read from the socket, in any pieces. After the peer's
+      # close_notify they are ignored.
       def receive(bytes, now:)
-        return nil if @failed
+        return nil if @failed || @read_closed
         @record << bytes
-        until @failed || (record = @record.read(epoch: @machine.read_epoch)).nil?
+        until @failed || @read_closed || (record = @record.read(epoch: @machine.read_epoch)).nil?
           case record
           when Record::Failure then fail!(record.alert, record.reason)
           else take(record, now)
@@ -87,8 +89,9 @@ module Raiha::Next::TLS
       end
 
       # Up to `max_bytes` of the peer's application data, "" when none has
-      # come.
+      # come, and nil once the peer has closed its side and all is read.
       def read(max_bytes)
+        return nil if @read_closed && @received.empty?
         raise UsageError, "the connection failed" if @failed && @received.empty?
         @received.slice!(0, max_bytes).to_s
       end
@@ -148,14 +151,23 @@ module Raiha::Next::TLS
         @record_size_limits_set = true
       end
 
-      # RFC 9846 "Error Alerts": every alert ends the connection, whatever
-      # its level, and none is sent back.
+      # RFC 9846 "Closure Alerts": close_notify after the handshake closes
+      # the peer's side only; ours stays open and sends nothing back, as
+      # answering at once is what TLS 1.2 did, inviting truncation. RFC 9846
+      # "Error Alerts": every other alert ends the connection, whatever its
+      # level, and none is sent back.
       private def receive_alert(payload)
         return fail!(:decode_error, :malformed_alert) unless payload.bytesize == 2
         level, description = payload.unpack("C2").map(&:to_i)
+        return close_read if IANA.alert_name(description) == :close_notify && @machine.complete?
         @events << Event::PeerAlert.new(level:, description:)
         @machine.discard
         stop
+      end
+
+      private def close_read
+        @read_closed = true
+        nil
       end
 
       # The Machine's outputs in queue order: each Secret into the key
