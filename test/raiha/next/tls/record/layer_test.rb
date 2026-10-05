@@ -104,11 +104,19 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
     end
   end
 
-  # A length past 2^14 + 256 fails as soon as the header is in.
+  # A length past 2^14 + 256 fails as soon as the header is in, and past
+  # 2^14 for a record that is never protected.
   def test_overlong_header
+    [[23, Record::MAX_PLAINTEXT + Record::MAX_EXPANSION + 1], [22, Record::MAX_PLAINTEXT + 1], [21, Record::MAX_PLAINTEXT + 1]].each do |type, length|
+      [:initial, :handshake].each do |epoch|
+        rec = layer
+        rec << [type, 0x0303, length].pack("Cnn")
+        assert_equal failure(:record_overflow, :record_too_large), rec.read(epoch:), [type, epoch].inspect
+      end
+    end
     rec = layer
-    rec << [23, 0x0303, Record::MAX_PLAINTEXT + Record::MAX_EXPANSION + 1].pack("Cnn")
-    assert_equal failure(:record_overflow, :record_too_large), rec.read(epoch: :initial)
+    rec << [23, 0x0303, Record::MAX_PLAINTEXT + Record::MAX_EXPANSION].pack("Cnn")
+    assert_nil rec.read(epoch: :initial)
   end
 
   def test_protected_epoch_rules

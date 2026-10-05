@@ -74,9 +74,12 @@ module Raiha::Next::TLS
       # Failure, or nil until a whole record is buffered.
       def read(epoch:)
         return nil if @buffer.bytesize < HEADER_LENGTH
-        # The version field is ignored, as RFC 9846 asks.
+        # The version field is ignored, as RFC 9846 asks. Only a record of
+        # application_data is ever protected, so any other is held to the
+        # plaintext limit as soon as its header is in.
         type, length = @buffer.unpack("Cx2n").map(&:to_i)
-        return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > MAX_PLAINTEXT + MAX_EXPANSION
+        limit = type == CONTENT_TYPES.fetch(:application_data) ? MAX_PLAINTEXT + MAX_EXPANSION : MAX_PLAINTEXT
+        return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit
         return nil if @buffer.bytesize < HEADER_LENGTH + length
         header = @buffer.byteslice(0, HEADER_LENGTH).to_s
         fragment = @buffer.byteslice(HEADER_LENGTH, length).to_s
