@@ -26,6 +26,11 @@ module Raiha::Next::TLS
 
       ALERT_LEVELS = { warning: 1, fatal: 2 }.freeze #: Hash[Symbol, Integer]
 
+      # user_canceled alerts read on in a row, without application data
+      # between them; one more ends the connection. BoringSSL's
+      # kMaxWarningAlerts, which rustls uses too.
+      MAX_CONSECUTIVE_WARNING_ALERTS = 4
+
       def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil)
         new(Handshake::Machine.client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:), config)
       end
@@ -49,6 +54,7 @@ module Raiha::Next::TLS
         @failed = false
         @read_closed = false
         @write_closed = false
+        @consecutive_warning_alerts = 0
         @handshake_received = false
         @record_size_limits_set = false
         @change_cipher_spec_sent = !config.profile.compatibility_mode
@@ -151,8 +157,12 @@ module Raiha::Next::TLS
           return fail!(:unexpected_message, :interleaved_record) if @machine.partial_message?
           return fail!(:unexpected_message, :application_data_before_handshake) unless @machine.read_epoch == :application
           @received << record.payload
-          # The peer's run of KeyUpdates ends with data that is not empty.
-          @machine.application_data_received unless record.payload.empty?
+          # The peer's runs of KeyUpdates and of user_canceled end with data
+          # that is not empty.
+          unless record.payload.empty?
+            @machine.application_data_received
+            @consecutive_warning_alerts = 0
+          end
         end
       end
 
@@ -183,8 +193,13 @@ module Raiha::Next::TLS
           @events << ::Raiha::Next::TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)
           return stop
         end
+        if IANA.alert_name(description) == :user_canceled
+          @consecutive_warning_alerts += 1
+          return fail!(:unexpected_message, :too_many_warning_alerts) if @consecutive_warning_alerts > MAX_CONSECUTIVE_WARNING_ALERTS
+          @events << Event::PeerAlert.new(level:, description:)
+          return nil
+        end
         @events << Event::PeerAlert.new(level:, description:)
-        return nil if IANA.alert_name(description) == :user_canceled
         @machine.discard
         stop
       end

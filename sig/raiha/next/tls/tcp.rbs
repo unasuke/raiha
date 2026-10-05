@@ -15,6 +15,7 @@ module Raiha::Next::TLS
     class Connection
       WRITE_BUFFER_LIMIT: Integer
       ALERT_LEVELS: Hash[Symbol, Integer]
+      MAX_CONSECUTIVE_WARNING_ALERTS: Integer
 
       @machine: Handshake::Machine
       @config: Config
@@ -26,6 +27,7 @@ module Raiha::Next::TLS
       @failed: bool
       @read_closed: bool
       @write_closed: bool
+      @consecutive_warning_alerts: Integer
       @handshake_received: bool
       @record_size_limits_set: bool
       @change_cipher_spec_sent: bool

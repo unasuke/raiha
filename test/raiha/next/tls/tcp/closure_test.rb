@@ -74,6 +74,20 @@ class RaihaNextTLSTCPClosureTest < Minitest::Test
     assert_equal "more", pair.client.read(10)
   end
 
+  # Four in a row, then data, then four more: the run starts over. The
+  # fifth in a row ends the connection.
+  def test_runs_of_user_canceled
+    pair, server = connected_with_server_writer
+    batch = ->(n) { Array.new(n) { server.seal("\x01\x5a\x15".b) }.join }
+    pair.client.receive(batch.(4) + server.seal("data\x17".b) + batch.(4), now: NOW)
+    refute pair.client.failed?
+    assert_equal 8, Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert).size
+    pair.client.receive(batch.(1), now: NOW)
+    assert_equal TLS::Event::Failed.new(alert: :unexpected_message, reason: :too_many_warning_alerts),
+      Pair.events(pair.client).grep(TLS::Event::Failed).first
+    assert_equal [[23, 19]], Pair.records(Pair.take(pair.client))
+  end
+
   # Any other alert ends the connection, whatever its level.
   def test_other_alerts_are_fatal
     pair, server = connected_with_server_writer
