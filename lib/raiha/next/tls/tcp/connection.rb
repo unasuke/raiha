@@ -156,7 +156,8 @@ module Raiha::Next::TLS
       # answering at once is what TLS 1.2 did, inviting truncation. During
       # the handshake it is a failure, unauthenticated as the peer still is.
       # RFC 9846 "Error Alerts": every other alert ends the connection,
-      # whatever its level, and none is sent back.
+      # whatever its level, and none is sent back, but for user_canceled,
+      # after which we read on until the close_notify that should follow.
       private def receive_alert(payload)
         return fail!(:decode_error, :malformed_alert) unless payload.bytesize == 2
         level, description = payload.unpack("C2").map(&:to_i)
@@ -167,6 +168,7 @@ module Raiha::Next::TLS
           return stop
         end
         @events << Event::PeerAlert.new(level:, description:)
+        return nil if IANA.alert_name(description) == :user_canceled
         @machine.discard
         stop
       end

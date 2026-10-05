@@ -37,6 +37,24 @@ class RaihaNextTLSTCPClosureTest < Minitest::Test
     assert_empty Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert)
   end
 
+  # RFC 9846 "Closure Alerts": read on after user_canceled.
+  def test_user_canceled
+    pair, server = connected_with_server_writer
+    pair.client.receive(server.seal("\x01\x5a\x15".b) + server.seal("more\x17".b), now: NOW)
+    refute pair.client.failed?
+    assert_equal [TLS::TCP::Event::PeerAlert.new(level: 1, description: 90)], Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert)
+    assert_equal "more", pair.client.read(10)
+  end
+
+  # Any other alert ends the connection, whatever its level.
+  def test_other_alerts_are_fatal
+    pair, server = connected_with_server_writer
+    pair.client.receive(server.seal("\x01\x2a\x15".b) + server.seal("more\x17".b), now: NOW)
+    assert pair.client.failed?
+    assert_equal [TLS::TCP::Event::PeerAlert.new(level: 1, description: 42)], Pair.events(pair.client).grep(TLS::TCP::Event::PeerAlert)
+    assert_empty Pair.take(pair.client)
+  end
+
   # During the handshake the peer is not yet authenticated: a failure, and
   # no alert back.
   def test_close_notify_during_the_handshake
