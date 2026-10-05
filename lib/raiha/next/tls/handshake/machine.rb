@@ -122,6 +122,10 @@ module Raiha::Next::TLS
       # The epoch of the next handshake bytes to pass in.
       def read_epoch = @conductor.read_epoch
 
+      # Part of a handshake message has come, but not all of it. Over TCP no
+      # other kind of record may come in between (RFC 9846 "Record Layer").
+      def partial_message? = @acceptor&.partial_message? || @conductor.pending_input?
+
       # The epoch to send an alert under now: the one the peer reads.
       def write_epoch = @conductor.write_epoch
 

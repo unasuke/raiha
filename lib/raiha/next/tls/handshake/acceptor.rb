@@ -64,6 +64,9 @@ module Raiha::Next::TLS
 
       def failed? = !@alert.nil?
 
+      # Part of a ClientHello has come, but not all of it.
+      def partial_message? = @reassembler.pending?
+
       # The ClientHello once whole and valid; nil before, and after a failure.
       def accepted = failed? ? nil : @accepted
 

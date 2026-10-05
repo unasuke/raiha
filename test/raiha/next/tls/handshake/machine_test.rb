@@ -178,6 +178,23 @@ class RaihaNextTLSMachineTest < Minitest::Test
     end
   end
 
+  # Whether part of a message has come, before and after the Acceptor.
+  def test_partial_message
+    client = Pair.client
+    hello = client.outputs.first.bytes
+    config = Pair.server_config
+    server = TLS::Handshake::Machine.server(config:, keyring: Pair.server_keyring(config:), now: NOW)
+    refute server.partial_message?
+    server.receive(hello.byteslice(0, 10).to_s, epoch: :initial, now: NOW)
+    assert server.partial_message?
+    server.receive(hello.byteslice(10..).to_s, epoch: :initial, now: NOW)
+    refute server.partial_message?
+    Pair.deliver(server.outputs, client)
+    refute client.partial_message?
+    client.receive("\x04\x00".b, epoch: :application, now: NOW)
+    assert client.partial_message?
+  end
+
   # RFC 9001 "Key Update": no KeyUpdate message in QUIC.
   def test_no_key_update_in_quic
     pair = quic_pair

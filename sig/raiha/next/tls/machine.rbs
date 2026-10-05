@@ -293,6 +293,7 @@ module Raiha::Next::TLS
       def each_event: () { (Event::t) -> void } -> void
                     | () -> Enumerator[Event::t, void]
       def read_epoch: () -> epoch
+      def partial_message?: () -> bool
       def write_epoch: () -> epoch
       def complete?: () -> bool
       def request_key_update: (?request_peer_update: bool) -> nil
@@ -357,6 +358,7 @@ module Raiha::Next::TLS
 
       def initialize: () -> void
       def failed?: () -> bool
+      def partial_message?: () -> bool
       def accepted: () -> Accepted?
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
       def each_output: () { (Output::Alert) -> void } -> void
