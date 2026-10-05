@@ -25,6 +25,7 @@ module Raiha::Next::TLS
       @events: Array[event]
       @failed: bool
       @handshake_received: bool
+      @record_size_limits_set: bool
       @change_cipher_spec_sent: bool
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
@@ -43,6 +44,7 @@ module Raiha::Next::TLS
       def next_event: () -> event?
 
       private def take: (Record::Plaintext record, Time now) -> void
+      private def limit_record_sizes: () -> void
       private def receive_alert: (String payload) -> nil
       private def drain_machine: () -> void
       private def send_alert: (epoch epoch, Symbol level, Symbol description) -> void

@@ -63,6 +63,26 @@ class RaihaNextTLSTCPConnectionTest < Minitest::Test
     assert_equal 4, client.write("more")
   end
 
+  # RFC 8449: each side's protected records keep to the other's limit,
+  # the server's first flight included.
+  def test_record_size_limit
+    client = Pair.client(config: Pair::TLSPair.client_config(record_size_limit: 200))
+    server = Pair.server(config: Pair::TLSPair.server_config(record_size_limit: 300))
+    server.receive(Pair.take(client), now: NOW)
+    flight = Pair.records(Pair.take(server))
+    assert_operator flight.size, :>, 3
+    assert flight.drop(2).all? { |_, length| length <= 200 + 16 }, flight.inspect
+
+    pair = Pair.connect(client: Pair.client(config: Pair::TLSPair.client_config(record_size_limit: 200)),
+      server: Pair.server(config: Pair::TLSPair.server_config(record_size_limit: 300)))
+    pair.client.write("c" * 1000)
+    pair.server.write("s" * 1000)
+    to_server = Pair.records(Pair.take(pair.client))
+    to_client = Pair.records(Pair.take(pair.server))
+    assert_equal [299 + 1 + 16] * 3 + [103 + 1 + 16], to_server.map(&:last)
+    assert_equal [199 + 1 + 16] * 5 + [5 + 1 + 16], to_client.map(&:last)
+  end
+
   def test_read_takes_at_most_max_bytes
     pair = Pair.connect
     pair.server.write("abcdef")

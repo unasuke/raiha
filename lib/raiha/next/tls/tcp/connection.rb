@@ -48,6 +48,7 @@ module Raiha::Next::TLS
         @events = events
         @failed = false
         @handshake_received = false
+        @record_size_limits_set = false
         @change_cipher_spec_sent = !config.profile.compatibility_mode
         drain_machine
       end
@@ -104,6 +105,7 @@ module Raiha::Next::TLS
         when :handshake
           @handshake_received = true
           @machine.receive(record.payload, epoch: @machine.read_epoch, now:)
+          limit_record_sizes
           drain_machine
           send_application_data
         when :change_cipher_spec
@@ -120,6 +122,17 @@ module Raiha::Next::TLS
           return fail!(:unexpected_message, :application_data_before_handshake) unless @machine.read_epoch == :application
           @received << record.payload
         end
+      end
+
+      # RFC 8449, once the Machine has seen the peer's record_size_limit and
+      # before the records it lets out: ours keep to it, and if we sent one
+      # too, the peer's keep to ours. A server learns the client's from the
+      # ClientHello, before its first flight.
+      private def limit_record_sizes
+        return if @record_size_limits_set
+        peer = @machine.peer_record_size_limit or return
+        @record.limit_sizes(send: peer, receive: @config.record_size_limit || Record::DEFAULT_SIZE_LIMIT)
+        @record_size_limits_set = true
       end
 
       # RFC 9846 "Error Alerts": every alert ends the connection, whatever
