@@ -1,0 +1,12 @@
+module Raiha::Next::TLS
+  module Keylog
+    # What a Machine writes its keylog lines to. A File works as is.
+    interface _Writer
+      def write: (String line) -> untyped
+    end
+
+    LABELS: Hash[Symbol, String]
+
+    def self.line: (Symbol name, String client_random, String secret) -> String
+  end
+end

@@ -243,7 +243,7 @@ module Raiha::Next::TLS
           ]
         )
         @conductor.emit_server_hello!(server_hello, suite.hash_algorithm)
-        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm)
+        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: ch.random)
         schedule.handshake!(shared_secret)
         shared_secret.clear
         transcript_hash = @conductor.transcript_hash

@@ -68,6 +68,7 @@ module Raiha::Next::TLS
       type secret_entry = [epoch, Output::direction, String]
 
       @tracer: Trace::_Tracer?
+      @keylog: Keylog::_Writer?
       @substitutions: Hash[Integer, Array[String]]?
       @reassemblers: Hash[epoch, Reassembler]
       @transcript: Transcript
@@ -86,7 +87,8 @@ module Raiha::Next::TLS
       attr_reader alert: Symbol?
       attr_reader key_schedule: KeySchedule?
 
-      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, ?substitutions: Hash[Integer, Array[String]]?) { (Conductor) -> _Side } -> void
+      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                       ?substitutions: Hash[Integer, Array[String]]?) { (Conductor) -> _Side } -> void
       def failed?: () -> bool
       def start: (now: Time) -> nil
       def request_key_update: (request_peer_update: bool) -> nil
@@ -99,7 +101,7 @@ module Raiha::Next::TLS
       def expected_types: () -> Set[Integer]
       def pending_input?: () -> bool
       def transcript_hash: () -> String
-      def start_key_schedule: (hash: Symbol, ?psk: String?) -> KeySchedule
+      def start_key_schedule: (hash: Symbol, client_random: String, ?psk: String?) -> KeySchedule
       def event!: (Event::t event) -> nil
       def tracing?: () -> bool
       def trace: (Trace::t value) -> nil
@@ -267,21 +269,21 @@ module Raiha::Next::TLS
       @acceptor: Acceptor?
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Machine
       def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?) -> Machine
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
-                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
+                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?) -> Machine
       private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
-                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
+                                      extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?) -> Machine
       private def self.check: (Config config, Keyring keyring, Array[Extension::_Extension] extensions) -> void
-      private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?,
+      private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                              substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> Machine
 
-      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, substitutions: Hash[Integer, Array[String]]?,
+      def initialize: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, keylog: Keylog::_Writer?, substitutions: Hash[Integer, Array[String]]?,
                        now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> void
       def receive: (String bytes, epoch: epoch, now: Time) -> nil
       def each_output: () { (Output::t) -> void } -> void

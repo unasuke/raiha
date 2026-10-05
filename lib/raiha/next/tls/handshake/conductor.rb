@@ -3,6 +3,7 @@
 require_relative "../error"
 require_relative "../event"
 require_relative "../key_schedule"
+require_relative "../keylog"
 require_relative "../output"
 require_relative "../trace"
 require_relative "../transcript"
@@ -38,10 +39,11 @@ module Raiha::Next::TLS
       # The side is built by the block, given this Conductor. `substitutions`
       # replace messages we send with given bytes, by message type and in
       # order; only Test::RFC8448 passes them.
-      def initialize(config:, keyring:, tracer:, substitutions: nil)
+      def initialize(config:, keyring:, tracer:, keylog: nil, substitutions: nil)
         @config = config
         @keyring = keyring
         @tracer = tracer
+        @keylog = keylog
         @substitutions = substitutions&.transform_values(&:dup)
         @state = nil #: Symbol?
         @read_epoch = :initial #: epoch
@@ -132,8 +134,12 @@ module Raiha::Next::TLS
 
       def transcript_hash = @transcript.digest
 
-      def start_key_schedule(hash:, psk: nil)
-        @key_schedule = KeySchedule.new(hash:, psk:)
+      # The key schedule of this handshake. Each traffic secret goes to the
+      # keylog, if any, as it is derived.
+      def start_key_schedule(hash:, client_random:, psk: nil)
+        keylog = @keylog
+        log = keylog && ->(name, secret) { keylog.write(Keylog.line(name, client_random, secret)) }
+        @key_schedule = KeySchedule.new(hash:, psk:, on_traffic_secret: log)
       end
 
       def event!(event)

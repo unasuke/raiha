@@ -18,7 +18,7 @@ module Raiha::Next::TLS::Test::RFC8448
   #
   # The peer's certificates are not verified: the trace's are long expired
   # and name no host.
-  def self.machine(section, role, now:)
+  def self.machine(section, role, now:, keylog: nil)
     vectors = { simple_1rtt: Simple1RTT, hello_retry_request: HelloRetryRequest, client_authentication: ClientAuthentication }
     trace = vectors.fetch(section)
     tls = Raiha::Next::TLS
@@ -41,7 +41,7 @@ module Raiha::Next::TLS::Test::RFC8448
         substitutions[15] = [ClientAuthentication::CLIENT_CERTIFICATE_VERIFY]
       end
       tls::Handshake::Machine.__send__(:start_client, config:, keyring:, server_name: "server", now:, extensions: [],
-        tracer: nil, substitutions:)
+        tracer: nil, keylog:, substitutions:)
     else
       server_hello = trace.const_get(:SERVER_HELLO)
       group, key = if section == :hello_retry_request
@@ -65,7 +65,7 @@ module Raiha::Next::TLS::Test::RFC8448
         substitutions[15] = [trace.const_get(:CERTIFICATE_VERIFY)]
       end
       tls::Handshake::Machine.__send__(:start_server, config:, keyring:, client_hello: nil, now:, extensions: [],
-        tracer: nil, substitutions:)
+        tracer: nil, keylog:, substitutions:)
     end
   end
 

@@ -25,7 +25,7 @@ module Raiha::Next::TLS::Test::RFC8448
 
   type section = :simple_1rtt | :hello_retry_request | :client_authentication
 
-  def self.machine: (section section, :client | :server role, now: Time) -> Raiha::Next::TLS::Handshake::Machine
+  def self.machine: (section section, :client | :server role, now: Time, ?keylog: Raiha::Next::TLS::Keylog::_Writer?) -> Raiha::Next::TLS::Handshake::Machine
   def self.server_identity: () -> Raiha::Next::TLS::Keyring::Identity
 
   module Simple1RTT

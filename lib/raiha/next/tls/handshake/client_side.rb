@@ -217,7 +217,7 @@ module Raiha::Next::TLS
         @cipher_suite = suite
         @group = key_pair.group
         @key_pairs = []
-        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm)
+        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: client_hello.random)
         schedule.handshake!(shared_secret)
         shared_secret.clear
         transcript_hash = @conductor.transcript_hash

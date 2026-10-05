@@ -13,6 +13,7 @@ module Raiha::Next::TLS
     def self.derive_secret: (secret: String, label: String, transcript_hash: String, hash: Symbol) -> String
     def self.export: (inner_value: String, context: String, length: Integer, hash: Symbol) -> String
 
+    @on_traffic_secret: (^(Symbol name, String secret) -> void)?
     @hash_length: Integer
     @empty_hash: String
     @secret: String
@@ -22,7 +23,7 @@ module Raiha::Next::TLS
     attr_reader hash_algorithm: Symbol
     attr_reader stage: stage
 
-    def initialize: (hash: Symbol, ?psk: String?) -> void
+    def initialize: (hash: Symbol, ?psk: String?, ?on_traffic_secret: (^(Symbol name, String secret) -> void)?) -> void
     def binder: (kind: binder_kind, transcript_hash: String) -> String
     def verify_binder: (kind: binder_kind, transcript_hash: String, binder: String) -> bool
     def client_early_traffic_secret: (String transcript_hash) -> String
@@ -47,6 +48,7 @@ module Raiha::Next::TLS
     private def advance: (stage from, stage to) { (String previous) -> String } -> self
     private def next_stage: (String secret, String ikm) -> String
     private def stage_secret: (stage stage) -> String
+    private def derive_traffic_secret: (Symbol label, String secret, String transcript_hash) -> String
     private def derive: (String secret, Symbol label, String transcript_hash) -> String
     private def expand: (String secret, Symbol label, Integer length) -> String
     private def mac: (String key, String data) -> String

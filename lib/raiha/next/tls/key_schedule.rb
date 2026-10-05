@@ -76,8 +76,11 @@ module Raiha::Next::TLS
 
     # The early secret from `psk`, or from zeros without one. The hash is
     # fixed here: a server knows it once the suite and PSK are chosen, a
-    # client from the PSK it offers or the ServerHello.
-    def initialize(hash:, psk: nil)
+    # client from the PSK it offers or the ServerHello. `on_traffic_secret`
+    # is called with the name of each traffic secret and the secret as it
+    # is derived, for the keylog; a KeyUpdate's next generation is not.
+    def initialize(hash:, psk: nil, on_traffic_secret: nil)
+      @on_traffic_secret = on_traffic_secret
       @hash_algorithm = hash
       @hash_length = Crypto.hash_length(hash)
       @empty_hash = Crypto.hash(hash, "".b)
@@ -112,7 +115,7 @@ module Raiha::Next::TLS
       expected&.clear
     end
 
-    def client_early_traffic_secret(transcript_hash) = derive(stage_secret(:early), :client_early_traffic, transcript_hash)
+    def client_early_traffic_secret(transcript_hash) = derive_traffic_secret(:client_early_traffic, stage_secret(:early), transcript_hash)
 
     # To the handshake secret; forgets the early secret.
     def handshake!(shared_secret)
@@ -208,7 +211,7 @@ module Raiha::Next::TLS
 
     private def handshake_traffic_secret(side, transcript_hash)
       label = side == :client ? :client_handshake_traffic : :server_handshake_traffic
-      traffic_secret = derive(stage_secret(:handshake), label, transcript_hash)
+      traffic_secret = derive_traffic_secret(label, stage_secret(:handshake), transcript_hash)
       @finished_keys[side]&.clear
       @finished_keys[side] = expand(traffic_secret, :finished, @hash_length)
       traffic_secret
@@ -218,7 +221,7 @@ module Raiha::Next::TLS
     # handed out cannot be cleared from here.
     private def derive_application_traffic_secret(side, transcript_hash)
       label = side == :client ? :client_application_traffic : :server_application_traffic
-      traffic_secret = derive(stage_secret(:main), label, transcript_hash)
+      traffic_secret = derive_traffic_secret(label, stage_secret(:main), transcript_hash)
       @application_traffic_secrets[side]&.clear
       @application_traffic_secrets[side] = traffic_secret
       traffic_secret.dup
@@ -243,6 +246,10 @@ module Raiha::Next::TLS
     private def stage_secret(stage)
       raise UsageError, "the key schedule is at #{@stage}, not #{stage}" unless @stage == stage
       @secret
+    end
+
+    private def derive_traffic_secret(label, secret, transcript_hash)
+      derive(secret, label, transcript_hash).tap { |derived| @on_traffic_secret&.call(label, derived) }
     end
 
     private def derive(secret, label, transcript_hash)

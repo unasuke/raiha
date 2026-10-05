@@ -24,33 +24,35 @@ module Raiha::Next::TLS
       # Starts a client, which queues its ClientHello at once. `server_name`
       # is a DNS name (A-labels) or an IP address literal; an address is
       # checked against the certificate but not sent as SNI. `extensions` are
-      # this connection's own, beside the Config's.
-      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil)
-        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, substitutions: nil)
+      # this connection's own, beside the Config's. `keylog`, anything with
+      # `#write(String)`, gets a Keylog line for each traffic secret: never in
+      # production (RFC 9850).
+      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil)
+        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil)
       end
 
       # Starts a server on the ClientHello an Acceptor offered; everything up
       # to the first flight happens here. Without one, the Machine takes the
       # ClientHello through `receive` with an Acceptor of its own, for a
       # server that does not choose its Config by the ClientHello.
-      def self.server(config:, keyring:, now:, client_hello: nil, extensions: [], tracer: nil)
-        start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, substitutions: nil)
+      def self.server(config:, keyring:, now:, client_hello: nil, extensions: [], tracer: nil, keylog: nil)
+        start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, keylog:, substitutions: nil)
       end
 
       # The constructors, with the `substitutions` only Test::RFC8448 passes.
-      private_class_method def self.start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, substitutions:)
+      private_class_method def self.start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions:)
         raise ArgumentError, "Machine.client takes a client Config" unless config.client?
         check(config, keyring, extensions)
         sni, name = ServerName.for_client(server_name)
-        new(config:, keyring:, tracer:, substitutions:, now:, client_hello: nil) do |conductor|
+        new(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello: nil) do |conductor|
           ClientSide.new(conductor, server_name: name, sni:, extensions:, tracer:)
         end
       end
 
-      private_class_method def self.start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, substitutions:)
+      private_class_method def self.start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, keylog:, substitutions:)
         raise ArgumentError, "Machine.server takes a server Config" unless config.server?
         check(config, keyring, extensions)
-        new(config:, keyring:, tracer:, substitutions:, now:, client_hello: client_hello || Acceptor.new) do |conductor|
+        new(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello: client_hello || Acceptor.new) do |conductor|
           ServerSide.new(conductor, extensions:, tracer:)
         end
       end
@@ -66,9 +68,9 @@ module Raiha::Next::TLS
 
       # A client starts by sending; a server by receiving its ClientHello,
       # given or still to come through its Acceptor.
-      def initialize(config:, keyring:, tracer:, substitutions:, now:, client_hello:, &side)
+      def initialize(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello:, &side)
         @config = config
-        @conductor = Conductor.new(config:, keyring:, tracer:, substitutions:, &side)
+        @conductor = Conductor.new(config:, keyring:, tracer:, keylog:, substitutions:, &side)
         @acceptor = nil #: Acceptor?
         case client_hello
         when Accepted then @conductor.receive_message(:initial, client_hello.bytes, now:)
