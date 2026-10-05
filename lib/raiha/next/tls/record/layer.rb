@@ -89,12 +89,16 @@ module Raiha::Next::TLS
       def write(content_type:, payload:, epoch:)
         type = CONTENT_TYPES.fetch(content_type) { raise ArgumentError, "unknown content type #{content_type.inspect}" }
         if epoch == :initial
-          fragments(payload, MAX_PLAINTEXT).map { |fragment| [type, Protection::LEGACY_RECORD_VERSION, fragment.bytesize].pack("Cnn") + fragment }.join
+          fragments(payload, fragment_size(epoch)).map { |fragment| [type, Protection::LEGACY_RECORD_VERSION, fragment.bytesize].pack("Cnn") + fragment }.join
         else
           protection = @write.fetch(epoch) { raise UsageError, "no write key for #{epoch.inspect}" }
-          fragments(payload, @send_size_limit - 1).map { |fragment| protection.seal(fragment + type.chr) }.join
+          fragments(payload, fragment_size(epoch)).map { |fragment| protection.seal(fragment + type.chr) }.join
         end
       end
+
+      # The most content one record of `epoch` carries: a protected record
+      # keeps to the peer's limit, less its content type byte.
+      def fragment_size(epoch) = epoch == :initial ? MAX_PLAINTEXT : @send_size_limit - 1
 
       # Records written under `epoch`'s current key.
       def records_written(epoch) = @write[epoch]&.sequence_number || 0

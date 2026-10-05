@@ -78,7 +78,9 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
       sizes << record.payload.bytesize
     end
     assert_equal [16_384, 16_384, 7_232], sizes
+    assert_equal [16_384, 16_384], [writer.fragment_size(:initial), writer.fragment_size(:application)]
     writer.limit_sizes(send: 1000)
+    assert_equal [16_384, 999], [writer.fragment_size(:initial), writer.fragment_size(:application)]
     reader << writer.write(content_type: :application_data, payload: data.byteslice(0, 2000).to_s, epoch: :application)
     assert_equal [999, 999, 2], Array.new(3) { reader.read(epoch: :application)&.payload&.bytesize }
     # A limit above the default is the default: three records again, each

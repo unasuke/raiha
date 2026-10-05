@@ -39,6 +39,7 @@ module Raiha::Next::TLS
       def pending_bytes: () -> Integer
       def read: (epoch: epoch) -> (Plaintext | Failure | nil)
       def write: (content_type: content_type, payload: String, epoch: epoch) -> String
+      def fragment_size: (epoch epoch) -> Integer
       def records_written: (epoch epoch) -> Integer
       def key_update_due?: (epoch epoch) -> bool
       def discard!: () -> nil

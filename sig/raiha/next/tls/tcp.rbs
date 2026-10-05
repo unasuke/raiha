@@ -51,6 +51,7 @@ module Raiha::Next::TLS
       private def send_record: (Record::content_type content_type, String payload, epoch epoch) -> void
       private def change_cipher_spec: () -> void
       private def send_application_data: () -> void
+      private def update_keys_at_the_limit: () -> void
       private def fail!: (Symbol alert, Symbol reason) -> nil
       private def stop: () -> nil
     end

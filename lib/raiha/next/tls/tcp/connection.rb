@@ -185,10 +185,23 @@ module Raiha::Next::TLS
         @outgoing << @record.write(content_type: :change_cipher_spec, payload: "\x01".b, epoch: :initial)
       end
 
+      # One record at a time, so the key can change between two.
       private def send_application_data
         return if @unsent.empty? || !@machine.complete? || @failed
-        @outgoing << @record.write(content_type: :application_data, payload: @unsent, epoch: :application)
-        @unsent = "".b
+        until @unsent.empty?
+          update_keys_at_the_limit
+          chunk = @unsent.byteslice(0, @record.fragment_size(:application)).to_s
+          @unsent = @unsent.byteslice(chunk.bytesize..).to_s
+          @outgoing << @record.write(content_type: :application_data, payload: chunk, epoch: :application)
+        end
+      end
+
+      # RFC 9846 "Limits on Key Usage": the key changes before it reaches its
+      # suite's limit, by a KeyUpdate under the old key.
+      private def update_keys_at_the_limit
+        return unless @record.key_update_due?(:application)
+        @machine.request_key_update(request_peer_update: false)
+        drain_machine
       end
 
       # A failure found here rather than in the Machine: the alert, under the
