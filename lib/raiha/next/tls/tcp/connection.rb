@@ -35,16 +35,25 @@ module Raiha::Next::TLS
         new(Handshake::Machine.client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:), config)
       end
 
-      def self.server(config:, keyring:, now:, extensions: [], tracer: nil, keylog: nil)
-        new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:), config)
+      # A server takes its ClientHello through `receive`, or from an
+      # Acceptor that has offered one: then with the bytes that came after it,
+      # read before anything given to `receive`.
+      def self.server(config:, keyring:, now:, acceptor: nil, extensions: [], tracer: nil, keylog: nil)
+        raise ArgumentError, "a TCP::Connection needs a profile with a record layer, as Profile::TCP" unless config.profile.record_layer
+        unless acceptor
+          return new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:), config)
+        end
+        accepted, record = acceptor.hand_over
+        machine = Handshake::Machine.server(config:, keyring:, client_hello: accepted, now:, extensions:, tracer:, keylog:)
+        new(machine, config, record:, client_hello_received: true).tap { |connection| connection.receive("".b, now:) }
       end
 
       private_class_method :new
 
-      def initialize(machine, config)
+      def initialize(machine, config, record: Record::Layer.new(profile: config.profile), client_hello_received: false)
         @machine = machine
         @config = config
-        @record = Record::Layer.new(profile: config.profile)
+        @record = record
         @outgoing = "".b
         @unsent = "".b
         @received = "".b
@@ -55,9 +64,10 @@ module Raiha::Next::TLS
         @read_closed = false
         @write_closed = false
         @consecutive_warning_alerts = 0
-        @handshake_received = false
+        @handshake_received = client_hello_received
         @record_size_limits_set = false
         @change_cipher_spec_sent = !config.profile.compatibility_mode
+        limit_record_sizes
         drain_machine
       end
 

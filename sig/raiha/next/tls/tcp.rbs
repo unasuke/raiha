@@ -61,11 +61,11 @@ module Raiha::Next::TLS
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
-      def self.server: (config: Config, keyring: Keyring, now: Time,
+      def self.server: (config: Config, keyring: Keyring, now: Time, ?acceptor: Acceptor?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
-      private def self.new: (Handshake::Machine machine, Config config) -> Connection
+      private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool) -> Connection
 
-      def initialize: (Handshake::Machine machine, Config config) -> void
+      def initialize: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool) -> void
       def receive: (String bytes, now: Time) -> nil
       def each_output: () { (String bytes) -> void } -> void
       def write: (String data) -> Integer

@@ -70,6 +70,66 @@ class RaihaNextTLSTCPAcceptorTest < Minitest::Test
     assert_raises(TLS::UsageError) { acceptor.hand_over }
   end
 
+  Site = Data.define(:config, :keyring)
+
+  def sites
+    %w[a.example b.example].to_h do |name|
+      config = TLSPair.server_config
+      [name, Site.new(config:, keyring: TLSPair.server_keyring(config:, identities: [TLSPair.server_identity(names: ["DNS:#{name}"])]))]
+    end
+  end
+
+  # The SNI path of a TCP server: the Config and Keyring by name.
+  def test_connection_for_the_site_by_name
+    sites = self.sites
+    %w[a.example b.example].each do |name|
+      client = Pair.client(server_name: name)
+      acceptor = TCP::Acceptor.new
+      acceptor.receive(Pair.take(client), now: NOW)
+      site = sites.fetch(acceptor.accepted&.info&.server_name)
+      server = TCP::Connection.server(config: site.config, keyring: site.keyring, acceptor:, now: NOW)
+      Pair.pump(client, server)
+      assert client.handshake_complete?, name
+      client.write("hi")
+      Pair.pump(client, server)
+      assert_equal "hi", server.read(10)
+    end
+  end
+
+  # What follows the ClientHello in the same segment, a ChangeCipherSpec
+  # here, waits for the Connection, which reads it first.
+  def test_the_connection_reads_what_was_held
+    client = Pair.client
+    acceptor = TCP::Acceptor.new
+    acceptor.receive(Pair.take(client) + CHANGE_CIPHER_SPEC, now: NOW)
+    config = TLSPair.server_config
+    server = TCP::Connection.server(config:, keyring: TLSPair.server_keyring(config:), acceptor:, now: NOW)
+    Pair.pump(client, server)
+    assert server.handshake_complete?
+    refute server.failed?
+  end
+
+  # A client's record_size_limit holds for the first flight too, which
+  # goes out as the Connection is made.
+  def test_record_size_limit_from_the_accepted_client_hello
+    client = Pair.client(config: TLSPair.client_config(record_size_limit: 200))
+    acceptor = TCP::Acceptor.new
+    acceptor.receive(Pair.take(client), now: NOW)
+    config = TLSPair.server_config
+    server = TCP::Connection.server(config:, keyring: TLSPair.server_keyring(config:), acceptor:, now: NOW)
+    assert Pair.records(Pair.take(server)).drop(2).all? { |_, length| length <= 200 + 16 }
+  end
+
+  def test_a_connection_needs_an_accepted_client_hello
+    acceptor = TCP::Acceptor.new
+    config = TLSPair.server_config
+    keyring = TLSPair.server_keyring(config:)
+    assert_raises(TLS::UsageError) { TCP::Connection.server(config:, keyring:, acceptor:, now: NOW) }
+    acceptor.receive(Pair.take(Pair.client), now: NOW)
+    TCP::Connection.server(config:, keyring:, acceptor:, now: NOW)
+    assert_raises(TLS::UsageError) { TCP::Connection.server(config:, keyring:, acceptor:, now: NOW) }
+  end
+
   def take(acceptor)
     taken = "".b
     acceptor.each_output { |bytes| taken << bytes }
