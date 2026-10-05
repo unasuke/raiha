@@ -132,6 +132,8 @@ module Raiha::Next::TLS
           return fail!(:unexpected_message, :interleaved_record) if @machine.partial_message?
           return fail!(:unexpected_message, :application_data_before_handshake) unless @machine.read_epoch == :application
           @received << record.payload
+          # The peer's run of KeyUpdates ends with data that is not empty.
+          @machine.application_data_received unless record.payload.empty?
         end
       end
 

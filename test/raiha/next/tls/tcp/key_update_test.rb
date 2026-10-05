@@ -50,6 +50,22 @@ class RaihaNextTLSTCPKeyUpdateTest < Minitest::Test
     assert_equal "x", pair.client.read(10)
   end
 
+  # 32 KeyUpdates in a row, then data, then 32 more: the run starts over.
+  # The 33rd in a row ends the connection.
+  def test_runs_of_key_updates
+    pair = Pair.connect
+    32.times { pair.server.request_key_update }
+    pair.server.write("x")
+    32.times { pair.server.request_key_update }
+    pair.client.receive(Pair.take(pair.server), now: NOW)
+    refute pair.client.failed?
+    pair.server.request_key_update
+    pair.client.receive(Pair.take(pair.server), now: NOW)
+    assert pair.client.failed?
+    assert_equal TLS::Event::Failed.new(alert: :unexpected_message, reason: :too_many_key_updates),
+      Pair.events(pair.client).grep(TLS::Event::Failed).first
+  end
+
   # RFC 9846 "Limits on Key Usage": with room for 3 records under the first
   # key, the third is a KeyUpdate, and the peer follows it. The next key
   # comes from the Machine with the suite's own limit.
