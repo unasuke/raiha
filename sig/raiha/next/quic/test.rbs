@@ -1,0 +1,60 @@
+module Raiha::Next::QUIC::Test
+  module Vectors
+    module Keys
+      DCID: String
+      INITIAL_SECRET: String
+      CLIENT_INITIAL_SECRET: String
+      CLIENT_KEY: String
+      CLIENT_IV: String
+      CLIENT_HP: String
+      SERVER_INITIAL_SECRET: String
+      SERVER_KEY: String
+      SERVER_IV: String
+      SERVER_HP: String
+    end
+
+    module ClientInitial
+      PACKET_NUMBER: Integer
+      FRAMES: String
+      PAYLOAD_LENGTH: Integer
+      HEADER: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+
+    module ServerInitial
+      PACKET_NUMBER: Integer
+      PAYLOAD: String
+      HEADER: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+
+    module Retry
+      SOURCE_CONNECTION_ID: String
+      TOKEN: String
+      PACKET: String
+    end
+
+    module ChaCha20ShortHeader
+      SECRET: String
+      KEY: String
+      IV: String
+      HP: String
+      KU: String
+      PACKET_NUMBER: Integer
+      NONCE: String
+      HEADER: String
+      PAYLOAD: String
+      CIPHERTEXT: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+  end
+end
