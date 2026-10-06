@@ -1,0 +1,53 @@
+module Raiha::Next::QUIC
+  module Wire
+    class Malformed < StandardError
+      attr_reader code: Integer
+
+      def initialize: (?String? message, ?code: Integer) -> void
+    end
+
+    class Truncated < Malformed
+    end
+
+    module Varint
+      MAX: Integer
+
+      def self.size: (Integer value) -> Integer
+      def self.encode: (Integer value) -> String
+    end
+
+    class Reader
+      @bytes: String
+      @limit: Integer
+
+      attr_reader offset: Integer
+
+      def initialize: (String bytes, ?Integer offset, ?Integer limit) -> void
+      def remaining: () -> Integer
+      def eof?: () -> bool
+      def u8: () -> Integer
+      def u16: () -> Integer
+      def u32: () -> Integer
+      def varint_with_size: () -> [Integer, Integer]
+      def varint: () -> Integer
+      def bytes: (Integer length) -> String
+      def rest: () -> String
+      def sub: (Integer length) -> Reader
+
+      private def take: (Integer length) -> String
+    end
+
+    class Writer
+      @buffer: String
+
+      def initialize: () -> void
+      def u8: (Integer value) -> self
+      def u16: (Integer value) -> self
+      def u32: (Integer value) -> self
+      def varint: (Integer value) -> self
+      def bytes: (String value) -> self
+      def bytesize: () -> Integer
+      def to_s: () -> String
+    end
+  end
+end
