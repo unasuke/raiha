@@ -1,0 +1,26 @@
+module Raiha::Next::QUIC
+  class Version < Data
+    type packet_type = :initial | :zero_rtt | :handshake | :retry
+
+    LONG_PACKET_TYPES: Array[packet_type]
+    V1: Version
+    SUPPORTED: Array[Version]
+
+    attr_reader number: Integer
+    attr_reader initial_salt: String
+    attr_reader label_prefix: String
+    attr_reader packet_types: Hash[packet_type, Integer]
+    attr_reader retry_key: String
+    attr_reader retry_nonce: String
+
+    def self.new: (number: Integer, initial_salt: String, label_prefix: String, packet_types: Hash[packet_type, Integer],
+                   retry_key: String, retry_nonce: String) -> instance
+                | (Integer number, String initial_salt, String label_prefix, Hash[packet_type, Integer] packet_types,
+                   String retry_key, String retry_nonce) -> instance
+    def self.find: (Integer number) -> Version?
+
+    def label: (String name) -> String
+    def type_bits: (packet_type type) -> Integer
+    def packet_type: (Integer bits) -> packet_type
+  end
+end
