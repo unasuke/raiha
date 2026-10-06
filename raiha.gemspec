@@ -36,4 +36,5 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "tttls1.3"
   spec.add_dependency "stringio"
+  spec.add_dependency "openssl", ">= 4.0"
 end

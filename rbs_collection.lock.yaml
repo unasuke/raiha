@@ -38,7 +38,7 @@ gems:
   source:
     type: stdlib
 - name: hpke
-  version: 1.0.0
+  version: 1.0.2
   source:
     type: rubygems
 - name: io-console
