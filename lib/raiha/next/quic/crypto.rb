@@ -12,3 +12,4 @@ end
 
 require_relative "crypto/aead"
 require_relative "crypto/header_protection"
+require_relative "crypto/keys"

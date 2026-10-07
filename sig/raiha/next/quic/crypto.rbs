@@ -35,5 +35,14 @@ module Raiha::Next::QUIC
 
       private def instance_variables_to_inspect: () -> Array[Symbol]
     end
+
+    class Keys < Data
+      attr_reader aead: AEAD
+      attr_reader header_protection: HeaderProtection
+
+      def self.new: (aead: AEAD, header_protection: HeaderProtection) -> instance
+                  | (AEAD aead, HeaderProtection header_protection) -> instance
+      def self.derive: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> Keys
+    end
   end
 end
