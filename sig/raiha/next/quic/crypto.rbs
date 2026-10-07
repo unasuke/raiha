@@ -19,5 +19,21 @@ module Raiha::Next::QUIC
       private def nonce: (Integer packet_number) -> String
       private def context: (:encrypt | :decrypt direction) -> OpenSSL::Cipher
     end
+
+    class HeaderProtection
+      SAMPLE_LENGTH: Integer
+      MASK_LENGTH: Integer
+      CIPHERS: Hash[Symbol, String]
+      ZEROS: String
+
+      @name: String
+      @chacha20: bool
+      @cipher: OpenSSL::Cipher
+
+      def initialize: (suite: ::Raiha::Next::TLS::CipherSuite, key: String) -> void
+      def mask: (String sample) -> String
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+    end
   end
 end
