@@ -16,4 +16,10 @@ module OpenSSL
       def private?: () -> bool
     end
   end
+
+  class Cipher
+    # openssl 4.0: an AEAD tag that does not authenticate.
+    class AuthTagError < CipherError
+    end
+  end
 end

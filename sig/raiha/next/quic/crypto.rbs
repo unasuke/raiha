@@ -1,0 +1,23 @@
+module Raiha::Next::QUIC
+  module Crypto
+    class AEAD
+      CIPHERS: Hash[Symbol, String]
+
+      @name: String
+      @tag_length: Integer
+      @key: String
+      @iv_high: Integer
+      @iv_low: Integer
+      @sealer: OpenSSL::Cipher?
+      @opener: OpenSSL::Cipher?
+
+      def initialize: (suite: ::Raiha::Next::TLS::CipherSuite, key: String, iv: String) -> void
+      def seal: (packet_number: Integer, header: String, plaintext: String) -> String
+      def open: (packet_number: Integer, header: String, ciphertext: String) -> String?
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def nonce: (Integer packet_number) -> String
+      private def context: (:encrypt | :decrypt direction) -> OpenSSL::Cipher
+    end
+  end
+end
