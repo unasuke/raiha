@@ -1,5 +1,12 @@
 module Raiha::Next::QUIC
   module Crypto
+    # A source of random bytes: SecureRandom, or a seeded ::Random in tests.
+    interface _Random
+      def bytes: (Integer length) -> String
+    end
+
+    Random: _Random
+
     class AEAD
       CIPHERS: Hash[Symbol, String]
 

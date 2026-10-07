@@ -16,6 +16,9 @@ if ENV["COVERAGE"]
 end
 
 $LOAD_PATH.unshift File.expand_path("../../../lib", __dir__)
+# The next release of raiha is built on Ractors, and Ruby warns that their
+# API is experimental the first time one starts.
+Warning[:experimental] = false
 require "debug"
 require "openssl"
 
