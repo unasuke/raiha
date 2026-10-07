@@ -44,5 +44,16 @@ module Raiha::Next::QUIC
                   | (AEAD aead, HeaderProtection header_protection) -> instance
       def self.derive: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> Keys
     end
+
+    class Initial < Data
+      SUITE: ::Raiha::Next::TLS::CipherSuite
+
+      attr_reader client: Keys
+      attr_reader server: Keys
+
+      def self.new: (client: Keys, server: Keys) -> instance
+                  | (Keys client, Keys server) -> instance
+      def self.derive: (dcid: String, version: Version) -> Initial
+    end
   end
 end
