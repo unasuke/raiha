@@ -61,11 +61,11 @@ module Raiha::Next::QUIC
 
       def eof? = @offset >= @limit
 
-      def u8 = take(1).getbyte(0).to_i
+      def u8 = take(1).getbyte(0)
 
-      def u16 = take(2).unpack1("n").to_i
+      def u16 = take(2).unpack1("n")
 
-      def u32 = take(4).unpack1("N").to_i
+      def u32 = take(4).unpack1("N")
 
       # The value and how many bytes it took, for the checks of a shortest
       # encoding (frame types must use one).
@@ -75,9 +75,9 @@ module Raiha::Next::QUIC
         raw = take(size)
         value = case size
           when 1 then first
-          when 2 then raw.unpack1("n").to_i & 0x3fff
-          when 4 then raw.unpack1("N").to_i & 0x3fff_ffff
-          else raw.unpack1("Q>").to_i & Varint::MAX
+          when 2 then raw.unpack1("n") & 0x3fff
+          when 4 then raw.unpack1("N") & 0x3fff_ffff
+          else raw.unpack1("Q>") & Varint::MAX
           end
         [value, size]
       end
@@ -99,7 +99,7 @@ module Raiha::Next::QUIC
 
       private def take(length)
         raise Truncated, "#{length} bytes wanted, #{remaining} left" if length > remaining
-        value = @bytes.byteslice(@offset, length).to_s
+        value = @bytes.byteslice(@offset, length)
         @offset += length
         value
       end
