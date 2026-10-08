@@ -49,5 +49,13 @@ module Raiha::Next::QUIC
       def bytesize: () -> Integer
       def to_s: () -> String
     end
+
+    module PacketNumber
+      MAX: Integer
+
+      def self.length: (Integer packet_number, largest_acked: Integer?) -> Integer
+      def self.encode: (Integer packet_number, Integer length) -> String
+      def self.decode: (Integer truncated, length: Integer, largest: Integer?) -> Integer
+    end
   end
 end
