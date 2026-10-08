@@ -169,5 +169,27 @@ module Raiha::Next::QUIC
 
       def negotiation: (Array[Integer] versions) -> VersionNegotiation
     end
+  
+    class Retry < Data
+      TAG_LENGTH: Integer
+      UNUSED: Integer
+
+      attr_reader version: Version
+      attr_reader dcid: String
+      attr_reader scid: String
+      attr_reader token: String
+      attr_reader unused: Integer
+      attr_reader tag: String?
+
+      def self.new: (version: Version, dcid: String, scid: String, token: String, ?unused: Integer, ?tag: String?) -> instance
+                  | (Version version, String dcid, String scid, String token, ?Integer unused, ?String? tag) -> instance
+      def initialize: (version: Version, dcid: String, scid: String, token: String, ?unused: Integer, ?tag: String?) -> void
+
+      def seal: (String original_dcid) -> String
+
+      private def body: () -> String
+      private def pseudo_packet: (String original_dcid) -> String
+      private def integrity: () -> Crypto::AEAD
+    end
   end
 end
