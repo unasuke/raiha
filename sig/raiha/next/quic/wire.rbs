@@ -68,6 +68,7 @@ module Raiha::Next::QUIC
 
       TYPES: Array[packet_type]
       PROTECTED_BITS: Integer
+      RESERVED_BITS: Integer
 
       attr_reader type: packet_type
       attr_reader version: Version
@@ -80,12 +81,15 @@ module Raiha::Next::QUIC
       def initialize: (type: packet_type, version: Version, dcid: String, scid: String, ?token: String) -> void
 
       def protected_bits: () -> Integer
+      def reserved_bits: () -> Integer
       def first_byte: (Integer packet_number_length) -> Integer
       def write_fields: (Writer writer, length: Integer) -> Writer
+      def unmasked: (Integer _first_byte) -> LongHeader
     end
 
     class ShortHeader < Data
       PROTECTED_BITS: Integer
+      RESERVED_BITS: Integer
 
       attr_reader dcid: String
       attr_reader spin: bool
@@ -96,8 +100,10 @@ module Raiha::Next::QUIC
       def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> void
 
       def protected_bits: () -> Integer
+      def reserved_bits: () -> Integer
       def first_byte: (Integer packet_number_length) -> Integer
       def write_fields: (Writer writer, length: Integer) -> Writer
+      def unmasked: (Integer first_byte) -> ShortHeader
     end
 
     module Packet
@@ -118,6 +124,21 @@ module Raiha::Next::QUIC
 
         def self.new: (header: header, datagram: String, offset: Integer, number_offset: Integer, end_offset: Integer) -> instance
                     | (header header, String datagram, Integer offset, Integer number_offset, Integer end_offset) -> instance
+
+        def unmask: (Crypto::HeaderProtection header_protection, largest: Integer?) -> Unmasked
+      end
+
+      class Unmasked < Data
+        attr_reader header: header
+        attr_reader packet_number: Integer
+        attr_reader reserved: Integer
+        attr_reader associated_data: String
+        attr_reader ciphertext: String
+
+        def self.new: (header: header, packet_number: Integer, reserved: Integer, associated_data: String, ciphertext: String) -> instance
+                    | (header header, Integer packet_number, Integer reserved, String associated_data, String ciphertext) -> instance
+
+        def open: (Crypto::AEAD aead) -> String?
       end
     end
   end

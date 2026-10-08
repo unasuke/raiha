@@ -7,8 +7,9 @@ module Raiha::Next::QUIC
   # Module functions over Reader and Writer; nothing here holds state.
   module Wire
     # Bytes from the peer that do not decode. `code` is the transport error
-    # to close the connection with, when the bytes came in a frame; a packet
-    # that does not decode is dropped instead.
+    # to close the connection with when the bytes were authenticated (a
+    # frame, or the reserved bits of a header); a packet that does not decode
+    # before that is dropped instead.
     class Malformed < StandardError
       attr_reader :code
 

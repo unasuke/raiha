@@ -114,6 +114,70 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
     assert_equal 29, Wire::Packet.parse("\x40".b + "c".b * 8 + "\0".b * 20, dcid_length: 8).end_offset
   end
 
+  # RFC 9001 appendix A.2 and A.3, backwards: the unprotected header is the
+  # associated data.
+  def test_open_initial_packets
+    client = Wire::Packet.parse(V::ClientInitial::PACKET, dcid_length: 8).unmask(initial.client.header_protection, largest: nil)
+    assert_equal [client_header, 2], [client.header, client.packet_number]
+    assert_equal_bin V::ClientInitial::HEADER, client.associated_data
+    assert_equal_bin client_payload, client.open(initial.client.aead)
+    s = V::ServerInitial
+    server = Wire::Packet.parse(s::PACKET, dcid_length: 8).unmask(initial.server.header_protection, largest: nil)
+    assert_equal [server_header, s::PACKET_NUMBER], [server.header, server.packet_number]
+    assert_equal_bin s::HEADER, server.associated_data
+    assert_equal_bin s::PAYLOAD, server.open(initial.server.aead)
+  end
+
+  # RFC 9001 appendix A.5: three bytes of packet number, decoded against
+  # the largest one before it.
+  def test_open_chacha20_short_header
+    c = V::ChaCha20ShortHeader
+    keys = chacha20_keys
+    unmasked = Wire::Packet.parse(c::PACKET, dcid_length: 0).unmask(keys.header_protection, largest: c::PACKET_NUMBER - 1)
+    assert_equal [Wire::ShortHeader.new(dcid: "".b, spin: false, key_phase: 0), c::PACKET_NUMBER], [unmasked.header, unmasked.packet_number]
+    assert_equal_bin c::HEADER, unmasked.associated_data
+    assert_equal_bin c::PAYLOAD, unmasked.open(keys.aead)
+  end
+
+  def test_key_phase_and_packet_number_come_back
+    keys = chacha20_keys
+    header = Wire::ShortHeader.new(dcid: "c".b * 8, spin: true, key_phase: 1)
+    sealed = Wire::Packet.seal(header, packet_number: 0x1234, packet_number_length: 1, payload: "\x01\0\0".b, keys:)
+    unmasked = Wire::Packet.parse(sealed, dcid_length: 8).unmask(keys.header_protection, largest: 0x1230)
+    assert_equal [header, 0x1234], [unmasked.header, unmasked.packet_number]
+    assert_equal_bin "\x01\0\0".b, unmasked.open(keys.aead)
+  end
+
+  # Under other keys, or with a byte changed, the payload does not open:
+  # nil, and the packet is dropped.
+  def test_what_does_not_open_is_nil
+    packet = V::ClientInitial::PACKET
+    assert_nil Wire::Packet.parse(packet, dcid_length: 8).unmask(initial.server.header_protection, largest: nil).open(initial.server.aead)
+    tampered = packet.dup.tap { |bytes| bytes.setbyte(100, bytes.getbyte(100) ^ 1) }
+    assert_nil Wire::Packet.parse(tampered, dcid_length: 8).unmask(initial.client.header_protection, largest: nil).open(initial.client.aead)
+  end
+
+  # RFC 9000 "Short Header Packets": reserved bits other than zero, found
+  # once the packet opens, close the connection.
+  def test_reserved_bits_are_a_protocol_violation
+    keys = chacha20_keys
+    reserving = Class.new(Wire::ShortHeader) { def first_byte(length) = super | 0x08 }
+    sealed = Wire::Packet.seal(reserving.new(dcid: "".b), packet_number: 0, packet_number_length: 1, payload: "\x01\0\0".b, keys:)
+    unmasked = Wire::Packet.parse(sealed, dcid_length: 0).unmask(keys.header_protection, largest: nil)
+    error = assert_raises(Wire::Malformed) { unmasked.open(keys.aead) }
+    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, error.code
+    # A packet that does not open is dropped before the bits count.
+    assert_nil unmasked.open(QUIC::Crypto::Keys.derive(suite: Raiha::Next::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256, secret: "\0".b * 32, version: V1).aead)
+  end
+
+  # The datagram is left as it was, so the packets coalesced with this one
+  # still read.
+  def test_unmask_leaves_the_datagram_alone
+    datagram = V::ClientInitial::PACKET.dup
+    Wire::Packet.parse(datagram, dcid_length: 8).unmask(initial.client.header_protection, largest: nil)
+    assert_equal_bin V::ClientInitial::PACKET, datagram
+  end
+
   def test_header_misuse
     assert_raises(ArgumentError) { client_header.with(type: :retry) }
     assert_raises(ArgumentError) { client_header.with(type: :handshake, token: "t".b) }

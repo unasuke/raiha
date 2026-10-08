@@ -15,6 +15,7 @@ module Raiha::Next::QUIC
       # The bits of the first byte under header protection: the two reserved
       # bits and the packet number length.
       PROTECTED_BITS = 0x0f
+      RESERVED_BITS = 0x0c
 
       def initialize(type:, version:, dcid:, scid:, token: EMPTY)
         raise ArgumentError, "a long header with a packet number is one of #{TYPES}, not #{type.inspect}" unless TYPES.include?(type)
@@ -27,6 +28,8 @@ module Raiha::Next::QUIC
 
       def protected_bits = PROTECTED_BITS
 
+      def reserved_bits = RESERVED_BITS
+
       # The first byte before header protection.
       def first_byte(packet_number_length) = 0xc0 | (version.type_bits(type) << 4) | (packet_number_length - 1)
 
@@ -38,6 +41,10 @@ module Raiha::Next::QUIC
         writer.varint(token.bytesize).bytes(token) if type == :initial
         writer.varint(length)
       end
+
+      # This header with header protection off: none of its fields was
+      # under it.
+      def unmasked(_first_byte) = self
     end
 
     # The header of a 1-RTT packet (RFC 9000 "Short Header Packets"), apart
@@ -48,6 +55,7 @@ module Raiha::Next::QUIC
     class ShortHeader < Data.define(:dcid, :spin, :key_phase)
       # The two reserved bits, the key phase and the packet number length.
       PROTECTED_BITS = 0x1f
+      RESERVED_BITS = 0x18
 
       def initialize(dcid:, spin: false, key_phase: 0)
         raise ArgumentError, "a connection ID has #{CONNECTION_ID_MAX_LENGTH} bytes at most, not #{dcid.bytesize}" if dcid.bytesize > CONNECTION_ID_MAX_LENGTH
@@ -55,6 +63,8 @@ module Raiha::Next::QUIC
       end
 
       def protected_bits = PROTECTED_BITS
+
+      def reserved_bits = RESERVED_BITS
 
       # The first byte before header protection.
       def first_byte(packet_number_length)
@@ -68,6 +78,10 @@ module Raiha::Next::QUIC
 
       # Writes what comes between the first byte and the packet number.
       def write_fields(writer, length:) = writer.bytes(dcid)
+
+      # This header with header protection off, which reveals the key phase
+      # in `first_byte`.
+      def unmasked(first_byte) = with(key_phase: (first_byte >> 2) & 1)
     end
   end
 end

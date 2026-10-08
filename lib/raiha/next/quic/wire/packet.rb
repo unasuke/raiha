@@ -79,6 +79,46 @@ module Raiha::Next::QUIC
       # (a short header without its key phase yet), and where in `datagram`
       # the packet starts, its packet number starts, and it ends.
       class Parsed < Data.define(:header, :datagram, :offset, :number_offset, :end_offset)
+        # Takes header protection off with `header_protection`. The packet
+        # number is decoded against `largest`, the largest one processed in
+        # this packet number space (nil when none), and a short header gets
+        # its key phase, which tells the keys for the payload.
+        def unmask(header_protection, largest:)
+          mask = header_protection.mask(datagram.byteslice(number_offset + SAMPLE_OFFSET, Crypto::HeaderProtection::SAMPLE_LENGTH))
+          first = datagram.unpack1("C", offset:) ^ (mask.unpack1("C") & header.protected_bits)
+          number_length = (first & 0x03) + 1
+          header_length = number_offset - offset
+          associated_data = datagram.byteslice(offset, header_length + number_length)
+          associated_data.setbyte(0, first)
+          truncated = 0
+          number_length.times do |i|
+            byte = associated_data.unpack1("C", offset: header_length + i) ^ mask.unpack1("C", offset: 1 + i)
+            associated_data.setbyte(header_length + i, byte)
+            truncated = (truncated << 8) | byte
+          end
+          Unmasked.new(
+            header: header.unmasked(first),
+            packet_number: PacketNumber.decode(truncated, length: number_length, largest:),
+            reserved: first & header.reserved_bits,
+            associated_data:,
+            ciphertext: datagram.byteslice(number_offset + number_length, end_offset - number_offset - number_length)
+          )
+        end
+      end
+
+      # A packet with header protection off and the payload still sealed:
+      # the header, the packet number, the value of the reserved bits, the
+      # header as the AEAD's associated data, and the ciphertext.
+      class Unmasked < Data.define(:header, :packet_number, :reserved, :associated_data, :ciphertext)
+        # The payload, or nil when `aead` does not open it, which is not an
+        # error: the packet is dropped. A packet that opens with reserved
+        # bits other than zero is a protocol violation (RFC 9000 "Long Header
+        # Packets", "Short Header Packets").
+        def open(aead)
+          payload = aead.open(packet_number:, header: associated_data, ciphertext:) or return nil
+          raise Malformed.new("the reserved bits are #{reserved}", code: ErrorCode::PROTOCOL_VIOLATION) unless reserved.zero?
+          payload
+        end
       end
     end
   end
