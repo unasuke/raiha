@@ -18,6 +18,8 @@ module Raiha::Next::QUIC
       @sealer: OpenSSL::Cipher?
       @opener: OpenSSL::Cipher?
 
+      attr_reader tag_length: Integer
+
       def initialize: (suite: ::Raiha::Next::TLS::CipherSuite, key: String, iv: String) -> void
       def seal: (packet_number: Integer, header: String, plaintext: String) -> String
       def open: (packet_number: Integer, header: String, ciphertext: String) -> String?

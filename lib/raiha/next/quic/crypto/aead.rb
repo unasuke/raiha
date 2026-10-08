@@ -10,6 +10,9 @@ module Raiha::Next::QUIC
     class AEAD
       CIPHERS = { aes_128_gcm: "aes-128-gcm", aes_256_gcm: "aes-256-gcm", chacha20_poly1305: "chacha20-poly1305" }.freeze #: Hash[Symbol, String]
 
+      # How many bytes `seal` adds to the plaintext.
+      attr_reader :tag_length
+
       def initialize(suite:, key:, iv:)
         raise ArgumentError, "#{suite.name} takes a #{suite.key_length}-byte key" unless key.bytesize == suite.key_length
         raise ArgumentError, "#{suite.name} takes a #{suite.iv_length}-byte IV" unless iv.bytesize == suite.iv_length

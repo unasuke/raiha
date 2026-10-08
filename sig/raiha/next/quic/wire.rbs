@@ -57,5 +57,54 @@ module Raiha::Next::QUIC
       def self.encode: (Integer packet_number, Integer length) -> String
       def self.decode: (Integer truncated, length: Integer, largest: Integer?) -> Integer
     end
+
+    CONNECTION_ID_MAX_LENGTH: Integer
+    EMPTY: String
+
+    type header = LongHeader | ShortHeader
+
+    class LongHeader < Data
+      type packet_type = :initial | :zero_rtt | :handshake
+
+      TYPES: Array[packet_type]
+      PROTECTED_BITS: Integer
+
+      attr_reader type: packet_type
+      attr_reader version: Version
+      attr_reader dcid: String
+      attr_reader scid: String
+      attr_reader token: String
+
+      def self.new: (type: packet_type, version: Version, dcid: String, scid: String, ?token: String) -> instance
+                  | (packet_type type, Version version, String dcid, String scid, ?String token) -> instance
+      def initialize: (type: packet_type, version: Version, dcid: String, scid: String, ?token: String) -> void
+
+      def protected_bits: () -> Integer
+      def first_byte: (Integer packet_number_length) -> Integer
+      def write_fields: (Writer writer, length: Integer) -> Writer
+    end
+
+    class ShortHeader < Data
+      PROTECTED_BITS: Integer
+      KEY_PHASE_BITS: Hash[Integer, Integer]
+
+      attr_reader dcid: String
+      attr_reader spin: bool
+      attr_reader key_phase: Integer
+
+      def self.new: (dcid: String, ?spin: bool, ?key_phase: Integer) -> instance
+                  | (String dcid, ?bool spin, ?Integer key_phase) -> instance
+      def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer) -> void
+
+      def protected_bits: () -> Integer
+      def first_byte: (Integer packet_number_length) -> Integer
+      def write_fields: (Writer writer, length: Integer) -> Writer
+    end
+
+    module Packet
+      SAMPLE_OFFSET: Integer
+
+      def self.seal: (header header, packet_number: Integer, packet_number_length: Integer, payload: String, keys: Crypto::Keys) -> String
+    end
   end
 end
