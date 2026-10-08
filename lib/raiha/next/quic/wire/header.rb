@@ -42,11 +42,12 @@ module Raiha::Next::QUIC
 
     # The header of a 1-RTT packet (RFC 9000 "Short Header Packets"), apart
     # from the packet number. The Destination Connection ID goes without its
-    # length: the receiver knows the length of the IDs it issued.
+    # length: the receiver knows the length of the IDs it issued. The key
+    # phase is under header protection, so a parsed header has nil there
+    # until the protection is off.
     class ShortHeader < Data.define(:dcid, :spin, :key_phase)
       # The two reserved bits, the key phase and the packet number length.
       PROTECTED_BITS = 0x1f
-      KEY_PHASE_BITS = { 0 => 0x00, 1 => 0x04 }.freeze #: Hash[Integer, Integer]
 
       def initialize(dcid:, spin: false, key_phase: 0)
         raise ArgumentError, "a connection ID has #{CONNECTION_ID_MAX_LENGTH} bytes at most, not #{dcid.bytesize}" if dcid.bytesize > CONNECTION_ID_MAX_LENGTH
@@ -57,7 +58,11 @@ module Raiha::Next::QUIC
 
       # The first byte before header protection.
       def first_byte(packet_number_length)
-        key_phase_bit = KEY_PHASE_BITS.fetch(key_phase) { raise ArgumentError, "the key phase is 0 or 1, not #{key_phase.inspect}" }
+        key_phase_bit = case key_phase
+          when 0 then 0x00
+          when 1 then 0x04
+          else raise ArgumentError, "the key phase is 0 or 1, not #{key_phase.inspect}"
+          end
         0x40 | (spin ? 0x20 : 0) | key_phase_bit | (packet_number_length - 1)
       end
 

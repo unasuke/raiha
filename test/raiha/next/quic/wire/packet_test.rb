@@ -60,6 +60,60 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
     assert_raises(ArgumentError) { Wire::ShortHeader.new(dcid: "".b, key_phase: 2).first_byte(1) }
   end
 
+  def test_parse_rfc9001_packets
+    client = Wire::Packet.parse(V::ClientInitial::PACKET, dcid_length: 8)
+    assert_equal client_header, client.header
+    assert_equal [0, 18, 1200], [client.offset, client.number_offset, client.end_offset]
+    server = Wire::Packet.parse(V::ServerInitial::PACKET, dcid_length: 8)
+    assert_equal server_header, server.header
+    assert_equal [18, 135], [server.number_offset, server.end_offset]
+    short = Wire::Packet.parse(V::ChaCha20ShortHeader::PACKET, dcid_length: 0)
+    assert_equal Wire::ShortHeader.new(dcid: "".b, spin: false, key_phase: nil), short.header
+    assert_equal [1, 21], [short.number_offset, short.end_offset]
+  end
+
+  # A long header packet ends where its Length field says; the next one
+  # starts there.
+  def test_parse_coalesced_packets
+    datagram = V::ServerInitial::PACKET + V::ClientInitial::PACKET
+    first = Wire::Packet.parse(datagram, dcid_length: 8)
+    second = Wire::Packet.parse(datagram, offset: first.end_offset, dcid_length: 8)
+    assert_equal server_header, first.header
+    assert_equal client_header, second.header
+    assert_equal [135, 135 + 18, datagram.bytesize], [second.offset, second.number_offset, second.end_offset]
+  end
+
+  def test_parse_short_header_fields
+    header = Wire::ShortHeader.new(dcid: "c".b * 8, spin: true, key_phase: 1)
+    sealed = Wire::Packet.seal(header, packet_number: 7, packet_number_length: 1, payload: "\0".b * 3, keys: chacha20_keys)
+    parsed = Wire::Packet.parse(sealed, dcid_length: 8)
+    assert_equal header.with(key_phase: nil), parsed.header
+  end
+
+  def test_parse_token
+    header = client_header.with(token: "token".b)
+    sealed = Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload: "\0".b * 3, keys: initial.client)
+    assert_equal header, Wire::Packet.parse(sealed, dcid_length: 8).header
+  end
+
+  def test_parse_rejects
+    client = V::ClientInitial::PACKET
+    rejected = {
+      "empty" => "".b,
+      "fixed bit clear" => client.dup.tap { |bytes| bytes.setbyte(0, bytes.getbyte(0) & ~0x40) },
+      "unknown version" => client.dup.tap { |bytes| bytes[1, 4] = "\x6b\x33\x43\xcf".b },
+      "21-byte DCID" => "\xc0\x00\x00\x00\x01\x15".b + "x".b * 21 + "\x00\x00\x40\x20".b + "\0".b * 32,
+      "Length past the datagram" => client.byteslice(0, 1199),
+      "Retry" => V::Retry::PACKET,
+      "too short for a sample" => "\x40".b + "c".b * 8 + "\0".b * 19,
+      "short header cut in its DCID" => "\x40\x01\x02".b
+    }
+    rejected.each do |name, bytes|
+      assert_raises(Wire::Malformed, name) { Wire::Packet.parse(bytes, dcid_length: 8) }
+    end
+    assert_equal 29, Wire::Packet.parse("\x40".b + "c".b * 8 + "\0".b * 20, dcid_length: 8).end_offset
+  end
+
   def test_header_misuse
     assert_raises(ArgumentError) { client_header.with(type: :retry) }
     assert_raises(ArgumentError) { client_header.with(type: :handshake, token: "t".b) }

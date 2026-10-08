@@ -86,15 +86,14 @@ module Raiha::Next::QUIC
 
     class ShortHeader < Data
       PROTECTED_BITS: Integer
-      KEY_PHASE_BITS: Hash[Integer, Integer]
 
       attr_reader dcid: String
       attr_reader spin: bool
-      attr_reader key_phase: Integer
+      attr_reader key_phase: Integer?
 
-      def self.new: (dcid: String, ?spin: bool, ?key_phase: Integer) -> instance
-                  | (String dcid, ?bool spin, ?Integer key_phase) -> instance
-      def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer) -> void
+      def self.new: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> instance
+                  | (String dcid, ?bool spin, ?Integer? key_phase) -> instance
+      def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> void
 
       def protected_bits: () -> Integer
       def first_byte: (Integer packet_number_length) -> Integer
@@ -105,6 +104,21 @@ module Raiha::Next::QUIC
       SAMPLE_OFFSET: Integer
 
       def self.seal: (header header, packet_number: Integer, packet_number_length: Integer, payload: String, keys: Crypto::Keys) -> String
+      def self.parse: (String datagram, ?offset: Integer, dcid_length: Integer) -> Parsed
+
+      private def self.long_header: (Reader reader, Integer first) -> LongHeader
+      private def self.connection_id: (Reader reader) -> String
+
+      class Parsed < Data
+        attr_reader header: header
+        attr_reader datagram: String
+        attr_reader offset: Integer
+        attr_reader number_offset: Integer
+        attr_reader end_offset: Integer
+
+        def self.new: (header: header, datagram: String, offset: Integer, number_offset: Integer, end_offset: Integer) -> instance
+                    | (header header, String datagram, Integer offset, Integer number_offset, Integer end_offset) -> instance
+      end
     end
   end
 end

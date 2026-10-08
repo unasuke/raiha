@@ -31,6 +31,55 @@ module Raiha::Next::QUIC
         end
         packet << sealed
       end
+
+      # The packet at `offset` in `datagram`, as far as it reads with its
+      # protection on: the header, where the packet number starts, and where
+      # the packet ends, which is where a packet coalesced after it starts.
+      # A short header packet runs to the end of the datagram, and its
+      # connection ID is `dcid_length` bytes. Bytes that do not make such a
+      # packet raise Malformed, and the packet is to be dropped.
+      def self.parse(datagram, offset: 0, dcid_length:)
+        reader = Reader.new(datagram, offset)
+        first = reader.u8
+        raise Malformed, "the fixed bit is clear" if first & 0x40 == 0
+        if first & 0x80 == 0
+          header = ShortHeader.new(dcid: reader.bytes(dcid_length), spin: first & 0x20 != 0, key_phase: nil)
+          end_offset = datagram.bytesize
+        else
+          header = long_header(reader, first)
+          length = reader.varint
+          raise Truncated, "the Length field says #{length} bytes, #{reader.remaining} are left" if length > reader.remaining
+          end_offset = reader.offset + length
+        end
+        number_offset = reader.offset
+        if end_offset - number_offset < SAMPLE_OFFSET + Crypto::HeaderProtection::SAMPLE_LENGTH
+          raise Malformed, "#{end_offset - number_offset} bytes after the header are too few for a sample"
+        end
+        Parsed.new(header:, datagram:, offset:, number_offset:, end_offset:)
+      end
+
+      private_class_method def self.long_header(reader, first)
+        number = reader.u32
+        version = Version.find(number) or raise Malformed, format("version 0x%08x is not supported", number)
+        dcid = connection_id(reader)
+        scid = connection_id(reader)
+        case type = version.packet_type((first >> 4) & 0x03)
+        when :retry then raise Malformed, "a Retry packet carries no packet number"
+        else LongHeader.new(type:, version:, dcid:, scid:, token: type == :initial ? reader.bytes(reader.varint) : EMPTY)
+        end
+      end
+
+      private_class_method def self.connection_id(reader)
+        length = reader.u8
+        raise Malformed, "a connection ID of #{length} bytes" if length > CONNECTION_ID_MAX_LENGTH
+        reader.bytes(length)
+      end
+
+      # A packet as `parse` read it, both protections still on: `header`
+      # (a short header without its key phase yet), and where in `datagram`
+      # the packet starts, its packet number starts, and it ends.
+      class Parsed < Data.define(:header, :datagram, :offset, :number_offset, :end_offset)
+      end
     end
   end
 end
