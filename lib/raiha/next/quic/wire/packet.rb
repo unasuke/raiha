@@ -39,8 +39,9 @@ module Raiha::Next::QUIC
       # connection ID is `dcid_length` bytes. Bytes that do not make such a
       # packet raise Malformed, and the packet is to be dropped.
       #
-      # A Version Negotiation packet comes back as VersionNegotiation, and a
-      # long header packet in a version not supported as UnsupportedVersion.
+      # A Version Negotiation packet comes back as VersionNegotiation, a
+      # Retry packet as Retry, and a long header packet in a version not
+      # supported as UnsupportedVersion. The first two fill the datagram.
       def self.parse(datagram, offset: 0, dcid_length:)
         reader = Reader.new(datagram, offset)
         first = reader.u8
@@ -54,7 +55,12 @@ module Raiha::Next::QUIC
           return VersionNegotiation.read(reader) if number.zero?
           version = Version.find(number) or return UnsupportedVersion.read(number, reader)
           raise Malformed, "the fixed bit is clear" if first & 0x40 == 0
-          header = long_header(reader, first, version)
+          dcid = connection_id(reader)
+          scid = connection_id(reader)
+          case type = version.packet_type((first >> 4) & 0x03)
+          when :retry then return Retry.read(reader, version:, dcid:, scid:, unused: first & 0x0f)
+          else header = LongHeader.new(type:, version:, dcid:, scid:, token: type == :initial ? reader.bytes(reader.varint) : EMPTY)
+          end
           length = reader.varint
           raise Truncated, "the Length field says #{length} bytes, #{reader.remaining} are left" if length > reader.remaining
           end_offset = reader.offset + length
@@ -64,15 +70,6 @@ module Raiha::Next::QUIC
           raise Malformed, "#{end_offset - number_offset} bytes after the header are too few for a sample"
         end
         Parsed.new(header:, datagram:, offset:, number_offset:, end_offset:)
-      end
-
-      private_class_method def self.long_header(reader, first, version)
-        dcid = connection_id(reader)
-        scid = connection_id(reader)
-        case type = version.packet_type((first >> 4) & 0x03)
-        when :retry then raise Malformed, "a Retry packet carries no packet number"
-        else LongHeader.new(type:, version:, dcid:, scid:, token: type == :initial ? reader.bytes(reader.varint) : EMPTY)
-        end
       end
 
       private_class_method def self.connection_id(reader)

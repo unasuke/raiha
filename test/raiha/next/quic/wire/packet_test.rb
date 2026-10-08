@@ -103,7 +103,6 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
       "fixed bit clear" => client.dup.tap { |bytes| bytes.setbyte(0, bytes.getbyte(0) & ~0x40) },
       "21-byte DCID" => "\xc0\x00\x00\x00\x01\x15".b + "x".b * 21 + "\x00\x00\x40\x20".b + "\0".b * 32,
       "Length past the datagram" => client.byteslice(0, 1199),
-      "Retry" => V::Retry::PACKET,
       "too short for a sample" => "\x40".b + "c".b * 8 + "\0".b * 19,
       "short header cut in its DCID" => "\x40\x01\x02".b
     }

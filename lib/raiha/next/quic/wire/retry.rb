@@ -26,7 +26,24 @@ module Raiha::Next::QUIC
 
       # The packet, with the tag for an Initial whose Destination
       # Connection ID was `original_dcid`.
+      # The rest of a Retry packet after its connection IDs, from `reader`:
+      # the token and the tag. A client drops a Retry without a token (RFC
+      # 9000 "Retry Packet").
+      def self.read(reader, version:, dcid:, scid:, unused:)
+        token_length = reader.remaining - TAG_LENGTH
+        raise Malformed, "a Retry without a token" unless token_length.positive?
+        new(version:, dcid:, scid:, token: reader.bytes(token_length), unused:, tag: reader.bytes(TAG_LENGTH))
+      end
+
       def seal(original_dcid) = body + integrity.seal(packet_number: 0, header: pseudo_packet(original_dcid), plaintext: EMPTY)
+
+      # Whether the tag is right for an Initial whose Destination Connection
+      # ID was `original_dcid`; a client drops a Retry whose tag is not.
+      # Opening the tag with the AEAD compares it in constant time.
+      def authentic?(original_dcid)
+        return false unless tag
+        !integrity.open(packet_number: 0, header: pseudo_packet(original_dcid), ciphertext: tag).nil?
+      end
 
       # The packet up to the tag.
       private def body

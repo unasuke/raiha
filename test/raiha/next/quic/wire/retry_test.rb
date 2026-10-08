@@ -21,6 +21,38 @@ class RaihaNextQUICWireRetryTest < Minitest::Test
     assert_equal_bin V::Retry::PACKET.byteslice(0, 20), retry_packet.seal(V::Keys::DCID.succ).byteslice(0, 20)
   end
 
+  def test_parse_rfc9001_retry
+    parsed = Wire::Packet.parse(V::Retry::PACKET, dcid_length: 8)
+    assert_equal retry_packet.with(tag: V::Retry::PACKET.byteslice(-16, 16)), parsed
+    assert parsed.authentic?(V::Keys::DCID)
+    refute parsed.authentic?(V::Keys::DCID.succ)
+  end
+
+  # The tag covers the whole packet, the unused bits included, whatever
+  # they are.
+  def test_the_tag_covers_every_byte
+    other_bits = retry_packet.with(unused: 0).seal(V::Keys::DCID)
+    assert Wire::Packet.parse(other_bits, dcid_length: 8).authentic?(V::Keys::DCID)
+    (0...V::Retry::PACKET.bytesize).each do |index|
+      changed = V::Retry::PACKET.dup.tap { |bytes| bytes.setbyte(index, bytes.getbyte(index) ^ 0x01) }
+      parsed = Wire::Packet.parse(changed, dcid_length: 8)
+      refute parsed.is_a?(Wire::Retry) && parsed.authentic?(V::Keys::DCID), "byte #{index}"
+    rescue Wire::Malformed
+      # Some changes no longer make a Retry: a connection ID length past 20.
+    end
+  end
+
+  def test_an_unsealed_retry_is_not_authentic
+    refute retry_packet.authentic?(V::Keys::DCID)
+  end
+
+  def test_parse_rejects
+    header = V::Retry::PACKET.byteslice(0, 15)
+    assert_raises(Wire::Malformed) { Wire::Packet.parse(header + "t".b * 16, dcid_length: 8) }
+    assert_raises(Wire::Malformed) { Wire::Packet.parse(header + "t".b * 10, dcid_length: 8) }
+    assert_equal "t".b, Wire::Packet.parse(header + "t".b * 17, dcid_length: 8).token
+  end
+
   def test_misuse
     assert_raises(ArgumentError) { retry_packet.with(token: "".b) }
     assert_raises(ArgumentError) { retry_packet.with(scid: "s".b * 21) }
