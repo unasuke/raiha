@@ -39,7 +39,8 @@ module Raiha::Next::QUIC
       # connection ID is `dcid_length` bytes. Bytes that do not make such a
       # packet raise Malformed, and the packet is to be dropped.
       #
-      # A Version Negotiation packet comes back as VersionNegotiation.
+      # A Version Negotiation packet comes back as VersionNegotiation, and a
+      # long header packet in a version not supported as UnsupportedVersion.
       def self.parse(datagram, offset: 0, dcid_length:)
         reader = Reader.new(datagram, offset)
         first = reader.u8
@@ -51,8 +52,9 @@ module Raiha::Next::QUIC
           number = reader.u32
           # Version 0 is Version Negotiation, whatever the other bits say.
           return VersionNegotiation.read(reader) if number.zero?
+          version = Version.find(number) or return UnsupportedVersion.read(number, reader)
           raise Malformed, "the fixed bit is clear" if first & 0x40 == 0
-          header = long_header(reader, first, number)
+          header = long_header(reader, first, version)
           length = reader.varint
           raise Truncated, "the Length field says #{length} bytes, #{reader.remaining} are left" if length > reader.remaining
           end_offset = reader.offset + length
@@ -64,8 +66,7 @@ module Raiha::Next::QUIC
         Parsed.new(header:, datagram:, offset:, number_offset:, end_offset:)
       end
 
-      private_class_method def self.long_header(reader, first, number)
-        version = Version.find(number) or raise Malformed, format("version 0x%08x is not supported", number)
+      private_class_method def self.long_header(reader, first, version)
         dcid = connection_id(reader)
         scid = connection_id(reader)
         case type = version.packet_type((first >> 4) & 0x03)

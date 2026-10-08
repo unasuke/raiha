@@ -101,7 +101,6 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
     rejected = {
       "empty" => "".b,
       "fixed bit clear" => client.dup.tap { |bytes| bytes.setbyte(0, bytes.getbyte(0) & ~0x40) },
-      "unknown version" => client.dup.tap { |bytes| bytes[1, 4] = "\x6b\x33\x43\xcf".b },
       "21-byte DCID" => "\xc0\x00\x00\x00\x01\x15".b + "x".b * 21 + "\x00\x00\x40\x20".b + "\0".b * 32,
       "Length past the datagram" => client.byteslice(0, 1199),
       "Retry" => V::Retry::PACKET,

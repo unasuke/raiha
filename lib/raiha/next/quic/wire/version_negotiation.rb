@@ -36,5 +36,18 @@ module Raiha::Next::QUIC
         writer.to_s
       end
     end
+
+    # A long header packet in a version this end does not support, read
+    # only as far as what every version shares (RFC 8999): enough for a
+    # server to answer it with Version Negotiation.
+    class UnsupportedVersion < Data.define(:version, :dcid, :scid)
+      # The connection IDs after the Version field, from `reader`.
+      def self.read(version, reader) = new(version:, dcid: reader.bytes(reader.u8), scid: reader.bytes(reader.u8))
+
+      # The Version Negotiation that answers this packet with `versions`,
+      # its connection IDs echoed in each other's places (RFC 9000 "Version
+      # Negotiation Packet").
+      def negotiation(versions) = VersionNegotiation.new(dcid: scid, scid: dcid, versions:)
+    end
   end
 end

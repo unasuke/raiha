@@ -110,9 +110,9 @@ module Raiha::Next::QUIC
       SAMPLE_OFFSET: Integer
 
       def self.seal: (header header, packet_number: Integer, packet_number_length: Integer, payload: String, keys: Crypto::Keys) -> String
-      def self.parse: (String datagram, ?offset: Integer, dcid_length: Integer) -> (Parsed | VersionNegotiation)
+      def self.parse: (String datagram, ?offset: Integer, dcid_length: Integer) -> (Parsed | VersionNegotiation | UnsupportedVersion)
 
-      private def self.long_header: (Reader reader, Integer first, Integer number) -> LongHeader
+      private def self.long_header: (Reader reader, Integer first, Version version) -> LongHeader
       private def self.connection_id: (Reader reader) -> String
 
       class Parsed < Data
@@ -156,6 +156,18 @@ module Raiha::Next::QUIC
       def self.read: (Reader reader) -> VersionNegotiation
 
       def encode: () -> String
+    end
+  
+    class UnsupportedVersion < Data
+      attr_reader version: Integer
+      attr_reader dcid: String
+      attr_reader scid: String
+
+      def self.new: (version: Integer, dcid: String, scid: String) -> instance
+                  | (Integer version, String dcid, String scid) -> instance
+      def self.read: (Integer version, Reader reader) -> UnsupportedVersion
+
+      def negotiation: (Array[Integer] versions) -> VersionNegotiation
     end
   end
 end
