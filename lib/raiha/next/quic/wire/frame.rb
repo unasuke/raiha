@@ -188,7 +188,91 @@ module Raiha::Next::QUIC
         def write(writer, ack_delay_exponent:) = writer.u8(0x05).varint(stream_id).varint(error_code)
       end
 
-      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending].freeze
+      # The most data the peer may send on the connection (RFC 9000
+      # "MAX_DATA Frames").
+      class MaxData < Data.define(:maximum)
+        TYPES = [0x10].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(maximum: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x10).varint(maximum)
+      end
+
+      # The most data the peer may send on a stream (RFC 9000
+      # "MAX_STREAM_DATA Frames").
+      class MaxStreamData < Data.define(:stream_id, :maximum)
+        TYPES = [0x11].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, maximum: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x11).varint(stream_id).varint(maximum)
+      end
+
+      # A count of streams of one direction no stream ID can go past: 2^60.
+      MAX_STREAM_COUNT = 1 << 60
+
+      # The most streams of one kind the peer may open (RFC 9000
+      # "MAX_STREAMS Frames"). A count past 2^60 is FRAME_ENCODING_ERROR.
+      class MaxStreams < Data.define(:bidirectional, :maximum)
+        TYPES = [0x12, 0x13].freeze
+
+        def initialize(bidirectional:, maximum:)
+          raise ArgumentError, "#{maximum} streams is past 2^60" if maximum > MAX_STREAM_COUNT
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:)
+          maximum = reader.varint
+          raise Malformed, "#{maximum} streams is past 2^60" if maximum > MAX_STREAM_COUNT
+          new(bidirectional: type == 0x12, maximum:)
+        end
+
+        def write(writer, ack_delay_exponent:) = writer.u8(bidirectional ? 0x12 : 0x13).varint(maximum)
+      end
+
+      # The sender has data to send but the connection's limit, `maximum`,
+      # stops it (RFC 9000 "DATA_BLOCKED Frames").
+      class DataBlocked < Data.define(:maximum)
+        TYPES = [0x14].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(maximum: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x14).varint(maximum)
+      end
+
+      # The same for a stream (RFC 9000 "STREAM_DATA_BLOCKED Frames").
+      class StreamDataBlocked < Data.define(:stream_id, :maximum)
+        TYPES = [0x15].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, maximum: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x15).varint(stream_id).varint(maximum)
+      end
+
+      # The sender would open a stream but the count `maximum` stops it (RFC
+      # 9000 "STREAMS_BLOCKED Frames"). A count past 2^60 is
+      # FRAME_ENCODING_ERROR.
+      class StreamsBlocked < Data.define(:bidirectional, :maximum)
+        TYPES = [0x16, 0x17].freeze
+
+        def initialize(bidirectional:, maximum:)
+          raise ArgumentError, "#{maximum} streams is past 2^60" if maximum > MAX_STREAM_COUNT
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:)
+          maximum = reader.varint
+          raise Malformed, "#{maximum} streams is past 2^60" if maximum > MAX_STREAM_COUNT
+          new(bidirectional: type == 0x16, maximum:)
+        end
+
+        def write(writer, ack_delay_exponent:) = writer.u8(bidirectional ? 0x16 : 0x17).varint(maximum)
+      end
+
+      KINDS = [
+        Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending,
+        MaxData, MaxStreamData, MaxStreams, DataBlocked, StreamDataBlocked, StreamsBlocked
+      ].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
       # The frames of a packet's payload. A payload without frames, a frame

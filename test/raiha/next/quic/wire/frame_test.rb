@@ -140,6 +140,30 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_malformed("\x04\x04\x00", ErrorCode::FRAME_ENCODING_ERROR, 0x04)
   end
 
+  def test_flow_control
+    frames = [
+      Frame::MaxData.new(maximum: 1 << 20), Frame::MaxStreamData.new(stream_id: 4, maximum: 65_536),
+      Frame::MaxStreams.new(bidirectional: true, maximum: 100), Frame::MaxStreams.new(bidirectional: false, maximum: 3),
+      Frame::DataBlocked.new(maximum: 1 << 20), Frame::StreamDataBlocked.new(stream_id: 4, maximum: 65_536),
+      Frame::StreamsBlocked.new(bidirectional: true, maximum: 100), Frame::StreamsBlocked.new(bidirectional: false, maximum: 3)
+    ]
+    assert_equal_bin "\x12\x40\x64\x13\x03".b, encode(*frames[2, 2])
+    assert_equal_bin "\x16\x40\x64\x17\x03".b, encode(*frames[6, 2])
+    assert_round_trip(*frames)
+  end
+
+  # RFC 9000 "MAX_STREAMS Frames", "STREAMS_BLOCKED Frames": no stream ID
+  # can go past 2^60 streams of one direction.
+  def test_stream_counts_stop_at_2_to_the_60
+    limit = Frame::MAX_STREAM_COUNT
+    assert_round_trip(Frame::MaxStreams.new(bidirectional: true, maximum: limit), Frame::StreamsBlocked.new(bidirectional: false, maximum: limit))
+    past = Wire::Varint.encode(limit + 1)
+    assert_malformed("\x13" + past, ErrorCode::FRAME_ENCODING_ERROR, 0x13)
+    assert_malformed("\x16" + past, ErrorCode::FRAME_ENCODING_ERROR, 0x16)
+    assert_raises(ArgumentError) { Frame::MaxStreams.new(bidirectional: true, maximum: limit + 1) }
+    assert_raises(ArgumentError) { Frame::StreamsBlocked.new(bidirectional: true, maximum: limit + 1) }
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)

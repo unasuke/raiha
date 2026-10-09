@@ -2,6 +2,7 @@ module Raiha::Next::QUIC
   module Wire
     module Frame
       type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream | ResetStream | StopSending
+             | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked
 
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
@@ -133,6 +134,86 @@ module Raiha::Next::QUIC
         def self.new: (stream_id: Integer, error_code: Integer) -> instance
                     | (Integer stream_id, Integer error_code) -> instance
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StopSending
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class MaxData < Data
+        TYPES: Array[Integer]
+
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxData
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class MaxStreamData < Data
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxStreamData
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      MAX_STREAM_COUNT: Integer
+
+      class MaxStreams < Data
+        TYPES: Array[Integer]
+
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+        def initialize: (bidirectional: bool, maximum: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxStreams
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class DataBlocked < Data
+        TYPES: Array[Integer]
+
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> DataBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StreamDataBlocked < Data
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StreamDataBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StreamsBlocked < Data
+        TYPES: Array[Integer]
+
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+        def initialize: (bidirectional: bool, maximum: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StreamsBlocked
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
       end
