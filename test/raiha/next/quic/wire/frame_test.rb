@@ -190,6 +190,22 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::PathChallenge.new(data: "123".b) }
   end
 
+  def test_connection_close
+    transport = Frame::ConnectionClose.new(code: ErrorCode::PROTOCOL_VIOLATION, frame_type: 0x06, reason: "bad".b, application: false)
+    assert_equal_bin "\x1c\x0a\x06\x03bad".b, encode(transport)
+    application = Frame::ConnectionClose.new(code: 0x0100, frame_type: nil, reason: "".b, application: true)
+    assert_equal_bin "\x1d\x41\x00\x00".b, encode(application)
+    assert_round_trip(transport, application)
+    # The reason is kept as the bytes that came, UTF-8 or not.
+    assert_equal "\xff".b, parse("\x1d\x00\x01\xff").first.reason
+    assert_malformed("\x1c\x0a\x06\x05bad", ErrorCode::FRAME_ENCODING_ERROR, 0x1c)
+  end
+
+  def test_connection_close_misuse
+    assert_raises(ArgumentError) { Frame::ConnectionClose.new(code: 0, frame_type: 1, reason: "".b, application: true) }
+    assert_raises(ArgumentError) { Frame::ConnectionClose.new(code: 0, frame_type: nil, reason: "".b, application: false) }
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)

@@ -340,10 +340,37 @@ module Raiha::Next::QUIC
         def write(writer, ack_delay_exponent:) = writer.u8(0x1b).bytes(data)
       end
 
+      # The end of the connection (RFC 9000 "CONNECTION_CLOSE Frames"), with
+      # the fields of ConnectionError. A transport error (type 0x1c) names
+      # the frame type that caused it, 0 when none did; an application error
+      # (type 0x1d) has no frame type. `reason` is the bytes as they came.
+      class ConnectionClose < Data.define(:code, :frame_type, :reason, :application)
+        TYPES = [0x1c, 0x1d].freeze
+
+        def initialize(code:, frame_type:, reason:, application:)
+          raise ArgumentError, "an application error names no frame type" if application && frame_type
+          raise ArgumentError, "a transport error names a frame type, 0 for none" unless application || frame_type
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:)
+          application = type == 0x1d
+          code = reader.varint
+          frame_type = application ? nil : reader.varint
+          new(code:, frame_type:, reason: reader.bytes(reader.varint), application:)
+        end
+
+        def write(writer, ack_delay_exponent:)
+          writer.u8(application ? 0x1d : 0x1c).varint(code)
+          writer.varint(frame_type) if frame_type
+          writer.varint(reason.bytesize).bytes(reason)
+        end
+      end
+
       KINDS = [
         Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending,
         MaxData, MaxStreamData, MaxStreams, DataBlocked, StreamDataBlocked, StreamsBlocked,
-        NewConnectionID, RetireConnectionID, PathChallenge, PathResponse
+        NewConnectionID, RetireConnectionID, PathChallenge, PathResponse, ConnectionClose
       ].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
