@@ -1,7 +1,7 @@
 module Raiha::Next::QUIC
   module Wire
     module Frame
-      type t = Padding | Ping | HandshakeDone | Ack
+      type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken
 
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
@@ -61,6 +61,33 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ack
 
         def largest: () -> Integer
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class Crypto < Data
+        TYPES: Array[Integer]
+
+        attr_reader offset: Integer
+        attr_reader data: String
+
+        def self.new: (offset: Integer, data: String) -> instance
+                    | (Integer offset, String data) -> instance
+        def initialize: (offset: Integer, data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Crypto
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class NewToken < Data
+        TYPES: Array[Integer]
+
+        attr_reader token: String
+
+        def self.new: (token: String) -> instance
+                    | (String token) -> instance
+        def initialize: (token: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewToken
+
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
       end
 

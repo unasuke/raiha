@@ -95,7 +95,47 @@ module Raiha::Next::QUIC
         end
       end
 
-      KINDS = [Padding, Ping, HandshakeDone, Ack].freeze
+      # Bytes of the TLS handshake at `offset` in the crypto stream of the
+      # packet's encryption level (RFC 9000 "CRYPTO Frames").
+      class Crypto < Data.define(:offset, :data)
+        TYPES = [0x06].freeze
+
+        def initialize(offset:, data:)
+          raise ArgumentError, "CRYPTO data ends past 2^62 - 1" unless offset >= 0 && offset + data.bytesize <= Varint::MAX
+          super
+        end
+
+        # Data that would end past 2^62 - 1 is FRAME_ENCODING_ERROR.
+        def self.read(reader, type:, ack_delay_exponent:)
+          offset = reader.varint
+          length = reader.varint
+          raise Malformed, "CRYPTO data ends past 2^62 - 1" if offset + length > Varint::MAX
+          new(offset:, data: reader.bytes(length))
+        end
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x06).varint(offset).varint(data.bytesize).bytes(data)
+      end
+
+      # A token for the address validation of a later connection (RFC 9000
+      # "NEW_TOKEN Frames"). An empty one is FRAME_ENCODING_ERROR.
+      class NewToken < Data.define(:token)
+        TYPES = [0x07].freeze
+
+        def initialize(token:)
+          raise ArgumentError, "a NEW_TOKEN frame carries a token" if token.empty?
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:)
+          token = reader.bytes(reader.varint)
+          raise Malformed, "an empty NEW_TOKEN" if token.empty?
+          new(token:)
+        end
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x07).varint(token.bytesize).bytes(token)
+      end
+
+      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
       # The frames of a packet's payload. A payload without frames, a frame

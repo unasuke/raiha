@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/quic"
+require "raiha/next/quic/test"
 
 class RaihaNextQUICWireFrameTest < Minitest::Test
   Wire = Raiha::Next::QUIC::Wire
@@ -77,6 +78,35 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::Ack.new(ranges: [5..3], delay: 0.0) }
     assert_raises(ArgumentError) { Frame::Ack.new(ranges: [-1..3], delay: 0.0) }
     assert_raises(ArgumentError) { Frame::Ack.new(ranges: [1..3], delay: -0.1) }
+  end
+
+  # RFC 9001 appendix A.2: the client's first CRYPTO frame, with the
+  # ClientHello, then PADDING to the end of the payload.
+  def test_crypto_in_the_client_initial
+    c = Raiha::Next::QUIC::Test::Vectors::ClientInitial
+    crypto = parse(c::FRAMES).first
+    assert_equal [0, 241], [crypto.offset, crypto.data.bytesize]
+    assert_equal 0x01, crypto.data.getbyte(0)
+    assert_equal_bin c::FRAMES, encode(crypto)
+    payload = c::FRAMES.ljust(c::PAYLOAD_LENGTH, "\0".b)
+    assert_equal [crypto, Frame::Padding.new(length: c::PAYLOAD_LENGTH - c::FRAMES.bytesize)], parse(payload)
+  end
+
+  # RFC 9000 "CRYPTO Frames": data may not end past 2^62 - 1.
+  def test_crypto_limits
+    max = Wire::Varint::MAX
+    assert_round_trip(Frame::Crypto.new(offset: max - 1, data: "x".b))
+    assert_malformed("\x06\xff\xff\xff\xff\xff\xff\xff\xff\x01x", ErrorCode::FRAME_ENCODING_ERROR, 0x06)
+    assert_malformed("\x06\x00\x05abc", ErrorCode::FRAME_ENCODING_ERROR, 0x06)
+    assert_raises(ArgumentError) { Frame::Crypto.new(offset: max, data: "x".b) }
+  end
+
+  def test_new_token
+    assert_equal_bin "\x07\x03tok".b, encode(Frame::NewToken.new(token: "tok".b))
+    assert_round_trip(Frame::NewToken.new(token: "tok".b))
+    # RFC 9000 "NEW_TOKEN Frames": an empty token.
+    assert_malformed("\x07\x00", ErrorCode::FRAME_ENCODING_ERROR, 0x07)
+    assert_raises(ArgumentError) { Frame::NewToken.new(token: "".b) }
   end
 
   # RFC 9000 "Frames and Frame Types".
