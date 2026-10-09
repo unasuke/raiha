@@ -135,7 +135,40 @@ module Raiha::Next::QUIC
         def write(writer, ack_delay_exponent:) = writer.u8(0x07).varint(token.bytesize).bytes(token)
       end
 
-      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken].freeze
+      # Bytes of a stream at `offset`, and whether they end it (RFC 9000
+      # "STREAM Frames"). The low three bits of the frame type say whether
+      # an Offset and a Length field follow and whether FIN is set; without
+      # a Length the data runs to the end of the packet. Written, the frame
+      # always has a Length, and an Offset unless it is 0.
+      class Stream < Data.define(:stream_id, :offset, :data, :fin)
+        TYPES = (0x08..0x0f).to_a.freeze
+        OFF = 0x04
+        LEN = 0x02
+        FIN = 0x01
+
+        def initialize(stream_id:, offset:, data:, fin: false)
+          raise ArgumentError, "stream data ends past 2^62 - 1" unless offset >= 0 && offset + data.bytesize <= Varint::MAX
+          super
+        end
+
+        # Data that would end past 2^62 - 1 is FRAME_ENCODING_ERROR.
+        def self.read(reader, type:, ack_delay_exponent:)
+          stream_id = reader.varint
+          offset = type & OFF == 0 ? 0 : reader.varint
+          length = type & LEN == 0 ? reader.remaining : reader.varint
+          raise Malformed, "stream data ends past 2^62 - 1" if offset + length > Varint::MAX
+          new(stream_id:, offset:, data: reader.bytes(length), fin: type & FIN != 0)
+        end
+
+        def write(writer, ack_delay_exponent:)
+          type = 0x08 | LEN | (offset.zero? ? 0 : OFF) | (fin ? FIN : 0)
+          writer.u8(type).varint(stream_id)
+          writer.varint(offset) unless offset.zero?
+          writer.varint(data.bytesize).bytes(data)
+        end
+      end
+
+      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
       # The frames of a packet's payload. A payload without frames, a frame

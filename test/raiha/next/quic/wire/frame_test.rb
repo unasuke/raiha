@@ -109,6 +109,28 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::NewToken.new(token: "".b) }
   end
 
+  def test_stream
+    assert_equal_bin "\x0a\x04\x02hi".b, encode(Frame::Stream.new(stream_id: 4, offset: 0, data: "hi".b))
+    assert_equal_bin "\x0f\x04\x40\x64\x02hi".b, encode(Frame::Stream.new(stream_id: 4, offset: 100, data: "hi".b, fin: true))
+    assert_round_trip(Frame::Stream.new(stream_id: 0, offset: 0, data: "".b, fin: true), Frame::Ping.new)
+    assert_round_trip(Frame::Stream.new(stream_id: 2, offset: 7, data: "abc".b))
+  end
+
+  # Without a Length field the data runs to the end of the packet; without
+  # an Offset field it starts at 0.
+  def test_stream_type_bits
+    assert_equal [Frame::Stream.new(stream_id: 4, offset: 0, data: "hello".b)], parse("\x08\x04hello")
+    assert_equal [Frame::Stream.new(stream_id: 4, offset: 9, data: "\x01".b, fin: true)], parse("\x0d\x04\x09\x01")
+    assert_equal [Frame::Stream.new(stream_id: 4, offset: 9, data: "h".b, fin: true), Frame::Ping.new], parse("\x0f\x04\x09\x01h\x01")
+  end
+
+  # RFC 9000 "STREAM Frames": data may not end past 2^62 - 1.
+  def test_stream_limits
+    assert_malformed("\x0c\x00\xff\xff\xff\xff\xff\xff\xff\xffx", ErrorCode::FRAME_ENCODING_ERROR, 0x0c)
+    assert_malformed("\x0a\x00\x05abc", ErrorCode::FRAME_ENCODING_ERROR, 0x0a)
+    assert_raises(ArgumentError) { Frame::Stream.new(stream_id: 0, offset: Wire::Varint::MAX, data: "x".b) }
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)
