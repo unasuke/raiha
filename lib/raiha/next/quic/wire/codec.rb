@@ -9,13 +9,16 @@ module Raiha::Next::QUIC
     # Bytes from the peer that do not decode. `code` is the transport error
     # to close the connection with when the bytes were authenticated (a
     # frame, or the reserved bits of a header); a packet that does not decode
-    # before that is dropped instead.
+    # before that is dropped instead. `frame_type` is the type of the frame
+    # that did not decode, for the CONNECTION_CLOSE frame.
     class Malformed < StandardError
       attr_reader :code
+      attr_reader :frame_type
 
-      def initialize(message = nil, code: ErrorCode::FRAME_ENCODING_ERROR)
+      def initialize(message = nil, code: ErrorCode::FRAME_ENCODING_ERROR, frame_type: nil)
         super(message)
         @code = code
+        @frame_type = frame_type
       end
     end
 
@@ -50,6 +53,8 @@ module Raiha::Next::QUIC
     # Reads fields from `bytes` between `offset` and `limit` without copying
     # them first. A field past the limit raises Truncated.
     class Reader
+      NON_ZERO = /[^\x00]/n
+
       attr_reader :offset
 
       def initialize(bytes, offset = 0, limit = bytes.bytesize)
@@ -86,6 +91,15 @@ module Raiha::Next::QUIC
       def varint = varint_with_size.first
 
       def bytes(length) = take(length)
+
+      # Skips the zero bytes from here on, and tells how many there were.
+      def zero_run
+        stop = @bytes.byteindex(NON_ZERO, @offset) || @limit
+        stop = @limit if stop > @limit
+        count = stop - @offset
+        @offset = stop
+        count
+      end
 
       # The rest, up to the limit.
       def rest = take(remaining)

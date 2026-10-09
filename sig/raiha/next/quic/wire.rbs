@@ -2,8 +2,9 @@ module Raiha::Next::QUIC
   module Wire
     class Malformed < StandardError
       attr_reader code: Integer
+      attr_reader frame_type: Integer?
 
-      def initialize: (?String? message, ?code: Integer) -> void
+      def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void
     end
 
     class Truncated < Malformed
@@ -17,6 +18,8 @@ module Raiha::Next::QUIC
     end
 
     class Reader
+      NON_ZERO: Regexp
+
       @bytes: String
       @limit: Integer
 
@@ -31,6 +34,7 @@ module Raiha::Next::QUIC
       def varint_with_size: () -> [Integer, Integer]
       def varint: () -> Integer
       def bytes: (Integer length) -> String
+      def zero_run: () -> Integer
       def rest: () -> String
       def sub: (Integer length) -> Reader
 

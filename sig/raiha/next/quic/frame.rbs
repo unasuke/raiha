@@ -1,0 +1,51 @@
+module Raiha::Next::QUIC
+  module Wire
+    module Frame
+      type t = Padding | Ping | HandshakeDone
+
+      # What each kind of frame offers to `Frame.parse`.
+      interface _Kind
+        def read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> t
+      end
+
+      class Padding < Data
+        TYPES: Array[Integer]
+
+        attr_reader length: Integer
+
+        def self.new: (length: Integer) -> instance
+                    | (Integer length) -> instance
+        def initialize: (length: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Padding
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class Ping < Data
+        TYPES: Array[Integer]
+
+        def self.new: () -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ping
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class HandshakeDone < Data
+        TYPES: Array[Integer]
+
+        def self.new: () -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> HandshakeDone
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      KINDS: Array[_Kind]
+      BY_TYPE: Hash[Integer, _Kind]
+
+      def self.parse: (String payload, ack_delay_exponent: Integer) -> Array[t]
+      def self.encode: (Array[t] frames, ack_delay_exponent: Integer) -> String
+
+      private def self.read: (Reader reader, ack_delay_exponent: Integer) -> t
+    end
+  end
+end
