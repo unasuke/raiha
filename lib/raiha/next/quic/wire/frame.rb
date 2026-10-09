@@ -2,7 +2,8 @@
 
 module Raiha::Next::QUIC
   module Wire
-    # The frames of RFC 9000 "Frame Types and Formats", as values. Each knows
+    # The frames of RFC 9000 "Frame Types and Formats" and the DATAGRAM frame
+    # of RFC 9221, as values. Each knows
     # its frame types, reads its fields after the type, and writes itself.
     # ACK Delay is in seconds as a Float; `ack_delay_exponent` converts it,
     # the peer's when reading and our own when writing.
@@ -367,10 +368,21 @@ module Raiha::Next::QUIC
         end
       end
 
+      # Application data outside any stream (RFC 9221 "Datagram Frame
+      # Types"). Type 0x30 runs to the end of the packet, 0x31 has a Length;
+      # written, it always has the Length.
+      class Datagram < Data.define(:data)
+        TYPES = [0x30, 0x31].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(data: type == 0x31 ? reader.bytes(reader.varint) : reader.rest)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x31).varint(data.bytesize).bytes(data)
+      end
+
       KINDS = [
         Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending,
         MaxData, MaxStreamData, MaxStreams, DataBlocked, StreamDataBlocked, StreamsBlocked,
-        NewConnectionID, RetireConnectionID, PathChallenge, PathResponse, ConnectionClose
+        NewConnectionID, RetireConnectionID, PathChallenge, PathResponse, ConnectionClose, Datagram
       ].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 

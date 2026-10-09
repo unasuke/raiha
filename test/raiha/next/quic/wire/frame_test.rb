@@ -206,6 +206,14 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::ConnectionClose.new(code: 0, frame_type: nil, reason: "".b, application: false) }
   end
 
+  # RFC 9221 "Datagram Frame Types": 0x30 runs to the end of the packet.
+  def test_datagram
+    assert_equal_bin "\x31\x02hi".b, encode(Frame::Datagram.new(data: "hi".b))
+    assert_round_trip(Frame::Datagram.new(data: "hi".b), Frame::Datagram.new(data: "".b), Frame::Ping.new)
+    assert_equal [Frame::Datagram.new(data: "hi\x01".b)], parse("\x30hi\x01")
+    assert_malformed("\x31\x05hi", ErrorCode::FRAME_ENCODING_ERROR, 0x31)
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)
