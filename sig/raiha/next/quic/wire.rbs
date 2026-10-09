@@ -103,6 +103,7 @@ module Raiha::Next::QUIC
                   | (String dcid, ?bool spin, ?Integer? key_phase) -> instance
       def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> void
 
+      def type: () -> :one_rtt
       def protected_bits: () -> Integer
       def reserved_bits: () -> Integer
       def first_byte: (Integer packet_number_length) -> Integer

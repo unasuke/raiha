@@ -176,6 +176,11 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
     assert_equal_bin V::ClientInitial::PACKET, datagram
   end
 
+  # The packet type `Wire::Frame.parse` takes.
+  def test_header_types
+    assert_equal [:initial, :one_rtt], [client_header.type, Wire::ShortHeader.new(dcid: "".b).type]
+  end
+
   def test_header_misuse
     assert_raises(ArgumentError) { client_header.with(type: :retry) }
     assert_raises(ArgumentError) { client_header.with(type: :handshake, token: "t".b) }

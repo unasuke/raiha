@@ -7,7 +7,7 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
   Frame = Wire::Frame
   ErrorCode = Raiha::Next::QUIC::ErrorCode
 
-  def parse(bytes) = Frame.parse(bytes.b, ack_delay_exponent: 3)
+  def parse(bytes, packet_type: :one_rtt) = Frame.parse(bytes.b, packet_type:, ack_delay_exponent: 3)
 
   def encode(*frames) = Frame.encode(frames, ack_delay_exponent: 3)
 
@@ -44,8 +44,8 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
 
   # ACK Delay is scaled by the exponent of the end that sent the frame.
   def test_ack_delay_exponent
-    assert_equal 0.0001, Frame.parse(ACK_BYTES, ack_delay_exponent: 0).first.delay
-    assert_equal 104.8576, Frame.parse(ACK_BYTES, ack_delay_exponent: 20).first.delay
+    assert_equal 0.0001, Frame.parse(ACK_BYTES, packet_type: :one_rtt, ack_delay_exponent: 0).first.delay
+    assert_equal 104.8576, Frame.parse(ACK_BYTES, packet_type: :one_rtt, ack_delay_exponent: 20).first.delay
     assert_equal_bin "\x02\x0a\x19\x00\x00".b, Frame.encode([Frame::Ack.new(ranges: [10..10], delay: 0.0001)], ack_delay_exponent: 2)
     # Whole microseconds, so 29 microseconds stay 29.
     assert_equal_bin "\x02\x00\x1d\x00\x00".b, Frame.encode([Frame::Ack.new(ranges: [0..0], delay: 0.000029)], ack_delay_exponent: 0)
@@ -212,6 +212,65 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_round_trip(Frame::Datagram.new(data: "hi".b), Frame::Datagram.new(data: "".b), Frame::Ping.new)
     assert_equal [Frame::Datagram.new(data: "hi\x01".b)], parse("\x30hi\x01")
     assert_malformed("\x31\x05hi", ErrorCode::FRAME_ENCODING_ERROR, 0x31)
+  end
+
+  # RFC 9000 Table 3: the packets each frame may travel in (Initial,
+  # Handshake, 0-RTT, 1-RTT), and the markings N (not ack-eliciting) and P
+  # (probing).
+  TABLE_3 = {
+    Frame::Padding.new(length: 1) => ["IH01", "NP"],
+    Frame::Ping.new => ["IH01", ""],
+    Frame::Ack.new(ranges: [0..0], delay: 0.0) => ["IH_1", "N"],
+    Frame::ResetStream.new(stream_id: 0, error_code: 0, final_size: 0) => ["__01", ""],
+    Frame::StopSending.new(stream_id: 0, error_code: 0) => ["__01", ""],
+    Frame::Crypto.new(offset: 0, data: "x".b) => ["IH_1", ""],
+    Frame::NewToken.new(token: "t".b) => ["___1", ""],
+    Frame::Stream.new(stream_id: 0, offset: 0, data: "x".b) => ["__01", ""],
+    Frame::MaxData.new(maximum: 0) => ["__01", ""],
+    Frame::MaxStreamData.new(stream_id: 0, maximum: 0) => ["__01", ""],
+    Frame::MaxStreams.new(bidirectional: true, maximum: 0) => ["__01", ""],
+    Frame::DataBlocked.new(maximum: 0) => ["__01", ""],
+    Frame::StreamDataBlocked.new(stream_id: 0, maximum: 0) => ["__01", ""],
+    Frame::StreamsBlocked.new(bidirectional: false, maximum: 0) => ["__01", ""],
+    Frame::NewConnectionID.new(sequence_number: 1, retire_prior_to: 0, connection_id: "c".b, stateless_reset_token: "t".b * 16) => ["__01", "P"],
+    Frame::RetireConnectionID.new(sequence_number: 0) => ["__01", ""],
+    Frame::PathChallenge.new(data: "x".b * 8) => ["__01", "P"],
+    Frame::PathResponse.new(data: "x".b * 8) => ["___1", "P"],
+    Frame::ConnectionClose.new(code: 0, frame_type: 0, reason: "".b, application: false) => ["IH01", "N"],
+    Frame::ConnectionClose.new(code: 0, frame_type: nil, reason: "".b, application: true) => ["__01", "N"],
+    Frame::HandshakeDone.new => ["___1", ""],
+    Frame::Datagram.new(data: "x".b) => ["__01", ""]
+  }.freeze
+  PACKET_TYPES = %i[initial handshake zero_rtt one_rtt].freeze
+
+  def test_table_3
+    TABLE_3.each do |frame, (packets, spec)|
+      PACKET_TYPES.each_with_index do |packet_type, index|
+        permitted = packets[index] != "_"
+        assert_equal permitted, frame.permitted_in?(packet_type), "#{frame.class} in #{packet_type}"
+        bytes = encode(frame)
+        if permitted
+          assert_equal [frame], parse(bytes, packet_type:)
+        else
+          assert_malformed_in(bytes, packet_type, ErrorCode::PROTOCOL_VIOLATION)
+        end
+      end
+      assert_equal !spec.include?("N"), frame.ack_eliciting?, frame.class.name
+      assert_equal spec.include?("P"), frame.probing?, frame.class.name
+    end
+    assert_equal Frame::KINDS.size, TABLE_3.keys.map(&:class).uniq.size
+  end
+
+  def assert_malformed_in(bytes, packet_type, code)
+    error = assert_raises(Wire::Malformed) { parse(bytes, packet_type:) }
+    assert_equal [code, Wire::Reader.new(bytes).varint], [error.code, error.frame_type]
+  end
+
+  # The frame type the error names is the one that broke the rule, after
+  # frames that kept it.
+  def test_packet_type_violation_names_the_frame
+    error = assert_raises(Wire::Malformed) { parse("\x01\x1e", packet_type: :handshake) }
+    assert_equal [ErrorCode::PROTOCOL_VIOLATION, 0x1e], [error.code, error.frame_type]
   end
 
   # RFC 9000 "Frames and Frame Types".

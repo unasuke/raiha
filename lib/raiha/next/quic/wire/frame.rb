@@ -3,14 +3,41 @@
 module Raiha::Next::QUIC
   module Wire
     # The frames of RFC 9000 "Frame Types and Formats" and the DATAGRAM frame
-    # of RFC 9221, as values. Each knows
-    # its frame types, reads its fields after the type, and writes itself.
-    # ACK Delay is in seconds as a Float; `ack_delay_exponent` converts it,
-    # the peer's when reading and our own when writing.
+    # of RFC 9221, as values. Each knows its frame types, reads its fields
+    # after the type, writes itself, and tells what RFC 9000 Table 3 says of
+    # it. ACK Delay is in seconds as a Float; `ack_delay_exponent` converts
+    # it, the peer's when reading and our own when writing.
     module Frame
+      # The packet types of RFC 9000 Table 3, "Pkts": Initial, Handshake,
+      # 0-RTT and 1-RTT.
+      ALL_PACKETS = %i[initial handshake zero_rtt one_rtt].freeze
+      NOT_ZERO_RTT = %i[initial handshake one_rtt].freeze
+      APPLICATION_PACKETS = %i[zero_rtt one_rtt].freeze
+      ONE_RTT = %i[one_rtt].freeze
+
+      # What RFC 9000 Table 3 says of most frames: they travel in 0-RTT and
+      # 1-RTT packets, elicit an ACK, and are no probe. Frames for which it
+      # says otherwise override these.
+      module Defaults
+        def permitted_in?(packet_type) = APPLICATION_PACKETS.include?(packet_type)
+
+        def ack_eliciting? = true
+
+        # Whether the frame may go in a packet that probes a new path.
+        def probing? = false
+      end
+
       # A run of PADDING frames, one zero byte each, read as one value.
       class Padding < Data.define(:length)
+        include Defaults
+
         TYPES = [0x00].freeze
+
+        def permitted_in?(packet_type) = ALL_PACKETS.include?(packet_type)
+
+        def ack_eliciting? = false
+
+        def probing? = true
 
         def initialize(length:)
           raise ArgumentError, "padding is 1 byte at least, not #{length}" unless length.positive?
@@ -23,7 +50,11 @@ module Raiha::Next::QUIC
       end
 
       class Ping < Data.define
+        include Defaults
+
         TYPES = [0x01].freeze
+
+        def permitted_in?(packet_type) = ALL_PACKETS.include?(packet_type)
 
         def self.read(reader, type:, ack_delay_exponent:) = new
 
@@ -31,7 +62,11 @@ module Raiha::Next::QUIC
       end
 
       class HandshakeDone < Data.define
+        include Defaults
+
         TYPES = [0x1e].freeze
+
+        def permitted_in?(packet_type) = ONE_RTT.include?(packet_type)
 
         def self.read(reader, type:, ack_delay_exponent:) = new
 
@@ -43,7 +78,13 @@ module Raiha::Next::QUIC
       # largest down with a gap between each two; `delay` is the ACK Delay in
       # seconds; `ecn` the ECN counts, or nil.
       class Ack < Data.define(:ranges, :delay, :ecn)
+        include Defaults
+
         TYPES = [0x02, 0x03].freeze
+
+        def permitted_in?(packet_type) = NOT_ZERO_RTT.include?(packet_type)
+
+        def ack_eliciting? = false
 
         # The packets received with ECT(0), ECT(1) and CE.
         class ECNCounts < Data.define(:ect0, :ect1, :ce); end
@@ -99,7 +140,11 @@ module Raiha::Next::QUIC
       # Bytes of the TLS handshake at `offset` in the crypto stream of the
       # packet's encryption level (RFC 9000 "CRYPTO Frames").
       class Crypto < Data.define(:offset, :data)
+        include Defaults
+
         TYPES = [0x06].freeze
+
+        def permitted_in?(packet_type) = NOT_ZERO_RTT.include?(packet_type)
 
         def initialize(offset:, data:)
           raise ArgumentError, "CRYPTO data ends past 2^62 - 1" unless offset >= 0 && offset + data.bytesize <= Varint::MAX
@@ -120,7 +165,11 @@ module Raiha::Next::QUIC
       # A token for the address validation of a later connection (RFC 9000
       # "NEW_TOKEN Frames"). An empty one is FRAME_ENCODING_ERROR.
       class NewToken < Data.define(:token)
+        include Defaults
+
         TYPES = [0x07].freeze
+
+        def permitted_in?(packet_type) = ONE_RTT.include?(packet_type)
 
         def initialize(token:)
           raise ArgumentError, "a NEW_TOKEN frame carries a token" if token.empty?
@@ -142,6 +191,8 @@ module Raiha::Next::QUIC
       # a Length the data runs to the end of the packet. Written, the frame
       # always has a Length, and an Offset unless it is 0.
       class Stream < Data.define(:stream_id, :offset, :data, :fin)
+        include Defaults
+
         TYPES = (0x08..0x0f).to_a.freeze
         OFF = 0x04
         LEN = 0x02
@@ -172,6 +223,8 @@ module Raiha::Next::QUIC
       # The sender abandons the sending part of a stream (RFC 9000
       # "RESET_STREAM Frames"); `final_size` is how far it got.
       class ResetStream < Data.define(:stream_id, :error_code, :final_size)
+        include Defaults
+
         TYPES = [0x04].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, error_code: reader.varint, final_size: reader.varint)
@@ -182,6 +235,8 @@ module Raiha::Next::QUIC
       # The receiver asks the sender to stop sending on a stream (RFC 9000
       # "STOP_SENDING Frames").
       class StopSending < Data.define(:stream_id, :error_code)
+        include Defaults
+
         TYPES = [0x05].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, error_code: reader.varint)
@@ -192,6 +247,8 @@ module Raiha::Next::QUIC
       # The most data the peer may send on the connection (RFC 9000
       # "MAX_DATA Frames").
       class MaxData < Data.define(:maximum)
+        include Defaults
+
         TYPES = [0x10].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(maximum: reader.varint)
@@ -202,6 +259,8 @@ module Raiha::Next::QUIC
       # The most data the peer may send on a stream (RFC 9000
       # "MAX_STREAM_DATA Frames").
       class MaxStreamData < Data.define(:stream_id, :maximum)
+        include Defaults
+
         TYPES = [0x11].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, maximum: reader.varint)
@@ -215,6 +274,8 @@ module Raiha::Next::QUIC
       # The most streams of one kind the peer may open (RFC 9000
       # "MAX_STREAMS Frames"). A count past 2^60 is FRAME_ENCODING_ERROR.
       class MaxStreams < Data.define(:bidirectional, :maximum)
+        include Defaults
+
         TYPES = [0x12, 0x13].freeze
 
         def initialize(bidirectional:, maximum:)
@@ -234,6 +295,8 @@ module Raiha::Next::QUIC
       # The sender has data to send but the connection's limit, `maximum`,
       # stops it (RFC 9000 "DATA_BLOCKED Frames").
       class DataBlocked < Data.define(:maximum)
+        include Defaults
+
         TYPES = [0x14].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(maximum: reader.varint)
@@ -243,6 +306,8 @@ module Raiha::Next::QUIC
 
       # The same for a stream (RFC 9000 "STREAM_DATA_BLOCKED Frames").
       class StreamDataBlocked < Data.define(:stream_id, :maximum)
+        include Defaults
+
         TYPES = [0x15].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, maximum: reader.varint)
@@ -254,6 +319,8 @@ module Raiha::Next::QUIC
       # 9000 "STREAMS_BLOCKED Frames"). A count past 2^60 is
       # FRAME_ENCODING_ERROR.
       class StreamsBlocked < Data.define(:bidirectional, :maximum)
+        include Defaults
+
         TYPES = [0x16, 0x17].freeze
 
         def initialize(bidirectional:, maximum:)
@@ -275,7 +342,11 @@ module Raiha::Next::QUIC
       # Frames"). A length outside 1 to 20 and Retire Prior To past the
       # sequence number are FRAME_ENCODING_ERROR.
       class NewConnectionID < Data.define(:sequence_number, :retire_prior_to, :connection_id, :stateless_reset_token)
+        include Defaults
+
         TYPES = [0x18].freeze
+
+        def probing? = true
         STATELESS_RESET_TOKEN_LENGTH = 16
 
         def initialize(sequence_number:, retire_prior_to:, connection_id:, stateless_reset_token:)
@@ -303,6 +374,8 @@ module Raiha::Next::QUIC
       # The connection ID of `sequence_number` is no longer used (RFC 9000
       # "RETIRE_CONNECTION_ID Frames").
       class RetireConnectionID < Data.define(:sequence_number)
+        include Defaults
+
         TYPES = [0x19].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(sequence_number: reader.varint)
@@ -315,7 +388,11 @@ module Raiha::Next::QUIC
       # Eight bytes for the peer to echo, to validate a path (RFC 9000
       # "PATH_CHALLENGE Frames").
       class PathChallenge < Data.define(:data)
+        include Defaults
+
         TYPES = [0x1a].freeze
+
+        def probing? = true
 
         def initialize(data:)
           raise ArgumentError, "PATH_CHALLENGE data has 8 bytes" unless data.bytesize == PATH_DATA_LENGTH
@@ -329,7 +406,13 @@ module Raiha::Next::QUIC
 
       # The echo of a PATH_CHALLENGE (RFC 9000 "PATH_RESPONSE Frames").
       class PathResponse < Data.define(:data)
+        include Defaults
+
         TYPES = [0x1b].freeze
+
+        def permitted_in?(packet_type) = ONE_RTT.include?(packet_type)
+
+        def probing? = true
 
         def initialize(data:)
           raise ArgumentError, "PATH_RESPONSE data has 8 bytes" unless data.bytesize == PATH_DATA_LENGTH
@@ -346,7 +429,15 @@ module Raiha::Next::QUIC
       # the frame type that caused it, 0 when none did; an application error
       # (type 0x1d) has no frame type. `reason` is the bytes as they came.
       class ConnectionClose < Data.define(:code, :frame_type, :reason, :application)
+        include Defaults
+
         TYPES = [0x1c, 0x1d].freeze
+
+        # Only a transport error may close a connection in Initial and Handshake
+        # packets.
+        def permitted_in?(packet_type) = (application ? APPLICATION_PACKETS : ALL_PACKETS).include?(packet_type)
+
+        def ack_eliciting? = false
 
         def initialize(code:, frame_type:, reason:, application:)
           raise ArgumentError, "an application error names no frame type" if application && frame_type
@@ -372,6 +463,8 @@ module Raiha::Next::QUIC
       # Types"). Type 0x30 runs to the end of the packet, 0x31 has a Length;
       # written, it always has the Length.
       class Datagram < Data.define(:data)
+        include Defaults
+
         TYPES = [0x30, 0x31].freeze
 
         def self.read(reader, type:, ack_delay_exponent:) = new(data: type == 0x31 ? reader.bytes(reader.varint) : reader.rest)
@@ -386,15 +479,17 @@ module Raiha::Next::QUIC
       ].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
-      # The frames of a packet's payload. A payload without frames, a frame
-      # type of an unknown frame or not in its shortest encoding, and fields
-      # that do not decode raise Malformed with the frame type and the error
+      # The frames of the payload of a packet of `packet_type` (:initial,
+      # :handshake, :zero_rtt or :one_rtt, as the header's `type` says). A
+      # payload without frames, a frame type of an unknown frame or not in its
+      # shortest encoding, fields that do not decode, and a frame the packet
+      # type may not carry raise Malformed with the frame type and the error
       # to close the connection with (RFC 9000 "Frames and Frame Types").
-      def self.parse(payload, ack_delay_exponent:)
+      def self.parse(payload, packet_type:, ack_delay_exponent:)
         reader = Reader.new(payload)
         raise Malformed.new("a packet without frames", code: ErrorCode::PROTOCOL_VIOLATION) if reader.eof?
         frames = [] #: Array[t]
-        frames << read(reader, ack_delay_exponent:) until reader.eof?
+        frames << read(reader, packet_type:, ack_delay_exponent:) until reader.eof?
         frames
       end
 
@@ -405,17 +500,21 @@ module Raiha::Next::QUIC
         writer.to_s
       end
 
-      private_class_method def self.read(reader, ack_delay_exponent:)
+      private_class_method def self.read(reader, packet_type:, ack_delay_exponent:)
         type, size = reader.varint_with_size
         unless size == Varint.size(type)
           raise Malformed.new("frame type 0x#{type.to_s(16)} in #{size} bytes", code: ErrorCode::PROTOCOL_VIOLATION, frame_type: type)
         end
         kind = BY_TYPE.fetch(type) { raise Malformed.new("unknown frame type 0x#{type.to_s(16)}", frame_type: type) }
-        begin
+        frame = begin
           kind.read(reader, type:, ack_delay_exponent:)
         rescue Malformed => error
           raise Malformed.new(error.message, code: error.code, frame_type: type)
         end
+        unless frame.permitted_in?(packet_type)
+          raise Malformed.new("frame type 0x#{type.to_s(16)} in a #{packet_type} packet", code: ErrorCode::PROTOCOL_VIOLATION, frame_type: type)
+        end
+        frame
       end
     end
   end

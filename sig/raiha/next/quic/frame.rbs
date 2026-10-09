@@ -6,12 +6,27 @@ module Raiha::Next::QUIC
              | NewConnectionID | RetireConnectionID | PathChallenge | PathResponse | ConnectionClose
              | Datagram
 
+      type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
+
+      ALL_PACKETS: Array[packet_type]
+      NOT_ZERO_RTT: Array[packet_type]
+      APPLICATION_PACKETS: Array[packet_type]
+      ONE_RTT: Array[packet_type]
+
+      module Defaults
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+        def probing?: () -> bool
+      end
+
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
         def read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> t
       end
 
       class Padding < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader length: Integer
@@ -22,27 +37,38 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Padding
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+        def probing?: () -> bool
       end
 
       class Ping < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         def self.new: () -> instance
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ping
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
       end
 
       class HandshakeDone < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         def self.new: () -> instance
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> HandshakeDone
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
       end
 
       class Ack < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         class ECNCounts < Data
@@ -65,9 +91,13 @@ module Raiha::Next::QUIC
 
         def largest: () -> Integer
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
       end
 
       class Crypto < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader offset: Integer
@@ -79,9 +109,12 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Crypto
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
       end
 
       class NewToken < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader token: String
@@ -92,9 +125,12 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewToken
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
       end
 
       class Stream < Data
+        include Defaults
+
         TYPES: Array[Integer]
         OFF: Integer
         LEN: Integer
@@ -114,6 +150,8 @@ module Raiha::Next::QUIC
       end
 
       class ResetStream < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader stream_id: Integer
@@ -128,6 +166,8 @@ module Raiha::Next::QUIC
       end
 
       class StopSending < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader stream_id: Integer
@@ -141,6 +181,8 @@ module Raiha::Next::QUIC
       end
 
       class MaxData < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader maximum: Integer
@@ -153,6 +195,8 @@ module Raiha::Next::QUIC
       end
 
       class MaxStreamData < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader stream_id: Integer
@@ -168,6 +212,8 @@ module Raiha::Next::QUIC
       MAX_STREAM_COUNT: Integer
 
       class MaxStreams < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader bidirectional: bool
@@ -182,6 +228,8 @@ module Raiha::Next::QUIC
       end
 
       class DataBlocked < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader maximum: Integer
@@ -194,6 +242,8 @@ module Raiha::Next::QUIC
       end
 
       class StreamDataBlocked < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader stream_id: Integer
@@ -207,6 +257,8 @@ module Raiha::Next::QUIC
       end
 
       class StreamsBlocked < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader bidirectional: bool
@@ -221,6 +273,8 @@ module Raiha::Next::QUIC
       end
 
       class NewConnectionID < Data
+        include Defaults
+
         TYPES: Array[Integer]
         STATELESS_RESET_TOKEN_LENGTH: Integer
 
@@ -235,9 +289,12 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewConnectionID
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def probing?: () -> bool
       end
 
       class RetireConnectionID < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader sequence_number: Integer
@@ -252,6 +309,8 @@ module Raiha::Next::QUIC
       PATH_DATA_LENGTH: Integer
 
       class PathChallenge < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader data: String
@@ -262,9 +321,12 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathChallenge
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def probing?: () -> bool
       end
 
       class PathResponse < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader data: String
@@ -275,9 +337,13 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathResponse
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def probing?: () -> bool
       end
 
       class ConnectionClose < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader code: Integer
@@ -291,9 +357,13 @@ module Raiha::Next::QUIC
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> ConnectionClose
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
       end
 
       class Datagram < Data
+        include Defaults
+
         TYPES: Array[Integer]
 
         attr_reader data: String
@@ -308,10 +378,10 @@ module Raiha::Next::QUIC
       KINDS: Array[_Kind]
       BY_TYPE: Hash[Integer, _Kind]
 
-      def self.parse: (String payload, ack_delay_exponent: Integer) -> Array[t]
+      def self.parse: (String payload, packet_type: packet_type, ack_delay_exponent: Integer) -> Array[t]
       def self.encode: (Array[t] frames, ack_delay_exponent: Integer) -> String
 
-      private def self.read: (Reader reader, ack_delay_exponent: Integer) -> t
+      private def self.read: (Reader reader, packet_type: packet_type, ack_delay_exponent: Integer) -> t
     end
   end
 end

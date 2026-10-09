@@ -62,6 +62,9 @@ module Raiha::Next::QUIC
         super
       end
 
+      # The packet type, as `LongHeader#type` tells it for a long header.
+      def type = :one_rtt
+
       def protected_bits = PROTECTED_BITS
 
       def reserved_bits = RESERVED_BITS
