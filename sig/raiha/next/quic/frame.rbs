@@ -1,7 +1,7 @@
 module Raiha::Next::QUIC
   module Wire
     module Frame
-      type t = Padding | Ping | HandshakeDone
+      type t = Padding | Ping | HandshakeDone | Ack
 
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
@@ -36,6 +36,31 @@ module Raiha::Next::QUIC
         def self.new: () -> instance
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> HandshakeDone
 
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class Ack < Data
+        TYPES: Array[Integer]
+
+        class ECNCounts < Data
+          attr_reader ect0: Integer
+          attr_reader ect1: Integer
+          attr_reader ce: Integer
+
+          def self.new: (ect0: Integer, ect1: Integer, ce: Integer) -> instance
+                      | (Integer ect0, Integer ect1, Integer ce) -> instance
+        end
+
+        attr_reader ranges: Array[Range[Integer]]
+        attr_reader delay: Float
+        attr_reader ecn: ECNCounts?
+
+        def self.new: (ranges: Array[Range[Integer]], delay: Float, ?ecn: ECNCounts?) -> instance
+                    | (Array[Range[Integer]] ranges, Float delay, ?ECNCounts? ecn) -> instance
+        def initialize: (ranges: Array[Range[Integer]], delay: Float, ?ecn: ECNCounts?) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ack
+
+        def largest: () -> Integer
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
       end
 

@@ -37,7 +37,65 @@ module Raiha::Next::QUIC
         def write(writer, ack_delay_exponent:) = writer.u8(0x1e)
       end
 
-      KINDS = [Padding, Ping, HandshakeDone].freeze
+      # ACK, and ACK with ECN counts (RFC 9000 "ACK Frames"). `ranges` are
+      # the packet numbers acknowledged, as inclusive Ranges from the
+      # largest down with a gap between each two; `delay` is the ACK Delay in
+      # seconds; `ecn` the ECN counts, or nil.
+      class Ack < Data.define(:ranges, :delay, :ecn)
+        TYPES = [0x02, 0x03].freeze
+
+        # The packets received with ECT(0), ECT(1) and CE.
+        class ECNCounts < Data.define(:ect0, :ect1, :ce); end
+
+        def initialize(ranges:, delay:, ecn: nil)
+          raise ArgumentError, "an ACK acknowledges one packet at least" if ranges.empty?
+          raise ArgumentError, "packet numbers are not negative: #{ranges.last}" if ranges.last.begin.negative?
+          ranges.each { |range| raise ArgumentError, "an empty range #{range}" if range.begin > range.end }
+          ranges.inject do |above, below|
+            raise ArgumentError, "#{below} is not below #{above} with a gap" unless below.end < above.begin - 1
+            below
+          end
+          raise ArgumentError, "a negative ACK Delay" if delay.negative?
+          super
+        end
+
+        def largest = ranges.first.end
+
+        # The Range Count field is not trusted to allocate anything: each
+        # range takes two fields, so the bytes run out first when it lies.
+        # A range below packet 0 is FRAME_ENCODING_ERROR.
+        def self.read(reader, type:, ack_delay_exponent:)
+          largest = reader.varint
+          delay = reader.varint * (1 << ack_delay_exponent) / 1_000_000.0
+          count = reader.varint
+          smallest = largest - reader.varint
+          raise Malformed, "the first ACK range goes below packet 0" if smallest.negative?
+          ranges = [smallest..largest]
+          count.times do
+            range_largest = smallest - reader.varint - 2
+            smallest = range_largest - reader.varint
+            raise Malformed, "an ACK range goes below packet 0" if smallest.negative?
+            ranges << (smallest..range_largest)
+          end
+          ecn = type == 0x03 ? ECNCounts.new(ect0: reader.varint, ect1: reader.varint, ce: reader.varint) : nil
+          new(ranges:, delay:, ecn:)
+        end
+
+        # The delay goes in whole microseconds, divided by 2 to the power of
+        # `ack_delay_exponent` (RFC 9000 "ACK Frames").
+        def write(writer, ack_delay_exponent:)
+          writer.u8(ecn ? 0x03 : 0x02).varint(largest).varint((delay * 1_000_000).round >> ack_delay_exponent)
+          writer.varint(ranges.size - 1).varint(largest - ranges.first.begin)
+          ranges.inject do |above, below|
+            writer.varint(above.begin - below.end - 2).varint(below.end - below.begin)
+            below
+          end
+          writer.varint(ecn.ect0).varint(ecn.ect1).varint(ecn.ce) if ecn
+          writer
+        end
+      end
+
+      KINDS = [Padding, Ping, HandshakeDone, Ack].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
       # The frames of a packet's payload. A payload without frames, a frame
