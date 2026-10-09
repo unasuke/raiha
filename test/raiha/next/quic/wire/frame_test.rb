@@ -131,6 +131,15 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::Stream.new(stream_id: 0, offset: Wire::Varint::MAX, data: "x".b) }
   end
 
+  def test_reset_stream_and_stop_sending
+    reset = Frame::ResetStream.new(stream_id: 4, error_code: 0x10c, final_size: 1000)
+    assert_equal_bin "\x04\x04\x41\x0c\x43\xe8".b, encode(reset)
+    stop = Frame::StopSending.new(stream_id: 3, error_code: 0)
+    assert_equal_bin "\x05\x03\x00".b, encode(stop)
+    assert_round_trip(reset, stop)
+    assert_malformed("\x04\x04\x00", ErrorCode::FRAME_ENCODING_ERROR, 0x04)
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)

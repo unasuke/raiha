@@ -1,7 +1,7 @@
 module Raiha::Next::QUIC
   module Wire
     module Frame
-      type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream
+      type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream | ResetStream | StopSending
 
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
@@ -106,6 +106,33 @@ module Raiha::Next::QUIC
                     | (Integer stream_id, Integer offset, String data, ?bool fin) -> instance
         def initialize: (stream_id: Integer, offset: Integer, data: String, ?fin: bool) -> void
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Stream
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class ResetStream < Data
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader error_code: Integer
+        attr_reader final_size: Integer
+
+        def self.new: (stream_id: Integer, error_code: Integer, final_size: Integer) -> instance
+                    | (Integer stream_id, Integer error_code, Integer final_size) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> ResetStream
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StopSending < Data
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader error_code: Integer
+
+        def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                    | (Integer stream_id, Integer error_code) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StopSending
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
       end

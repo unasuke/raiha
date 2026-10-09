@@ -168,7 +168,27 @@ module Raiha::Next::QUIC
         end
       end
 
-      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream].freeze
+      # The sender abandons the sending part of a stream (RFC 9000
+      # "RESET_STREAM Frames"); `final_size` is how far it got.
+      class ResetStream < Data.define(:stream_id, :error_code, :final_size)
+        TYPES = [0x04].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, error_code: reader.varint, final_size: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x04).varint(stream_id).varint(error_code).varint(final_size)
+      end
+
+      # The receiver asks the sender to stop sending on a stream (RFC 9000
+      # "STOP_SENDING Frames").
+      class StopSending < Data.define(:stream_id, :error_code)
+        TYPES = [0x05].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(stream_id: reader.varint, error_code: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x05).varint(stream_id).varint(error_code)
+      end
+
+      KINDS = [Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 
       # The frames of a packet's payload. A payload without frames, a frame
