@@ -269,9 +269,81 @@ module Raiha::Next::QUIC
         def write(writer, ack_delay_exponent:) = writer.u8(bidirectional ? 0x16 : 0x17).varint(maximum)
       end
 
+      # A connection ID the peer may use, with its sequence number and the
+      # token of a stateless reset for it (RFC 9000 "NEW_CONNECTION_ID
+      # Frames"). A length outside 1 to 20 and Retire Prior To past the
+      # sequence number are FRAME_ENCODING_ERROR.
+      class NewConnectionID < Data.define(:sequence_number, :retire_prior_to, :connection_id, :stateless_reset_token)
+        TYPES = [0x18].freeze
+        STATELESS_RESET_TOKEN_LENGTH = 16
+
+        def initialize(sequence_number:, retire_prior_to:, connection_id:, stateless_reset_token:)
+          raise ArgumentError, "Retire Prior To #{retire_prior_to} is past #{sequence_number}" if retire_prior_to > sequence_number
+          raise ArgumentError, "a connection ID of #{connection_id.bytesize} bytes" unless connection_id.bytesize.between?(1, CONNECTION_ID_MAX_LENGTH)
+          raise ArgumentError, "a stateless reset token has 16 bytes" unless stateless_reset_token.bytesize == STATELESS_RESET_TOKEN_LENGTH
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:)
+          sequence_number = reader.varint
+          retire_prior_to = reader.varint
+          raise Malformed, "Retire Prior To #{retire_prior_to} is past #{sequence_number}" if retire_prior_to > sequence_number
+          length = reader.u8
+          raise Malformed, "a connection ID of #{length} bytes" unless length.between?(1, CONNECTION_ID_MAX_LENGTH)
+          new(sequence_number:, retire_prior_to:, connection_id: reader.bytes(length), stateless_reset_token: reader.bytes(STATELESS_RESET_TOKEN_LENGTH))
+        end
+
+        def write(writer, ack_delay_exponent:)
+          writer.u8(0x18).varint(sequence_number).varint(retire_prior_to)
+            .u8(connection_id.bytesize).bytes(connection_id).bytes(stateless_reset_token)
+        end
+      end
+
+      # The connection ID of `sequence_number` is no longer used (RFC 9000
+      # "RETIRE_CONNECTION_ID Frames").
+      class RetireConnectionID < Data.define(:sequence_number)
+        TYPES = [0x19].freeze
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(sequence_number: reader.varint)
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x19).varint(sequence_number)
+      end
+
+      PATH_DATA_LENGTH = 8
+
+      # Eight bytes for the peer to echo, to validate a path (RFC 9000
+      # "PATH_CHALLENGE Frames").
+      class PathChallenge < Data.define(:data)
+        TYPES = [0x1a].freeze
+
+        def initialize(data:)
+          raise ArgumentError, "PATH_CHALLENGE data has 8 bytes" unless data.bytesize == PATH_DATA_LENGTH
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(data: reader.bytes(PATH_DATA_LENGTH))
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x1a).bytes(data)
+      end
+
+      # The echo of a PATH_CHALLENGE (RFC 9000 "PATH_RESPONSE Frames").
+      class PathResponse < Data.define(:data)
+        TYPES = [0x1b].freeze
+
+        def initialize(data:)
+          raise ArgumentError, "PATH_RESPONSE data has 8 bytes" unless data.bytesize == PATH_DATA_LENGTH
+          super
+        end
+
+        def self.read(reader, type:, ack_delay_exponent:) = new(data: reader.bytes(PATH_DATA_LENGTH))
+
+        def write(writer, ack_delay_exponent:) = writer.u8(0x1b).bytes(data)
+      end
+
       KINDS = [
         Padding, Ping, HandshakeDone, Ack, Crypto, NewToken, Stream, ResetStream, StopSending,
-        MaxData, MaxStreamData, MaxStreams, DataBlocked, StreamDataBlocked, StreamsBlocked
+        MaxData, MaxStreamData, MaxStreams, DataBlocked, StreamDataBlocked, StreamsBlocked,
+        NewConnectionID, RetireConnectionID, PathChallenge, PathResponse
       ].freeze
       BY_TYPE = KINDS.flat_map { |kind| kind::TYPES.map { |type| [type, kind] } }.to_h.freeze # steep:ignore
 

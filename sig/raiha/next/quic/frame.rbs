@@ -3,6 +3,7 @@ module Raiha::Next::QUIC
     module Frame
       type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream | ResetStream | StopSending
              | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked
+             | NewConnectionID | RetireConnectionID | PathChallenge | PathResponse
 
       # What each kind of frame offers to `Frame.parse`.
       interface _Kind
@@ -214,6 +215,63 @@ module Raiha::Next::QUIC
                     | (bool bidirectional, Integer maximum) -> instance
         def initialize: (bidirectional: bool, maximum: Integer) -> void
         def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StreamsBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class NewConnectionID < Data
+        TYPES: Array[Integer]
+        STATELESS_RESET_TOKEN_LENGTH: Integer
+
+        attr_reader sequence_number: Integer
+        attr_reader retire_prior_to: Integer
+        attr_reader connection_id: String
+        attr_reader stateless_reset_token: String
+
+        def self.new: (sequence_number: Integer, retire_prior_to: Integer, connection_id: String, stateless_reset_token: String) -> instance
+                    | (Integer sequence_number, Integer retire_prior_to, String connection_id, String stateless_reset_token) -> instance
+        def initialize: (sequence_number: Integer, retire_prior_to: Integer, connection_id: String, stateless_reset_token: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewConnectionID
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class RetireConnectionID < Data
+        TYPES: Array[Integer]
+
+        attr_reader sequence_number: Integer
+
+        def self.new: (sequence_number: Integer) -> instance
+                    | (Integer sequence_number) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> RetireConnectionID
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      PATH_DATA_LENGTH: Integer
+
+      class PathChallenge < Data
+        TYPES: Array[Integer]
+
+        attr_reader data: String
+
+        def self.new: (data: String) -> instance
+                    | (String data) -> instance
+        def initialize: (data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathChallenge
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class PathResponse < Data
+        TYPES: Array[Integer]
+
+        attr_reader data: String
+
+        def self.new: (data: String) -> instance
+                    | (String data) -> instance
+        def initialize: (data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathResponse
 
         def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
       end

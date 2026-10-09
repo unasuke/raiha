@@ -164,6 +164,32 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
     assert_raises(ArgumentError) { Frame::StreamsBlocked.new(bidirectional: true, maximum: limit + 1) }
   end
 
+  def new_connection_id = Frame::NewConnectionID.new(sequence_number: 2, retire_prior_to: 1, connection_id: "c".b * 8, stateless_reset_token: "t".b * 16)
+
+  def test_connection_ids
+    assert_equal_bin "\x18\x02\x01\x08".b + "c".b * 8 + "t".b * 16, encode(new_connection_id)
+    assert_round_trip(new_connection_id, Frame::RetireConnectionID.new(sequence_number: 1))
+  end
+
+  # RFC 9000 "NEW_CONNECTION_ID Frames".
+  def test_new_connection_id_rejects
+    assert_malformed("\x18\x01\x02\x08" + "c" * 8 + "t" * 16, ErrorCode::FRAME_ENCODING_ERROR, 0x18)
+    assert_malformed("\x18\x02\x01\x00" + "t" * 16, ErrorCode::FRAME_ENCODING_ERROR, 0x18)
+    assert_malformed("\x18\x02\x01\x15" + "c" * 21 + "t" * 16, ErrorCode::FRAME_ENCODING_ERROR, 0x18)
+    assert_malformed("\x18\x02\x01\x08" + "c" * 8 + "t" * 15, ErrorCode::FRAME_ENCODING_ERROR, 0x18)
+    assert_raises(ArgumentError) { new_connection_id.with(retire_prior_to: 3) }
+    assert_raises(ArgumentError) { new_connection_id.with(connection_id: "".b) }
+    assert_raises(ArgumentError) { new_connection_id.with(stateless_reset_token: "t".b) }
+  end
+
+  def test_path_challenge_and_response
+    challenge = Frame::PathChallenge.new(data: "12345678".b)
+    assert_equal_bin "\x1a12345678\x1b12345678".b, encode(challenge, Frame::PathResponse.new(data: challenge.data))
+    assert_round_trip(challenge, Frame::PathResponse.new(data: challenge.data))
+    assert_malformed("\x1b1234567", ErrorCode::FRAME_ENCODING_ERROR, 0x1b)
+    assert_raises(ArgumentError) { Frame::PathChallenge.new(data: "123".b) }
+  end
+
   # RFC 9000 "Frames and Frame Types".
   def test_a_packet_carries_a_frame
     assert_malformed("", ErrorCode::PROTOCOL_VIOLATION, nil)
