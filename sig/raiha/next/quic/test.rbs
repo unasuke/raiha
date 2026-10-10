@@ -58,3 +58,34 @@ module Raiha::Next::QUIC::Test
     end
   end
 end
+
+module Raiha::Next::QUIC::Test
+  module CongestionContract : _ContractTest
+    # What a test class that includes the contract provides: Minitest's
+    # assertions and the algorithm under test.
+    interface _ContractTest
+      def congestion_control: () -> ::Raiha::Next::QUIC::Congestion::_Algorithm
+      def assert_operator: (top left, Symbol operator, top right, ?String? message) -> true
+      def assert_equal: (top expected, top actual, ?String? message) -> true
+      def assert_includes: (top collection, top object, ?String? message) -> true
+      def assert_kind_of: (Module klass, top object, ?String? message) -> true
+    end
+
+    MAX_DATAGRAM_SIZE: Integer
+    INITIAL_WINDOW: ::Raiha::Next::QUIC::Congestion::_InitialWindow
+    KNOWN_STATES: Array[Symbol]
+    SEED: Integer
+
+    def known_congestion_states: () -> Array[Symbol]
+    def test_congestion_contract_window_stays_above_the_minimum: () -> void
+    def test_congestion_contract_loss_shrinks_the_window: () -> void
+    def test_congestion_contract_persistent_congestion_takes_the_minimum: () -> void
+    def test_congestion_contract_minimum_follows_the_datagram_size: () -> void
+    def test_congestion_contract_no_growth_while_application_limited: () -> void
+    def test_congestion_contract_states_are_known: () -> void
+    def test_congestion_contract_metrics_carry_the_window: () -> void
+
+    private def new_controller: () -> ::Raiha::Next::QUIC::Congestion::_Controller
+    private def acknowledge: (::Raiha::Next::QUIC::Congestion::_Controller cc, Integer bytes, sent_at: Float, now: Float, ?app_limited: bool) -> void
+  end
+end

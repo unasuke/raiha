@@ -8,3 +8,4 @@ module Raiha::Next::QUIC::Test
 end
 
 require_relative "test/vectors"
+require_relative "test/congestion_contract"
