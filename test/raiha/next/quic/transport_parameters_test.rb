@@ -131,6 +131,18 @@ class RaihaNextQUICTransportParametersTest < Minitest::Test
     }.each { |name, bytes| assert_rejected(bytes, name, sender: :server) }
   end
 
+  # Known vulnerabilities (QUIC), decoding the same bytes twice: a
+  # parameter twice is an error, whichever it is.
+  def test_duplicates
+    assert_rejected(tp(0x0f, SCID) + tp(0x04, varint(10)) + tp(0x04, varint(1 << 30)), "initial_max_data twice")
+    assert_rejected(tp(0x0f, SCID) + tp(0x0f, "d" * 8), "initial_source_connection_id twice")
+    assert_rejected(tp(0x0f, SCID) + tp(0x0c, "") + tp(0x0c, ""), "disable_active_migration twice")
+    assert_rejected(tp(0x0f, SCID) + tp(27, "") + tp(27, ""), "a reserved parameter twice")
+    assert_rejected(tp(0x0f, SCID) + tp(0x3fff, "a") + tp(0x3fff, "b"), "an unknown parameter twice")
+    # The same ID in another encoding is the same ID.
+    assert_rejected(tp(0x0f, SCID) + tp(0x04, varint(10)) + "\x40\x04\x01\x0a", "initial_max_data twice, the second in two bytes")
+  end
+
   def test_misuse
     [{ max_udp_payload_size: 1199 }, { ack_delay_exponent: 21 }, { max_ack_delay: 16.384 }, { active_connection_id_limit: 1 },
      { initial_max_streams_uni: (1 << 60) + 1 }, { max_idle_timeout: -1.0 }, { initial_source_connection_id: "c".b * 21 },

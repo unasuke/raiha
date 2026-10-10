@@ -123,14 +123,19 @@ module Raiha::Next::QUIC
     # value against the rules, a parameter only a server sends coming from a
     # client, and a missing initial_source_connection_id, or a missing
     # original_destination_connection_id from a server (RFC 9000
-    # "Authenticating Connection IDs").
+    # "Authenticating Connection IDs"). So does any ID twice, unknown ones
+    # too: a peer may not send one twice (RFC 9000 "Transport Parameters"),
+    # and taking the first or the last would let two readers of the same
+    # bytes disagree.
     def self.decode(bytes, sender:)
       reader = Wire::Reader.new(bytes)
       # @type var parameters: Hash[Symbol, Integer | Float | bool | String | PreferredAddress]
       parameters = {}
+      seen = Set.new #: Set[Integer]
       until reader.eof?
         id = reader.varint
         value = reader.sub(reader.varint)
+        raise Wire::Malformed, "transport parameter 0x#{id.to_s(16)} twice" unless seen.add?(id)
         name = NAMES[id] or next
         raise Wire::Malformed, "#{name} from a client" if sender == :client && SERVER_ONLY.include?(name)
         parameters[name] = read_value(name, value)
