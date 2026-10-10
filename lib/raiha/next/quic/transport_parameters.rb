@@ -79,7 +79,12 @@ module Raiha::Next::QUIC
       ack_delay_exponent: 3, max_ack_delay: 0.025, disable_active_migration: false, preferred_address: nil, active_connection_id_limit: 2,
       initial_source_connection_id: nil, retry_source_connection_id: nil, max_datagram_frame_size: 0
     )
-      raise ArgumentError, "max_idle_timeout #{max_idle_timeout} is negative" if max_idle_timeout.negative?
+      integers = [
+        max_udp_payload_size, initial_max_data, initial_max_stream_data_bidi_local, initial_max_stream_data_bidi_remote,
+        initial_max_stream_data_uni, initial_max_streams_bidi, initial_max_streams_uni, ack_delay_exponent,
+        active_connection_id_limit, max_datagram_frame_size, (max_idle_timeout * 1000).round
+      ]
+      integers.each { |value| raise ArgumentError, "#{value} is no varint" unless value.between?(0, Wire::Varint::MAX) }
       raise ArgumentError, "max_udp_payload_size #{max_udp_payload_size} is under 1200" if max_udp_payload_size < 1200
       raise ArgumentError, "ack_delay_exponent #{ack_delay_exponent} is over 20" if ack_delay_exponent > 20
       raise ArgumentError, "max_ack_delay #{max_ack_delay} is 2^14 milliseconds or more" if max_ack_delay * 1000 >= 1 << 14

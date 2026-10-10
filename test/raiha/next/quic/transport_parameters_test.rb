@@ -146,7 +146,8 @@ class RaihaNextQUICTransportParametersTest < Minitest::Test
   def test_misuse
     [{ max_udp_payload_size: 1199 }, { ack_delay_exponent: 21 }, { max_ack_delay: 16.384 }, { active_connection_id_limit: 1 },
      { initial_max_streams_uni: (1 << 60) + 1 }, { max_idle_timeout: -1.0 }, { initial_source_connection_id: "c".b * 21 },
-     { stateless_reset_token: "s".b * 15 }].each do |fields|
+     { stateless_reset_token: "s".b * 15 }, { initial_max_data: -1 }, { initial_max_stream_data_uni: 1 << 62 },
+     { max_datagram_frame_size: -1 }, { max_idle_timeout: (1 << 62) / 1000.0 }].each do |fields|
       assert_raises(ArgumentError, fields.inspect) { TP.new(**fields) }
     end
   end
