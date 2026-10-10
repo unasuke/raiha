@@ -1,0 +1,122 @@
+require "raiha/next/test_helper"
+require "raiha/next/quic"
+
+class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
+  NewReno = Raiha::Next::QUIC::Congestion::NewReno
+  MDS = 1200
+  # RFC 9002 "Initial and Minimum Congestion Window".
+  INITIAL_WINDOW = ->(mds) { [10 * mds, [14_720, 2 * mds].max].min }
+
+  class Recorder
+    include Raiha::Next::QUIC::Tracer
+
+    attr_reader :states
+
+    def initialize = @states = []
+
+    def congestion_state_updated(old:, new:, now:) = @states << [old, new]
+  end
+
+  def new_reno(tracer: nil) = NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, tracer:)
+
+  def ack(cc, bytes, sent_at:, now:, app_limited: false)
+    cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, app_limited:, now:)
+  end
+
+  def lose(cc, sent_at:, now:, persistent: false)
+    cc.on_loss(lost_bytes: MDS, largest_lost_sent_at: sent_at, persistent:, now:)
+  end
+
+  def test_initial_and_minimum_windows
+    cc = new_reno
+    assert_equal [12_000, 2400], [cc.window, cc.minimum_window]
+    assert_equal :slow_start, cc.state
+    assert_equal({ congestion_window: 12_000 }, cc.metrics)
+    assert_nil cc.pacing_rate
+    refute NewReno.requires_rate_sample?
+  end
+
+  # Slow start adds the bytes acknowledged; congestion avoidance one
+  # datagram a window.
+  def test_growth
+    cc = new_reno
+    ack(cc, 2400, sent_at: 0.0, now: 0.1)
+    assert_equal 14_400, cc.window
+    lose(cc, sent_at: 0.05, now: 0.2)
+    ack(cc, 7200, sent_at: 0.3, now: 0.4)
+    assert_equal [7200 + MDS * 7200 / 7200, :congestion_avoidance], [cc.window, cc.state]
+  end
+
+  # RFC 9002 appendix B: a congestion event halves the window, once a
+  # recovery period, and acknowledgments of packets sent before the period
+  # began do not grow it.
+  def test_recovery_period
+    cc = new_reno
+    lose(cc, sent_at: 1.0, now: 2.0)
+    assert_equal [6000, :recovery], [cc.window, cc.state]
+    assert_equal({ congestion_window: 6000, ssthresh: 6000 }, cc.metrics)
+    lose(cc, sent_at: 1.5, now: 2.1)
+    assert_equal 6000, cc.window
+    ack(cc, 1200, sent_at: 2.0, now: 2.2)
+    assert_equal [6000, :recovery], [cc.window, cc.state]
+    ack(cc, 1200, sent_at: 2.05, now: 2.3)
+    assert_equal [6240, :congestion_avoidance], [cc.window, cc.state]
+    lose(cc, sent_at: 2.1, now: 2.4)
+    assert_equal [3120, :recovery], [cc.window, cc.state]
+  end
+
+  def test_the_window_stays_above_the_minimum
+    cc = new_reno
+    5.times { |i| lose(cc, sent_at: i.to_f, now: i + 0.5) }
+    assert_equal 2400, cc.window
+  end
+
+  # RFC 9002 "Persistent Congestion": the minimum, even within a recovery
+  # period, then slow start again.
+  def test_persistent_congestion
+    cc = new_reno
+    lose(cc, sent_at: 1.0, now: 2.0)
+    lose(cc, sent_at: 1.5, now: 2.1, persistent: true)
+    assert_equal [2400, :slow_start], [cc.window, cc.state]
+    ack(cc, 1200, sent_at: 1.8, now: 2.2)
+    assert_equal 3600, cc.window
+  end
+
+  def test_ecn_ce_is_a_congestion_event
+    cc = new_reno
+    cc.on_ecn_ce(largest_acked_sent_at: 1.0, now: 2.0)
+    assert_equal [6000, :recovery], [cc.window, cc.state]
+    cc.on_ecn_ce(largest_acked_sent_at: 1.9, now: 2.1)
+    assert_equal 6000, cc.window
+  end
+
+  # RFC 9002 "Underutilizing the Congestion Window".
+  def test_application_limited
+    cc = new_reno
+    ack(cc, 2400, sent_at: 0.0, now: 0.1, app_limited: true)
+    assert_equal [12_000, :application_limited], [cc.window, cc.state]
+    ack(cc, 2400, sent_at: 0.1, now: 0.2)
+    assert_equal [14_400, :slow_start], [cc.window, cc.state]
+  end
+
+  def test_mtu_updated
+    cc = new_reno
+    cc.on_mtu_updated(max_datagram_size: 1400, now: 0.0)
+    assert_equal [14_000, 2800], [cc.window, cc.minimum_window]
+    ack(cc, 1400, sent_at: 0.0, now: 0.1)
+    cc.on_mtu_updated(max_datagram_size: 1500, now: 0.2)
+    assert_equal [15_400, 3000], [cc.window, cc.minimum_window]
+    5.times { |i| lose(cc, sent_at: i + 1.0, now: i + 1.5) }
+    cc.on_mtu_updated(max_datagram_size: 9000, now: 9.0)
+    assert_equal 18_000, cc.window
+  end
+
+  def test_state_changes_are_traced
+    tracer = Recorder.new
+    cc = new_reno(tracer:)
+    lose(cc, sent_at: 1.0, now: 2.0)
+    ack(cc, 1200, sent_at: 2.5, now: 3.0)
+    ack(cc, 1200, sent_at: 3.0, now: 3.5, app_limited: true)
+    assert_equal [%i[slow_start recovery], %i[recovery congestion_avoidance], %i[congestion_avoidance application_limited]], tracer.states
+  end
+end

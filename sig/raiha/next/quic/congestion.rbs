@@ -1,0 +1,64 @@
+module Raiha::Next::QUIC
+  module Congestion
+    # Turns a maximum datagram size into an initial window, in bytes.
+    interface _InitialWindow
+      def call: (Integer max_datagram_size) -> Integer
+    end
+
+    # What loss recovery asks of a congestion controller.
+    interface _Controller
+      def window: () -> Integer
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> void
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> Float?
+      def state: () -> Symbol
+      def metrics: () -> Hash[Symbol, Integer | Float | Symbol | nil]
+    end
+
+    # A congestion control algorithm: the class itself.
+    interface _Algorithm
+      def requires_rate_sample?: () -> bool
+      def new: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _Controller
+    end
+
+    class NewReno
+      LOSS_REDUCTION_DIVISOR: Integer
+
+      @max_datagram_size: Integer
+      @initial_window: _InitialWindow
+      @window: Integer
+      @ssthresh: Integer?
+      @recovery_start: Float?
+      @in_recovery: bool
+      @app_limited: bool
+      @initial: bool
+      @state: Symbol
+      @tracer: _Tracer?
+
+      def self.requires_rate_sample?: () -> bool
+
+      attr_reader window: Integer
+      attr_reader state: Symbol
+
+      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> void
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> nil
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> nil
+      def metrics: () -> Hash[Symbol, Integer]
+
+      private def slow_start?: () -> bool
+      private def congestion_event: (Float sent_at, Float now) -> void
+      private def update_state: (Float now) -> void
+    end
+  end
+end
