@@ -102,19 +102,27 @@ module Raiha::Next::QUIC
     # IDs, those at their defaults left out.
     def encode
       writer = Wire::Writer.new
-      to_h.each do |name, value|
-        next if value == DEFAULTS.fetch(name)
-        body = case value
-          when true then ""
-          when String then value
-          when PreferredAddress then value.encode
-          when Float then Wire::Varint.encode((value * 1000).round)
-          else Wire::Varint.encode(value)
-          end
-        writer.varint(IDS.fetch(name)).varint(body.bytesize).bytes(body)
-      end
+      to_h.each { |name, value| TransportParameters.write(writer, name, value) unless value == DEFAULTS.fetch(name) }
       writer.to_s
     end
+
+    # Writes the parameter `name` with `value`: its ID, length and value. A
+    # flag has no value; it is there when true and left out when false, as
+    # is a parameter whose value is nil.
+    def self.write(writer, name, value)
+      body =
+        if value == true then ""
+        elsif value.is_a?(String) then value
+        elsif value.is_a?(PreferredAddress) then value.encode
+        elsif value.is_a?(Float) then Wire::Varint.encode((value * 1000).round)
+        elsif value.is_a?(Integer) then Wire::Varint.encode(value)
+        else return writer
+        end
+      writer.varint(IDS.fetch(name)).varint(body.bytesize).bytes(body)
+    end
+
+    # The parameters a client may remember for 0-RTT.
+    def remembered = RememberedTransportParameters.new(**to_h.slice(*RememberedTransportParameters.members)) # steep:ignore
 
     # The parameters in `bytes`, sent by `sender` (:client or :server).
     # Unknown parameters, the reserved ones for GREASE among them, are

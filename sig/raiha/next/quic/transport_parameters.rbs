@@ -62,6 +62,8 @@ module Raiha::Next::QUIC
     def self.decode: (String bytes, sender: sender) -> TransportParameters
 
     def encode: () -> String
+    def self.write: (Wire::Writer writer, Symbol name, Integer | Float | bool | String | PreferredAddress | nil value) -> Wire::Writer
+    def remembered: () -> RememberedTransportParameters
 
     private def self.read_value: (Symbol name, Wire::Reader value) -> (Integer | Float | bool | String | PreferredAddress)
 
@@ -69,5 +71,27 @@ module Raiha::Next::QUIC
       TYPE: Integer
       CODECS: Hash[::Raiha::Next::TLS::Handshake::context, ::Raiha::Next::TLS::Extension::Opaque::Parser]
     end
+  end
+
+  class RememberedTransportParameters < Data
+    attr_reader max_idle_timeout: Float
+    attr_reader max_udp_payload_size: Integer
+    attr_reader initial_max_data: Integer
+    attr_reader initial_max_stream_data_bidi_local: Integer
+    attr_reader initial_max_stream_data_bidi_remote: Integer
+    attr_reader initial_max_stream_data_uni: Integer
+    attr_reader initial_max_streams_bidi: Integer
+    attr_reader initial_max_streams_uni: Integer
+    attr_reader disable_active_migration: bool
+    attr_reader active_connection_id_limit: Integer
+    attr_reader max_datagram_frame_size: Integer
+
+    def self.new: (max_idle_timeout: Float, max_udp_payload_size: Integer, initial_max_data: Integer,
+                   initial_max_stream_data_bidi_local: Integer, initial_max_stream_data_bidi_remote: Integer,
+                   initial_max_stream_data_uni: Integer, initial_max_streams_bidi: Integer, initial_max_streams_uni: Integer,
+                   disable_active_migration: bool, active_connection_id_limit: Integer, max_datagram_frame_size: Integer) -> instance
+    def self.members: () -> Array[Symbol]
+
+    def encode: () -> String
   end
 end
