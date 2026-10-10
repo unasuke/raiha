@@ -1,12 +1,36 @@
 module Raiha::Next::QUIC
   class TransportParameters < Data
+    type sender = :client | :server
+    type value = Integer | Float | bool | String | PreferredAddress | nil
+
     IDS: Hash[Symbol, Integer]
     NAMES: Hash[Integer, Symbol]
     MILLISECONDS: Array[Symbol]
+    CONNECTION_IDS: Array[Symbol]
+    SERVER_ONLY: Array[Symbol]
     MAX_STREAM_COUNT: Integer
-    DEFAULTS: Hash[Symbol, Integer | Float | bool]
+    STATELESS_RESET_TOKEN_LENGTH: Integer
+    DEFAULTS: Hash[Symbol, value]
 
+    class PreferredAddress < Data
+      attr_reader ipv4: address?
+      attr_reader ipv6: address?
+      attr_reader connection_id: String
+      attr_reader stateless_reset_token: String
+
+      def self.new: (ipv4: address?, ipv6: address?, connection_id: String, stateless_reset_token: String) -> instance
+                  | (address? ipv4, address? ipv6, String connection_id, String stateless_reset_token) -> instance
+      def initialize: (ipv4: address?, ipv6: address?, connection_id: String, stateless_reset_token: String) -> void
+      def self.read: (Wire::Reader reader) -> PreferredAddress
+
+      def encode: () -> String
+
+      private def self.address: (String bytes, Integer port) -> address?
+    end
+
+    attr_reader original_destination_connection_id: String?
     attr_reader max_idle_timeout: Float
+    attr_reader stateless_reset_token: String?
     attr_reader max_udp_payload_size: Integer
     attr_reader initial_max_data: Integer
     attr_reader initial_max_stream_data_bidi_local: Integer
@@ -17,23 +41,28 @@ module Raiha::Next::QUIC
     attr_reader ack_delay_exponent: Integer
     attr_reader max_ack_delay: Float
     attr_reader disable_active_migration: bool
+    attr_reader preferred_address: PreferredAddress?
     attr_reader active_connection_id_limit: Integer
+    attr_reader initial_source_connection_id: String?
+    attr_reader retry_source_connection_id: String?
     attr_reader max_datagram_frame_size: Integer
 
-    def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
-                   ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer, ?initial_max_stream_data_bidi_remote: Integer,
-                   ?initial_max_stream_data_uni: Integer, ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
-                   ?ack_delay_exponent: Integer, ?max_ack_delay: Float, ?disable_active_migration: bool, ?active_connection_id_limit: Integer,
-                   ?max_datagram_frame_size: Integer) -> instance
-    def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
-                     ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer, ?initial_max_stream_data_bidi_remote: Integer,
-                     ?initial_max_stream_data_uni: Integer, ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
-                     ?ack_delay_exponent: Integer, ?max_ack_delay: Float, ?disable_active_migration: bool, ?active_connection_id_limit: Integer,
-                     ?max_datagram_frame_size: Integer) -> void
-    def self.decode: (String bytes) -> TransportParameters
+    def self.new: (?original_destination_connection_id: String?, ?max_idle_timeout: Float, ?stateless_reset_token: String?,
+                   ?max_udp_payload_size: Integer, ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                   ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer, ?initial_max_streams_bidi: Integer,
+                   ?initial_max_streams_uni: Integer, ?ack_delay_exponent: Integer, ?max_ack_delay: Float, ?disable_active_migration: bool,
+                   ?preferred_address: PreferredAddress?, ?active_connection_id_limit: Integer, ?initial_source_connection_id: String?,
+                   ?retry_source_connection_id: String?, ?max_datagram_frame_size: Integer) -> instance
+    def initialize: (?original_destination_connection_id: String?, ?max_idle_timeout: Float, ?stateless_reset_token: String?,
+                     ?max_udp_payload_size: Integer, ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                     ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer, ?initial_max_streams_bidi: Integer,
+                     ?initial_max_streams_uni: Integer, ?ack_delay_exponent: Integer, ?max_ack_delay: Float, ?disable_active_migration: bool,
+                     ?preferred_address: PreferredAddress?, ?active_connection_id_limit: Integer, ?initial_source_connection_id: String?,
+                     ?retry_source_connection_id: String?, ?max_datagram_frame_size: Integer) -> void
+    def self.decode: (String bytes, sender: sender) -> TransportParameters
 
     def encode: () -> String
 
-    private def self.read_value: (Symbol name, Wire::Reader value) -> (Integer | Float | bool)
+    private def self.read_value: (Symbol name, Wire::Reader value) -> (Integer | Float | bool | String | PreferredAddress)
   end
 end
