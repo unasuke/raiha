@@ -159,5 +159,19 @@ module Raiha::Next::QUIC
       else value.varint
       end
     end
+
+    # The quic_transport_parameters extension (RFC 9001 "QUIC Transport
+    # Parameters Extension") for the TLS layer's Extension::Registry. It
+    # keeps the bytes that came: decoding them is the QUIC binding's, which
+    # closes with TRANSPORT_PARAMETER_ERROR rather than with a TLS alert.
+    # Registered, it lets TLS refuse the extension in any message but
+    # ClientHello and EncryptedExtensions.
+    module Extension
+      TYPE = 0x39
+      CODECS = {
+        client_hello: Raiha::Next::TLS::Extension::Opaque::Parser.new(type: TYPE),
+        encrypted_extensions: Raiha::Next::TLS::Extension::Opaque::Parser.new(type: TYPE)
+      }.freeze
+    end
   end
 end

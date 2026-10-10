@@ -64,5 +64,10 @@ module Raiha::Next::QUIC
     def encode: () -> String
 
     private def self.read_value: (Symbol name, Wire::Reader value) -> (Integer | Float | bool | String | PreferredAddress)
+
+    module Extension
+      TYPE: Integer
+      CODECS: Hash[::Raiha::Next::TLS::Handshake::context, ::Raiha::Next::TLS::Extension::Opaque::Parser]
+    end
   end
 end
