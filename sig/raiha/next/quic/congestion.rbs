@@ -26,6 +26,10 @@ module Raiha::Next::QUIC
       def new: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _Controller
     end
 
+    ALGORITHMS: Hash[Symbol, _Algorithm]
+
+    def self.resolve: (Symbol | _Algorithm name) -> _Algorithm
+
     class NewReno
       LOSS_REDUCTION_DIVISOR: Integer
 
