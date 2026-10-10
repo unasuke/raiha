@@ -1,9 +1,6 @@
 module Raiha::Next::QUIC
   module Wire
-    class Malformed < StandardError
-      attr_reader code: Integer
-      attr_reader frame_type: Integer?
-
+    class Malformed < Violation
       def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void
     end
 

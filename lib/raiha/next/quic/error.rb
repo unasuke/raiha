@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "error_code"
+
 module Raiha::Next::QUIC
   # Exceptions are for misuse of the API only. What the peer does never
   # raises: a protocol error is a ConnectionError value, sent as
@@ -15,6 +17,21 @@ module Raiha::Next::QUIC
 
     # A call on a stream that does not exist or does not allow it.
     class StreamError < Usage; end
+  end
+
+  # The peer broke a rule of the protocol. `code` is the transport error to
+  # close the connection with, and `frame_type` the type of the frame that
+  # broke it, when one did. Raised inside the layer and turned into a
+  # ConnectionError where the input came in; the application never sees it.
+  class Violation < StandardError
+    attr_reader :code
+    attr_reader :frame_type
+
+    def initialize(message = nil, code: ErrorCode::PROTOCOL_VIOLATION, frame_type: nil)
+      super(message)
+      @code = code
+      @frame_type = frame_type
+    end
   end
 
   # Why a connection closed: a transport error code (ErrorCode) or an

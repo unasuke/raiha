@@ -13,6 +13,13 @@ module Raiha::Next::QUIC
     end
   end
 
+  class Violation < StandardError
+    attr_reader code: Integer
+    attr_reader frame_type: Integer?
+
+    def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void
+  end
+
   class ConnectionError < Data
     attr_reader code: Integer
     attr_reader frame_type: Integer?

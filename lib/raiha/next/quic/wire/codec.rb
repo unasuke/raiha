@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../error_code"
+require_relative "../error"
 
 module Raiha::Next::QUIC
   # The encoding of QUIC packets and frames: values in, bytes out, and back.
@@ -11,15 +11,8 @@ module Raiha::Next::QUIC
     # frame, or the reserved bits of a header); a packet that does not decode
     # before that is dropped instead. `frame_type` is the type of the frame
     # that did not decode, for the CONNECTION_CLOSE frame.
-    class Malformed < StandardError
-      attr_reader :code
-      attr_reader :frame_type
-
-      def initialize(message = nil, code: ErrorCode::FRAME_ENCODING_ERROR, frame_type: nil)
-        super(message)
-        @code = code
-        @frame_type = frame_type
-      end
+    class Malformed < Violation
+      def initialize(message = nil, code: ErrorCode::FRAME_ENCODING_ERROR, frame_type: nil) = super
     end
 
     # The bytes ran out before a field did.

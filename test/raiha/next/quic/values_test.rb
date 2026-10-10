@@ -20,6 +20,15 @@ class RaihaNextQUICValuesTest < Minitest::Test
     assert_operator QUIC::Error::Usage, :<, QUIC::Error::Base
   end
 
+  # What the peer broke is raised inside the layer with the error to close
+  # with; a frame that does not decode is one such.
+  def test_violations
+    assert_equal [QUIC::ErrorCode::PROTOCOL_VIOLATION, nil], QUIC::Violation.new("x").then { [_1.code, _1.frame_type] }
+    assert_operator QUIC::Wire::Malformed, :<, QUIC::Violation
+    assert_equal QUIC::ErrorCode::FRAME_ENCODING_ERROR, QUIC::Wire::Malformed.new("x").code
+    refute_operator QUIC::Violation, :<, QUIC::Error::Base
+  end
+
   def test_values_are_shareable_once_frozen
     # Without certificates: an OpenSSL::X509::Certificate is never shareable.
     handshake = Ractor.make_shareable(TLS::Event::HandshakeComplete.new(server_name: "localhost", alpn: "h3",
