@@ -1,0 +1,46 @@
+module Raiha::Next::QUIC
+  class Config < Data
+    TRANSPORT_PARAMETERS: Array[Symbol]
+
+    attr_reader max_idle_timeout: Float
+    attr_reader max_udp_payload_size: Integer
+    attr_reader initial_max_data: Integer
+    attr_reader initial_max_stream_data_bidi_local: Integer
+    attr_reader initial_max_stream_data_bidi_remote: Integer
+    attr_reader initial_max_stream_data_uni: Integer
+    attr_reader initial_max_streams_bidi: Integer
+    attr_reader initial_max_streams_uni: Integer
+    attr_reader max_ack_delay: Float
+    attr_reader ack_delay_exponent: Integer
+    attr_reader active_connection_id_limit: Integer
+    attr_reader disable_active_migration: bool
+    attr_reader max_datagram_frame_size: Integer?
+    attr_reader versions: Array[Version]
+    attr_reader connection_id_length: Integer
+    attr_reader initial_max_datagram_size: Integer
+    attr_reader max_stream_receive_window: Integer
+    attr_reader max_receive_window: Integer
+    attr_reader max_send_buffer: Integer
+
+    def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
+                   ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                   ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
+                   ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
+                   ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
+                   ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
+                   ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
+                   ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer) -> instance
+    def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
+                     ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                     ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
+                     ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
+                     ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
+                     ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
+                     ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
+                     ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer) -> void
+
+    def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
+                               ?retry_source_connection_id: String?, ?stateless_reset_token: String?,
+                               ?preferred_address: TransportParameters::PreferredAddress?) -> TransportParameters
+  end
+end
