@@ -79,6 +79,7 @@ module Raiha::Next::QUIC
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
     private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
+    private def persistent_congestion?: (Path path, Array[SentPacket] lost) -> bool
     private def on_acked: (Array[SentPacket] acked, Path? sampled, Float now) -> void
     private def trace_metrics: (Float now) -> void
     private def skip_interval: () -> Integer

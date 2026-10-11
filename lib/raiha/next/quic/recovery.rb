@@ -278,8 +278,35 @@ module Raiha::Next::QUIC
         packets.each { |packet| path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting) }
         congested = packets.reject(&:pmtu_probe)
         largest_lost_sent_at = congested.map(&:time_sent).max or next
-        path.congestion.on_loss(lost_bytes: congested.sum(&:sent_bytes), largest_lost_sent_at:, persistent: false, now:)
+        persistent = persistent_congestion?(path, lost)
+        path.congestion.on_loss(lost_bytes: congested.sum(&:sent_bytes), largest_lost_sent_at:, persistent:, now:)
+        path.rtt.reset_min_rtt if persistent
       end
+    end
+
+    # RFC 9002 "Establishing Persistent Congestion", within the losses of
+    # one detection in one space (loss recovery's design, "Persistent
+    # congestion"). The losses run on while the packet numbers follow each
+    # other on `path`; a gap, a packet acknowledged, skipped or lost before,
+    # or one of another path ends the run. Two ack-eliciting packets of a
+    # run sent after the path's first RTT sample and further apart than
+    # the period establish it; the period is three times the smoothed RTT,
+    # four times its variation and the peer's max_ack_delay.
+    private def persistent_congestion?(path, lost)
+      rtt = path.rtt
+      first_sample_at = rtt.first_sample_at or return false
+      period = (rtt.smoothed_rtt + [4 * rtt.rttvar, GRANULARITY].max + @peer_max_ack_delay) * PERSISTENT_CONGESTION_THRESHOLD
+      run_start = nil #: Float?
+      previous = nil #: SentPacket?
+      lost.each do |packet|
+        follows = previous && packet.packet_number == previous.packet_number + 1 && previous.path.equal?(path) && packet.path.equal?(path)
+        run_start = nil unless follows
+        previous = packet
+        next unless packet.path.equal?(path) && packet.ack_eliciting && packet.time_sent > first_sample_at
+        start = run_start ||= packet.time_sent
+        return true if packet.time_sent - start > period
+      end
+      false
     end
 
     # Each path that sent packets acknowledged takes them out of flight and
