@@ -193,7 +193,14 @@ module Raiha::Next::QUIC
       def skipping?: () -> bool
       def skip_after: (Integer packets) -> void
       def add: (SentPacket packet) -> void
+      attr_reader ack_steps: Integer
+
       def sent?: (Integer packet_number) -> bool
+      def acknowledge: (Array[Range[Integer]] ranges, frame_type: Integer) -> Array[SentPacket]
+
+      private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
+      private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]
+      private def walk: (Array[Range[Integer]] ranges) -> Array[SentPacket]
     end
   end
 end
