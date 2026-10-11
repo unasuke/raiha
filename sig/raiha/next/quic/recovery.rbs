@@ -2,6 +2,34 @@ module Raiha::Next::QUIC
   class Recovery
     INITIAL_RTT: Float
     GRANULARITY: Float
+    PACKET_THRESHOLD: Integer
+    TIME_THRESHOLD: Float
+    PERSISTENT_CONGESTION_THRESHOLD: Integer
+    SPACES: Hash[Symbol, space]
+
+    type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
+
+    attr_reader path: Path
+    attr_reader pto_count: Integer
+    attr_writer peer_max_ack_delay: Float
+
+    @config: Config
+    @random: Crypto::_Random
+    @tracer: _Tracer?
+    @spaces: Hash[space, PacketNumberSpace]
+    @peer_max_ack_delay: Float
+    @handshake_confirmed: bool
+
+    def initialize: (config: Config, path: Path, random: Crypto::_Random, now: Float, ?tracer: _Tracer?) -> void
+    def handshake_confirmed!: () -> void
+    def handshake_confirmed?: () -> bool
+    def next_packet_number: (packet_type packet_type) -> Integer
+    def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
+                         duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
+
+    private def space_of: (packet_type packet_type) -> PacketNumberSpace
+    private def skip_interval: () -> Integer
+    private def random_below: (Integer bound) -> Integer
 
     class RttEstimator
       attr_reader latest_rtt: Float
