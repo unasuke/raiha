@@ -102,6 +102,37 @@ module Raiha::Next::QUIC
         acked
       end
 
+      # Takes out the records lost (RFC 9002 "Detecting Lost Packets"): those
+      # at least PACKET_THRESHOLD below the largest acknowledged, or sent
+      # `loss_delay` or more before `now`. Each is yielded with its trigger,
+      # :reordering_threshold or :time_threshold, and `loss_time` set to
+      # when the next one would be lost by time.
+      def detect_lost(loss_delay:, now:)
+        largest = @largest_acked_packet
+        @loss_time = nil
+        lost = [] #: Array[SentPacket]
+        return lost unless largest
+        lost_send_time = now - loss_delay
+        @sent.each_value do |packet|
+          break if packet.packet_number > largest
+          if largest >= packet.packet_number + PACKET_THRESHOLD
+            lost << packet
+            yield packet, :reordering_threshold
+          elsif packet.time_sent <= lost_send_time
+            lost << packet
+            yield packet, :time_threshold
+          else
+            loss_time = packet.time_sent + loss_delay
+            @loss_time = [@loss_time || loss_time, loss_time].min
+          end
+        end
+        lost.each do |packet|
+          @sent.delete(packet.packet_number)
+          @ack_eliciting_in_flight -= 1 if packet.in_flight && packet.ack_eliciting
+        end
+        lost
+      end
+
       private def take_acknowledged(ranges)
         @ack_steps = 0
         oldest = @sent.each_key.first

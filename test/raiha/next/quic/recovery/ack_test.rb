@@ -23,7 +23,7 @@ class RaihaNextQUICRecoveryAckTest < Minitest::Test
 
   def test_acknowledged_packets_come_back_in_order
     recovery = recovery()
-    3.times { |i| send_packet(recovery, :initial, now: i * 0.01) }
+    3.times { send_packet(recovery, :initial, now: 0.0) }
     outcome = recovery.on_ack_received(packet_type: :initial, ack: ack(2..2, 0..0), now: 0.1)
     assert_equal [0, 2], outcome.acked.map(&:packet_number)
     assert_empty outcome.lost

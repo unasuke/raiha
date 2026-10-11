@@ -22,6 +22,7 @@ module Raiha::Next::QUIC
 
     attr_reader path: Path
     attr_reader pto_count: Integer
+    attr_reader packets_lost: Integer
     attr_writer peer_max_ack_delay: Float
 
     @role: :client | :server
@@ -46,6 +47,8 @@ module Raiha::Next::QUIC
 
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
+    private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]
+    private def on_lost: (Array[SentPacket] lost, Float now) -> void
     private def on_acked: (Array[SentPacket] acked, Path? sampled, Float now) -> void
     private def trace_metrics: (Float now) -> void
     private def skip_interval: () -> Integer
@@ -217,6 +220,7 @@ module Raiha::Next::QUIC
 
       def sent?: (Integer packet_number) -> bool
       def acknowledge: (Array[Range[Integer]] ranges, frame_type: Integer) -> Array[SentPacket]
+      def detect_lost: (loss_delay: Float, now: Float) { (SentPacket packet, Symbol trigger) -> void } -> Array[SentPacket]
 
       private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]

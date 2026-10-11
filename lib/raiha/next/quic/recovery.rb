@@ -27,6 +27,8 @@ module Raiha::Next::QUIC
     # The path packets are sent on now.
     attr_reader :path
     attr_reader :pto_count
+    # The packets declared lost.
+    attr_reader :packets_lost
     # The peer's max_ack_delay, 25 ms until its transport parameters say.
     attr_writer :peer_max_ack_delay
 
@@ -49,6 +51,7 @@ module Raiha::Next::QUIC
       @spaces = { initial: PacketNumberSpace.new(:initial), handshake: PacketNumberSpace.new(:handshake),
                   application_data: PacketNumberSpace.new(:application_data) } #: Hash[space, PacketNumberSpace]
       @pto_count = 0
+      @packets_lost = 0
       @peer_max_ack_delay = 0.025
       @handshake_confirmed = false
       @handshake_acknowledged = false
@@ -100,10 +103,12 @@ module Raiha::Next::QUIC
       return Outcome::NONE if acked.empty?
       @handshake_acknowledged = true if space.name == :handshake
       sampled = take_rtt_sample(space, ack, acked, received_at)
+      lost = detect_lost(space, now)
+      on_lost(lost, now)
       on_acked(acked, sampled, now)
       @pto_count = 0 if peer_completed_address_validation?
       trace_metrics(now)
-      Outcome.new(acked:, lost: Outcome::NO_PACKETS)
+      Outcome.new(acked:, lost:)
     end
 
     # Whether the peer has validated this end's address, so that nothing is
@@ -127,6 +132,34 @@ module Raiha::Next::QUIC
       path.rtt.update(latest_rtt: received_at - largest.time_sent, ack_delay: space.name == :initial ? 0.0 : ack.delay,
         max_ack_delay: @peer_max_ack_delay, handshake_confirmed: @handshake_confirmed, now: received_at)
       path
+    end
+
+    # The records of `space` lost by now, by the RTT of the current path
+    # (loss recovery's design, "Which path's RTT"): 9/8 of the larger of the
+    # latest and smoothed RTT, and no less than the granularity.
+    private def detect_lost(space, now)
+      rtt = @path.rtt
+      loss_delay = [TIME_THRESHOLD * [rtt.latest_rtt, rtt.smoothed_rtt].max, GRANULARITY].max
+      space.detect_lost(loss_delay:, now:) do |packet, trigger|
+        if @tracer
+          @tracer.packet_lost(packet_number: packet.packet_number, space: space.name, trigger:, mtu_probe: packet.pmtu_probe, now:) # steep:ignore
+        end
+      end
+    end
+
+    # Each path that sent packets lost takes them out of flight and tells
+    # its congestion controller once, with the latest time one of them was
+    # sent (RFC 9002 "On Packets Lost"). The loss of a probe of the path MTU
+    # tells it nothing; a path abandoned does neither.
+    private def on_lost(lost, now)
+      @packets_lost += lost.size
+      lost.select(&:in_flight).group_by(&:path).each do |path, packets|
+        next if path.abandoned?
+        packets.each { |packet| path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting) }
+        congested = packets.reject(&:pmtu_probe)
+        largest_lost_sent_at = congested.map(&:time_sent).max or next
+        path.congestion.on_loss(lost_bytes: congested.sum(&:sent_bytes), largest_lost_sent_at:, persistent: false, now:)
+      end
     end
 
     # Each path that sent packets acknowledged takes them out of flight and
