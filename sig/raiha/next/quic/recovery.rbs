@@ -1,0 +1,19 @@
+module Raiha::Next::QUIC
+  class Recovery
+    INITIAL_RTT: Float
+    GRANULARITY: Float
+
+    class RttEstimator
+      attr_reader latest_rtt: Float
+      attr_reader smoothed_rtt: Float
+      attr_reader rttvar: Float
+      attr_reader min_rtt: Float?
+      attr_reader first_sample_at: Float?
+
+      def initialize: () -> void
+      def update: (latest_rtt: Float, ack_delay: Float, max_ack_delay: Float, handshake_confirmed: bool, now: Float) -> void
+      def reset_min_rtt: () -> void
+      def pto_period: () -> Float
+    end
+  end
+end
