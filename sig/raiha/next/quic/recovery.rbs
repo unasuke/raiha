@@ -15,5 +15,136 @@ module Raiha::Next::QUIC
       def reset_min_rtt: () -> void
       def pto_period: () -> Float
     end
+
+    module Duty
+      type t = Stream | Crypto | Ack | ResetStream | StopSending | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked | NewConnectionID | RetireConnectionID | NewToken | HandshakeDone
+
+      class Stream < Data
+        attr_reader stream_id: Integer
+        attr_reader offset: Integer
+        attr_reader length: Integer
+        attr_reader fin: bool
+
+        def self.new: (stream_id: Integer, offset: Integer, length: Integer, fin: bool) -> instance
+                    | (Integer stream_id, Integer offset, Integer length, bool fin) -> instance
+      end
+
+      class Crypto < Data
+        attr_reader offset: Integer
+        attr_reader length: Integer
+
+        def self.new: (offset: Integer, length: Integer) -> instance
+                    | (Integer offset, Integer length) -> instance
+      end
+
+      class Ack < Data
+        attr_reader largest: Integer
+
+        def self.new: (largest: Integer) -> instance
+                    | (Integer largest) -> instance
+      end
+
+      class ResetStream < Data
+        attr_reader stream_id: Integer
+
+        def self.new: (stream_id: Integer) -> instance
+                    | (Integer stream_id) -> instance
+      end
+
+      class StopSending < Data
+        attr_reader stream_id: Integer
+
+        def self.new: (stream_id: Integer) -> instance
+                    | (Integer stream_id) -> instance
+      end
+
+      class MaxData < Data
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+      end
+
+      class MaxStreamData < Data
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+      end
+
+      class MaxStreams < Data
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+      end
+
+      class DataBlocked < Data
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+      end
+
+      class StreamDataBlocked < Data
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+      end
+
+      class StreamsBlocked < Data
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+      end
+
+      class NewConnectionID < Data
+        attr_reader sequence_number: Integer
+
+        def self.new: (sequence_number: Integer) -> instance
+                    | (Integer sequence_number) -> instance
+      end
+
+      class RetireConnectionID < Data
+        attr_reader sequence_number: Integer
+
+        def self.new: (sequence_number: Integer) -> instance
+                    | (Integer sequence_number) -> instance
+      end
+
+      class NewToken < Data
+        attr_reader path: Path
+
+        def self.new: (path: Path) -> instance
+                    | (Path path) -> instance
+      end
+
+      class HandshakeDone < Data
+        def self.new: () -> instance
+      end
+
+      ALL: Array[singleton(Stream) | singleton(Crypto) | singleton(Ack) | singleton(ResetStream) | singleton(StopSending) | singleton(MaxData) | singleton(MaxStreamData) | singleton(MaxStreams) | singleton(DataBlocked) | singleton(StreamDataBlocked) | singleton(StreamsBlocked) | singleton(NewConnectionID) | singleton(RetireConnectionID) | singleton(NewToken) | singleton(HandshakeDone)]
+    end
+
+    class SentPacket < Data
+      attr_reader packet_number: Integer
+      attr_reader time_sent: Float
+      attr_reader sent_bytes: Integer
+      attr_reader ack_eliciting: bool
+      attr_reader in_flight: bool
+      attr_reader path: Path
+      attr_reader duties: Array[Duty::t]
+      attr_reader pmtu_probe: bool
+      attr_reader ecn: ::Raiha::Next::QUIC::ecn
+
+      def self.new: (packet_number: Integer, time_sent: Float, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool, path: Path, duties: Array[Duty::t], pmtu_probe: bool, ecn: ::Raiha::Next::QUIC::ecn) -> instance
+                  | (Integer packet_number, Float time_sent, Integer sent_bytes, bool ack_eliciting, bool in_flight, Path path, Array[Duty::t] duties, bool pmtu_probe, ::Raiha::Next::QUIC::ecn ecn) -> instance
+    end
   end
 end
