@@ -9,10 +9,24 @@ module Raiha::Next::QUIC
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
 
+    class Outcome < Data
+      NO_PACKETS: Array[SentPacket]
+      NONE: Outcome
+
+      attr_reader acked: Array[SentPacket]
+      attr_reader lost: Array[SentPacket]
+
+      def self.new: (acked: Array[SentPacket], lost: Array[SentPacket]) -> instance
+                  | (Array[SentPacket] acked, Array[SentPacket] lost) -> instance
+    end
+
     attr_reader path: Path
     attr_reader pto_count: Integer
     attr_writer peer_max_ack_delay: Float
 
+    @role: :client | :server
+    @handshake_acknowledged: bool
+    @metrics: Hash[Symbol, metric]
     @config: Config
     @random: Crypto::_Random
     @tracer: _Tracer?
@@ -20,14 +34,20 @@ module Raiha::Next::QUIC
     @peer_max_ack_delay: Float
     @handshake_confirmed: bool
 
-    def initialize: (config: Config, path: Path, random: Crypto::_Random, now: Float, ?tracer: _Tracer?) -> void
+    def initialize: (role: :client | :server, config: Config, path: Path, random: Crypto::_Random, now: Float, ?tracer: _Tracer?) -> void
     def handshake_confirmed!: () -> void
     def handshake_confirmed?: () -> bool
     def next_packet_number: (packet_type packet_type) -> Integer
     def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
                          duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
 
+    def on_ack_received: (packet_type: packet_type, ack: Wire::Frame::Ack, now: Float, ?received_at: Float) -> Outcome
+    def peer_completed_address_validation?: () -> bool
+
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
+    private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
+    private def on_acked: (Array[SentPacket] acked, Path? sampled, Float now) -> void
+    private def trace_metrics: (Float now) -> void
     private def skip_interval: () -> Integer
     private def random_below: (Integer bound) -> Integer
 

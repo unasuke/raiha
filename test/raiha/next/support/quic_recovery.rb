@@ -21,9 +21,12 @@ module NextQUICRecovery
 
   module_function
 
-  def recovery(config: QUIC::Config.new, path: QUIC::Path.new(config:), tracer: nil, seed: 1, now: 0.0)
-    QUIC::Recovery.new(config:, path:, random: Random.new(seed), tracer:, now:)
+  def recovery(role: :client, config: QUIC::Config.new, path: QUIC::Path.new(config:), tracer: nil, seed: 1, now: 0.0)
+    QUIC::Recovery.new(role:, config:, path:, random: Random.new(seed), tracer:, now:)
   end
+
+  # An ACK frame of `ranges`, the largest first.
+  def ack(*ranges, delay: 0.0, ecn: nil) = QUIC::Wire::Frame::Ack.new(ranges:, delay:, ecn:)
 
   # Sends a packet of `packet_type` at `now` and gives its number.
   def send_packet(recovery, packet_type, now:, sent_bytes: 1200, ack_eliciting: true, in_flight: true, duties: [])

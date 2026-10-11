@@ -11,6 +11,7 @@ module Raiha::Next::QUIC
     attr_reader :congestion
     attr_reader :bytes_in_flight
     attr_reader :ack_eliciting_in_flight
+    attr_reader :packets_in_flight
     attr_reader :max_datagram_size
 
     def initialize(config:, max_datagram_size: config.initial_max_datagram_size, tracer: nil)
@@ -19,6 +20,7 @@ module Raiha::Next::QUIC
       @max_datagram_size = max_datagram_size
       @bytes_in_flight = 0
       @ack_eliciting_in_flight = 0
+      @packets_in_flight = 0
       @app_limited = false
       @abandoned = false
     end
@@ -27,6 +29,7 @@ module Raiha::Next::QUIC
     # congestion controller.
     def add_in_flight(sent_bytes:, ack_eliciting:, now:)
       @bytes_in_flight += sent_bytes
+      @packets_in_flight += 1
       @ack_eliciting_in_flight += 1 if ack_eliciting
       @congestion.on_packet_sent(bytes: sent_bytes, now:)
     end
@@ -34,6 +37,7 @@ module Raiha::Next::QUIC
     # No longer counts a packet acknowledged, lost or discarded.
     def remove_in_flight(sent_bytes:, ack_eliciting:)
       @bytes_in_flight -= sent_bytes
+      @packets_in_flight -= 1
       @ack_eliciting_in_flight -= 1 if ack_eliciting
     end
 

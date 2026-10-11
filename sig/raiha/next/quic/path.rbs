@@ -4,6 +4,7 @@ module Raiha::Next::QUIC
     attr_reader congestion: Congestion::_Controller
     attr_reader bytes_in_flight: Integer
     attr_reader ack_eliciting_in_flight: Integer
+    attr_reader packets_in_flight: Integer
     attr_reader max_datagram_size: Integer
 
     @app_limited: bool

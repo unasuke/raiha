@@ -17,9 +17,9 @@ class RaihaNextQUICPathTest < Minitest::Test
     path = path()
     path.add_in_flight(sent_bytes: 1200, ack_eliciting: true, now: 0.0)
     path.add_in_flight(sent_bytes: 50, ack_eliciting: false, now: 0.0)
-    assert_equal [1250, 1], [path.bytes_in_flight, path.ack_eliciting_in_flight]
+    assert_equal [1250, 1, 2], [path.bytes_in_flight, path.ack_eliciting_in_flight, path.packets_in_flight]
     path.remove_in_flight(sent_bytes: 1200, ack_eliciting: true)
-    assert_equal [50, 0], [path.bytes_in_flight, path.ack_eliciting_in_flight]
+    assert_equal [50, 0, 1], [path.bytes_in_flight, path.ack_eliciting_in_flight, path.packets_in_flight]
   end
 
   # Loss recovery's design, "app_limited:": only a full window, or pacing
