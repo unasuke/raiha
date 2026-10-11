@@ -12,14 +12,25 @@ module Raiha::Next::QUIC
   # DATAGRAM frames; RFC 9221 suggests 65535 to have them. max_udp_payload_size
   # is what this end can receive, and initial_max_datagram_size what it
   # sends before a path is probed: two things, however alike the names.
+  #
+  # congestion_control is the class of the algorithm each path makes its
+  # controller from, or its name in Congestion::ALGORITHMS; initial_window
+  # turns a maximum datagram size into the initial window and must be
+  # shareable, as a lambda made by Ractor.shareable_lambda.
   class Config < Data.define(
     :max_idle_timeout, :max_udp_payload_size,
     :initial_max_data, :initial_max_stream_data_bidi_local, :initial_max_stream_data_bidi_remote, :initial_max_stream_data_uni,
     :initial_max_streams_bidi, :initial_max_streams_uni,
     :max_ack_delay, :ack_delay_exponent, :active_connection_id_limit, :disable_active_migration, :max_datagram_frame_size,
     :versions, :connection_id_length, :initial_max_datagram_size,
-    :max_stream_receive_window, :max_receive_window, :max_send_buffer
+    :max_stream_receive_window, :max_receive_window, :max_send_buffer,
+    :congestion_control, :initial_window
   )
+    DEFAULT_CONGESTION_CONTROL = Congestion::NewReno
+    # RFC 9002 "Initial and Minimum Congestion Window". Made shareable here,
+    # where self is the class.
+    DEFAULT_INITIAL_WINDOW = Ractor.make_shareable(->(max_datagram_size) { [10 * max_datagram_size, [14_720, 2 * max_datagram_size].max].min })
+
     TRANSPORT_PARAMETERS = %i[
       max_idle_timeout max_udp_payload_size
       initial_max_data initial_max_stream_data_bidi_local initial_max_stream_data_bidi_remote initial_max_stream_data_uni
@@ -32,7 +43,8 @@ module Raiha::Next::QUIC
     # bytes, a datagram is 1200 bytes at least (RFC 9000 "Datagram Size"),
     # and the receive windows can grow from the initial ones: the stream
     # window to each initial stream limit, and the connection window to the
-    # initial limit and to 1.5 times the stream window.
+    # initial limit and to 1.5 times the stream window. The initial window
+    # is the minimum of two datagrams at least.
     def initialize(
       max_idle_timeout: 30.0, max_udp_payload_size: 65_527,
       initial_max_data: 768 * 1024, initial_max_stream_data_bidi_local: 512 * 1024,
@@ -41,7 +53,8 @@ module Raiha::Next::QUIC
       max_ack_delay: 0.025, ack_delay_exponent: 3, active_connection_id_limit: 4, disable_active_migration: false,
       max_datagram_frame_size: nil,
       versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200,
-      max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024
+      max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024,
+      congestion_control: DEFAULT_CONGESTION_CONTROL, initial_window: DEFAULT_INITIAL_WINDOW
     )
       TransportParameters.new(
         max_idle_timeout:, max_udp_payload_size:, initial_max_data:, initial_max_stream_data_bidi_local:,
@@ -63,8 +76,18 @@ module Raiha::Next::QUIC
         raise ArgumentError, "max_receive_window #{max_receive_window} is under 1.5 times max_stream_receive_window"
       end
       raise ArgumentError, "max_send_buffer #{max_send_buffer} is not positive" unless max_send_buffer.positive?
+      congestion_control = Congestion.resolve(congestion_control)
+      window = initial_window.call(initial_max_datagram_size)
+      unless window.is_a?(Integer) && window >= 2 * initial_max_datagram_size
+        raise ArgumentError, "an initial window of #{window.inspect} for #{initial_max_datagram_size}-byte datagrams is under two of them"
+      end
       # A copy, so that making it shareable does not freeze the caller's.
       versions = Ractor.make_shareable(versions, copy: true)
+      begin
+        initial_window = Ractor.make_shareable(initial_window, copy: true)
+      rescue TypeError, Ractor::Error => error
+        raise ArgumentError, "initial_window cannot be shared between Ractors (#{error.message}); make it with Ractor.shareable_lambda"
+      end
       super
     end
 

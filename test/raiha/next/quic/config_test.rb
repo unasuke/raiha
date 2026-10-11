@@ -57,6 +57,33 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert Config.new(max_stream_receive_window: 10 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024)
   end
 
+  # Until CUBIC comes, NewReno is the default; a name becomes its class.
+  def test_congestion_control
+    assert_same QUIC::Congestion::NewReno, Config.new.congestion_control
+    assert_same QUIC::Congestion::NewReno, Config.new(congestion_control: :new_reno).congestion_control
+    own = Class.new(QUIC::Congestion::NewReno)
+    assert_same own, Config.new(congestion_control: own).congestion_control
+    assert_raises(ArgumentError) { Config.new(congestion_control: :bbr) }
+  end
+
+  # RFC 9002 "Initial and Minimum Congestion Window".
+  def test_initial_window
+    window = Config.new.initial_window
+    assert_equal [12_000, 14_720, 18_000], [1200, 1472, 9000].map { |mds| window.call(mds) }
+    doubled = Ractor.shareable_lambda { |mds| 20 * mds }
+    config = Config.new(initial_window: doubled)
+    assert_same doubled, config.initial_window
+    assert Ractor.shareable?(config)
+  end
+
+  def test_initial_window_misuse
+    # A lambda made in a method has the test for its self, which no Ractor
+    # can share.
+    assert_raises(ArgumentError) { Config.new(initial_window: ->(mds) { 10 * mds }) }
+    assert_raises(ArgumentError) { Config.new(initial_window: Ractor.shareable_lambda { |mds| mds }) }
+    assert_raises(ArgumentError) { Config.new(initial_window: Ractor.shareable_lambda { |mds| mds * 2.5 }) }
+  end
+
   def test_transport_parameters
     config = Config.new(max_idle_timeout: 10.0, max_datagram_frame_size: 65_535)
     client = config.transport_parameters(initial_source_connection_id: "c".b * 8)

@@ -72,7 +72,6 @@ module Raiha::Next::QUIC::Test
     end
 
     MAX_DATAGRAM_SIZE: Integer
-    INITIAL_WINDOW: ::Raiha::Next::QUIC::Congestion::_InitialWindow
     KNOWN_STATES: Array[Symbol]
     SEED: Integer
 

@@ -1,6 +1,8 @@
 module Raiha::Next::QUIC
   class Config < Data
     TRANSPORT_PARAMETERS: Array[Symbol]
+    DEFAULT_CONGESTION_CONTROL: Congestion::_Algorithm
+    DEFAULT_INITIAL_WINDOW: Congestion::_InitialWindow
 
     attr_reader max_idle_timeout: Float
     attr_reader max_udp_payload_size: Integer
@@ -21,6 +23,8 @@ module Raiha::Next::QUIC
     attr_reader max_stream_receive_window: Integer
     attr_reader max_receive_window: Integer
     attr_reader max_send_buffer: Integer
+    attr_reader congestion_control: Congestion::_Algorithm
+    attr_reader initial_window: Congestion::_InitialWindow
 
     def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                    ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
@@ -29,7 +33,8 @@ module Raiha::Next::QUIC
                    ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
                    ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
                    ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
-                   ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer) -> instance
+                   ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
+                   ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow) -> instance
     def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                      ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
                      ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
@@ -37,7 +42,8 @@ module Raiha::Next::QUIC
                      ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
                      ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
                      ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
-                     ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer) -> void
+                     ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
+                     ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow) -> void
 
     def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
                                ?retry_source_connection_id: String?, ?stateless_reset_token: String?,

@@ -11,8 +11,6 @@ module Raiha::Next::QUIC::Test
   #   end
   module CongestionContract
     MAX_DATAGRAM_SIZE = 1200
-    # RFC 9002 "Initial and Minimum Congestion Window".
-    INITIAL_WINDOW = Ractor.make_shareable(->(mds) { [10 * mds, [14_720, 2 * mds].max].min })
     # The states of the algorithms that come with the layer and of those
     # 259 names; an algorithm of its own may add to them.
     KNOWN_STATES = %i[
@@ -96,7 +94,7 @@ module Raiha::Next::QUIC::Test
       assert_equal cc.window, cc.metrics[:congestion_window]
     end
 
-    private def new_controller = congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: INITIAL_WINDOW)
+    private def new_controller = congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: Raiha::Next::QUIC::Config::DEFAULT_INITIAL_WINDOW)
 
     private def acknowledge(cc, bytes, sent_at:, now:, app_limited: false)
       cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, app_limited:, now:)
