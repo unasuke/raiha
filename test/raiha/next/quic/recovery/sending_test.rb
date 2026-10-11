@@ -26,7 +26,7 @@ class RaihaNextQUICRecoverySendingTest < Minitest::Test
   def test_skips
     recovery = recovery()
     assert_equal (0...100).to_a, Array.new(100) { recovery.next_packet_number(:one_rtt) }
-    recovery.handshake_confirmed!
+    recovery.handshake_confirmed!(now: 0.0)
     numbers = Array.new(100) { recovery.next_packet_number(:one_rtt) }
     skipped = ((100..numbers.last).to_a - numbers)
     assert_equal 1, skipped.size

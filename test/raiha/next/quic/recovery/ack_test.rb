@@ -110,7 +110,7 @@ class RaihaNextQUICRecoveryAckTest < Minitest::Test
     client.on_ack_received(packet_type: :handshake, ack: ack(0..0), now: 0.3)
     assert client.peer_completed_address_validation?
     confirmed = recovery(role: :client)
-    confirmed.handshake_confirmed!
+    confirmed.handshake_confirmed!(now: 0.0)
     assert confirmed.peer_completed_address_validation?
   end
 

@@ -32,12 +32,19 @@ module Raiha::Next::QUIC
     # The peer's max_ack_delay, 25 ms until its transport parameters say.
     attr_writer :peer_max_ack_delay
 
+    # Ack-eliciting packets to send now in `space`, as the PTO ran out:
+    # new data if there is any, else what the oldest unacknowledged packet
+    # carried, else a PING (RFC 9002 "Sending Probe Packets"). They go out
+    # past the congestion window and pacing, but not past the server's
+    # amplification limit.
+    class Probe < Data.define(:space, :packets); end
+
     # What an ACK or a timer leaves for the owners of the packets: the
-    # records acknowledged first, then those lost.
-    class Outcome < Data.define(:acked, :lost)
+    # records acknowledged first, then those lost, and a probe to send.
+    class Outcome < Data.define(:acked, :lost, :probe)
       NO_PACKETS = [] #: Array[SentPacket]
       NO_PACKETS.freeze
-      NONE = new(acked: NO_PACKETS, lost: NO_PACKETS)
+      NONE = new(acked: NO_PACKETS, lost: NO_PACKETS, probe: nil)
     end
 
     # `role` is :client or :server, and `random` gives the bytes the skips
@@ -55,6 +62,9 @@ module Raiha::Next::QUIC
       @peer_max_ack_delay = 0.025
       @handshake_confirmed = false
       @handshake_acknowledged = false
+      @handshake_keys = false
+      @amplification_limited = false
+      @loss_detection_timer = nil #: Float?
       @metrics = {} #: Hash[Symbol, metric]
       if tracer
         tracer.recovery_parameters_set(
@@ -65,12 +75,66 @@ module Raiha::Next::QUIC
       end
     end
 
-    # The handshake is confirmed (RFC 9001 "Handshake Confirmed").
-    def handshake_confirmed!
+    # When the loss detection timer runs out (RFC 9002 "Setting the Loss
+    # Detection Timer"), nil when it is not set.
+    attr_reader :loss_detection_timer
+
+    # The handshake is confirmed (RFC 9001 "Handshake Confirmed"), which
+    # lets the PTO count Application Data.
+    def handshake_confirmed!(now:)
       @handshake_confirmed = true
+      set_loss_detection_timer(now)
     end
 
     def handshake_confirmed? = @handshake_confirmed
+
+    # This end has Handshake keys, so that a probe to avoid a deadlock goes
+    # in a Handshake packet.
+    def handshake_keys_installed!
+      @handshake_keys = true
+    end
+
+    # A server that may send no more until the client's address is
+    # validated sets no timer, since it could send nothing when it ran out;
+    # once a datagram lifts the limit the timer is set again (RFC 9002
+    # "Handling Anti-Amplification Limits").
+    def amplification_limited(limited, now:)
+      @amplification_limited = limited
+      set_loss_detection_timer(now)
+    end
+
+    # When something is to be done next: the loss detection timer.
+    def next_timeout = @loss_detection_timer
+
+    # Runs out the loss detection timer at `now` if it is due (RFC 9002 "On
+    # Timeout"). A loss time declares the packets lost; otherwise the PTO
+    # asks for two probes in the space it ran out in, or one in a Handshake
+    # or Initial packet when nothing is in flight to keep the server from
+    # being stuck, and backs off.
+    def on_timeout(now:)
+      timer = @loss_detection_timer
+      return Outcome::NONE unless timer && now >= timer
+      loss = loss_deadline
+      pto = pto_deadline(now)
+      trace_timer(:expired, (loss || pto)&.space, nil, now)
+      if loss
+        lost = detect_lost(@spaces.fetch(loss.space), now)
+        on_lost(lost, now)
+        set_loss_detection_timer(now)
+        trace_metrics(now)
+        return Outcome.new(acked: Outcome::NO_PACKETS, lost:, probe: nil)
+      end
+      probe =
+        if ack_eliciting_in_flight?
+          Probe.new(space: pto&.space || :initial, packets: 2)
+        else
+          Probe.new(space: @handshake_keys ? :handshake : :initial, packets: 1)
+        end
+      @pto_count += 1
+      set_loss_detection_timer(now)
+      trace_metrics(now)
+      Outcome.new(acked: Outcome::NO_PACKETS, lost: Outcome::NO_PACKETS, probe:)
+    end
 
     # The number for the next packet of `packet_type` (:initial,
     # :handshake, :zero_rtt or :one_rtt). Once the handshake is confirmed,
@@ -88,7 +152,10 @@ module Raiha::Next::QUIC
       packet = SentPacket.new(packet_number:, time_sent: now, sent_bytes:, ack_eliciting:, in_flight:, path: @path,
         duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn: :not_ect)
       space_of(packet_type).add(packet)
-      @path.add_in_flight(sent_bytes:, ack_eliciting:, now:) if in_flight
+      if in_flight
+        @path.add_in_flight(sent_bytes:, ack_eliciting:, now:)
+        set_loss_detection_timer(now)
+      end
       packet
     end
 
@@ -107,8 +174,9 @@ module Raiha::Next::QUIC
       on_lost(lost, now)
       on_acked(acked, sampled, now)
       @pto_count = 0 if peer_completed_address_validation?
+      set_loss_detection_timer(now)
       trace_metrics(now)
-      Outcome.new(acked:, lost:)
+      Outcome.new(acked:, lost:, probe: nil)
     end
 
     # Whether the peer has validated this end's address, so that nothing is
@@ -118,6 +186,58 @@ module Raiha::Next::QUIC
     def peer_completed_address_validation? = @role == :server || @handshake_acknowledged || @handshake_confirmed
 
     private def space_of(packet_type) = @spaces.fetch(SPACES.fetch(packet_type))
+
+    private def ack_eliciting_in_flight? = @spaces.each_value.any? { |space| space.ack_eliciting_in_flight.positive? }
+
+    # When the loss detection timer runs out, and in which space.
+    class Deadline < Data.define(:time, :space); end
+
+    # The earliest time a packet can be lost by time, and its space.
+    private def loss_deadline
+      @spaces.each_value.filter_map { |space| (time = space.loss_time) && Deadline.new(time:, space: space.name) }.min_by(&:time)
+    end
+
+    # RFC 9002 "Setting the Loss Detection Timer".
+    private def set_loss_detection_timer(now)
+      deadline =
+        if (loss = loss_deadline) then loss
+        elsif @amplification_limited then nil
+        elsif !ack_eliciting_in_flight? && peer_completed_address_validation? then nil
+        else pto_deadline(now)
+        end
+      before = @loss_detection_timer
+      timer = @loss_detection_timer = deadline&.time
+      if deadline && timer
+        trace_timer(:set, deadline.space, timer - now, now) unless timer == before
+      elsif before
+        trace_timer(:cancelled, nil, nil, now)
+      end
+    end
+
+    # RFC 9002 "Computing PTO": the earliest PTO of the spaces with
+    # ack-eliciting packets in flight, Application Data only once the
+    # handshake is confirmed and with the peer's max_ack_delay, by the RTT of
+    # the current path and backed off by the PTO count. With nothing in
+    # flight, a PTO from now. nil when none applies.
+    private def pto_deadline(now)
+      backoff = 1 << @pto_count
+      duration = @path.rtt.pto_period * backoff
+      return Deadline.new(time: now + duration, space: @handshake_keys ? :handshake : :initial) unless ack_eliciting_in_flight?
+      @spaces.each_value.filter_map do |space|
+        sent_at = space.time_of_last_ack_eliciting_packet
+        next unless space.ack_eliciting_in_flight.positive? && sent_at
+        if space.name == :application_data
+          next unless @handshake_confirmed
+          Deadline.new(time: sent_at + duration + @peer_max_ack_delay * backoff, space: space.name)
+        else
+          Deadline.new(time: sent_at + duration, space: space.name)
+        end
+      end.min_by(&:time)
+    end
+
+    private def trace_timer(event_type, space, delta, now)
+      @tracer.timer_updated(timer_type: :loss_timeout, event_type:, space:, delta:, now:) if @tracer # steep:ignore
+    end
 
     # RFC 9002 "Generating RTT Samples": when the largest acknowledged is
     # acknowledged for the first time and with an ack-eliciting packet. The

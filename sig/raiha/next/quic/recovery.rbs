@@ -9,15 +9,24 @@ module Raiha::Next::QUIC
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
 
+    class Probe < Data
+      attr_reader space: space
+      attr_reader packets: Integer
+
+      def self.new: (space: space, packets: Integer) -> instance
+                  | (space space, Integer packets) -> instance
+    end
+
     class Outcome < Data
       NO_PACKETS: Array[SentPacket]
       NONE: Outcome
 
       attr_reader acked: Array[SentPacket]
       attr_reader lost: Array[SentPacket]
+      attr_reader probe: Probe?
 
-      def self.new: (acked: Array[SentPacket], lost: Array[SentPacket]) -> instance
-                  | (Array[SentPacket] acked, Array[SentPacket] lost) -> instance
+      def self.new: (acked: Array[SentPacket], lost: Array[SentPacket], probe: Probe?) -> instance
+                  | (Array[SentPacket] acked, Array[SentPacket] lost, Probe? probe) -> instance
     end
 
     attr_reader path: Path
@@ -27,6 +36,8 @@ module Raiha::Next::QUIC
 
     @role: :client | :server
     @handshake_acknowledged: bool
+    @handshake_keys: bool
+    @amplification_limited: bool
     @metrics: Hash[Symbol, metric]
     @config: Config
     @random: Crypto::_Random
@@ -36,8 +47,14 @@ module Raiha::Next::QUIC
     @handshake_confirmed: bool
 
     def initialize: (role: :client | :server, config: Config, path: Path, random: Crypto::_Random, now: Float, ?tracer: _Tracer?) -> void
-    def handshake_confirmed!: () -> void
+    attr_reader loss_detection_timer: Float?
+
+    def handshake_confirmed!: (now: Float) -> void
     def handshake_confirmed?: () -> bool
+    def handshake_keys_installed!: () -> void
+    def amplification_limited: (bool limited, now: Float) -> void
+    def next_timeout: () -> Float?
+    def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer
     def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
                          duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
@@ -46,6 +63,19 @@ module Raiha::Next::QUIC
     def peer_completed_address_validation?: () -> bool
 
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
+    private def ack_eliciting_in_flight?: () -> bool
+    class Deadline < Data
+      attr_reader time: Float
+      attr_reader space: space
+
+      def self.new: (time: Float, space: space) -> instance
+                  | (Float time, space space) -> instance
+    end
+
+    private def loss_deadline: () -> Deadline?
+    private def set_loss_detection_timer: (Float now) -> void
+    private def pto_deadline: (Float now) -> Deadline?
+    private def trace_timer: (Symbol event_type, space? space, Float? delta, Float now) -> void
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
     private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
