@@ -146,5 +146,26 @@ module Raiha::Next::QUIC
       def self.new: (packet_number: Integer, time_sent: Float, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool, path: Path, duties: Array[Duty::t], pmtu_probe: bool, ecn: ::Raiha::Next::QUIC::ecn) -> instance
                   | (Integer packet_number, Float time_sent, Integer sent_bytes, bool ack_eliciting, bool in_flight, Path path, Array[Duty::t] duties, bool pmtu_probe, ::Raiha::Next::QUIC::ecn ecn) -> instance
     end
+
+    class PacketNumberSpace
+      attr_reader name: space
+      attr_reader largest_sent: Integer?
+      attr_reader largest_acked_packet: Integer?
+      attr_accessor loss_time: Float?
+      attr_reader time_of_last_ack_eliciting_packet: Float?
+      attr_reader ack_eliciting_in_flight: Integer
+      attr_reader skipped: Integer?
+
+      @next_packet_number: Integer
+      @sent: Hash[Integer, SentPacket]
+      @skip_after: Integer?
+
+      def initialize: (space name) -> void
+      def next_packet_number: () -> Integer
+      def skipping?: () -> bool
+      def skip_after: (Integer packets) -> void
+      def add: (SentPacket packet) -> void
+      def sent?: (Integer packet_number) -> bool
+    end
   end
 end
