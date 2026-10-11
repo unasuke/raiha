@@ -84,6 +84,16 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert_raises(ArgumentError) { Config.new(initial_window: Ractor.shareable_lambda { |mds| mds * 2.5 }) }
   end
 
+  # Kept for pacing and Rapid Start, which come later.
+  def test_startup_and_pacing_granularity
+    config = Config.new
+    assert_equal [nil, 0.001], [config.startup, config.pacing_granularity]
+    startup = Class.new
+    assert_same startup, Config.new(startup:).startup
+    assert_raises(ArgumentError) { Config.new(startup: :rapid_start) }
+    assert_raises(ArgumentError) { Config.new(pacing_granularity: 0.0) }
+  end
+
   def test_transport_parameters
     config = Config.new(max_idle_timeout: 10.0, max_datagram_frame_size: 65_535)
     client = config.transport_parameters(initial_source_connection_id: "c".b * 8)

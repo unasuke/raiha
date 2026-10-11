@@ -25,6 +25,8 @@ module Raiha::Next::QUIC
     attr_reader max_send_buffer: Integer
     attr_reader congestion_control: Congestion::_Algorithm
     attr_reader initial_window: Congestion::_InitialWindow
+    attr_reader startup: Congestion::_Startup?
+    attr_reader pacing_granularity: Float
 
     def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                    ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
@@ -34,7 +36,8 @@ module Raiha::Next::QUIC
                    ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
                    ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
                    ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
-                   ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow) -> instance
+                   ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
+                   ?startup: Congestion::_Startup?, ?pacing_granularity: Float) -> instance
     def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                      ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
                      ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
@@ -43,7 +46,8 @@ module Raiha::Next::QUIC
                      ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
                      ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
                      ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
-                     ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow) -> void
+                     ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
+                     ?startup: Congestion::_Startup?, ?pacing_granularity: Float) -> void
 
     def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
                                ?retry_source_connection_id: String?, ?stateless_reset_token: String?,

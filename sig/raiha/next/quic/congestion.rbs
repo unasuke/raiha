@@ -26,6 +26,12 @@ module Raiha::Next::QUIC
       def new: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _Controller
     end
 
+    # A class that wraps a controller while the connection starts, as Rapid
+    # Start does.
+    interface _Startup
+      def new: (_Controller cc, max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _Controller
+    end
+
     ALGORITHMS: Hash[Symbol, _Algorithm]
 
     def self.resolve: (Symbol | _Algorithm name) -> _Algorithm

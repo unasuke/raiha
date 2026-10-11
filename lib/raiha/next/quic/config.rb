@@ -16,7 +16,10 @@ module Raiha::Next::QUIC
   # congestion_control is the class of the algorithm each path makes its
   # controller from, or its name in Congestion::ALGORITHMS; initial_window
   # turns a maximum datagram size into the initial window and must be
-  # shareable, as a lambda made by Ractor.shareable_lambda.
+  # shareable, as a lambda made by Ractor.shareable_lambda. startup is the
+  # class that wraps the controller while the connection starts, nil for
+  # the controller's own slow start, and pacing_granularity the seconds
+  # between the wake-ups of pacing.
   class Config < Data.define(
     :max_idle_timeout, :max_udp_payload_size,
     :initial_max_data, :initial_max_stream_data_bidi_local, :initial_max_stream_data_bidi_remote, :initial_max_stream_data_uni,
@@ -24,7 +27,7 @@ module Raiha::Next::QUIC
     :max_ack_delay, :ack_delay_exponent, :active_connection_id_limit, :disable_active_migration, :max_datagram_frame_size,
     :versions, :connection_id_length, :initial_max_datagram_size,
     :max_stream_receive_window, :max_receive_window, :max_send_buffer,
-    :congestion_control, :initial_window
+    :congestion_control, :initial_window, :startup, :pacing_granularity
   )
     DEFAULT_CONGESTION_CONTROL = Congestion::NewReno
     # RFC 9002 "Initial and Minimum Congestion Window". Made shareable here,
@@ -44,7 +47,8 @@ module Raiha::Next::QUIC
     # and the receive windows can grow from the initial ones: the stream
     # window to each initial stream limit, and the connection window to the
     # initial limit and to 1.5 times the stream window. The initial window
-    # is the minimum of two datagrams at least.
+    # is the minimum of two datagrams at least, and pacing wakes up after
+    # some time.
     def initialize(
       max_idle_timeout: 30.0, max_udp_payload_size: 65_527,
       initial_max_data: 768 * 1024, initial_max_stream_data_bidi_local: 512 * 1024,
@@ -54,7 +58,7 @@ module Raiha::Next::QUIC
       max_datagram_frame_size: nil,
       versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200,
       max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024,
-      congestion_control: DEFAULT_CONGESTION_CONTROL, initial_window: DEFAULT_INITIAL_WINDOW
+      congestion_control: DEFAULT_CONGESTION_CONTROL, initial_window: DEFAULT_INITIAL_WINDOW, startup: nil, pacing_granularity: 0.001
     )
       TransportParameters.new(
         max_idle_timeout:, max_udp_payload_size:, initial_max_data:, initial_max_stream_data_bidi_local:,
@@ -81,6 +85,11 @@ module Raiha::Next::QUIC
       unless window.is_a?(Integer) && window >= 2 * initial_max_datagram_size
         raise ArgumentError, "an initial window of #{window.inspect} for #{initial_max_datagram_size}-byte datagrams is under two of them"
       end
+      case startup
+      when nil, Class then nil
+      else raise ArgumentError, "startup is a class or nil"
+      end
+      raise ArgumentError, "pacing_granularity #{pacing_granularity} is not positive" unless pacing_granularity.positive?
       # A copy, so that making it shareable does not freeze the caller's.
       versions = Ractor.make_shareable(versions, copy: true)
       begin
