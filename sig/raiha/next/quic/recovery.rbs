@@ -55,6 +55,7 @@ module Raiha::Next::QUIC
     def handshake_confirmed?: () -> bool
     def handshake_keys_installed!: () -> void
     def amplification_limited: (bool limited, now: Float) -> void
+    def discard_space: (:initial | :handshake packet_type, now: Float) -> void
     def next_timeout: () -> Float?
     def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer
@@ -263,6 +264,7 @@ module Raiha::Next::QUIC
       def detect_lost: (loss_delay: Float, now: Float) { (SentPacket packet, Symbol trigger) -> void } -> Array[SentPacket]
       def take_spurious: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       def forget_lost: (before: Float) -> void
+      def discard: () -> Array[SentPacket]
 
       private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]

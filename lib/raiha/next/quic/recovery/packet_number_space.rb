@@ -155,6 +155,18 @@ module Raiha::Next::QUIC
         end.each { |packet| @lost.delete(packet.packet_number) }
       end
 
+      # Throws everything sent away, and gives the records that were still
+      # waiting (RFC 9002 "Discarding Keys and Packet State").
+      def discard
+        records = @sent.values
+        @sent.clear
+        @lost.clear
+        @loss_time = nil
+        @time_of_last_ack_eliciting_packet = nil
+        @ack_eliciting_in_flight = 0
+        records
+      end
+
       # Forgets the records declared lost that were sent before `time`.
       def forget_lost(before:)
         @lost.shift while (oldest = @lost.each_value.first) && oldest.time_sent < before

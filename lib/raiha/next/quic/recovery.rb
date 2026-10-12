@@ -108,6 +108,21 @@ module Raiha::Next::QUIC
       set_loss_detection_timer(now)
     end
 
+    # The Initial or Handshake keys are gone (RFC 9001 "Discarding Unused
+    # Keys"): what was sent in that space is thrown away and taken out of
+    # flight, told to neither the congestion controller nor the owners, and
+    # the PTO starts over (RFC 9002 "Discarding Keys and Packet State").
+    def discard_space(packet_type, now:)
+      space = space_of(packet_type)
+      raise ArgumentError, "Application Data is never discarded" if space.name == :application_data
+      space.discard.each do |packet|
+        next unless packet.in_flight && !packet.path.abandoned?
+        packet.path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting)
+      end
+      @pto_count = 0
+      set_loss_detection_timer(now)
+    end
+
     # When something is to be done next: the loss detection timer.
     def next_timeout = @loss_detection_timer
 
