@@ -276,22 +276,26 @@ module Raiha::Next::QUIC
       # `loss_delay` or more before `now`. Each is yielded with its trigger,
       # :reordering_threshold or :time_threshold, and `loss_time` set to
       # when the next one would be lost by time.
+      #
+      # The time is compared by the same sum as the loss time, so that a
+      # packet is lost at its loss time itself: `now - loss_delay` may round
+      # below the time it was sent, which would set the timer again to the
+      # time it ran out at.
       def detect_lost(loss_delay:, now:)
         largest = @largest_acked_packet
         @loss_time = nil
         lost = [] #: Array[SentPacket]
         return lost unless largest
-        lost_send_time = now - loss_delay
         @sent.each_value do |packet|
           break if packet.packet_number > largest
+          loss_time = packet.time_sent + loss_delay
           if largest >= packet.packet_number + PACKET_THRESHOLD
             lost << packet
             yield packet, :reordering_threshold
-          elsif packet.time_sent <= lost_send_time
+          elsif loss_time <= now
             lost << packet
             yield packet, :time_threshold
           else
-            loss_time = packet.time_sent + loss_delay
             @loss_time = [@loss_time || loss_time, loss_time].min
           end
         end

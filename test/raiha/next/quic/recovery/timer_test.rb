@@ -66,6 +66,18 @@ class RaihaNextQUICRecoveryTimerTest < Minitest::Test
     assert_nil recovery.next_timeout
   end
 
+  # Run out at the loss time itself, the packet is lost, though here the
+  # loss time less the loss delay rounds under 0.5, the time it was sent.
+  def test_lost_at_the_loss_time_itself
+    recovery = recovery(role: :server)
+    send_packet(recovery, :handshake, now: 0.5)
+    send_packet(recovery, :handshake, now: 0.5)
+    recovery.on_ack_received(packet_type: :handshake, ack: ack(1..1), now: 0.6)
+    outcome = recovery.on_timeout(now: recovery.loss_detection_timer)
+    assert_equal [0], outcome.lost.map(&:packet_number)
+    assert_nil recovery.loss_detection_timer
+  end
+
   # Application Data counts once the handshake is confirmed, with the
   # peer's max_ack_delay.
   def test_application_data
