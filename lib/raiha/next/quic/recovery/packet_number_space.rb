@@ -26,6 +26,10 @@ module Raiha::Next::QUIC
       # How many packet numbers or records the last `acknowledge` went
       # through.
       attr_reader :ack_steps
+      # The packets sent marked ECT(0), and the ECN counts of the last ACK
+      # that passed validation.
+      attr_reader :ect0_sent
+      attr_accessor :ecn_counts
 
       def initialize(name)
         @name = name
@@ -39,7 +43,11 @@ module Raiha::Next::QUIC
         @skip_after = nil #: Integer?
         @skipped = nil #: Integer?
         @ack_steps = 0
+        @ect0_sent = 0
+        @ecn_counts = NO_ECN_COUNTS
       end
+
+      NO_ECN_COUNTS = Wire::Frame::Ack::ECNCounts.new(ect0: 0, ect1: 0, ce: 0)
 
       # The packet number for the next packet. After `skip_after`'s count
       # of packets, one number is left out first.
@@ -68,6 +76,7 @@ module Raiha::Next::QUIC
       def add(packet)
         @sent[packet.packet_number] = packet
         @largest_sent = packet.packet_number
+        @ect0_sent += 1 if packet.ecn == :ect0
         return unless packet.in_flight && packet.ack_eliciting
         @time_of_last_ack_eliciting_packet = packet.time_sent
         @ack_eliciting_in_flight += 1

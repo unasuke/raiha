@@ -78,6 +78,7 @@ module Raiha::Next::QUIC
     private def trace_timer: (Symbol event_type, space? space, Float? delta, Float now) -> void
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
     private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]
+    private def process_ecn: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float now) -> void
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
     private def persistent_congestion?: (Path path, Array[SentPacket] lost) -> bool
     private def on_acked: (Array[SentPacket] acked, Path? sampled, Float now) -> void
@@ -248,6 +249,10 @@ module Raiha::Next::QUIC
       def skip_after: (Integer packets) -> void
       def add: (SentPacket packet) -> void
       attr_reader ack_steps: Integer
+      attr_reader ect0_sent: Integer
+      attr_accessor ecn_counts: Wire::Frame::Ack::ECNCounts
+
+      NO_ECN_COUNTS: Wire::Frame::Ack::ECNCounts
 
       def sent?: (Integer packet_number) -> bool
       def acknowledge: (Array[Range[Integer]] ranges, frame_type: Integer) -> Array[SentPacket]

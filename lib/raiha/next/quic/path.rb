@@ -23,6 +23,39 @@ module Raiha::Next::QUIC
       @packets_in_flight = 0
       @app_limited = false
       @abandoned = false
+      @tracer = tracer
+      @ecn_state = :testing
+      @ecn_testing_sent = 0
+      @ecn_testing_lost = 0
+    end
+
+    # :testing, :capable or :failed (loss recovery's design, "Marking").
+    attr_reader :ecn_state
+
+    # The codepoint to mark packets with: ECT(0) until the path fails.
+    def ecn = @ecn_state == :failed ? :not_ect : :ect0
+
+    # A packet marked ECT(0) was sent.
+    def ecn_sent
+      @ecn_testing_sent += 1 if @ecn_state == :testing
+    end
+
+    # ECT(0) packets were declared lost: while testing, all of them lost
+    # fails the path (RFC 9000 "ECN Validation").
+    def ecn_lost(count, now:)
+      return unless @ecn_state == :testing
+      @ecn_testing_lost += count
+      ecn_failed(now:) if @ecn_testing_lost >= @ecn_testing_sent
+    end
+
+    # An ACK of ECT(0) packets passed validation.
+    def ecn_validated(now:)
+      change_ecn_state(:capable, now) if @ecn_state == :testing
+    end
+
+    # The path fails ECN for good: no marks and no counts heeded.
+    def ecn_failed(now:)
+      change_ecn_state(:failed, now)
     end
 
     # Counts a packet that went in flight on this path, and tells the
@@ -73,5 +106,11 @@ module Raiha::Next::QUIC
     def abandon = @abandoned = true
 
     def abandoned? = @abandoned
+
+    private def change_ecn_state(state, now)
+      return if state == @ecn_state
+      @tracer.ecn_state_updated(old: @ecn_state, new: state, now:) if @tracer # steep:ignore
+      @ecn_state = state
+    end
   end
 end

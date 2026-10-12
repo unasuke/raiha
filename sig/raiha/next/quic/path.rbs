@@ -9,6 +9,11 @@ module Raiha::Next::QUIC
 
     @app_limited: bool
     @abandoned: bool
+    @tracer: _Tracer?
+    @ecn_testing_sent: Integer
+    @ecn_testing_lost: Integer
+
+    attr_reader ecn_state: :testing | :capable | :failed
 
     def initialize: (config: Config, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
@@ -19,5 +24,12 @@ module Raiha::Next::QUIC
     def window_packets: () -> Integer
     def abandon: () -> void
     def abandoned?: () -> bool
+    def ecn: () -> (:ect0 | :not_ect)
+    def ecn_sent: () -> void
+    def ecn_lost: (Integer count, now: Float) -> void
+    def ecn_validated: (now: Float) -> void
+    def ecn_failed: (now: Float) -> void
+
+    private def change_ecn_state: (:testing | :capable | :failed state, Float now) -> void
   end
 end

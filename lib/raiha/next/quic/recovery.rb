@@ -149,9 +149,11 @@ module Raiha::Next::QUIC
     # Records a packet sent at `now`, and counts it on the path when it is
     # in flight.
     def on_packet_sent(packet_type:, packet_number:, sent_bytes:, ack_eliciting:, in_flight:, duties:, now:, pmtu_probe: false)
+      ecn = @path.ecn
       packet = SentPacket.new(packet_number:, time_sent: now, sent_bytes:, ack_eliciting:, in_flight:, path: @path,
-        duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn: :not_ect)
+        duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn:)
       space_of(packet_type).add(packet)
+      @path.ecn_sent if ecn == :ect0
       if in_flight
         @path.add_in_flight(sent_bytes:, ack_eliciting:, now:)
         set_loss_detection_timer(now)
@@ -166,10 +168,12 @@ module Raiha::Next::QUIC
     # Violation.
     def on_ack_received(packet_type:, ack:, now:, received_at: now)
       space = space_of(packet_type)
+      largest_before = space.largest_acked_packet
       acked = space.acknowledge(ack.ranges, frame_type: ack.ecn ? 0x03 : 0x02)
       return Outcome::NONE if acked.empty?
       @handshake_acknowledged = true if space.name == :handshake
       sampled = take_rtt_sample(space, ack, acked, received_at)
+      process_ecn(space, ack, acked, now) if largest_before.nil? || ack.largest > largest_before
       lost = detect_lost(space, now)
       on_lost(lost, now)
       on_acked(acked, sampled, now)
@@ -267,12 +271,43 @@ module Raiha::Next::QUIC
       end
     end
 
+    # Checks the ECN counts of an ACK that raised the largest acknowledged
+    # (RFC 9000 "ECN Validation", loss recovery's design, "Validating the
+    # counts"), for the path that sent the largest newly acknowledged
+    # packet: the counts must be there when ECT(0) packets are newly
+    # acknowledged, never go down, show no ECT(1), not exceed the ECT(0)
+    # packets sent, and grow by as many ECT(0) and CE marks as ECT(0)
+    # packets are newly acknowledged. A path that fails stops marking and
+    # heeding counts. CE marks that grew tell its congestion controller
+    # once.
+    private def process_ecn(space, ack, acked, now)
+      largest = acked.fetch(-1)
+      path = largest.path
+      return if path.abandoned? || path.ecn_state == :failed
+      newly = acked.count { |packet| packet.ecn == :ect0 }
+      counts = ack.ecn
+      unless counts
+        path.ecn_failed(now:) if newly.positive?
+        return
+      end
+      last = space.ecn_counts
+      if counts.ect1.positive? || counts.ect0 < last.ect0 || counts.ce < last.ce || counts.ect0 > space.ect0_sent ||
+          (counts.ect0 - last.ect0) + (counts.ce - last.ce) < newly
+        path.ecn_failed(now:)
+        return
+      end
+      space.ecn_counts = counts
+      path.ecn_validated(now:) if newly.positive?
+      path.congestion.on_ecn_ce(largest_acked_sent_at: largest.time_sent, now:) if counts.ce > last.ce
+    end
+
     # Each path that sent packets lost takes them out of flight and tells
     # its congestion controller once, with the latest time one of them was
     # sent (RFC 9002 "On Packets Lost"). The loss of a probe of the path MTU
     # tells it nothing; a path abandoned does neither.
     private def on_lost(lost, now)
       @packets_lost += lost.size
+      lost.select { |packet| packet.ecn == :ect0 }.group_by(&:path).each { |path, packets| path.ecn_lost(packets.size, now:) }
       lost.select(&:in_flight).group_by(&:path).each do |path, packets|
         next if path.abandoned?
         packets.each { |packet| path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting) }
