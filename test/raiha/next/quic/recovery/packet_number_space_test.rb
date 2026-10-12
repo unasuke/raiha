@@ -102,4 +102,20 @@ class RaihaNextQUICRecoveryPacketNumberSpaceTest < Minitest::Test
     assert_equal 500, acked.size
     assert_operator space.ack_steps, :<=, 1000
   end
+
+  # Loss recovery's design, "Limits": the packets of only ACKs after the
+  # last ack-eliciting one are kept up to 1000.
+  def test_ack_only_records_are_kept_up_to_1000
+    space = Space.new(:application_data)
+    space.add(packet(space.next_packet_number, time_sent: 0.0))
+    1005.times { space.add(packet(space.next_packet_number, time_sent: 0.0, ack_eliciting: false, in_flight: false)) }
+    refute space.sent?(5)
+    assert space.sent?(6)
+    assert space.sent?(0)
+    assert_equal [0, 6], numbers(space.acknowledge([6..6, 0..5], frame_type: 0x02))
+    # An ack-eliciting packet starts the tail over.
+    space.add(packet(space.next_packet_number, time_sent: 0.0))
+    2.times { space.add(packet(space.next_packet_number, time_sent: 0.0, ack_eliciting: false, in_flight: false)) }
+    assert space.sent?(1007)
+  end
 end

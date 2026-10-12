@@ -43,6 +43,8 @@ module Raiha::Next::QUIC
         @ack_eliciting_in_flight = 0
         @sent = {} #: Hash[Integer, SentPacket]
         @lost = {} #: Hash[Integer, SentPacket]
+        # The packets of only ACKs sent since the last ack-eliciting one.
+        @ack_only_tail = [] #: Array[Integer]
         @skip_after = nil #: Integer?
         @skipped = nil #: Integer?
         @ack_steps = 0
@@ -216,10 +218,21 @@ module Raiha::Next::QUIC
         @skip_after = packets
       end
 
+      # Keeps the record of a packet sent. Of the packets of only ACKs that
+      # follow the last ack-eliciting one, which the peer may never
+      # acknowledge, the latest MAX_NON_ACK_ELICITING_TAIL are kept (loss
+      # recovery's design, "Limits").
       def add(packet)
-        @sent[packet.packet_number] = packet
-        @largest_sent = packet.packet_number
+        number = packet.packet_number
+        @sent[number] = packet
+        @largest_sent = number
         @ect0_sent += 1 if packet.ecn == :ect0
+        if packet.ack_eliciting
+          @ack_only_tail.clear
+        elsif !packet.in_flight
+          @ack_only_tail << number
+          @sent.delete(@ack_only_tail.shift) if @ack_only_tail.size > MAX_NON_ACK_ELICITING_TAIL
+        end
         return unless packet.in_flight && packet.ack_eliciting
         @time_of_last_ack_eliciting_packet = packet.time_sent
         @ack_eliciting_in_flight += 1

@@ -8,6 +8,7 @@ module Raiha::Next::QUIC
     MAX_LOST_PACKETS: Integer
     MIN_RETRY_RTT: Float
     MAX_ACK_RANGES: Integer
+    MAX_NON_ACK_ELICITING_TAIL: Integer
     SPACES: Hash[Symbol, space]
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
@@ -261,6 +262,7 @@ module Raiha::Next::QUIC
       @sent: Hash[Integer, SentPacket]
       @lost: Hash[Integer, SentPacket]
       @rejected_below: Integer?
+      @ack_only_tail: Array[Integer]
       @received_starts: Array[Integer]
       @received_ends: Array[Integer]
       @received_ecn: Hash[Symbol, Integer]

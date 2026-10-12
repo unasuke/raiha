@@ -24,6 +24,8 @@ module Raiha::Next::QUIC
     # The ranges of packet numbers received kept a space, and so sent in an
     # ACK; past it the oldest is let go (loss recovery's design, "Limits").
     MAX_ACK_RANGES = 64
+    # The packets of only ACKs kept after the last ack-eliciting one.
+    MAX_NON_ACK_ELICITING_TAIL = 1000
     # The least RTT sample a Retry gives.
     MIN_RETRY_RTT = 0.005
     # The records declared lost kept a space, beside those older than three
