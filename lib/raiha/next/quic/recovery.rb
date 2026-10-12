@@ -21,6 +21,8 @@ module Raiha::Next::QUIC
     TIME_THRESHOLD = 9.0 / 8
     # kPersistentCongestionThreshold (RFC 9002 "Duration").
     PERSISTENT_CONGESTION_THRESHOLD = 3
+    # The least RTT sample a Retry gives.
+    MIN_RETRY_RTT = 0.005
     # The records declared lost kept a space, beside those older than three
     # PTOs, to tell spurious losses (loss recovery's design, "Limits").
     MAX_LOST_PACKETS = 64
@@ -68,6 +70,7 @@ module Raiha::Next::QUIC
       @handshake_confirmed = false
       @handshake_acknowledged = false
       @handshake_keys = false
+      @first_initial_sent_at = nil #: Float?
       @amplification_limited = false
       @loss_detection_timer = nil #: Float?
       @metrics = {} #: Hash[Symbol, metric]
@@ -123,6 +126,28 @@ module Raiha::Next::QUIC
       set_loss_detection_timer(now)
     end
 
+    # A client's Retry came at `now` (RFC 9002 "Handling Retry Packets",
+    # loss recovery's design, "On a Retry"). What was sent in Initial
+    # packets that elicited an ACK and every 0-RTT packet go back to their
+    # owners as lost, to be sent again, without a word to the congestion
+    # controller; the packet numbers go on. The path starts over, and unless
+    # a PTO ran out the time from the first Initial to the Retry, 5 ms at
+    # least, is its first RTT sample.
+    def on_retry(now:)
+      initial = @spaces.fetch(:initial).discard
+      zero_rtt = @spaces.fetch(:application_data).discard
+      first_sent_at = @first_initial_sent_at
+      sample = first_sent_at if @pto_count.zero?
+      @path.start_over
+      if sample
+        @path.rtt.update(latest_rtt: [now - sample, MIN_RETRY_RTT].max, ack_delay: 0.0, max_ack_delay: @peer_max_ack_delay,
+          handshake_confirmed: false, now:)
+      end
+      @pto_count = 0
+      set_loss_detection_timer(now)
+      Outcome.new(acked: Outcome::NO_PACKETS, lost: initial.select(&:ack_eliciting) + zero_rtt, probe: nil)
+    end
+
     # When something is to be done next: the loss detection timer.
     def next_timeout = @loss_detection_timer
 
@@ -173,6 +198,7 @@ module Raiha::Next::QUIC
       packet = SentPacket.new(packet_number:, time_sent: now, sent_bytes:, ack_eliciting:, in_flight:, path: @path,
         duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn:)
       space_of(packet_type).add(packet)
+      @first_initial_sent_at ||= now if packet_type == :initial
       @path.ecn_sent if ecn == :ect0
       if in_flight
         @path.add_in_flight(sent_bytes:, ack_eliciting:, now:)

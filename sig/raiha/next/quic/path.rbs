@@ -7,6 +7,7 @@ module Raiha::Next::QUIC
     attr_reader packets_in_flight: Integer
     attr_reader max_datagram_size: Integer
 
+    @config: Config
     @app_limited: bool
     @abandoned: bool
     @tracer: _Tracer?
@@ -16,6 +17,7 @@ module Raiha::Next::QUIC
     attr_reader ecn_state: :testing | :capable | :failed
 
     def initialize: (config: Config, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
+    def start_over: () -> void
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
     def remove_in_flight: (sent_bytes: Integer, ack_eliciting: bool) -> void
     def app_limited?: () -> bool

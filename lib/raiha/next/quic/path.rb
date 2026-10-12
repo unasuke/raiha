@@ -15,18 +15,26 @@ module Raiha::Next::QUIC
     attr_reader :max_datagram_size
 
     def initialize(config:, max_datagram_size: config.initial_max_datagram_size, tracer: nil)
-      @rtt = Recovery::RttEstimator.new
-      @congestion = config.congestion_control.new(max_datagram_size:, initial_window: config.initial_window, tracer:)
+      @config = config
       @max_datagram_size = max_datagram_size
+      @tracer = tracer
+      start_over
+      @abandoned = false
+      @ecn_state = :testing
+      @ecn_testing_sent = 0
+      @ecn_testing_lost = 0
+    end
+
+    # Takes the RTT, the congestion controller and the counts in flight back
+    # to where a new path starts, as after a Retry (RFC 9002 "Handling Retry
+    # Packets").
+    def start_over
+      @rtt = Recovery::RttEstimator.new
+      @congestion = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, tracer: @tracer)
       @bytes_in_flight = 0
       @ack_eliciting_in_flight = 0
       @packets_in_flight = 0
       @app_limited = false
-      @abandoned = false
-      @tracer = tracer
-      @ecn_state = :testing
-      @ecn_testing_sent = 0
-      @ecn_testing_lost = 0
     end
 
     # :testing, :capable or :failed (loss recovery's design, "Marking").

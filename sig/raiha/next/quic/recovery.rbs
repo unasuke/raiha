@@ -6,6 +6,7 @@ module Raiha::Next::QUIC
     TIME_THRESHOLD: Float
     PERSISTENT_CONGESTION_THRESHOLD: Integer
     MAX_LOST_PACKETS: Integer
+    MIN_RETRY_RTT: Float
     SPACES: Hash[Symbol, space]
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
@@ -39,6 +40,7 @@ module Raiha::Next::QUIC
     @role: :client | :server
     @handshake_acknowledged: bool
     @handshake_keys: bool
+    @first_initial_sent_at: Float?
     @amplification_limited: bool
     @metrics: Hash[Symbol, metric]
     @config: Config
@@ -56,6 +58,7 @@ module Raiha::Next::QUIC
     def handshake_keys_installed!: () -> void
     def amplification_limited: (bool limited, now: Float) -> void
     def discard_space: (:initial | :handshake packet_type, now: Float) -> void
+    def on_retry: (now: Float) -> Outcome
     def next_timeout: () -> Float?
     def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer

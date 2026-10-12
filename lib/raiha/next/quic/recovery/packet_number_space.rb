@@ -156,7 +156,8 @@ module Raiha::Next::QUIC
       end
 
       # Throws everything sent away, and gives the records that were still
-      # waiting (RFC 9002 "Discarding Keys and Packet State").
+      # waiting (RFC 9002 "Discarding Keys and Packet State"). The packet
+      # numbers go on.
       def discard
         records = @sent.values
         @sent.clear
