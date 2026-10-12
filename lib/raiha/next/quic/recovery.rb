@@ -21,6 +21,9 @@ module Raiha::Next::QUIC
     TIME_THRESHOLD = 9.0 / 8
     # kPersistentCongestionThreshold (RFC 9002 "Duration").
     PERSISTENT_CONGESTION_THRESHOLD = 3
+    # The ranges of packet numbers received kept a space, and so sent in an
+    # ACK; past it the oldest is let go (loss recovery's design, "Limits").
+    MAX_ACK_RANGES = 64
     # The least RTT sample a Retry gives.
     MIN_RETRY_RTT = 0.005
     # The records declared lost kept a space, beside those older than three
@@ -251,6 +254,16 @@ module Raiha::Next::QUIC
       trace_metrics(now)
       Outcome.new(acked: spurious.empty? ? acked : acked + spurious, lost:, probe: nil)
     end
+
+    # Records a packet of `packet_type` received with the ECN mark of its
+    # datagram, once its protection is off; false for a duplicate, which
+    # the caller drops (RFC 9000 "Packet Number Spaces").
+    def on_packet_received(packet_type:, packet_number:, ecn:) = space_of(packet_type).receive(packet_number, ecn:)
+
+    # A packet that carried an ACK frame of this end with the largest
+    # `largest` was acknowledged (the duty Duty::Ack): what the frame
+    # acknowledged need not be acknowledged again.
+    def ack_frame_acknowledged(space, largest:) = @spaces.fetch(space).acknowledged_up_to(largest)
 
     # Whether the peer has validated this end's address, so that nothing is
     # owed to keep it from being stuck at its amplification limit (RFC 9002

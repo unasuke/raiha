@@ -7,7 +7,9 @@ module Raiha::Next::QUIC
     # packet numbers, now and then skipping one to catch a peer that
     # acknowledges what it never received, and keeps the record of each
     # packet sent until it is acknowledged, lost or discarded, in a Hash in
-    # the order the packets were sent.
+    # the order the packets were sent. On the receiving side it keeps the
+    # packet numbers received, as the starts and ends of their ranges in
+    # two Integer arrays, and the ECN marks they came with.
     class PacketNumberSpace
       attr_reader :name
       # The largest packet number sent, nil before any.
@@ -47,6 +49,76 @@ module Raiha::Next::QUIC
         @rejected_below = nil #: Integer?
         @ect0_sent = 0
         @ecn_counts = NO_ECN_COUNTS
+        @received_starts = [] #: Array[Integer]
+        @received_ends = [] #: Array[Integer]
+        @ignore_below = 0
+        @received_ecn = { ect0: 0, ect1: 0, ce: 0 } #: Hash[Symbol, Integer]
+      end
+
+      # Numbers below it are no longer kept and count as duplicates.
+      attr_reader :ignore_below
+
+      # Records the packet number received, with the ECN mark the datagram
+      # came with; false for a duplicate, which is not counted (RFC 9000
+      # "Packet Number Spaces"). The ranges are searched from the newest,
+      # where most packets land, and a packet in order only moves the end of
+      # the last range. Past MAX_ACK_RANGES ranges the oldest is let go.
+      def receive(packet_number, ecn:)
+        return false if packet_number < @ignore_below
+        starts = @received_starts
+        ends = @received_ends
+        index = starts.size - 1
+        index -= 1 while index >= 0 && starts.fetch(index) > packet_number
+        return false if index >= 0 && packet_number <= ends.fetch(index)
+        after_left = index >= 0 && ends.fetch(index) + 1 == packet_number
+        before_right = index + 1 < starts.size && starts.fetch(index + 1) - 1 == packet_number
+        if after_left && before_right
+          ends[index] = ends.fetch(index + 1)
+          starts.delete_at(index + 1)
+          ends.delete_at(index + 1)
+        elsif after_left
+          ends[index] = packet_number
+        elsif before_right
+          starts[index + 1] = packet_number
+        else
+          starts.insert(index + 1, packet_number)
+          ends.insert(index + 1, packet_number)
+        end
+        if starts.size > MAX_ACK_RANGES
+          starts.shift
+          @ignore_below = ends.shift + 1
+        end
+        @received_ecn[ecn] += 1 if ecn != :not_ect
+        true
+      end
+
+      # The ranges received, the largest first, for an ACK frame.
+      def received_ranges = @received_starts.each_with_index.map { |first, index| first..@received_ends.fetch(index) }.reverse!
+
+      def largest_received = @received_ends.last
+
+      # The ECN counts of the packets received, nil when none was marked.
+      def received_ecn_counts
+        return nil if @received_ecn.each_value.all?(&:zero?)
+        Wire::Frame::Ack::ECNCounts.new(ect0: @received_ecn.fetch(:ect0), ect1: @received_ecn.fetch(:ect1), ce: @received_ecn.fetch(:ce))
+      end
+
+      # An ACK this end sent, whose largest was `largest`, was acknowledged:
+      # the numbers up to it need not be acknowledged again (RFC 9000
+      # "Limiting Ranges by Tracking ACK Frames").
+      def acknowledged_up_to(largest)
+        return if largest < @ignore_below
+        @ignore_below = largest + 1
+        while (first = @received_starts.first)
+          last = @received_ends.fetch(0)
+          if last <= largest
+            @received_starts.shift
+            @received_ends.shift
+          else
+            @received_starts[0] = largest + 1 if first <= largest
+            break
+          end
+        end
       end
 
       NO_ECN_COUNTS = Wire::Frame::Ack::ECNCounts.new(ect0: 0, ect1: 0, ce: 0)
@@ -167,6 +239,8 @@ module Raiha::Next::QUIC
         records = @sent.values
         @sent.clear
         @lost.clear
+        @received_starts.clear
+        @received_ends.clear
         @loss_time = nil
         @time_of_last_ack_eliciting_packet = nil
         @ack_eliciting_in_flight = 0

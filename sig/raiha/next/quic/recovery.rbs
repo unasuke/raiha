@@ -7,6 +7,7 @@ module Raiha::Next::QUIC
     PERSISTENT_CONGESTION_THRESHOLD: Integer
     MAX_LOST_PACKETS: Integer
     MIN_RETRY_RTT: Float
+    MAX_ACK_RANGES: Integer
     SPACES: Hash[Symbol, space]
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
@@ -69,6 +70,8 @@ module Raiha::Next::QUIC
 
     def on_ack_received: (packet_type: packet_type, ack: Wire::Frame::Ack, now: Float, ?received_at: Float) -> Outcome
     def peer_completed_address_validation?: () -> bool
+    def on_packet_received: (packet_type: packet_type, packet_number: Integer, ecn: ::Raiha::Next::QUIC::ecn | :ce) -> bool
+    def ack_frame_acknowledged: (space space, largest: Integer) -> void
 
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
     private def ack_eliciting_in_flight?: () -> bool
@@ -252,6 +255,11 @@ module Raiha::Next::QUIC
       @sent: Hash[Integer, SentPacket]
       @lost: Hash[Integer, SentPacket]
       @rejected_below: Integer?
+      @received_starts: Array[Integer]
+      @received_ends: Array[Integer]
+      @received_ecn: Hash[Symbol, Integer]
+
+      attr_reader ignore_below: Integer
       @skip_after: Integer?
 
       def initialize: (space name) -> void
@@ -272,6 +280,11 @@ module Raiha::Next::QUIC
       def forget_lost: (before: Float) -> void
       def discard: () -> Array[SentPacket]
       def reject_below: (Integer boundary) -> Array[SentPacket]
+      def receive: (Integer packet_number, ecn: ::Raiha::Next::QUIC::ecn | :ce) -> bool
+      def received_ranges: () -> Array[Range[Integer]]
+      def largest_received: () -> Integer?
+      def received_ecn_counts: () -> Wire::Frame::Ack::ECNCounts?
+      def acknowledged_up_to: (Integer largest) -> void
 
       private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]
