@@ -182,3 +182,25 @@ module Raiha::Next::QUIC::Test
     end
   end
 end
+
+module Raiha::Next::QUIC::Test
+  class RandomLoss < Data
+    attr_reader rate: Float
+
+    def self.new: (rate: Float) -> instance
+                | (Float rate) -> instance
+    def initialize: (rate: Float) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @rate: Float
+      @random: Random
+      @queue: Array[Datagram]
+
+      def initialize: (Float rate, Random random) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> nil
+    end
+  end
+end
