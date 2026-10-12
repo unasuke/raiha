@@ -9,3 +9,5 @@ end
 
 require_relative "test/vectors"
 require_relative "test/congestion_contract"
+require_relative "test/virtual_clock"
+require_relative "test/network"
