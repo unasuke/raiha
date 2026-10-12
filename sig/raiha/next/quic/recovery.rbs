@@ -234,6 +234,33 @@ module Raiha::Next::QUIC
       end
 
       ALL: Array[singleton(Stream) | singleton(Crypto) | singleton(Ack) | singleton(ResetStream) | singleton(StopSending) | singleton(MaxData) | singleton(MaxStreamData) | singleton(MaxStreams) | singleton(DataBlocked) | singleton(StreamDataBlocked) | singleton(StreamsBlocked) | singleton(NewConnectionID) | singleton(RetireConnectionID) | singleton(NewToken) | singleton(HandshakeDone)]
+
+      # What owns the information of the duties: the connection, which hands
+      # each to the part that keeps it.
+      interface _Owner
+        def stream_data_acked: (Stream duty) -> void
+        def crypto_data_acked: (Crypto duty) -> void
+        def ack_frame_acked: (Ack duty) -> void
+        def reset_stream_acked: (ResetStream duty) -> void
+        def stream_data_lost: (Stream duty) -> void
+        def crypto_data_lost: (Crypto duty) -> void
+        def reset_stream_lost: (ResetStream duty) -> void
+        def stop_sending_lost: (StopSending duty) -> void
+        def max_data_lost: (MaxData duty) -> void
+        def max_stream_data_lost: (MaxStreamData duty) -> void
+        def max_streams_lost: (MaxStreams duty) -> void
+        def data_blocked_lost: (DataBlocked duty) -> void
+        def stream_data_blocked_lost: (StreamDataBlocked duty) -> void
+        def streams_blocked_lost: (StreamsBlocked duty) -> void
+        def new_connection_id_lost: (NewConnectionID duty) -> void
+        def retire_connection_id_lost: (RetireConnectionID duty) -> void
+        def new_token_lost: (NewToken duty) -> void
+        def handshake_done_lost: () -> void
+      end
+
+      def self.dispatch: (Outcome outcome, to: _Owner) -> void
+      private def self.acked: (t duty, _Owner owner) -> void
+      private def self.lost: (t duty, _Owner owner) -> void
     end
 
     class SentPacket < Data

@@ -53,6 +53,49 @@ module Raiha::Next::QUIC
         Stream, Crypto, Ack, ResetStream, StopSending, MaxData, MaxStreamData, MaxStreams,
         DataBlocked, StreamDataBlocked, StreamsBlocked, NewConnectionID, RetireConnectionID, NewToken, HandshakeDone
       ].freeze
+
+      # Tells `to` of the duties of the packets acknowledged and lost in
+      # `outcome`, the acknowledged first so that a range acknowledged is not
+      # put back to be sent again. An acknowledgment or loss that means
+      # nothing to the owner tells nothing.
+      def self.dispatch(outcome, to:)
+        outcome.acked.each { |packet| packet.duties.each { |duty| acked(duty, to) } }
+        outcome.lost.each { |packet| packet.duties.each { |duty| lost(duty, to) } }
+      end
+
+      # Each kind has its branch and there is no else: a kind added without
+      # one raises.
+      private_class_method def self.acked(duty, owner)
+        case duty
+        in Stream then owner.stream_data_acked(duty)
+        in Crypto then owner.crypto_data_acked(duty)
+        in Ack then owner.ack_frame_acked(duty)
+        in ResetStream then owner.reset_stream_acked(duty)
+        in StopSending | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked |
+           NewConnectionID | RetireConnectionID | NewToken | HandshakeDone
+          nil
+        end
+      end
+
+      private_class_method def self.lost(duty, owner)
+        case duty
+        in Stream then owner.stream_data_lost(duty)
+        in Crypto then owner.crypto_data_lost(duty)
+        in Ack then nil
+        in ResetStream then owner.reset_stream_lost(duty)
+        in StopSending then owner.stop_sending_lost(duty)
+        in MaxData then owner.max_data_lost(duty)
+        in MaxStreamData then owner.max_stream_data_lost(duty)
+        in MaxStreams then owner.max_streams_lost(duty)
+        in DataBlocked then owner.data_blocked_lost(duty)
+        in StreamDataBlocked then owner.stream_data_blocked_lost(duty)
+        in StreamsBlocked then owner.streams_blocked_lost(duty)
+        in NewConnectionID then owner.new_connection_id_lost(duty)
+        in RetireConnectionID then owner.retire_connection_id_lost(duty)
+        in NewToken then owner.new_token_lost(duty)
+        in HandshakeDone then owner.handshake_done_lost
+        end
+      end
     end
   end
 end
