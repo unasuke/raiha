@@ -66,6 +66,7 @@ module Raiha::Next::QUIC
       @tracer = tracer
       @spaces = { initial: PacketNumberSpace.new(:initial), handshake: PacketNumberSpace.new(:handshake),
                   application_data: PacketNumberSpace.new(:application_data) } #: Hash[space, PacketNumberSpace]
+      @spaces.fetch(:application_data).max_ack_delay = config.max_ack_delay
       @pto_count = 0
       @packets_lost = 0
       @packets_spuriously_lost = 0
@@ -169,8 +170,9 @@ module Raiha::Next::QUIC
       set_loss_detection_timer(now)
     end
 
-    # When something is to be done next: the loss detection timer.
-    def next_timeout = @loss_detection_timer
+    # When something is to be done next: the loss detection timer or an
+    # ACK that must go.
+    def next_timeout = [@loss_detection_timer, *@spaces.each_value.filter_map(&:ack_deadline)].compact.min
 
     # Runs out the loss detection timer at `now` if it is due (RFC 9002 "On
     # Timeout"). A loss time declares the packets lost; otherwise the PTO
@@ -257,8 +259,52 @@ module Raiha::Next::QUIC
 
     # Records a packet of `packet_type` received with the ECN mark of its
     # datagram, once its protection is off; false for a duplicate, which
-    # the caller drops (RFC 9000 "Packet Number Spaces").
-    def on_packet_received(packet_type:, packet_number:, ecn:) = space_of(packet_type).receive(packet_number, ecn:)
+    # the caller drops (RFC 9000 "Packet Number Spaces"). An ack-eliciting
+    # one owes an ACK, at once or within max_ack_delay (loss recovery's
+    # design, "When to send an ACK"). `received_at` is when the packet
+    # arrived, earlier than `now` for one kept until its keys came.
+    def on_packet_received(packet_type:, packet_number:, ecn:, ack_eliciting:, now:, received_at: now)
+      space = space_of(packet_type)
+      before = space.ack_deadline
+      received = space.receive(packet_number, ecn:, ack_eliciting:, now: received_at)
+      deadline = space.ack_deadline
+      if deadline && deadline != before && @tracer
+        @tracer.timer_updated(timer_type: :ack, event_type: :set, space: space.name, delta: [deadline - now, 0.0].max, now:) # steep:ignore
+      end
+      received
+    end
+
+    # Whether an ACK must go now in `space` (:initial, :handshake or
+    # :application_data).
+    def ack_due?(space, now:)
+      deadline = @spaces.fetch(space).ack_deadline
+      !deadline.nil? && now >= deadline
+    end
+
+    # Whether an ack-eliciting packet waits for an ACK in `space`, which can
+    # then ride along with anything sent there.
+    def ack_owed?(space) = @spaces.fetch(space).ack_owed?
+
+    # The ACK frame to send in `space` now, nil before anything came.
+    def ack_frame(space, now:) = @spaces.fetch(space).ack_frame(now:)
+
+    # An ACK frame of `space` went out.
+    def on_ack_sent(space, now:)
+      space = @spaces.fetch(space)
+      if space.ack_deadline && @tracer
+        @tracer.timer_updated(timer_type: :ack, event_type: :cancelled, space: space.name, delta: nil, now:) # steep:ignore
+      end
+      space.ack_sent
+    end
+
+    # Whether a packet of only an ACK of `space` should carry a PING too:
+    # with nothing ack-eliciting sent for a round trip, the peer would never
+    # acknowledge the ACKs and what they acknowledge would never be let go
+    # (RFC 9000 "Limiting Ranges by Tracking ACK Frames").
+    def ping_with_ack?(space, now:)
+      sent_at = @spaces.fetch(space).time_of_last_ack_eliciting_packet
+      sent_at.nil? || now - sent_at >= @path.rtt.smoothed_rtt
+    end
 
     # A packet that carried an ACK frame of this end with the largest
     # `largest` was acknowledged (the duty Duty::Ack): what the frame

@@ -7,7 +7,7 @@ class RaihaNextQUICRecoveryReceivingTest < Minitest::Test
 
   Space = QUIC::Recovery::PacketNumberSpace
 
-  def receive(space, *numbers, ecn: :not_ect) = numbers.map { |number| space.receive(number, ecn:) }
+  def receive(space, *numbers, ecn: :not_ect) = numbers.map { |number| space.receive(number, ecn:, ack_eliciting: false, now: 0.0) }
 
   def test_in_order_and_out_of_order
     space = Space.new(:application_data)
@@ -42,7 +42,7 @@ class RaihaNextQUICRecoveryReceivingTest < Minitest::Test
   # duplicate.
   def test_at_most_64_ranges
     space = Space.new(:application_data)
-    66.times { |i| space.receive(i * 2, ecn: :not_ect) }
+    66.times { |i| space.receive(i * 2, ecn: :not_ect, ack_eliciting: false, now: 0.0) }
     ranges = space.received_ranges
     assert_equal [64, 130..130, 4..4], [ranges.size, ranges.first, ranges.last]
     assert_equal 3, space.ignore_below
@@ -62,17 +62,18 @@ class RaihaNextQUICRecoveryReceivingTest < Minitest::Test
 
   def test_through_recovery
     recovery = recovery()
-    assert recovery.on_packet_received(packet_type: :one_rtt, packet_number: 3, ecn: :ect0)
-    refute recovery.on_packet_received(packet_type: :zero_rtt, packet_number: 3, ecn: :ect0)
+    assert recovery.on_packet_received(packet_type: :one_rtt, packet_number: 3, ecn: :ect0, ack_eliciting: true, now: 0.0)
+    refute recovery.on_packet_received(packet_type: :zero_rtt, packet_number: 3, ecn: :ect0, ack_eliciting: true, now: 0.0)
     recovery.ack_frame_acknowledged(:application_data, largest: 3)
-    refute recovery.on_packet_received(packet_type: :one_rtt, packet_number: 2, ecn: :not_ect)
+    refute recovery.on_packet_received(packet_type: :one_rtt, packet_number: 2, ecn: :not_ect, ack_eliciting: true, now: 0.0)
   end
 
   # Discarding the keys of a space forgets what was received in it too.
   def test_discard_forgets
     recovery = recovery()
-    recovery.on_packet_received(packet_type: :handshake, packet_number: 0, ecn: :not_ect)
+    recovery.on_packet_received(packet_type: :handshake, packet_number: 0, ecn: :not_ect, ack_eliciting: true, now: 0.0)
     recovery.discard_space(:handshake, now: 0.0)
-    assert recovery.on_packet_received(packet_type: :handshake, packet_number: 1, ecn: :not_ect)
+    refute recovery.ack_owed?(:handshake)
+    assert recovery.on_packet_received(packet_type: :handshake, packet_number: 1, ecn: :not_ect, ack_eliciting: true, now: 0.0)
   end
 end

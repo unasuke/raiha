@@ -70,7 +70,13 @@ module Raiha::Next::QUIC
 
     def on_ack_received: (packet_type: packet_type, ack: Wire::Frame::Ack, now: Float, ?received_at: Float) -> Outcome
     def peer_completed_address_validation?: () -> bool
-    def on_packet_received: (packet_type: packet_type, packet_number: Integer, ecn: ::Raiha::Next::QUIC::ecn | :ce) -> bool
+    def on_packet_received: (packet_type: packet_type, packet_number: Integer, ecn: ::Raiha::Next::QUIC::ecn | :ce, ack_eliciting: bool,
+                             now: Float, ?received_at: Float) -> bool
+    def ack_due?: (space space, now: Float) -> bool
+    def ack_owed?: (space space) -> bool
+    def ack_frame: (space space, now: Float) -> Wire::Frame::Ack?
+    def on_ack_sent: (space space, now: Float) -> void
+    def ping_with_ack?: (space space, now: Float) -> bool
     def ack_frame_acknowledged: (space space, largest: Integer) -> void
 
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
@@ -280,7 +286,22 @@ module Raiha::Next::QUIC
       def forget_lost: (before: Float) -> void
       def discard: () -> Array[SentPacket]
       def reject_below: (Integer boundary) -> Array[SentPacket]
-      def receive: (Integer packet_number, ecn: ::Raiha::Next::QUIC::ecn | :ce) -> bool
+      @largest_received_at: Float?
+      @largest_ack_eliciting_received: Integer?
+      @unacked_ack_eliciting: Integer
+      @first_unacked_at: Float?
+
+      attr_accessor ack_eliciting_threshold: Integer
+      attr_accessor max_ack_delay: Float
+      attr_reader ack_deadline: Float?
+
+      def receive: (Integer packet_number, ecn: ::Raiha::Next::QUIC::ecn | :ce, ack_eliciting: bool, now: Float) -> bool
+      def ack_sent: () -> void
+      def ack_owed?: () -> bool
+      def ack_frame: (now: Float) -> Wire::Frame::Ack?
+      private def owe_ack: (Integer packet_number, ce: bool, now: Float) -> void
+      private def range_start: (Integer packet_number) -> Integer
+      private def record_received: (Integer packet_number) -> bool
       def received_ranges: () -> Array[Range[Integer]]
       def largest_received: () -> Integer?
       def received_ecn_counts: () -> Wire::Frame::Ack::ECNCounts?

@@ -53,7 +53,24 @@ module Raiha::Next::QUIC
         @received_ends = [] #: Array[Integer]
         @ignore_below = 0
         @received_ecn = { ect0: 0, ect1: 0, ce: 0 } #: Hash[Symbol, Integer]
+        @largest_received_at = nil #: Float?
+        @largest_ack_eliciting_received = nil #: Integer?
+        @unacked_ack_eliciting = 0
+        @first_unacked_at = nil #: Float?
+        @ack_deadline = nil #: Float?
+        @ack_eliciting_threshold = 2
+        @max_ack_delay = 0.0
       end
+
+      # The ack-eliciting packets after which an ACK goes at once, and the
+      # longest an ACK of an ack-eliciting packet waits (RFC 9000 "Sending ACK
+      # Frames"). Values of the space, not constants, for ACK_FREQUENCY to
+      # change one day; Initial and Handshake packets are always acknowledged
+      # at once.
+      attr_accessor :ack_eliciting_threshold
+      attr_accessor :max_ack_delay
+      # When an ACK must go, nil when none is owed.
+      attr_reader :ack_deadline
 
       # Numbers below it are no longer kept and count as duplicates.
       attr_reader :ignore_below
@@ -63,8 +80,61 @@ module Raiha::Next::QUIC
       # "Packet Number Spaces"). The ranges are searched from the newest,
       # where most packets land, and a packet in order only moves the end of
       # the last range. Past MAX_ACK_RANGES ranges the oldest is let go.
-      def receive(packet_number, ecn:)
+      #
+      # An ack-eliciting packet owes an ACK: at once in Initial and Handshake,
+      # as the threshold's count of them, out of order, after a gap, or with
+      # a CE mark; within max_ack_delay of the first one otherwise. `now` is
+      # when the packet came, for the ACK Delay.
+      def receive(packet_number, ecn:, ack_eliciting:, now:)
         return false if packet_number < @ignore_below
+        largest = @received_ends.last
+        return false unless record_received(packet_number)
+        @received_ecn[ecn] += 1 if ecn != :not_ect
+        @largest_received_at = now if largest.nil? || packet_number > largest
+        owe_ack(packet_number, ce: ecn == :ce, now:) if ack_eliciting
+        @ack_deadline = now if ecn == :ce && @unacked_ack_eliciting.positive?
+        true
+      end
+
+      # An ACK of what was received went.
+      def ack_sent
+        @unacked_ack_eliciting = 0
+        @first_unacked_at = nil
+        @ack_deadline = nil
+      end
+
+      # Whether an ack-eliciting packet waits for an ACK, which can then ride
+      # along with anything sent.
+      def ack_owed? = @unacked_ack_eliciting.positive?
+
+      # The ACK frame of what was received, nil before anything: at most
+      # MAX_ACK_RANGES ranges, the delay since the largest came, and the ECN
+      # counts when a packet was marked.
+      def ack_frame(now:)
+        largest_at = @largest_received_at or return nil
+        Wire::Frame::Ack.new(ranges: received_ranges, delay: [now - largest_at, 0.0].max, ecn: received_ecn_counts)
+      end
+
+      private def owe_ack(packet_number, ce:, now:)
+        @unacked_ack_eliciting += 1
+        largest = @largest_ack_eliciting_received
+        reordered = largest && packet_number < largest
+        gap = largest && packet_number > largest && range_start(packet_number) > largest + 1
+        @largest_ack_eliciting_received = packet_number if largest.nil? || packet_number > largest
+        at_once = @name != :application_data || @unacked_ack_eliciting >= @ack_eliciting_threshold || reordered || gap || ce
+        deadline = at_once ? now : (@first_unacked_at ||= now) + @max_ack_delay
+        @ack_deadline = [@ack_deadline || deadline, deadline].min
+      end
+
+      # The start of the range received that holds `packet_number`.
+      private def range_start(packet_number)
+        index = @received_starts.size - 1
+        index -= 1 while index.positive? && @received_starts.fetch(index) > packet_number
+        @received_starts.fetch(index)
+      end
+
+      # Adds `packet_number` to the ranges; false when it is in one already.
+      private def record_received(packet_number)
         starts = @received_starts
         ends = @received_ends
         index = starts.size - 1
@@ -88,7 +158,6 @@ module Raiha::Next::QUIC
           starts.shift
           @ignore_below = ends.shift + 1
         end
-        @received_ecn[ecn] += 1 if ecn != :not_ect
         true
       end
 
@@ -241,6 +310,7 @@ module Raiha::Next::QUIC
         @lost.clear
         @received_starts.clear
         @received_ends.clear
+        ack_sent
         @loss_time = nil
         @time_of_last_ack_eliciting_packet = nil
         @ack_eliciting_in_flight = 0
