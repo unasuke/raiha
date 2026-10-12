@@ -41,6 +41,7 @@ module Raiha::Next::QUIC
     @handshake_acknowledged: bool
     @handshake_keys: bool
     @first_initial_sent_at: Float?
+    @first_one_rtt_packet_number: Integer?
     @amplification_limited: bool
     @metrics: Hash[Symbol, metric]
     @config: Config
@@ -59,6 +60,7 @@ module Raiha::Next::QUIC
     def amplification_limited: (bool limited, now: Float) -> void
     def discard_space: (:initial | :handshake packet_type, now: Float) -> void
     def on_retry: (now: Float) -> Outcome
+    def on_zero_rtt_rejected: (now: Float) -> void
     def next_timeout: () -> Float?
     def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer
@@ -249,6 +251,7 @@ module Raiha::Next::QUIC
       @next_packet_number: Integer
       @sent: Hash[Integer, SentPacket]
       @lost: Hash[Integer, SentPacket]
+      @rejected_below: Integer?
       @skip_after: Integer?
 
       def initialize: (space name) -> void
@@ -268,6 +271,7 @@ module Raiha::Next::QUIC
       def take_spurious: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       def forget_lost: (before: Float) -> void
       def discard: () -> Array[SentPacket]
+      def reject_below: (Integer boundary) -> Array[SentPacket]
 
       private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]

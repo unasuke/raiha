@@ -71,6 +71,7 @@ module Raiha::Next::QUIC
       @handshake_acknowledged = false
       @handshake_keys = false
       @first_initial_sent_at = nil #: Float?
+      @first_one_rtt_packet_number = nil #: Integer?
       @amplification_limited = false
       @loss_detection_timer = nil #: Float?
       @metrics = {} #: Hash[Symbol, metric]
@@ -148,6 +149,23 @@ module Raiha::Next::QUIC
       Outcome.new(acked: Outcome::NO_PACKETS, lost: initial.select(&:ack_eliciting) + zero_rtt, probe: nil)
     end
 
+    # The server rejected 0-RTT (RFC 9001 "Rejecting 0-RTT", loss recovery's
+    # design, "On a rejected 0-RTT"). The 0-RTT packets are those of
+    # Application Data below the first 1-RTT one, or all of them when no
+    # 1-RTT packet went yet: thrown away and taken out of flight without a
+    # word to the congestion controller or the owners, whose streams start
+    # over by other means. An ACK of one of them from now on is
+    # PROTOCOL_VIOLATION.
+    def on_zero_rtt_rejected(now:)
+      space = @spaces.fetch(:application_data)
+      boundary = @first_one_rtt_packet_number || (space.largest_sent || -1) + 1
+      space.reject_below(boundary).each do |packet|
+        next unless packet.in_flight && !packet.path.abandoned?
+        packet.path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting)
+      end
+      set_loss_detection_timer(now)
+    end
+
     # When something is to be done next: the loss detection timer.
     def next_timeout = @loss_detection_timer
 
@@ -199,6 +217,7 @@ module Raiha::Next::QUIC
         duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn:)
       space_of(packet_type).add(packet)
       @first_initial_sent_at ||= now if packet_type == :initial
+      @first_one_rtt_packet_number ||= packet_number if packet_type == :one_rtt
       @path.ecn_sent if ecn == :ect0
       if in_flight
         @path.add_in_flight(sent_bytes:, ack_eliciting:, now:)

@@ -44,6 +44,7 @@ module Raiha::Next::QUIC
         @skip_after = nil #: Integer?
         @skipped = nil #: Integer?
         @ack_steps = 0
+        @rejected_below = nil #: Integer?
         @ect0_sent = 0
         @ecn_counts = NO_ECN_COUNTS
       end
@@ -104,6 +105,10 @@ module Raiha::Next::QUIC
         skipped = @skipped
         if skipped && ranges.any? { |range| range.cover?(skipped) }
           raise Violation.new("an ACK of packet #{skipped}, skipped", frame_type:)
+        end
+        rejected = @rejected_below
+        if rejected && ranges.fetch(-1).begin < rejected
+          raise Violation.new("an ACK of a 0-RTT packet after 0-RTT was rejected", frame_type:)
         end
         @largest_acked_packet = [@largest_acked_packet || largest, largest].max
         @skipped = nil if skipped && largest > skipped
@@ -166,6 +171,22 @@ module Raiha::Next::QUIC
         @time_of_last_ack_eliciting_packet = nil
         @ack_eliciting_in_flight = 0
         records
+      end
+
+      # Throws away the records below `boundary`, the 0-RTT packets of a
+      # rejected 0-RTT, and gives those that were still waiting; from now on
+      # an ACK of any of them is PROTOCOL_VIOLATION (RFC 9001 "Rejecting
+      # 0-RTT").
+      def reject_below(boundary)
+        @rejected_below = boundary
+        @lost.delete_if { |number, _| number < boundary }
+        rejected = @sent.values.select { |packet| packet.packet_number < boundary }
+        rejected.each do |packet|
+          @sent.delete(packet.packet_number)
+          @ack_eliciting_in_flight -= 1 if packet.in_flight && packet.ack_eliciting
+        end
+        @loss_time = nil if @sent.empty?
+        rejected
       end
 
       # Forgets the records declared lost that were sent before `time`.
