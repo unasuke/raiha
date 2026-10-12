@@ -40,6 +40,7 @@ module Raiha::Next::QUIC
         @time_of_last_ack_eliciting_packet = nil #: Float?
         @ack_eliciting_in_flight = 0
         @sent = {} #: Hash[Integer, SentPacket]
+        @lost = {} #: Hash[Integer, SentPacket]
         @skip_after = nil #: Integer?
         @skipped = nil #: Integer?
         @ack_steps = 0
@@ -137,9 +138,26 @@ module Raiha::Next::QUIC
         end
         lost.each do |packet|
           @sent.delete(packet.packet_number)
+          @lost[packet.packet_number] = packet
           @ack_eliciting_in_flight -= 1 if packet.in_flight && packet.ack_eliciting
         end
+        @lost.shift while @lost.size > MAX_LOST_PACKETS
         lost
+      end
+
+      # Takes out the records declared lost that the ranges acknowledge
+      # after all (loss recovery's design, "Lost packets kept").
+      def take_spurious(ranges)
+        @lost.each_value.select do |packet|
+          number = packet.packet_number
+          range = ranges.bsearch { |candidate| candidate.begin <= number }
+          range&.cover?(number)
+        end.each { |packet| @lost.delete(packet.packet_number) }
+      end
+
+      # Forgets the records declared lost that were sent before `time`.
+      def forget_lost(before:)
+        @lost.shift while (oldest = @lost.each_value.first) && oldest.time_sent < before
       end
 
       private def take_acknowledged(ranges)

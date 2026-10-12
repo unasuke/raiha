@@ -5,6 +5,7 @@ module Raiha::Next::QUIC
     PACKET_THRESHOLD: Integer
     TIME_THRESHOLD: Float
     PERSISTENT_CONGESTION_THRESHOLD: Integer
+    MAX_LOST_PACKETS: Integer
     SPACES: Hash[Symbol, space]
 
     type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
@@ -32,6 +33,7 @@ module Raiha::Next::QUIC
     attr_reader path: Path
     attr_reader pto_count: Integer
     attr_reader packets_lost: Integer
+    attr_reader packets_spuriously_lost: Integer
     attr_writer peer_max_ack_delay: Float
 
     @role: :client | :server
@@ -78,6 +80,7 @@ module Raiha::Next::QUIC
     private def trace_timer: (Symbol event_type, space? space, Float? delta, Float now) -> void
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
     private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]
+    private def take_spurious: (PacketNumberSpace space, Array[Range[Integer]] ranges, Float now) -> Array[SentPacket]
     private def process_ecn: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float now) -> void
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
     private def persistent_congestion?: (Path path, Array[SentPacket] lost) -> bool
@@ -241,6 +244,7 @@ module Raiha::Next::QUIC
 
       @next_packet_number: Integer
       @sent: Hash[Integer, SentPacket]
+      @lost: Hash[Integer, SentPacket]
       @skip_after: Integer?
 
       def initialize: (space name) -> void
@@ -257,6 +261,8 @@ module Raiha::Next::QUIC
       def sent?: (Integer packet_number) -> bool
       def acknowledge: (Array[Range[Integer]] ranges, frame_type: Integer) -> Array[SentPacket]
       def detect_lost: (loss_delay: Float, now: Float) { (SentPacket packet, Symbol trigger) -> void } -> Array[SentPacket]
+      def take_spurious: (Array[Range[Integer]] ranges) -> Array[SentPacket]
+      def forget_lost: (before: Float) -> void
 
       private def take_acknowledged: (Array[Range[Integer]] ranges) -> Array[SentPacket]
       private def look_up: (Array[Range[Integer]] ranges) -> Array[SentPacket]

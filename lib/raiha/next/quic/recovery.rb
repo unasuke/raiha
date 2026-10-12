@@ -21,14 +21,18 @@ module Raiha::Next::QUIC
     TIME_THRESHOLD = 9.0 / 8
     # kPersistentCongestionThreshold (RFC 9002 "Duration").
     PERSISTENT_CONGESTION_THRESHOLD = 3
+    # The records declared lost kept a space, beside those older than three
+    # PTOs, to tell spurious losses (loss recovery's design, "Limits").
+    MAX_LOST_PACKETS = 64
 
     SPACES = { initial: :initial, handshake: :handshake, zero_rtt: :application_data, one_rtt: :application_data }.freeze #: Hash[Symbol, space]
 
     # The path packets are sent on now.
     attr_reader :path
     attr_reader :pto_count
-    # The packets declared lost.
+    # The packets declared lost, and those of them acknowledged later.
     attr_reader :packets_lost
+    attr_reader :packets_spuriously_lost
     # The peer's max_ack_delay, 25 ms until its transport parameters say.
     attr_writer :peer_max_ack_delay
 
@@ -59,6 +63,7 @@ module Raiha::Next::QUIC
                   application_data: PacketNumberSpace.new(:application_data) } #: Hash[space, PacketNumberSpace]
       @pto_count = 0
       @packets_lost = 0
+      @packets_spuriously_lost = 0
       @peer_max_ack_delay = 0.025
       @handshake_confirmed = false
       @handshake_acknowledged = false
@@ -170,7 +175,10 @@ module Raiha::Next::QUIC
       space = space_of(packet_type)
       largest_before = space.largest_acked_packet
       acked = space.acknowledge(ack.ranges, frame_type: ack.ecn ? 0x03 : 0x02)
-      return Outcome::NONE if acked.empty?
+      spurious = take_spurious(space, ack.ranges, now)
+      if acked.empty?
+        return spurious.empty? ? Outcome::NONE : Outcome.new(acked: spurious, lost: Outcome::NO_PACKETS, probe: nil)
+      end
       @handshake_acknowledged = true if space.name == :handshake
       sampled = take_rtt_sample(space, ack, acked, received_at)
       process_ecn(space, ack, acked, now) if largest_before.nil? || ack.largest > largest_before
@@ -178,9 +186,10 @@ module Raiha::Next::QUIC
       on_lost(lost, now)
       on_acked(acked, sampled, now)
       @pto_count = 0 if peer_completed_address_validation?
+      space.forget_lost(before: now - 3 * @path.rtt.pto_period)
       set_loss_detection_timer(now)
       trace_metrics(now)
-      Outcome.new(acked:, lost:, probe: nil)
+      Outcome.new(acked: spurious.empty? ? acked : acked + spurious, lost:, probe: nil)
     end
 
     # Whether the peer has validated this end's address, so that nothing is
@@ -269,6 +278,19 @@ module Raiha::Next::QUIC
           @tracer.packet_lost(packet_number: packet.packet_number, space: space.name, trigger:, mtu_probe: packet.pmtu_probe, now:) # steep:ignore
         end
       end
+    end
+
+    # The records declared lost that an ACK acknowledges after all: counted
+    # as spurious losses and handed back as acknowledged, and nothing to
+    # the congestion controller, the RTT or the ECN counts (loss recovery's
+    # design, "Acknowledged after all").
+    private def take_spurious(space, ranges, now)
+      spurious = space.take_spurious(ranges)
+      @packets_spuriously_lost += spurious.size
+      if @tracer
+        spurious.each { |packet| @tracer.spurious_loss(packet_number: packet.packet_number, space: space.name, now:) } # steep:ignore
+      end
+      spurious
     end
 
     # Checks the ECN counts of an ACK that raised the largest acknowledged
