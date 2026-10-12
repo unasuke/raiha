@@ -27,14 +27,14 @@ class RaihaNextQUICRecoveryDutyTest < Minitest::Test
 
   def test_sent_packet
     path = QUIC::Path.new(config: QUIC::Config.new)
-    duties = [Duty::Ack.new(largest: 3), Duty::Crypto.new(offset: 0, length: 100)].freeze
+    duties = [Duty::Ack.new(space: :handshake, largest: 3), Duty::Crypto.new(space: :handshake, offset: 0, length: 100)].freeze
     packet = QUIC::Recovery::SentPacket.new(packet_number: 5, time_sent: 1.0, sent_bytes: 1200, ack_eliciting: true, in_flight: true,
       path:, duties:, pmtu_probe: false, ecn: :ect0)
     assert_same path, packet.path
     assert_equal [5, 1200, :ect0], [packet.packet_number, packet.sent_bytes, packet.ecn]
     case packet
-    in { duties: [Duty::Ack(largest:), *] }
-      assert_equal 3, largest
+    in { duties: [Duty::Ack(space:, largest:), *] }
+      assert_equal [:handshake, 3], [space, largest]
     end
   end
 end

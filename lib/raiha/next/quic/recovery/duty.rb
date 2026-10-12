@@ -14,11 +14,13 @@ module Raiha::Next::QUIC
       # A range of a stream's data; the data stays in the send buffer.
       class Stream < Data.define(:stream_id, :offset, :length, :fin); end
 
-      # A range of the crypto stream of the packet's number space.
-      class Crypto < Data.define(:offset, :length); end
+      # A range of the crypto stream of a number space (:initial, :handshake
+      # or :application_data), the one the packet was sent in.
+      class Crypto < Data.define(:space, :offset, :length); end
 
-      # An ACK frame and the largest packet number it acknowledged.
-      class Ack < Data.define(:largest); end
+      # An ACK frame of a number space and the largest packet number it
+      # acknowledged.
+      class Ack < Data.define(:space, :largest); end
 
       class ResetStream < Data.define(:stream_id); end
 

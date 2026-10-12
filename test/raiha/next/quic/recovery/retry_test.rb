@@ -10,13 +10,15 @@ class RaihaNextQUICRecoveryRetryTest < Minitest::Test
 
   def test_a_retry
     recovery = recovery(role: :client)
-    send_packet(recovery, :initial, now: 1.0, duties: [Duty::Crypto.new(offset: 0, length: 300)])
+    client_hello = Duty::Crypto.new(space: :initial, offset: 0, length: 300)
+    early_data = Duty::Stream.new(stream_id: 0, offset: 0, length: 100, fin: true)
+    send_packet(recovery, :initial, now: 1.0, duties: [client_hello])
     send_packet(recovery, :initial, now: 1.01, sent_bytes: 50, ack_eliciting: false, in_flight: false)
-    send_packet(recovery, :zero_rtt, now: 1.02, duties: [Duty::Stream.new(stream_id: 0, offset: 0, length: 100, fin: true)])
+    send_packet(recovery, :zero_rtt, now: 1.02, duties: [early_data])
     window = recovery.path.congestion
     outcome = recovery.on_retry(now: 1.1)
     # The ClientHello and the 0-RTT data go back to be sent again.
-    assert_equal [[0, :initial], [0, :zero_rtt]], outcome.lost.map { |packet| [packet.packet_number, packet.duties.first.is_a?(Duty::Crypto) ? :initial : :zero_rtt] }
+    assert_equal [[client_hello], [early_data]], outcome.lost.map(&:duties)
     assert_empty outcome.acked
     # The path starts over, with the time to the Retry as its first sample.
     path = recovery.path

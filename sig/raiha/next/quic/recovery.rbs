@@ -132,18 +132,20 @@ module Raiha::Next::QUIC
       end
 
       class Crypto < Data
+        attr_reader space: space
         attr_reader offset: Integer
         attr_reader length: Integer
 
-        def self.new: (offset: Integer, length: Integer) -> instance
-                    | (Integer offset, Integer length) -> instance
+        def self.new: (space: space, offset: Integer, length: Integer) -> instance
+                    | (space space, Integer offset, Integer length) -> instance
       end
 
       class Ack < Data
+        attr_reader space: space
         attr_reader largest: Integer
 
-        def self.new: (largest: Integer) -> instance
-                    | (Integer largest) -> instance
+        def self.new: (space: space, largest: Integer) -> instance
+                    | (space space, Integer largest) -> instance
       end
 
       class ResetStream < Data

@@ -36,7 +36,7 @@ class RaihaNextQUICRecoverySendingTest < Minitest::Test
 
   def test_on_packet_sent
     recovery = recovery()
-    send_packet(recovery, :initial, now: 1.0, duties: [QUIC::Recovery::Duty::Crypto.new(offset: 0, length: 1000)])
+    send_packet(recovery, :initial, now: 1.0, duties: [QUIC::Recovery::Duty::Crypto.new(space: :initial, offset: 0, length: 1000)])
     send_packet(recovery, :initial, now: 1.1, sent_bytes: 40, ack_eliciting: false, in_flight: false)
     assert_equal [1200, 1], [recovery.path.bytes_in_flight, recovery.path.ack_eliciting_in_flight]
     packet = recovery.on_packet_sent(packet_type: :one_rtt, packet_number: recovery.next_packet_number(:one_rtt), sent_bytes: 1200,
