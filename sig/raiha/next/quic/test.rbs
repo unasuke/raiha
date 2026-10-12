@@ -204,3 +204,28 @@ module Raiha::Next::QUIC::Test
     end
   end
 end
+
+module Raiha::Next::QUIC::Test
+  class Reorder < Data
+    attr_reader rate: Float
+    attr_reader hold: Float
+
+    def self.new: (rate: Float, ?hold: Float) -> instance
+                | (Float rate, ?Float hold) -> instance
+    def initialize: (rate: Float, ?hold: Float) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @rate: Float
+      @hold: Float
+      @random: Random
+      @queue: Array[Datagram]
+      @held: [Datagram, Float]?
+
+      def initialize: (Float rate, Float hold, Random random) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> Float?
+    end
+  end
+end
