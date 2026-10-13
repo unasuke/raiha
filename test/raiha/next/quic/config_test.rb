@@ -105,4 +105,19 @@ class RaihaNextQUICConfigTest < Minitest::Test
       stateless_reset_token: "t".b * 16)
     assert_equal server, QUIC::TransportParameters.decode(server.encode, sender: :server)
   end
+
+  # The secrets of an Endpoint's tokens: nil by default, 32 bytes at least,
+  # kept as frozen copies, and never shown.
+  def test_token_keys
+    assert_nil Config.new.retry_token_key
+    key = "k" * 32
+    config = Config.new(retry_token_key: key, stateless_reset_key: "r".b * 40)
+    refute_same key, config.retry_token_key
+    assert_equal [true, Encoding::BINARY], [config.retry_token_key.frozen?, config.retry_token_key.encoding]
+    assert Ractor.shareable?(Ractor.make_shareable(config))
+    refute_includes config.inspect, "k" * 32
+    assert_includes config.inspect, "retry_token_key=[32 bytes]"
+    assert_raises(ArgumentError) { Config.new(retry_token_key: "k" * 31) }
+    assert_raises(ArgumentError) { Config.new(stateless_reset_key: "".b) }
+  end
 end
