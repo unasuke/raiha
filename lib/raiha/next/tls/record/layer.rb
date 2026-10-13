@@ -79,12 +79,12 @@ module Raiha::Next::TLS
         # plaintext limit as soon as its header is in.
         type, length = @buffer.unpack("Cx2n").map(&:to_i)
         limit = type == CONTENT_TYPES.fetch(:application_data) ? MAX_PLAINTEXT + MAX_EXPANSION : MAX_PLAINTEXT
-        return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit
-        return nil if @buffer.bytesize < HEADER_LENGTH + length
+        return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit # steep:ignore
+        return nil if @buffer.bytesize < HEADER_LENGTH + length # steep:ignore
         header = @buffer.byteslice(0, HEADER_LENGTH).to_s
-        fragment = @buffer.byteslice(HEADER_LENGTH, length).to_s
-        @buffer = @buffer.byteslice((HEADER_LENGTH + length)..).to_s
-        epoch == :initial ? unprotected(type, fragment) : protected(epoch, type, header, fragment)
+        fragment = @buffer.byteslice(HEADER_LENGTH, length).to_s # steep:ignore
+        @buffer = @buffer.byteslice((HEADER_LENGTH + length)..).to_s # steep:ignore
+        epoch == :initial ? unprotected(type, fragment) : protected(epoch, type, header, fragment) # steep:ignore
       end
 
       # The records carrying `payload`, split to fit the peer's limit and

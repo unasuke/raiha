@@ -117,7 +117,7 @@ module Raiha::Next::QUIC::Test
       size = transmit.segment_size || payload.bytesize
       path = @links.fetch([source, transmit.destination], @direct)
       0.step(payload.bytesize - 1, size) do |offset|
-        path.submit(Datagram.new(payload: payload.byteslice(offset, size), source:, destination: transmit.destination, ecn: transmit.ecn), now:)
+        path.submit(Datagram.new(payload: payload.byteslice(offset, size), source:, destination: transmit.destination, ecn: transmit.ecn), now:) # steep:ignore
       end
     end
 

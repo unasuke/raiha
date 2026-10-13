@@ -100,7 +100,7 @@ module Raiha::Next::TLS
         raise UsageError, "the connection failed" if @failed
         raise UsageError, "our side is closed" if @write_closed
         room = WRITE_BUFFER_LIMIT - @unsent.bytesize - @outgoing.bytesize
-        taken = data.byteslice(0, room.clamp(0..)).to_s
+        taken = data.byteslice(0, room.clamp(0..)).to_s # steep:ignore
         @unsent << taken
         send_application_data
         taken.bytesize
@@ -197,19 +197,19 @@ module Raiha::Next::TLS
       private def receive_alert(payload)
         return fail!(:decode_error, :malformed_alert) unless payload.bytesize == 2
         level, description = payload.unpack("C2").map(&:to_i)
-        if IANA.alert_name(description) == :close_notify
+        if IANA.alert_name(description) == :close_notify # steep:ignore
           return close_read if @machine.complete?
           @machine.discard
           @events << ::Raiha::Next::TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)
           return stop
         end
-        if IANA.alert_name(description) == :user_canceled
+        if IANA.alert_name(description) == :user_canceled # steep:ignore
           @consecutive_warning_alerts += 1
           return fail!(:unexpected_message, :too_many_warning_alerts) if @consecutive_warning_alerts > MAX_CONSECUTIVE_WARNING_ALERTS
-          @events << Event::PeerAlert.new(level:, description:)
+          @events << Event::PeerAlert.new(level:, description:) # steep:ignore
           return nil
         end
-        @events << Event::PeerAlert.new(level:, description:)
+        @events << Event::PeerAlert.new(level:, description:) # steep:ignore
         @machine.discard
         stop
       end

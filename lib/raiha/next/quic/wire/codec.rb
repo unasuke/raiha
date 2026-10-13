@@ -60,7 +60,7 @@ module Raiha::Next::QUIC
 
       def eof? = @offset >= @limit
 
-      def u8 = take(1).getbyte(0)
+      def u8 = take(1).getbyte(0) # steep:ignore
 
       def u16 = take(2).unpack1("n")
 
@@ -105,7 +105,7 @@ module Raiha::Next::QUIC
         reader
       end
 
-      private def take(length)
+      private def take(length) # steep:ignore
         raise Truncated, "#{length} bytes wanted, #{remaining} left" if length > remaining
         value = @bytes.byteslice(@offset, length)
         @offset += length

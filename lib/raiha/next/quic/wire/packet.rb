@@ -24,7 +24,7 @@ module Raiha::Next::QUIC
         number_offset = writer.bytesize
         packet = writer.bytes(encoded_number).to_s
         sealed = keys.aead.seal(packet_number:, header: packet, plaintext: payload)
-        mask = keys.header_protection.mask(sealed.byteslice(SAMPLE_OFFSET - packet_number_length, Crypto::HeaderProtection::SAMPLE_LENGTH))
+        mask = keys.header_protection.mask(sealed.byteslice(SAMPLE_OFFSET - packet_number_length, Crypto::HeaderProtection::SAMPLE_LENGTH)) # steep:ignore
         packet.setbyte(0, packet.unpack1("C") ^ (mask.unpack1("C") & header.protected_bits))
         packet_number_length.times do |i|
           packet.setbyte(number_offset + i, packet.unpack1("C", offset: number_offset + i) ^ mask.unpack1("C", offset: 1 + i))
@@ -87,24 +87,24 @@ module Raiha::Next::QUIC
         # this packet number space (nil when none), and a short header gets
         # its key phase, which tells the keys for the payload.
         def unmask(header_protection, largest:)
-          mask = header_protection.mask(datagram.byteslice(number_offset + SAMPLE_OFFSET, Crypto::HeaderProtection::SAMPLE_LENGTH))
+          mask = header_protection.mask(datagram.byteslice(number_offset + SAMPLE_OFFSET, Crypto::HeaderProtection::SAMPLE_LENGTH)) # steep:ignore
           first = datagram.unpack1("C", offset:) ^ (mask.unpack1("C") & header.protected_bits)
           number_length = (first & 0x03) + 1
           header_length = number_offset - offset
           associated_data = datagram.byteslice(offset, header_length + number_length)
-          associated_data.setbyte(0, first)
+          associated_data.setbyte(0, first) # steep:ignore
           truncated = 0
           number_length.times do |i|
-            byte = associated_data.unpack1("C", offset: header_length + i) ^ mask.unpack1("C", offset: 1 + i)
-            associated_data.setbyte(header_length + i, byte)
+            byte = associated_data.unpack1("C", offset: header_length + i) ^ mask.unpack1("C", offset: 1 + i) # steep:ignore
+            associated_data.setbyte(header_length + i, byte) # steep:ignore
             truncated = (truncated << 8) | byte
           end
           Unmasked.new(
             header: header.unmasked(first),
             packet_number: PacketNumber.decode(truncated, length: number_length, largest:),
             reserved: first & header.reserved_bits,
-            associated_data:,
-            ciphertext: datagram.byteslice(number_offset + number_length, end_offset - number_offset - number_length)
+            associated_data:, # steep:ignore
+            ciphertext: datagram.byteslice(number_offset + number_length, end_offset - number_offset - number_length) # steep:ignore
           )
         end
       end

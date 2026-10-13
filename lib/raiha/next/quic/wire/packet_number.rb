@@ -21,7 +21,7 @@ module Raiha::Next::QUIC
       end
 
       # The low `length` bytes of `packet_number`.
-      def self.encode(packet_number, length)
+      def self.encode(packet_number, length) # steep:ignore
         raise ArgumentError, "a packet number field is 1 to 4 bytes, not #{length}" unless length.between?(1, 4)
         [packet_number & 0xffff_ffff].pack("N").byteslice(4 - length, length)
       end

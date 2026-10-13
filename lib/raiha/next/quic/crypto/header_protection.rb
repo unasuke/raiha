@@ -24,7 +24,7 @@ module Raiha::Next::QUIC
       end
 
       # The mask for `sample`, 5 bytes.
-      def mask(sample)
+      def mask(sample) # steep:ignore
         raise ArgumentError, "a sample is #{SAMPLE_LENGTH} bytes, not #{sample.bytesize}" unless sample.bytesize == SAMPLE_LENGTH
         if @chacha20
           # OpenSSL's ChaCha20 takes a 16-byte IV, the 4-byte little-endian

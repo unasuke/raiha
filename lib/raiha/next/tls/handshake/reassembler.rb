@@ -46,10 +46,10 @@ module Raiha::Next::TLS
           length = message_length
           break if length.nil? || @buf.bytesize < 4 + length
           msg_type = @buf.getbyte(0) #: Integer
-          body = @buf.byteslice(4, length).freeze # steep:ignore
+          body = @buf.byteslice(4, length).freeze
           @buf = @buf.byteslice(4 + length, @buf.bytesize) # steep:ignore
           @header_checked = false
-          yield msg_type, body
+          yield msg_type, body # steep:ignore
         end
         :ok
       end

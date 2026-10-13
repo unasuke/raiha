@@ -7,13 +7,16 @@
 # must come before :lib, whose `check "lib"` would otherwise take
 # lib/raiha/next as well.
 target :next do
-  signature "sig/raiha/next", "sig/raiha.rbs", "sig/patches"
+  signature "sig/raiha/next", "sig/raiha.rbs", "sig/patches/io_buffer.rbs", "sig/patches/openssl.rbs", "sig/next_patches"
   check "lib/raiha/next"
   library "ipaddr"
   library "securerandom"
 end
 
 target :lib do
+  # Its signatures stay out of :next, which steep would otherwise load them
+  # into as well.
+  unreferenced!
   signature "sig"
   check "lib"
   library "openssl"

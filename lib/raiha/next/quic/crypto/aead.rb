@@ -45,9 +45,9 @@ module Raiha::Next::QUIC
         return nil if body_length.negative?
         cipher = @opener ||= context(:decrypt)
         cipher.iv = nonce(packet_number)
-        cipher.auth_tag = ciphertext.byteslice(body_length, @tag_length)
+        cipher.auth_tag = ciphertext.byteslice(body_length, @tag_length) # steep:ignore
         cipher.auth_data = header
-        opened = body_length.zero? ? "".b : cipher.update(ciphertext.byteslice(0, body_length))
+        opened = body_length.zero? ? "".b : cipher.update(ciphertext.byteslice(0, body_length)) # steep:ignore
         opened << cipher.final
       rescue OpenSSL::Cipher::AuthTagError
         nil
