@@ -229,3 +229,29 @@ module Raiha::Next::QUIC::Test
     end
   end
 end
+
+module Raiha::Next::QUIC::Test
+  class Bottleneck < Data
+    attr_reader bandwidth: Integer
+    attr_reader delay: Float
+    attr_reader queue: Integer
+    attr_reader ce_threshold: Integer?
+
+    def self.new: (bandwidth: Integer, delay: Float, queue: Integer, ?ce_threshold: Integer?) -> instance
+                | (Integer bandwidth, Float delay, Integer queue, ?Integer? ce_threshold) -> instance
+    def initialize: (bandwidth: Integer, delay: Float, queue: Integer, ?ce_threshold: Integer?) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @model: Bottleneck
+      @waiting: Array[[Float, Integer]]
+      @busy_until: Float
+      @arrivals: Array[[Float, Datagram]]
+
+      def initialize: (Bottleneck model) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> Float?
+    end
+  end
+end
