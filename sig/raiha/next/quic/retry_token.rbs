@@ -1,0 +1,12 @@
+module Raiha::Next::QUIC
+  module RetryToken
+    KIND: Integer
+    LIFETIME: Integer
+    EXPIRY_LENGTH: Integer
+    OVERHEAD: Integer
+
+    def self.mint: (key: String, original_destination_connection_id: String, address: address, time: Time) -> String
+    def self.verify: (String token, key: String, address: address, time: Time) -> String?
+    private def self.bound: (address address) -> String
+  end
+end
