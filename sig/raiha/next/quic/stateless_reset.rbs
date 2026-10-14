@@ -1,0 +1,10 @@
+module Raiha::Next::QUIC
+  module StatelessReset
+    TOKEN_LENGTH: Integer
+    MIN_LENGTH: Integer
+
+    def self.token: (key: String, connection_id: String) -> String
+    def self.packet: (token: String, length: Integer, random: Crypto::_Random) -> String
+    def self.match?: (String datagram, Array[String] tokens) -> bool
+  end
+end
