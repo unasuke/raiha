@@ -64,5 +64,12 @@ module Raiha::Next::QUIC
                   | (Keys client, Keys server) -> instance
       def self.derive: (dcid: String, version: Version) -> Initial
     end
+  
+    module Mac
+      LENGTH: Integer
+
+      def self.digest: (String key, String data) -> String
+      def self.same?: (String a, String b) -> bool
+    end
   end
 end
