@@ -1,0 +1,25 @@
+module Raiha::Next::QUIC
+  class PacketProtection
+    type level = :initial | :zero_rtt | :handshake | :one_rtt
+    type direction = :read | :write
+
+    LEVELS: Array[level]
+
+    @role: :client | :server
+    @keys: Hash[level, Hash[direction, Crypto::Keys]]
+    @one_rtt_secrets: Hash[direction, [String, ::Raiha::Next::TLS::CipherSuite]]
+    @discarded: Array[level]
+
+    attr_reader version: Version
+
+    def initialize: (role: :client | :server, version: Version) -> void
+    def install_initial: (String dcid) -> Hash[direction, Crypto::Keys]
+    def install: (level level, direction direction, secret: String, suite: ::Raiha::Next::TLS::CipherSuite) -> void
+    def read_keys: (level level) -> Crypto::Keys?
+    def write_keys: (level level) -> Crypto::Keys?
+    def can_read?: (level level) -> bool
+    def can_write?: (level level) -> bool
+    def discarded?: (level level) -> bool
+    def discard: (level level) -> void
+  end
+end
