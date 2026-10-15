@@ -32,7 +32,8 @@ module Raiha::Next::QUIC
     private def self.check: (::Raiha::Next::TLS::Config config) -> void
     private def self.extension: (TransportParameters transport_parameters) -> ::Raiha::Next::TLS::Extension::Opaque
 
-    def initialize: (_Connection connection, ::Raiha::Next::TLS::Handshake::Machine machine, ::Raiha::Next::TLS::Profile profile) -> void
+    def initialize: (_Connection connection, ::Raiha::Next::TLS::Handshake::Machine machine, ::Raiha::Next::TLS::Profile profile,
+                     ?consumed: Integer) -> void
     def complete?: () -> bool
     def receive_crypto: (PacketProtection::level level, Wire::Frame::Crypto frame, time: Time) -> void
     def pump: () -> void

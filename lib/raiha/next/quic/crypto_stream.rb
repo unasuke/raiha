@@ -102,6 +102,13 @@ module Raiha::Next::QUIC
       @received_end = finish if finish > @received_end
     end
 
+    # The first `length` bytes were received and read elsewhere: frames
+    # carrying them again are old.
+    def consumed(length)
+      raise ArgumentError, "bytes have been received already" unless @received_end.zero?
+      @received_end = @read_offset = length
+    end
+
     # The bytes received from where reading stopped up to the first gap.
     def read
       first = @filled.first

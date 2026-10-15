@@ -38,13 +38,14 @@ module Raiha::Next::QUIC
     end
 
     # A server's binding, given the ClientHello an Acceptor took when there
-    # was one.
+    # was one. Its bytes are the start of the Initial CRYPTO stream, so the
+    # frames that carried them, received again, are not read twice.
     def self.server(connection:, config:, keyring:, transport_parameters:, time:, client_hello: nil, tracer: nil, keylog: nil)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.server(
         config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer:, keylog:
       )
-      new(connection, machine, config.profile).tap { |binding| binding.pump }
+      new(connection, machine, config.profile, consumed: client_hello&.bytes&.bytesize || 0).tap { |binding| binding.pump }
     end
 
     private_class_method def self.check(config)
@@ -56,11 +57,13 @@ module Raiha::Next::QUIC
       Raiha::Next::TLS::Extension::Opaque.new(type: TRANSPORT_PARAMETERS, data: transport_parameters.encode)
     end
 
-    def initialize(connection, machine, profile)
+    # `consumed` Initial CRYPTO bytes have been read already.
+    def initialize(connection, machine, profile, consumed: 0)
       @connection = connection
       @machine = machine
       @profile = profile
       @streams = SPACES.to_h { |level, space| [level, CryptoStream.new(space)] } #: Hash[PacketProtection::level, CryptoStream]
+      @streams.fetch(:initial).consumed(consumed)
     end
 
     def complete? = @machine.complete?

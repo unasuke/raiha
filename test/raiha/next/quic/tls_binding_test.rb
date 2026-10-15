@@ -96,4 +96,25 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
   def test_a_tcp_profile_is_refused
     assert_raises(ArgumentError) { client(Connection.new, config: NextTLSPair.client_config(alpn: ALPN)) }
   end
+
+  # A server given the ClientHello an Acceptor took does not read it again
+  # when the frames that carried it are delivered once more.
+  def test_a_client_hello_taken_already
+    client = client(Connection.new)
+    frames = []
+    while (frame, _duty = client.next_crypto_frame(:initial, 1200))
+      frames << frame
+    end
+    acceptor = TLS::Handshake::Acceptor.new
+    frames.each { |frame| acceptor.receive(frame.data, epoch: :initial, now: NOW) }
+    server_connection = Connection.new
+    config = server_config
+    server = QUIC::TLSBinding.server(connection: server_connection, config:, keyring: server_keyring(config:),
+      transport_parameters: parameters("s".b * 8), time: NOW, client_hello: acceptor.accepted)
+    frames.each { |frame| server.receive_crypto(:initial, frame, time: NOW) }
+    exchange(client, server)
+    assert client.complete?
+    assert server.complete?
+    assert_empty server_connection.of(:tls_failed)
+  end
 end
