@@ -81,11 +81,12 @@ module Raiha::Next::QUIC
     end
 
     # Tells the connection what the Machine has put out (250 "Writing the
-    # outputs and events").
+    # outputs and events"). A message of a level whose keys are gone has
+    # nowhere to go.
     def pump
       @machine.each_output do |output|
         case output
-        in Raiha::Next::TLS::Output::Message(epoch:, bytes:) then @streams.fetch(LEVEL.fetch(epoch)).write(bytes)
+        in Raiha::Next::TLS::Output::Message(epoch:, bytes:) then @streams[LEVEL.fetch(epoch)]&.write(bytes)
         in Raiha::Next::TLS::Output::Secret(epoch:, direction:, secret:, cipher_suite:)
           @connection.install_keys(LEVEL.fetch(epoch), direction, secret:, suite: cipher_suite)
         in Raiha::Next::TLS::Output::Alert then nil

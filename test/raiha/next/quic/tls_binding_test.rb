@@ -117,4 +117,15 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
     assert server.complete?
     assert_empty server_connection.of(:tls_failed)
   end
+
+  # A message of a level whose keys are gone is dropped, not an error.
+  def test_a_message_of_a_discarded_level
+    machine = Object.new
+    def machine.each_output = yield(TLS::Output::Message.new(epoch: :initial, bytes: "x".b))
+    def machine.each_event = nil
+    binding = QUIC::TLSBinding.new(Connection.new, machine, TLS::Profile::QUIC)
+    binding.discard_level(:initial)
+    binding.pump
+    refute binding.crypto_pending?(:initial)
+  end
 end
