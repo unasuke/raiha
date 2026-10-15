@@ -66,6 +66,8 @@ module Raiha::Next::QUIC
     def next_timeout: () -> Float?
     def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer
+    def packet_number_length: (packet_type packet_type, Integer packet_number) -> Integer
+    def largest_received: (packet_type packet_type) -> Integer?
     def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
                          duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
 

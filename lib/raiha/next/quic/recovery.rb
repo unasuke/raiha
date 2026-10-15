@@ -216,6 +216,17 @@ module Raiha::Next::QUIC
       space.next_packet_number
     end
 
+    # How many bytes the packet number of the packet of `packet_type`
+    # numbered `packet_number` goes in, by what the peer has acknowledged
+    # (RFC 9000 "Packet Number Encoding and Decoding").
+    def packet_number_length(packet_type, packet_number)
+      Wire::PacketNumber.length(packet_number, largest_acked: space_of(packet_type).largest_acked_packet)
+    end
+
+    # The largest packet number received in the space of `packet_type`, nil
+    # before any, which the packet number of the next is decoded against.
+    def largest_received(packet_type) = space_of(packet_type).largest_received
+
     # Records a packet sent at `now`, and counts it on the path when it is
     # in flight.
     def on_packet_sent(packet_type:, packet_number:, sent_bytes:, ack_eliciting:, in_flight:, duties:, now:, pmtu_probe: false)

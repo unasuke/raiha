@@ -45,4 +45,22 @@ class RaihaNextQUICRecoverySendingTest < Minitest::Test
     assert packet.duties.frozen?
     assert_equal [1.2, 2400], [packet.time_sent, recovery.path.bytes_in_flight]
   end
+
+  # RFC 9000 appendix A.2: twice the packets not yet acknowledged.
+  def test_packet_number_length
+    recovery = recovery()
+    assert_equal 1, recovery.packet_number_length(:handshake, 0)
+    300.times { send_packet(recovery, :handshake, now: 0.0) }
+    assert_equal 2, recovery.packet_number_length(:handshake, 300)
+    recovery.on_ack_received(packet_type: :handshake, ack: ack(299..299), now: 0.1)
+    assert_equal 1, recovery.packet_number_length(:handshake, 300)
+  end
+
+  def test_largest_received
+    recovery = recovery()
+    assert_nil recovery.largest_received(:one_rtt)
+    recovery.on_packet_received(packet_type: :one_rtt, packet_number: 7, ecn: :not_ect, ack_eliciting: true, now: 0.0)
+    recovery.on_packet_received(packet_type: :zero_rtt, packet_number: 3, ecn: :not_ect, ack_eliciting: true, now: 0.0)
+    assert_equal 7, recovery.largest_received(:zero_rtt)
+  end
 end
