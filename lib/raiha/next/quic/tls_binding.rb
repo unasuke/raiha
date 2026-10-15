@@ -124,14 +124,21 @@ module Raiha::Next::QUIC
     private def read_level = LEVEL.fetch(@machine.read_epoch)
 
     # Hands the bytes of the level TLS reads to the Machine, again as long as
-    # what it puts out moves it to a level with bytes waiting.
+    # what it puts out moves it to a level with bytes waiting. Bytes of a
+    # level TLS leaves that it has not read, past a gap, are
+    # PROTOCOL_VIOLATION (RFC 9001 "Sending and Receiving Handshake
+    # Messages").
     private def feed(time)
       until @machine.failed?
         epoch = @machine.read_epoch
-        bytes = @streams[LEVEL.fetch(epoch)]&.read
-        break if bytes.nil? || bytes.empty?
+        stream = @streams[LEVEL.fetch(epoch)] or break
+        bytes = stream.read
+        break if bytes.empty?
         @machine.receive(bytes, epoch:, now: time)
         pump
+        if @machine.read_epoch != epoch && !@machine.failed? && stream.buffered.positive?
+          raise Violation.new("CRYPTO data of the #{LEVEL.fetch(epoch)} level unread as TLS leaves it", frame_type: CryptoStream::FRAME_TYPE)
+        end
       end
     end
 

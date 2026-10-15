@@ -136,4 +136,20 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
     exchange(client, server(Connection.new))
     client.receive_crypto(:initial, QUIC::Wire::Frame::Crypto.new(offset: 100_000, data: "".b), time: NOW)
   end
+
+  # Bytes of a level past a gap, still unread when TLS moves on from it.
+  def test_bytes_left_behind
+    client = client(Connection.new)
+    frames = []
+    while (frame, _duty = client.next_crypto_frame(:initial, 1200))
+      frames << frame
+    end
+    server = server(Connection.new)
+    total = frames.sum { _1.data.bytesize }
+    server.receive_crypto(:initial, QUIC::Wire::Frame::Crypto.new(offset: total + 100, data: "x".b), time: NOW)
+    *head, last = frames
+    head.each { server.receive_crypto(:initial, _1, time: NOW) }
+    error = assert_raises(QUIC::Violation) { server.receive_crypto(:initial, last, time: NOW) }
+    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, error.code
+  end
 end
