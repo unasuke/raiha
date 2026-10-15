@@ -71,6 +71,7 @@ module Raiha::Next::TLS
       # Event::Failed#reason here.
       protocol_violation_reasons: %i[
         handshake_data_spans_key_change
+        data_after_client_hello
         wrong_epoch
         post_handshake_certificate_request
         max_early_data_size_not_sentinel

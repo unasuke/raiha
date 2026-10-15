@@ -26,7 +26,7 @@ class RaihaNextTLSProfileTest < Minitest::Test
 
   def test_protocol_violation_reasons
     assert_empty Profile::TCP.protocol_violation_reasons
-    assert_equal %i[handshake_data_spans_key_change wrong_epoch post_handshake_certificate_request
+    assert_equal %i[handshake_data_spans_key_change data_after_client_hello wrong_epoch post_handshake_certificate_request
       max_early_data_size_not_sentinel nonempty_legacy_session_id], Profile::QUIC.protocol_violation_reasons
   end
 

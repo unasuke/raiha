@@ -34,6 +34,12 @@ class RaihaNextTLSProtocolViolationTest < Minitest::Test
       client.receive(first.bytes + second.bytes, epoch: :initial, now: NOW)
       client
     end,
+    # The same as the last, before the server's Machine has its ClientHello:
+    # bytes after it in the same Initial data.
+    data_after_client_hello: lambda do |test, profile|
+      Pair.server(test.client(profile).outputs.first.bytes + "\x02\x00".b, config: test.config(profile, :server),
+        extensions: test.profile_extensions(profile))
+    end,
     wrong_epoch: lambda do |test, profile|
       client = test.client(profile)
       client.receive("\x02\x00\x00\x00".b, epoch: :handshake, now: NOW)
