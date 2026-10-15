@@ -41,6 +41,8 @@ module Raiha::Next::TLS
 
     def initialize: (config: Config, identities: Array[Identity], random: _Random, key_exchange: KeyExchange::_Provider,
                      verifier: Verifier::_Verifier?) -> void
+    attr_reader random: _Random
+
     def random_bytes: (Integer length) -> String
     def peer_verified?: () -> bool
     def client_credential: (signature_algorithms: Array[Integer], certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?

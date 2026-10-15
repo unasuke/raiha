@@ -71,8 +71,10 @@ class RaihaNextTLSKeyringTest < Minitest::Test
   end
 
   def test_random_is_injected
-    keyring = Keyring.client(config: client_config, random: Random.new(42))
+    random = Random.new(42)
+    keyring = Keyring.client(config: client_config, random:)
     assert_equal Random.new(42).bytes(32), keyring.random_bytes(32)
+    assert_same random, keyring.random
   end
 
   def test_inspect_hides_keys

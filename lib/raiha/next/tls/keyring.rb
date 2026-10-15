@@ -68,6 +68,10 @@ module Raiha::Next::TLS
       freeze
     end
 
+    # Where the connection's random bytes come from, for a QUIC connection
+    # as well as for TLS (250 "Random numbers").
+    attr_reader :random
+
     def random_bytes(length) = @random.bytes(length)
 
     # False for Verifier::None, so the application can tell that the peer
