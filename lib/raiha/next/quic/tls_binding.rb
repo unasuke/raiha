@@ -69,8 +69,10 @@ module Raiha::Next::QUIC
     def complete? = @machine.complete?
 
     # A CRYPTO frame of `level` received. Bytes of a finished level past what
-    # it had received are PROTOCOL_VIOLATION.
+    # it had received are PROTOCOL_VIOLATION; a frame without bytes carries
+    # none.
     def receive_crypto(level, frame, time:)
+      return if frame.data.empty?
       stream = @streams[level] or return
       finish = frame.offset + frame.data.bytesize
       if RANK.fetch(level) < RANK.fetch(read_level) && finish > stream.received_end

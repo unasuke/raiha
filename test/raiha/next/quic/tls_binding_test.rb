@@ -128,4 +128,12 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
     binding.pump
     refute binding.crypto_pending?(:initial)
   end
+
+  # An empty frame past the end of a finished level carries no bytes past
+  # it.
+  def test_an_empty_frame_of_a_finished_level
+    client = client(Connection.new)
+    exchange(client, server(Connection.new))
+    client.receive_crypto(:initial, QUIC::Wire::Frame::Crypto.new(offset: 100_000, data: "".b), time: NOW)
+  end
 end

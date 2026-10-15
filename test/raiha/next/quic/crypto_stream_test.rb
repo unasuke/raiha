@@ -105,4 +105,11 @@ class RaihaNextQUICCryptoStreamTest < Minitest::Test
     [4, 0, 2, 1, 3].each { |n| stream.receive(n * 10, "#{n}".b * 10, limit: 4096) }
     assert_equal "0" * 10 + "1" * 10 + "2" * 10 + "3" * 10 + "4" * 10, stream.read
   end
+
+  # A frame without bytes changes nothing, however far it says it starts.
+  def test_empty_frames
+    stream = stream()
+    (QUIC::CryptoStream::MAX_RANGES + 10).times { |n| stream.receive(10 + 2 * n, "".b, limit: 4096) }
+    assert_equal [0, 0], [stream.received_end, stream.buffered]
+  end
 end
