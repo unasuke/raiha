@@ -41,4 +41,17 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     assert_equal [0], unmasked.packet_number.then { [_1] }
     assert_equal 1, frames.grep(QUIC::Wire::Frame::Crypto).first.data.getbyte(0)
   end
+
+  # An Initial that does not open, which anyone could send, changes
+  # nothing on a server: the client that comes next connects.
+  def test_a_forged_initial_takes_nothing_over
+    server = server_connection
+    forged = client_connection(random: Random.new(9)).transmits(now: 0.0).first.payload.dup
+    forged.setbyte(forged.bytesize - 1, forged.getbyte(forged.bytesize - 1) ^ 1)
+    server.receive(forged, from: ["203.0.113.66", 4444], now: 0.0)
+    assert_empty server.transmits(now: 0.0)
+    client = client_connection
+    handshake(client, server)
+    assert server.handshake_complete?
+  end
 end

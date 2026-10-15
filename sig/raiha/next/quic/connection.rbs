@@ -63,6 +63,7 @@ module Raiha::Next::QUIC
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset) -> Wire::Packet::Parsed?
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
+    private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void

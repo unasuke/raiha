@@ -184,12 +184,12 @@ module Raiha::Next::QUIC
     private def receive_packet(packet, from:, ecn:, now:)
       header = packet.header
       level = header.type
-      if @role == :server && header.is_a?(Wire::LongHeader) && level == :initial && @destination_connection_id.empty?
-        accept_first_initial(header, from)
-      end
-      keys = @protection.read_keys(level) or return
+      first = @role == :server && @binding.nil?
+      keys = first ? first_initial_keys(header) : @protection.read_keys(level)
+      return unless keys
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = unmasked.open(keys.aead) or return
+      accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
@@ -197,8 +197,16 @@ module Raiha::Next::QUIC
       frames.each { |frame| receive_frame(level, frame, now) }
     end
 
-    # The server learns from the client's first Initial its connection ID,
-    # address and the Destination Connection ID its Initial keys come from.
+    # The keys a client's first Initial is sealed with, from its own
+    # Destination Connection ID; nil for any other packet.
+    private def first_initial_keys(header)
+      return nil unless header.is_a?(Wire::LongHeader) && header.type == :initial
+      Crypto::Initial.derive(dcid: header.dcid, version: @version).client
+    end
+
+    # The server learns from the client's first Initial, once it has opened,
+    # its connection ID, address and the Destination Connection ID its
+    # Initial keys come from. Until then anyone could have sent it.
     private def accept_first_initial(header, from)
       @remote = from
       @destination_connection_id = header.scid
