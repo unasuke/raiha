@@ -34,9 +34,11 @@ module Raiha::Next::QUIC
       @next_offset = 0
       @lost = [] #: Array[Range[Integer]]
       @acked = [] #: Array[Range[Integer]]
-      # The bytes from `read_offset` to `received_end`, and which of them
-      # have been received, as ranges in order.
+      # The bytes from `read_offset` to `received_end`, from `@window_start`
+      # on in `@window`, and which of them have been received, as ranges in
+      # order.
       @window = "".b
+      @window_start = 0
       @filled = [] #: Array[Range[Integer]]
       @received_end = 0
       @read_offset = 0
@@ -95,8 +97,9 @@ module Raiha::Next::QUIC
         data = data.byteslice((@read_offset - offset)..) #: String
         offset = @read_offset
       end
-      @window << "\0".b * (finish - @read_offset - @window.bytesize) if finish - @read_offset > @window.bytesize
-      @window.bytesplice(offset - @read_offset, data.bytesize, data)
+      wanted = @window_start + finish - @read_offset
+      @window << "\0".b * (wanted - @window.bytesize) if wanted > @window.bytesize
+      @window.bytesplice(@window_start + offset - @read_offset, data.bytesize, data)
       fill(offset...finish)
       exceeded("CRYPTO bytes received in over #{MAX_RANGES} pieces") if @filled.size > MAX_RANGES
       @received_end = finish if finish > @received_end
@@ -110,14 +113,21 @@ module Raiha::Next::QUIC
     end
 
     # The bytes received from where reading stopped up to the first gap.
+    # What is read stays at the front of the window until it is over half
+    # of it, so that a frame received after a read does not copy the window
+    # it would share with the bytes read.
     def read
       first = @filled.first
       return "".b unless first && first.begin == @read_offset
       length = first.end - @read_offset
-      out = @window.byteslice(0, length) #: String
-      @window = @window.byteslice(length..) #: String
+      out = @window.byteslice(@window_start, length) #: String
+      @window_start += length
       @read_offset = first.end
       @filled.shift
+      if @window_start * 2 > @window.bytesize
+        @window = @window.byteslice(@window_start..) #: String
+        @window_start = 0
+      end
       out
     end
 

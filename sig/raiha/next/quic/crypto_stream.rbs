@@ -9,6 +9,7 @@ module Raiha::Next::QUIC
     @lost: Array[Range[Integer]]
     @acked: Array[Range[Integer]]
     @window: String
+    @window_start: Integer
     @filled: Array[Range[Integer]]
 
     attr_reader space: space
