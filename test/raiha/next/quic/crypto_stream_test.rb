@@ -78,4 +78,31 @@ class RaihaNextQUICCryptoStreamTest < Minitest::Test
     assert_equal 4096, stream.read.bytesize
     stream.receive(4096, "y".b * 4096, limit: 4096)
   end
+
+  # Frames that overlap keep no more than the span waiting: here each
+  # reaches the limit from a later offset, which, kept one by one, would
+  # hold about half the limit squared.
+  def test_overlapping_frames_keep_one_span
+    stream = stream()
+    (1...4096).each { |offset| stream.receive(offset, "x".b * (4096 - offset), limit: 4096) }
+    assert_equal 4096, stream.instance_variable_get(:@window).bytesize
+    stream.receive(0, "y".b, limit: 4096)
+    assert_equal "y".b + "x".b * 4095, stream.read
+  end
+
+  # Bytes received in more than MAX_RANGES pieces fail the connection, so
+  # that no frame costs more than the pieces there are.
+  def test_too_many_pieces
+    stream = stream()
+    QUIC::CryptoStream::MAX_RANGES.times { |n| stream.receive(1 + 2 * n, "x".b, limit: 1 << 20) }
+    error = assert_raises(QUIC::Violation) { stream.receive(1 + 2 * QUIC::CryptoStream::MAX_RANGES, "x".b, limit: 1 << 20) }
+    assert_equal QUIC::ErrorCode::CRYPTO_BUFFER_EXCEEDED, error.code
+  end
+
+  # The gaps filled in any order join up.
+  def test_pieces_join
+    stream = stream()
+    [4, 0, 2, 1, 3].each { |n| stream.receive(n * 10, "#{n}".b * 10, limit: 4096) }
+    assert_equal "0" * 10 + "1" * 10 + "2" * 10 + "3" * 10 + "4" * 10, stream.read
+  end
 end

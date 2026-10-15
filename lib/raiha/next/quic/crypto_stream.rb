@@ -11,9 +11,14 @@ module Raiha::Next::QUIC
   # bytes run without a gap. What waits, from what has been read up to the
   # end of the furthest frame, must stay within the limit given, or the
   # connection fails with CRYPTO_BUFFER_EXCEEDED (RFC 9000 "Cryptographic
-  # Message Buffering").
+  # Message Buffering"). The bytes wait in one buffer of that span, however
+  # the frames overlap, and the ranges received in at most MAX_RANGES
+  # pieces, as quic-go's frame sorter keeps to 1000 gaps
+  # (`MaxStreamFrameSorterGaps`), so that neither memory nor time grows
+  # faster than the bytes.
   class CryptoStream
     FRAME_TYPE = 0x06
+    MAX_RANGES = 1000
 
     # The number space the level's packets are in.
     attr_reader :space
@@ -29,7 +34,10 @@ module Raiha::Next::QUIC
       @next_offset = 0
       @lost = [] #: Array[Range[Integer]]
       @acked = [] #: Array[Range[Integer]]
-      @segments = {} #: Hash[Integer, String]
+      # The bytes from `read_offset` to `received_end`, and which of them
+      # have been received, as ranges in order.
+      @window = "".b
+      @filled = [] #: Array[Range[Integer]]
       @received_end = 0
       @read_offset = 0
     end
@@ -77,30 +85,32 @@ module Raiha::Next::QUIC
     end
 
     # Bytes received at `offset`, kept until read; a Violation of
-    # CRYPTO_BUFFER_EXCEEDED when more than `limit` bytes would wait.
+    # CRYPTO_BUFFER_EXCEEDED when more than `limit` bytes would wait or the
+    # bytes received would lie in more than MAX_RANGES pieces.
     def receive(offset, data, limit:)
       finish = offset + data.bytesize
       return if finish <= @read_offset
-      if finish - @read_offset > limit
-        raise Violation.new("#{finish - @read_offset} CRYPTO bytes waiting, over #{limit}", code: ErrorCode::CRYPTO_BUFFER_EXCEEDED,
-          frame_type: FRAME_TYPE)
-      end
+      exceeded("#{finish - @read_offset} CRYPTO bytes waiting, over #{limit}") if finish - @read_offset > limit
       if offset < @read_offset
         data = data.byteslice((@read_offset - offset)..) #: String
         offset = @read_offset
       end
-      @segments[offset] = data unless (@segments[offset]&.bytesize || -1) >= data.bytesize
+      @window << "\0".b * (finish - @read_offset - @window.bytesize) if finish - @read_offset > @window.bytesize
+      @window.bytesplice(offset - @read_offset, data.bytesize, data)
+      fill(offset...finish)
+      exceeded("CRYPTO bytes received in over #{MAX_RANGES} pieces") if @filled.size > MAX_RANGES
       @received_end = finish if finish > @received_end
     end
 
     # The bytes received from where reading stopped up to the first gap.
     def read
-      out = "".b
-      while (start, data = @segments.find { |start, data| start <= @read_offset && start + data.bytesize > @read_offset })
-        out << data.byteslice((@read_offset - start)..) # steep:ignore
-        @read_offset = start + data.bytesize
-      end
-      @segments.delete_if { |start, data| start + data.bytesize <= @read_offset }
+      first = @filled.first
+      return "".b unless first && first.begin == @read_offset
+      length = first.end - @read_offset
+      out = @window.byteslice(0, length) #: String
+      @window = @window.byteslice(length..) #: String
+      @read_offset = first.end
+      @filled.shift
       out
     end
 
@@ -109,6 +119,23 @@ module Raiha::Next::QUIC
     def buffered = @received_end - @read_offset
 
     private def send_end = @sent_base + @sent.bytesize
+
+    private def exceeded(message) = raise Violation.new(message, code: ErrorCode::CRYPTO_BUFFER_EXCEEDED, frame_type: FRAME_TYPE)
+
+    # `range` marked received, merged with the ranges it overlaps or
+    # touches, found by binary search.
+    private def fill(range)
+      first = @filled.bsearch_index { |filled| filled.end >= range.begin } || @filled.size
+      last = first
+      start = range.begin
+      finish = range.end
+      while (filled = @filled[last]) && filled.begin <= finish
+        start = filled.begin if filled.begin < start
+        finish = filled.end if filled.end > finish
+        last += 1
+      end
+      @filled[first...last] = [start...finish]
+    end
 
     private def empty?(range) = range.begin >= range.end
 

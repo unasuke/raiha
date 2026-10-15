@@ -1,13 +1,15 @@
 module Raiha::Next::QUIC
   class CryptoStream
     FRAME_TYPE: Integer
+    MAX_RANGES: Integer
 
     @sent: String
     @sent_base: Integer
     @next_offset: Integer
     @lost: Array[Range[Integer]]
     @acked: Array[Range[Integer]]
-    @segments: Hash[Integer, String]
+    @window: String
+    @filled: Array[Range[Integer]]
 
     attr_reader space: space
     attr_reader received_end: Integer
@@ -24,6 +26,8 @@ module Raiha::Next::QUIC
     def buffered: () -> Integer
 
     private def send_end: () -> Integer
+    private def exceeded: (String message) -> bot
+    private def fill: (Range[Integer] range) -> void
     private def empty?: (Range[Integer] range) -> bool
     private def add: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
     private def subtract: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
