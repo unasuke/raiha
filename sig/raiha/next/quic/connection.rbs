@@ -1,0 +1,80 @@
+module Raiha::Next::QUIC
+  class Connection
+    include TLSBinding::_Connection
+    include Recovery::Duty::_Owner
+
+    LEVELS: Array[PacketProtection::level]
+    SPACES: Hash[PacketProtection::level, space]
+    MIN_INITIAL_DATAGRAM: Integer
+    INITIAL_DCID_LENGTH: Integer
+    DEFAULT_ACK_DELAY_EXPONENT: Integer
+    LONG_HEADER_OVERHEAD: Integer
+    SHORT_HEADER_OVERHEAD: Integer
+
+    class Pending < Data
+      attr_reader level: PacketProtection::level
+      attr_reader header: Wire::header
+      attr_reader packet_number: Integer
+      attr_reader packet_number_length: Integer
+      attr_reader frames: Array[Wire::Frame::t]
+      attr_reader duties: Array[Recovery::Duty::t]
+
+      def self.new: (level: PacketProtection::level, header: Wire::header, packet_number: Integer, packet_number_length: Integer,
+                     frames: Array[Wire::Frame::t], duties: Array[Recovery::Duty::t]) -> instance
+    end
+
+    @config: Config
+    @version: Version
+    @created_at: Float
+    @time: Time
+    @remote: address?
+    @tracer: _Tracer?
+    @recovery: Recovery
+    @protection: PacketProtection
+    @events: Array[Event::t]
+    @source_connection_id: String
+    @destination_connection_id: String
+    @peer_parameters: TransportParameters?
+    @handshake_complete: bool
+    @peer_connection_id_adopted: bool
+    @start_binding: ^(Connection, TransportParameters) -> TLSBinding
+    @binding: TLSBinding?
+
+    attr_reader role: :client | :server
+    attr_reader path: Path
+
+    def self.client: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String,
+                      remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
+    def self.server: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, time: Time, now: Float,
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
+
+    def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
+                     random: ::Raiha::Next::TLS::Keyring::_Random) { (Connection, TransportParameters) -> TLSBinding } -> void
+    def handshake_complete?: () -> bool
+    def next_event: () -> Event::t?
+    def each_event: () { (Event::t) -> void } -> void
+    def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> void
+    def each_transmit: (now: Float) { (Transmit) -> void } -> void
+    def transmits: (now: Float) -> Array[Transmit]
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+
+    private def remote: () -> address
+    private def binding: () -> TLSBinding
+    private def parse_packet: (String datagram, Integer offset) -> Wire::Packet::Parsed?
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
+    private def accept_first_initial: (Wire::LongHeader header, address from) -> void
+    private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
+    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
+    private def next_datagram: (Float now) -> String?
+    private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
+    private def seal: (Array[Pending] pending, Float now) -> String
+    private def protect: (Pending packet, String payload, Float now) -> String
+    private def header_for: (PacketProtection::level level) -> Wire::header
+    private def overhead: (Wire::header header) -> Integer
+    private def sealed_size: (Pending packet, Integer length) -> Integer
+    private def own_ack_delay_exponent: (PacketProtection::level level) -> Integer
+    private def peer_ack_delay_exponent: (PacketProtection::level level) -> Integer
+    private def tls_time: (Float now) -> Time
+  end
+end
