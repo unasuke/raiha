@@ -10,6 +10,9 @@ module Raiha::Next::QUIC
     DEFAULT_ACK_DELAY_EXPONENT: Integer
     LONG_HEADER_OVERHEAD: Integer
     SHORT_HEADER_OVERHEAD: Integer
+    CLOSE_PTOS: Integer
+    MAX_REASON_LENGTH: Integer
+    CLOSE_LEVELS: Array[PacketProtection::level]
 
     class Pending < Data
       attr_reader level: PacketProtection::level
@@ -37,6 +40,14 @@ module Raiha::Next::QUIC
     @peer_parameters: TransportParameters?
     @handshake_complete: bool
     @peer_connection_id_adopted: bool
+    @state: :open | :closing | :draining | :closed
+    @close_error: ConnectionError?
+    @close_deadline: Float?
+    @close_frame_due: bool
+    @closing_datagrams: Integer
+    @idle_deadline: Float?
+    @eliciting_since_received: bool
+    @now: Float
     @start_binding: ^(Connection, TransportParameters) -> TLSBinding
     @binding: TLSBinding?
 
@@ -51,6 +62,11 @@ module Raiha::Next::QUIC
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
                      random: ::Raiha::Next::TLS::Keyring::_Random) { (Connection, TransportParameters) -> TLSBinding } -> void
     def handshake_complete?: () -> bool
+    def closing?: () -> bool
+    def draining?: () -> bool
+    def closed?: () -> bool
+    def close_reason: () -> ConnectionError?
+    def close: (?error_code: Integer, ?reason: String, ?application: bool, now: Float) -> void
     def next_event: () -> Event::t?
     def each_event: () { (Event::t) -> void } -> void
     def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> void
@@ -67,9 +83,16 @@ module Raiha::Next::QUIC
     private def accept_first_initial: (Wire::LongHeader header, address from) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
+    private def enter_closing: (ConnectionError error, Float now) -> void
+    private def enter_draining: (Wire::Frame::ConnectionClose frame, Float now) -> void
+    private def time_out_idly: () -> void
+    private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
+    private def closing_datagram: (Float now) -> String?
+    private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
     private def seal: (Array[Pending] pending, Float now) -> String
+    private def padded: (Pending packet, String payload, Integer missing) -> String
     private def protect: (Pending packet, String payload, Float now) -> String
     private def header_for: (PacketProtection::level level) -> Wire::header
     private def overhead: (Wire::header header) -> Integer

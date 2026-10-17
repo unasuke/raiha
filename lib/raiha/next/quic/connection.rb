@@ -29,6 +29,14 @@ module Raiha::Next::QUIC
     LONG_HEADER_OVERHEAD = 1 + 4 + 1 + 1 + 2 + 4 + 16
     SHORT_HEADER_OVERHEAD = 1 + 4 + 16
 
+    # RFC 9000 "Immediate Close": the closing and draining states last three
+    # PTOs.
+    CLOSE_PTOS = 3
+    # The longest reason phrase a CONNECTION_CLOSE frame carries.
+    MAX_REASON_LENGTH = 256
+    # The levels a CONNECTION_CLOSE frame goes in.
+    CLOSE_LEVELS = %i[initial handshake one_rtt].freeze
+
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
 
@@ -69,6 +77,17 @@ module Raiha::Next::QUIC
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
       @peer_connection_id_adopted = false
+      # :open, :closing, :draining or :closed (RFC 9000 "Connection
+      # Termination").
+      @state = :open
+      @close_error = nil #: ConnectionError?
+      @close_deadline = nil #: Float?
+      @close_frame_due = false
+      @closing_datagrams = 0
+      @idle_deadline = nil #: Float?
+      @eliciting_since_received = false
+      @now = now
+      restart_idle(now)
       @start_binding = start
       @binding = nil #: TLSBinding?
       if role == :client
@@ -83,6 +102,27 @@ module Raiha::Next::QUIC
     # Whether TLS has completed the handshake on this end.
     def handshake_complete? = @handshake_complete
 
+    def closing? = @state == :closing
+
+    def draining? = @state == :draining
+
+    # Whether the connection is over, its closing or draining period past.
+    def closed? = @state == :closed
+
+    # Why the connection closed, nil while it is open.
+    def close_reason = @close_error
+
+    # Closes the connection with `error_code`, an application's unless
+    # `application` is false: a CONNECTION_CLOSE frame goes out, and the
+    # connection stays closing, answering what comes with it again, for
+    # three PTOs (RFC 9000 "Immediate Close"). `each_transmit` and
+    # `handle_timeout` still have work until `closed?`.
+    def close(error_code: ErrorCode::NO_ERROR, reason: "", application: true, now:)
+      @now = now
+      return unless @state == :open
+      enter_closing(ConnectionError.new(code: error_code, frame_type: application ? nil : 0, reason:, application:), now)
+    end
+
     def next_event = @events.shift
 
     def each_event
@@ -92,18 +132,31 @@ module Raiha::Next::QUIC
     end
 
     # Takes a datagram that came from `from` with the ECN codepoint `ecn`.
-    # The packets coalesced in it are handled one after another.
+    # The packets coalesced in it are handled one after another. While
+    # closing, a datagram is answered with the CONNECTION_CLOSE frame again,
+    # the first, second, fourth and so on; while draining, nothing.
     def receive(datagram, from:, to: nil, ecn: :not_ect, now:)
+      @now = now
+      case @state
+      when :open then nil
+      when :closing
+        @closing_datagrams += 1
+        @close_frame_due = true if (@closing_datagrams & (@closing_datagrams - 1)).zero?
+        return
+      else return
+      end
       offset = 0
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset) or break
         receive_packet(packet, from:, ecn:, now:)
         offset = packet.end_offset
+        break unless @state == :open
       end
     end
 
     # Each datagram there is to send now.
     def each_transmit(now:)
+      @now = now
       while (datagram = next_datagram(now))
         yield Transmit.new(payload: datagram, destination: remote, source: nil, ecn: @path.ecn, segment_size: nil)
       end
@@ -115,11 +168,26 @@ module Raiha::Next::QUIC
       transmits
     end
 
-    def next_timeout = @recovery.next_timeout
+    # When something is to be done next: a timer of loss recovery or the
+    # idle timeout while open, the end of closing or draining after.
+    def next_timeout
+      case @state
+      when :open then [@recovery.next_timeout, @idle_deadline].compact.min
+      when :closing, :draining then @close_deadline
+      end
+    end
 
     def handle_timeout(now:)
-      outcome = @recovery.on_timeout(now:)
-      Recovery::Duty.dispatch(outcome, to: self)
+      @now = now
+      case @state
+      when :open
+        idle = @idle_deadline
+        return time_out_idly if idle && now >= idle
+        Recovery::Duty.dispatch(@recovery.on_timeout(now:), to: self)
+      when :closing, :draining
+        deadline = @close_deadline
+        @state = :closed if deadline && now >= deadline
+      end
     end
 
     # TLSBinding::_Connection
@@ -135,7 +203,12 @@ module Raiha::Next::QUIC
       @events << Event::Connected.new(handshake: event)
     end
 
-    def tls_failed(code, reason) = nil
+    # TLS failed and has forgotten its secrets: the connection closes with
+    # `code`, a transport error of the CRYPTO frame.
+    def tls_failed(code, reason)
+      return unless @state == :open
+      enter_closing(ConnectionError.new(code:, frame_type: CryptoStream::FRAME_TYPE, reason: reason.to_s, application: false), @now)
+    end
 
     def tls_event(event) = @events << Event::TLSEvent.new(event:)
 
@@ -190,6 +263,8 @@ module Raiha::Next::QUIC
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = unmasked.open(keys.aead) or return
       accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
+      restart_idle(now)
+      @eliciting_since_received = false
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
@@ -225,17 +300,60 @@ module Raiha::Next::QUIC
     end
 
     private def receive_frame(level, frame, now)
+      return unless @state == :open
       case frame
       when Wire::Frame::Crypto then binding.receive_crypto(level, frame, time: tls_time(now))
       when Wire::Frame::Ack
         Recovery::Duty.dispatch(@recovery.on_ack_received(packet_type: level, ack: frame, now:), to: self)
+      when Wire::Frame::ConnectionClose then enter_draining(frame, now)
       end
+    end
+
+    # RFC 9000 "Immediate Close": what was being sent stops, and only the
+    # CONNECTION_CLOSE frame goes, as soon as it can.
+    private def enter_closing(error, now)
+      @state = :closing
+      @close_error = error
+      @close_deadline = now + CLOSE_PTOS * @path.rtt.pto_period
+      @close_frame_due = true
+      @binding&.discard
+      @events << Event::Closed.new(error:, by_peer: false)
+    end
+
+    # The peer closed: nothing more is sent, and what comes is dropped for
+    # three PTOs (RFC 9000 "Draining Connection State").
+    private def enter_draining(frame, now)
+      error = ConnectionError.new(code: frame.code, frame_type: frame.frame_type, reason: frame.reason, application: frame.application)
+      @state = :draining
+      @close_error = error
+      @close_deadline = now + CLOSE_PTOS * @path.rtt.pto_period
+      @binding&.discard
+      @events << Event::Closed.new(error:, by_peer: true)
+    end
+
+    # RFC 9000 "Idle Timeout": the connection ends at once, with nothing
+    # sent.
+    private def time_out_idly
+      error = ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "idle timeout", application: false)
+      @state = :closed
+      @close_error = error
+      @binding&.discard
+      @events << Event::Closed.new(error:, by_peer: false)
+    end
+
+    # The idle timeout starts again from `now`: the smaller of the two ends'
+    # max_idle_timeout, 0 being none, and three PTOs at least.
+    private def restart_idle(now)
+      timeouts = [@config.max_idle_timeout, @peer_parameters&.max_idle_timeout].compact.reject(&:zero?)
+      timeout = timeouts.min
+      @idle_deadline = timeout && now + [timeout, CLOSE_PTOS * @path.rtt.pto_period].max
     end
 
     # The next datagram to send, nil when there is nothing. What elicits an
     # ACK goes only while the congestion window has room for a datagram
-    # more.
+    # more. While closing, only the CONNECTION_CLOSE frame, when due.
     private def next_datagram(now)
+      return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
       eliciting = @path.bytes_in_flight + limit <= @path.congestion.window
       pending = [] #: Array[Pending]
@@ -253,6 +371,34 @@ module Raiha::Next::QUIC
       end
       return nil if pending.empty?
       seal(pending, now)
+    end
+
+    # The CONNECTION_CLOSE frame in a packet of each level there are keys to
+    # write, since the peer may not have all of them yet (RFC 9000 "Immediate
+    # Close during the Handshake").
+    private def closing_datagram(now)
+      return nil unless @state == :closing && @close_frame_due
+      @close_frame_due = false
+      pending = CLOSE_LEVELS.filter_map do |level|
+        next unless @protection.can_write?(level)
+        packet_number = @recovery.next_packet_number(level)
+        Pending.new(level:, header: header_for(level), packet_number:, packet_number_length: @recovery.packet_number_length(level, packet_number),
+          frames: [close_frame(level)], duties: [])
+      end
+      pending.empty? ? nil : seal(pending, now)
+    end
+
+    # An application's error closes with APPLICATION_ERROR and no reason in
+    # Initial and Handshake packets, where only a transport error may go.
+    private def close_frame(level)
+      error = @close_error or raise Error::StateError, "the connection is not closing"
+      reason = error.reason.b.byteslice(0, MAX_REASON_LENGTH) #: String
+      if error.application && level != :one_rtt
+        Wire::Frame::ConnectionClose.new(code: ErrorCode::APPLICATION_ERROR, frame_type: 0, reason: "".b, application: false)
+      else
+        Wire::Frame::ConnectionClose.new(code: error.code, frame_type: error.application ? nil : error.frame_type || 0, reason:,
+          application: error.application)
+      end
     end
 
     # The frames of `level` that fit in `room` bytes, and their duties: an
@@ -289,8 +435,15 @@ module Raiha::Next::QUIC
         short.positive? ? payload + "\0".b * short : payload
       end
       size = pending.each_with_index.sum { |packet, index| sealed_size(packet, payloads.fetch(index).bytesize) }
-      payloads[-1] = payloads.fetch(-1) + "\0".b * (target - size) if target > size
+      payloads[-1] = padded(pending.fetch(-1), payloads.fetch(-1), target - size) if target > size
       pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now) }.join
+    end
+
+    # `payload` with `missing` bytes of PADDING, less what the Length field
+    # grows by.
+    private def padded(packet, payload, missing)
+      grown = sealed_size(packet, payload.bytesize + missing) - sealed_size(packet, payload.bytesize) - missing
+      payload + "\0".b * (missing - grown)
     end
 
     private def protect(packet, payload, now)
@@ -299,6 +452,10 @@ module Raiha::Next::QUIC
         payload:, keys:)
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
       in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize
+      if ack_eliciting && !@eliciting_since_received
+        @eliciting_since_received = true
+        restart_idle(now)
+      end
       @recovery.on_packet_sent(packet_type: packet.level, packet_number: packet.packet_number, sent_bytes: sealed.bytesize,
         ack_eliciting:, in_flight:, duties: packet.duties, now:)
       sealed
