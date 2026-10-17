@@ -132,7 +132,8 @@ module Raiha::Next::QUIC
     end
 
     # Takes a datagram that came from `from` with the ECN codepoint `ecn`.
-    # The packets coalesced in it are handled one after another. While
+    # The packets coalesced in it are handled one after another; nothing
+    # the peer sends raises. While
     # closing, a datagram is answered with the CONNECTION_CLOSE frame again,
     # the first, second, fourth and so on; while draining, nothing.
     def receive(datagram, from:, to: nil, ecn: :not_ect, now:)
@@ -152,6 +153,10 @@ module Raiha::Next::QUIC
         offset = packet.end_offset
         break unless @state == :open
       end
+    rescue Violation => error
+      # What a packet that opened breaks closes the connection; only an
+      # authenticated peer gets here (250 "Errors").
+      enter_closing(ConnectionError.new(code: error.code, frame_type: error.frame_type || 0, reason: error.message, application: false), now)
     end
 
     # Each datagram there is to send now.
