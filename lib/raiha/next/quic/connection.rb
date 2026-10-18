@@ -295,6 +295,9 @@ module Raiha::Next::QUIC
       header = packet.header
       level = header.type
       return if header.is_a?(Wire::LongHeader) && (id = @peer_source_connection_id) && header.scid != id
+      # RFC 9000 "Datagram Size": a server drops an Initial packet in a
+      # datagram under 1200 bytes.
+      return if @role == :server && level == :initial && packet.datagram.bytesize < MIN_INITIAL_DATAGRAM
       first = @role == :server && @binding.nil?
       keys = first ? first_initial_keys(header) : @protection.read_keys(level)
       return unless keys

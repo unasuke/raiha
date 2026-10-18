@@ -67,4 +67,29 @@ class RaihaNextQUICConnectionAmplificationTest < Minitest::Test
     server.close(now: 1.0)
     assert_equal 1, server.transmits(now: 1.0).size
   end
+
+  # An Initial packet in a datagram under 1200 bytes is dropped: it owes
+  # no ACK, and the same packet in a full datagram is the first to count.
+  def test_a_short_initial_datagram_is_dropped
+    client = client_connection
+    server = server_connection
+    first = client.transmits(now: 0.0).first.payload
+    short = shorten(first)
+    assert_operator short.bytesize, :<, 1200
+    server.receive(short, from: CLIENT, now: 0.0)
+    assert_operator server.next_timeout, :>, 1.0
+    server.receive(first, from: CLIENT, now: 0.0)
+    refute_empty server.transmits(now: 0.0)
+  end
+
+  # The client's Initial packet resealed with less padding, in a datagram
+  # of its own under 1200 bytes.
+  def shorten(datagram)
+    packet = QUIC::Wire::Packet.parse(datagram, dcid_length: 8)
+    keys = QUIC::Crypto::Initial.derive(dcid: packet.header.dcid, version: QUIC::Version::V1).client
+    unmasked = packet.unmask(keys.header_protection, largest: nil)
+    frames = QUIC::Wire::Frame.parse(unmasked.open(keys.aead), packet_type: :initial, ack_delay_exponent: 3).grep(QUIC::Wire::Frame::Crypto)
+    payload = QUIC::Wire::Frame.encode(frames, ack_delay_exponent: 3)
+    QUIC::Wire::Packet.seal(packet.header, packet_number: unmasked.packet_number, packet_number_length: 1, payload:, keys:)
+  end
 end

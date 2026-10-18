@@ -14,7 +14,7 @@ class RaihaNextQUICConnectionErrorsTest < Minitest::Test
   def initial(client_datagram, payload, packet_number: 1)
     first = QUIC::Wire::Packet.parse(client_datagram, dcid_length: 8)
     keys = QUIC::Crypto::Initial.derive(dcid: first.header.dcid, version: QUIC::Version::V1).client
-    packet = QUIC::Wire::Packet.seal(first.header, packet_number:, packet_number_length: 1, payload: payload.ljust(1100, "\0".b), keys:)
+    packet = QUIC::Wire::Packet.seal(first.header, packet_number:, packet_number_length: 1, payload: payload.ljust(1200, "\0".b), keys:)
     packet
   end
 
