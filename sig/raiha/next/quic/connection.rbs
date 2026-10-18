@@ -57,6 +57,7 @@ module Raiha::Next::QUIC
     @received_unvalidated: Integer
     @sent_unvalidated: Integer
     @amplification_limited: bool
+    @probes: Hash[space, Integer]
     @start_binding: ^(Connection, TransportParameters) -> TLSBinding
     @binding: TLSBinding?
 
@@ -103,6 +104,8 @@ module Raiha::Next::QUIC
     private def amplification_budget: (Float now) -> Integer
     private def count_received: (String datagram, Float now) -> void
     private def validate_address: (Float now) -> void
+    private def probe: (Recovery::Probe probe) -> void
+    private def fill_probe: (PacketProtection::level level) -> void
     private def discard_level: (:initial | :handshake level, Float now) -> void
     private def closing_datagram: (Float now) -> String?
     private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose

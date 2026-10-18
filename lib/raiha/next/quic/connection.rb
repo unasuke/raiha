@@ -102,6 +102,8 @@ module Raiha::Next::QUIC
       @received_unvalidated = 0
       @sent_unvalidated = 0
       @amplification_limited = false
+      # How many packets that elicit an ACK a PTO asks for in each space.
+      @probes = {} #: Hash[space, Integer]
       restart_idle(now)
       @start_binding = start
       @binding = nil #: TLSBinding?
@@ -203,7 +205,10 @@ module Raiha::Next::QUIC
     # idle timeout while open, the end of closing or draining after.
     def next_timeout
       case @state
-      when :open then [@recovery.next_timeout, @idle_deadline].compact.min
+      when :open
+        # A server at its amplification limit cannot send an ACK either, so
+        # an ACK's deadline would only come round again and again.
+        [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline].compact.min
       when :closing, :draining then @close_deadline
       end
     end
@@ -214,7 +219,9 @@ module Raiha::Next::QUIC
       when :open
         idle = @idle_deadline
         return time_out_idly if idle && now >= idle
-        Recovery::Duty.dispatch(@recovery.on_timeout(now:), to: self)
+        outcome = @recovery.on_timeout(now:)
+        Recovery::Duty.dispatch(outcome, to: self)
+        probe(outcome.probe) if outcome.probe
       when :closing, :draining
         deadline = @close_deadline
         @state = :closed if deadline && now >= deadline
@@ -441,13 +448,14 @@ module Raiha::Next::QUIC
 
     # The next datagram to send, nil when there is nothing. What elicits an
     # ACK goes only while the congestion window has room for a datagram
-    # more. While closing, only the CONNECTION_CLOSE frame, when due.
+    # more, or a probe is due. While closing, only the CONNECTION_CLOSE
+    # frame, when due.
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
       return nil if limit < MIN_INITIAL_DATAGRAM
-      eliciting = @path.bytes_in_flight + limit <= @path.congestion.window
+      eliciting = @path.bytes_in_flight + limit <= @path.congestion.window || @probes.values.any?(&:positive?)
       pending = [] #: Array[Pending]
       used = 0
       LEVELS.each do |level|
@@ -497,12 +505,28 @@ module Raiha::Next::QUIC
       @recovery.amplification_limited(false, now:)
     end
 
+    # A PTO asks for `probe.packets` packets that elicit an ACK in
+    # `probe.space`.
+    private def probe(probe)
+      @probes[probe.space] = @probes.fetch(probe.space, 0) + probe.packets
+    end
+
+    # A probe of `level` carries what is new when there is some, else the
+    # duties of the oldest packet in flight again, its record left as it is,
+    # else a PING (loss recovery's design, "Probes").
+    private def fill_probe(level)
+      return if binding.crypto_pending?(level) || (level == :one_rtt && @handshake_done_due)
+      oldest = @recovery.oldest_ack_eliciting(SPACES.fetch(level)) or return
+      Recovery::Duty.dispatch(Recovery::Outcome.new(acked: Recovery::Outcome::NO_PACKETS, lost: [oldest], probe: nil), to: self)
+    end
+
     # RFC 9001 "Discarding Unused Keys": the keys of `level`, its CRYPTO
     # stream and what was sent in it go, once. A client's Initial keys go when
     # it first sends a Handshake packet, a server's when it first processes
     # one.
     private def discard_level(level, now)
       return if @protection.discarded?(level)
+      @probes.delete(SPACES.fetch(level))
       @protection.discard(level)
       binding.discard_level(level)
       @recovery.discard_space(level, now:)
@@ -542,13 +566,15 @@ module Raiha::Next::QUIC
 
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
-    # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO.
+    # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, and a
+    # PING for a probe with nothing else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
       space = SPACES.fetch(level)
       ack = @recovery.ack_frame(space, now:) if @recovery.ack_owed?(space) || @recovery.ack_due?(space, now:)
       room -= Wire::Frame.encode([ack], ack_delay_exponent: own_ack_delay_exponent(level)).bytesize if ack
+      fill_probe(level) if eliciting && @probes.fetch(space, 0).positive?
       if eliciting && level == :one_rtt && @handshake_done_due && room.positive?
         @handshake_done_due = false
         frames << Wire::Frame::HandshakeDone.new
@@ -559,6 +585,10 @@ module Raiha::Next::QUIC
         frames << frame
         duties << duty
         room -= Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
+      end
+      if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
+        frames << Wire::Frame::Ping.new
+        room -= 1
       end
       if ack && (frames.any? || @recovery.ack_due?(space, now:))
         frames.unshift(ack)
@@ -607,6 +637,8 @@ module Raiha::Next::QUIC
         @eliciting_since_received = true
         restart_idle(now)
       end
+      space = SPACES.fetch(packet.level)
+      @probes[space] = @probes.fetch(space, 0) - 1 if ack_eliciting && @probes.fetch(space, 0).positive?
       @recovery.on_packet_sent(packet_type: packet.level, packet_number: packet.packet_number, sent_bytes: sealed.bytesize,
         ack_eliciting:, in_flight:, duties: packet.duties, now:)
       sealed
