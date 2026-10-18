@@ -124,6 +124,80 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_nil open_one_rtt(server, 5, phase: 0, now: 4.0)
   end
 
+  # A confirmed server that has had its packet 0 acknowledged.
+  def confirmed_server(&updated)
+    one_rtt_server(&updated).tap do |server|
+      server.handshake_confirmed!
+      server.sent(0)
+      server.acknowledged(0)
+    end
+  end
+
+  # quic-go's interval: the first update comes after 100 packets sent or
+  # opened with the first keys.
+  def test_the_first_update_after_100_packets
+    phases = []
+    server = confirmed_server { phases << _1 }
+    98.times { server.sent(_1 + 1) }
+    server.update_keys_if_due
+    assert_equal 0, server.key_phase
+    server.sent(99)
+    server.update_keys_if_due
+    assert_equal [1], phases
+    assert_equal seal(keys_at(SERVER_SECRET, 1)), seal(server.write_keys(:one_rtt))
+    assert open_one_rtt(server, 1, phase: 1)
+  end
+
+  def test_packets_opened_count_too
+    server = confirmed_server
+    100.times { open_one_rtt(server, _1, phase: 0) }
+    server.update_keys_if_due
+    assert_equal 1, server.key_phase
+  end
+
+  # quic-go's interval: every later update comes after 100,000 packets.
+  def test_later_updates_after_100000_packets
+    server = confirmed_server
+    99.times { server.sent(_1 + 1) }
+    server.update_keys_if_due
+    server.sent(100)
+    server.acknowledged(100)
+    99_998.times { server.sent(_1 + 101) }
+    server.update_keys_if_due
+    assert_equal 1, server.key_phase
+    server.sent(100_099)
+    server.update_keys_if_due
+    assert_equal 2, server.key_phase
+  end
+
+  # RFC 9001 "Initiating a Key Update": not before the handshake is
+  # confirmed.
+  def test_no_update_before_confirmation
+    server = one_rtt_server
+    server.sent(0)
+    server.acknowledged(0)
+    200.times { server.sent(_1 + 1) }
+    server.update_keys_if_due
+    assert_equal 0, server.key_phase
+    server.handshake_confirmed!
+    server.update_keys_if_due
+    assert_equal 1, server.key_phase
+  end
+
+  # RFC 9001 "Initiating a Key Update": not before a packet sent with the
+  # current keys is acknowledged.
+  def test_no_update_before_an_ack_of_the_current_keys
+    server = one_rtt_server
+    server.handshake_confirmed!
+    server.acknowledged(4)
+    200.times { server.sent(_1 + 5) }
+    server.update_keys_if_due
+    assert_equal 0, server.key_phase
+    server.acknowledged(5)
+    server.update_keys_if_due
+    assert_equal 1, server.key_phase
+  end
+
   # A Key Phase bit changed on a packet that does not open with the next
   # keys changes nothing.
   def test_a_changed_bit_alone_updates_nothing

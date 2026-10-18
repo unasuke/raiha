@@ -55,14 +55,14 @@ module NextQUICPair
       payload: payload.ljust(40, "\0".b), keys:)
   end
 
-  # The Key Phase bit and frames of the server's 1-RTT packet in
-  # `datagram`, opened with its keys of `phase` from `keylog`; nil when it
-  # does not open with them.
+  # The Key Phase bit, packet number and frames of the server's 1-RTT
+  # packet in `datagram`, opened with its keys of `phase` from `keylog`;
+  # nil when it does not open with them.
   def server_one_rtt(keylog, datagram, phase:)
     keys = one_rtt_keys(keylog, "SERVER_TRAFFIC_SECRET_0", phase:)
     unmasked = QUIC::Wire::Packet.parse(datagram, dcid_length: 8).unmask(keys.header_protection, largest: nil)
     payload = unmasked.open(keys.aead) or return nil
-    [unmasked.header.key_phase, QUIC::Wire::Frame.parse(payload, packet_type: :one_rtt, ack_delay_exponent: 3)]
+    [unmasked.header.key_phase, unmasked.packet_number, QUIC::Wire::Frame.parse(payload, packet_type: :one_rtt, ack_delay_exponent: 3)]
   end
 
   # Passes datagrams each way, a millisecond apart, until both have

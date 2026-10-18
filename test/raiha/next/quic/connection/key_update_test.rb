@@ -33,7 +33,7 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
     assert_equal [QUIC::Event::KeyUpdated.new(phase: 1)], events(server).grep(QUIC::Event::KeyUpdated)
     opened = server.transmits(now: now + 1.0).map { server_one_rtt(keylog, _1.payload, phase: 1) }
     refute_empty opened
-    assert opened.all? { |bit, _| bit == 1 }, opened.inspect
+    assert opened.all? { |bit, _, _| bit == 1 }, opened.inspect
     assert opened.flat_map(&:last).grep(QUIC::Wire::Frame::Ack).any? { _1.largest == 1000 }
   end
 
@@ -50,5 +50,24 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
     acked = opened.flat_map(&:last).grep(QUIC::Wire::Frame::Ack).flat_map(&:ranges)
     assert acked.any? { _1.cover?(998) }, acked.inspect
     refute acked.any? { _1.cover?(999) }, acked.inspect
+  end
+
+  # quic-go's interval: once a packet of its first 1-RTT keys is
+  # acknowledged, the server updates them after 100 packets.
+  def test_the_server_updates_its_keys
+    server, keylog, server_id, now = connected
+    server.transmits(now:)
+    100.times { server.receive(client_one_rtt(keylog, dcid: server_id, payload: PING, packet_number: 1000 + _1), from: CLIENT, now:) }
+    first = server.transmits(now:).map { server_one_rtt(keylog, _1.payload, phase: 0) }
+    refute_empty first
+    assert first.all?, "the server keeps its first keys until a packet of them is acknowledged"
+    largest = first.map { _2 }.max
+    ack = QUIC::Wire::Frame::Ack.new(ranges: [largest..largest], delay: 0)
+    payload = QUIC::Wire::Frame.encode([ack, QUIC::Wire::Frame::Ping.new], ack_delay_exponent: 3)
+    server.receive(client_one_rtt(keylog, dcid: server_id, payload:, packet_number: 1100), from: CLIENT, now:)
+    updated = server.transmits(now: now + 1.0).map { server_one_rtt(keylog, _1.payload, phase: 1) }
+    refute_empty updated
+    assert updated.all? { |bit, _, _| bit == 1 }, updated.inspect
+    assert_equal [QUIC::Event::KeyUpdated.new(phase: 1)], events(server).grep(QUIC::Event::KeyUpdated)
   end
 end

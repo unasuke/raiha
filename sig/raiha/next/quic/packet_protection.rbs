@@ -5,6 +5,8 @@ module Raiha::Next::QUIC
 
     LEVELS: Array[level]
     OLD_KEY_PTOS: Integer
+    FIRST_KEY_UPDATE_INTERVAL: Integer
+    KEY_UPDATE_INTERVAL: Integer
 
     @role: :client | :server
     @keys: Hash[level, Hash[direction, Crypto::Keys]]
@@ -15,7 +17,12 @@ module Raiha::Next::QUIC
     @next_read: Crypto::Keys?
     @previous_read: Crypto::Keys?
     @previous_until: Float?
+    @confirmed: bool
+    @largest_acked: Integer?
+    @first_sent: Integer?
     @lowest_opened: Integer?
+    @sent_count: Integer
+    @opened_count: Integer
 
     attr_reader version: Version
     attr_reader key_phase: Integer
@@ -30,6 +37,10 @@ module Raiha::Next::QUIC
     def discarded?: (level level) -> bool
     def key_phase_bit: () -> Integer
     def open: (level level, Wire::Packet::Unmasked unmasked, now: Float, pto: Float) -> String?
+    def sent: (Integer packet_number) -> void
+    def acknowledged: (Integer largest) -> void
+    def handshake_confirmed!: () -> bool
+    def update_keys_if_due: () -> void
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
     def discard: (level level) -> void

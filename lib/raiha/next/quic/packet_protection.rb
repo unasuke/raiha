@@ -13,9 +13,17 @@ module Raiha::Next::QUIC
   # whether its Key Phase bit changed; those of the previous phase stay
   # for the packets the network delayed, OLD_KEY_PTOS PTOs from the first
   # packet that opens with the new ones.
+  #
+  # This end updates the keys as quic-go does, so that the peer's handling
+  # of an update is exercised early in a connection: after
+  # FIRST_KEY_UPDATE_INTERVAL packets sent or opened with the first keys,
+  # and KEY_UPDATE_INTERVAL with each later ones (quic-go's
+  # `FirstKeyUpdateInterval` and `KeyUpdateInterval`).
   class PacketProtection
     LEVELS = %i[initial zero_rtt handshake one_rtt].freeze
     OLD_KEY_PTOS = 3
+    FIRST_KEY_UPDATE_INTERVAL = 100
+    KEY_UPDATE_INTERVAL = 100_000
 
     attr_reader :version
     # How many times the 1-RTT keys have changed.
@@ -37,8 +45,15 @@ module Raiha::Next::QUIC
       @previous_read = nil #: Crypto::Keys?
       @previous_until = nil #: Float?
       @key_phase = 0
-      # The lowest packet number opened with the current 1-RTT keys.
+      @confirmed = false
+      # The largest 1-RTT packet number the peer has acknowledged.
+      @largest_acked = nil #: Integer?
+      # Of the packets of the current key phase: the first number sent, the
+      # lowest opened, and how many were sent and opened.
+      @first_sent = nil #: Integer?
       @lowest_opened = nil #: Integer?
+      @sent_count = 0
+      @opened_count = 0
     end
 
     # The Initial keys from the client's first Destination Connection ID,
@@ -101,7 +116,35 @@ module Raiha::Next::QUIC
       end
       @previous_until = now + OLD_KEY_PTOS * pto if lowest.nil? && @previous_read
       @lowest_opened = number if lowest.nil? || number < lowest
+      @opened_count += 1
       payload
+    end
+
+    # A 1-RTT packet numbered `packet_number` went out with the current
+    # keys.
+    def sent(packet_number)
+      @first_sent ||= packet_number
+      @sent_count += 1
+    end
+
+    # The peer acknowledged the 1-RTT packets up to `largest`.
+    def acknowledged(largest)
+      @largest_acked = largest if @largest_acked.nil? || largest > @largest_acked # steep:ignore
+    end
+
+    def handshake_confirmed! = @confirmed = true
+
+    # Moves to the keys of the next key phase when an update is due: the
+    # handshake confirmed, a packet sent with the current keys acknowledged
+    # (RFC 9001 "Initiating a Key Update"), and as many packets gone with
+    # them as the interval.
+    def update_keys_if_due
+      return unless @confirmed && @next_read
+      first = @first_sent or return
+      acked = @largest_acked or return
+      return if acked < first
+      return if [@sent_count, @opened_count].max < (@key_phase.zero? ? FIRST_KEY_UPDATE_INTERVAL : KEY_UPDATE_INTERVAL)
+      update_keys
     end
 
     # When the previous 1-RTT read keys go, nil when none are to go.
@@ -129,7 +172,10 @@ module Raiha::Next::QUIC
       @next_secrets.transform_values! { |secret| Crypto::Keys.next_secret(suite:, secret:, version: @version) }
       @next_read = keys.fetch(:read).update(suite:, secret: @next_secrets.fetch(:read), version: @version)
       @key_phase += 1
+      @first_sent = nil
       @lowest_opened = nil
+      @sent_count = 0
+      @opened_count = 0
       @updated&.call(@key_phase)
     end
 

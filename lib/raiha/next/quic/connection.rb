@@ -392,6 +392,7 @@ module Raiha::Next::QUIC
       when Wire::Frame::Crypto then binding.receive_crypto(level, frame, time: tls_time(now))
       when Wire::Frame::Ack
         Recovery::Duty.dispatch(@recovery.on_ack_received(packet_type: level, ack: frame, now:), to: self)
+        @protection.acknowledged(frame.largest) if level == :one_rtt
       when Wire::Frame::ConnectionClose then enter_draining(frame, now)
       when Wire::Frame::HandshakeDone
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
@@ -406,6 +407,7 @@ module Raiha::Next::QUIC
       return if @handshake_confirmed
       @handshake_confirmed = true
       @recovery.handshake_confirmed!(now:)
+      @protection.handshake_confirmed!
       discard_level(:handshake, now)
     end
 
@@ -451,14 +453,15 @@ module Raiha::Next::QUIC
 
     # The next datagram to send, nil when there is nothing. What elicits an
     # ACK goes only while the congestion window has room for a datagram
-    # more, or a probe is due. While closing, only the CONNECTION_CLOSE
-    # frame, when due.
+    # more, or a probe is due. The 1-RTT keys change first when a key update
+    # is due. While closing, only the CONNECTION_CLOSE frame, when due.
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
       return nil if limit < MIN_INITIAL_DATAGRAM
       eliciting = @path.bytes_in_flight + limit <= @path.congestion.window || @probes.values.any?(&:positive?)
+      @protection.update_keys_if_due
       pending = [] #: Array[Pending]
       used = 0
       LEVELS.each do |level|
@@ -634,6 +637,7 @@ module Raiha::Next::QUIC
       keys = @protection.write_keys(packet.level) or raise Error::StateError, "no keys to write #{packet.level}"
       sealed = Wire::Packet.seal(packet.header, packet_number: packet.packet_number, packet_number_length: packet.packet_number_length,
         payload:, keys:)
+      @protection.sent(packet.packet_number) if packet.level == :one_rtt
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
       in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize
       if ack_eliciting && !@eliciting_since_received
