@@ -534,11 +534,13 @@ module Raiha::Next::QUIC
 
     private def overhead(header)
       case header
-      when Wire::LongHeader
-        LONG_HEADER_OVERHEAD + header.dcid.bytesize + header.scid.bytesize + Wire::Varint.size(header.token.bytesize) + header.token.bytesize
+      when Wire::LongHeader then LONG_HEADER_OVERHEAD + header.dcid.bytesize + header.scid.bytesize + token_field(header)
       else SHORT_HEADER_OVERHEAD + header.dcid.bytesize
       end
     end
+
+    # The Token Length and Token fields, which only an Initial packet has.
+    private def token_field(header) = header.type == :initial ? Wire::Varint.size(header.token.bytesize) + header.token.bytesize : 0
 
     # The bytes of `packet` with a payload of `length` bytes, protected.
     private def sealed_size(packet, length)
@@ -547,8 +549,7 @@ module Raiha::Next::QUIC
       body = packet.packet_number_length + length + keys.aead.tag_length
       case header
       when Wire::LongHeader
-        1 + 4 + 1 + header.dcid.bytesize + 1 + header.scid.bytesize + Wire::Varint.size(header.token.bytesize) + header.token.bytesize +
-          Wire::Varint.size(body) + body
+        1 + 4 + 1 + header.dcid.bytesize + 1 + header.scid.bytesize + token_field(header) + Wire::Varint.size(body) + body
       else 1 + header.dcid.bytesize + body
       end
     end

@@ -87,4 +87,23 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     assert server.closing?
     assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, server.close_reason.code
   end
+
+  # Every datagram of a client with an Initial packet in it is 1200 bytes,
+  # those with a Handshake packet after it too.
+  def test_every_client_initial_datagram_is_padded
+    client = client_connection
+    server = server_connection
+    sizes = []
+    now = 0.0
+    6.times do
+      client.transmits(now:).each do |transmit|
+        sizes << transmit.payload.bytesize if QUIC::Wire::Packet.parse(transmit.payload, dcid_length: 8).header.type == :initial
+        server.receive(transmit.payload, from: CLIENT, now:)
+      end
+      server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+      now += 0.001
+    end
+    assert_operator sizes.size, :>=, 2
+    assert sizes.all? { _1 >= QUIC::Connection::MIN_INITIAL_DATAGRAM }, sizes.inspect
+  end
 end

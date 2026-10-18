@@ -101,6 +101,7 @@ module Raiha::Next::QUIC
     private def protect: (Pending packet, String payload, Float now) -> String
     private def header_for: (PacketProtection::level level) -> Wire::header
     private def overhead: (Wire::header header) -> Integer
+    private def token_field: (Wire::LongHeader header) -> Integer
     private def sealed_size: (Pending packet, Integer length) -> Integer
     private def own_ack_delay_exponent: (PacketProtection::level level) -> Integer
     private def peer_ack_delay_exponent: (PacketProtection::level level) -> Integer
