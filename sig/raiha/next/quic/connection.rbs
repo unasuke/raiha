@@ -39,6 +39,8 @@ module Raiha::Next::QUIC
     @destination_connection_id: String
     @peer_parameters: TransportParameters?
     @handshake_complete: bool
+    @handshake_confirmed: bool
+    @handshake_done_due: bool
     @peer_source_connection_id: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
@@ -62,6 +64,7 @@ module Raiha::Next::QUIC
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
                      random: ::Raiha::Next::TLS::Keyring::_Random) { (Connection, TransportParameters) -> TLSBinding } -> void
     def handshake_complete?: () -> bool
+    def handshake_confirmed?: () -> bool
     def closing?: () -> bool
     def draining?: () -> bool
     def closed?: () -> bool
@@ -83,6 +86,7 @@ module Raiha::Next::QUIC
     private def accept_first_initial: (Wire::LongHeader header, address from) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
+    private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void
     private def enter_draining: (Wire::Frame::ConnectionClose frame, Float now) -> void
     private def time_out_idly: () -> void

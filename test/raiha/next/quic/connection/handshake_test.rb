@@ -54,4 +54,37 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     handshake(client, server)
     assert server.handshake_complete?
   end
+
+  # RFC 9001 "Handshake Confirmed": a server confirms as it completes, a
+  # client once HANDSHAKE_DONE comes.
+  def test_confirmation
+    client = client_connection
+    server = server_connection
+    now = 0.0
+    until server.handshake_complete?
+      client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+      server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) } unless server.handshake_complete?
+    end
+    assert server.handshake_confirmed?
+    assert client.handshake_complete?
+    refute client.handshake_confirmed?
+    server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+    assert client.handshake_confirmed?
+  end
+
+  # A server does not take HANDSHAKE_DONE: PROTOCOL_VIOLATION.
+  def test_handshake_done_from_a_client
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection
+    first = client.transmits(now: 0.0).first.payload
+    server.receive(first, from: CLIENT, now: 0.0)
+    reply = server.transmits(now: 0.0)
+    server_id = QUIC::Wire::Packet.parse(reply.first.payload, dcid_length: 8).header.scid
+    reply.each { client.receive(_1.payload, from: SERVER, now: 0.0) }
+    handshake(client, server)
+    server.receive(client_one_rtt(keylog, dcid: server_id, payload: "\x1e".b), from: CLIENT, now: 1.0)
+    assert server.closing?
+    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, server.close_reason.code
+  end
 end

@@ -22,10 +22,9 @@ class RaihaNextQUICConnectionCloseTest < Minitest::Test
     [client, server, now]
   end
 
-  # The application closes: the peer drains, and both are closed three
-  # PTOs on. The Initial and Handshake keys are still there, so the frame
-  # goes in those packets too, as APPLICATION_ERROR, and the peer reads
-  # that one first.
+  # The application closes: the peer drains with its error, and both are
+  # closed three PTOs on. With the handshake confirmed, the frame goes in a
+  # 1-RTT packet alone.
   def test_an_application_closes
     client, server, now = connected
     client.close(error_code: 7, reason: "bye", now:)
@@ -33,8 +32,7 @@ class RaihaNextQUICConnectionCloseTest < Minitest::Test
     assert_equal [QUIC::ConnectionError.new(code: 7, frame_type: nil, reason: "bye", application: true)], closed(client).map(&:error)
     deliver(client, server, now:)
     assert server.draining?
-    assert_equal [[QUIC::ErrorCode::APPLICATION_ERROR, "", false, true]],
-      closed(server).map { [_1.error.code, _1.error.reason, _1.error.application, _1.by_peer] }
+    assert_equal [[7, "bye", true, true]], closed(server).map { [_1.error.code, _1.error.reason, _1.error.application, _1.by_peer] }
     assert_empty server.transmits(now:)
     [client, server].each do |connection|
       connection.handle_timeout(now: connection.next_timeout)
@@ -72,8 +70,9 @@ class RaihaNextQUICConnectionCloseTest < Minitest::Test
 
   # RFC 9000 "Idle Timeout": the smaller of the two, gone quietly.
   def test_idle_timeout
-    client, server, now = connected
-    assert_in_delta now + 30.0, client.next_timeout, 0.01
+    client, _server, now = connected
+    client.handle_timeout(now: now + 29.9)
+    refute client.closed?
     client.handle_timeout(now: now + 30.0)
     assert client.closed?
     assert_equal ["idle timeout"], closed(client).map { _1.error.reason }
@@ -81,7 +80,10 @@ class RaihaNextQUICConnectionCloseTest < Minitest::Test
     short = client_connection(config: QUIC::Config.new(max_idle_timeout: 5.0))
     other = server_connection
     now = handshake(short, other)
-    assert_in_delta now + 5.0, other.next_timeout, 0.01
+    other.handle_timeout(now: now + 4.9)
+    refute other.closed?
+    other.handle_timeout(now: now + 5.0)
+    assert other.closed?
   end
 
   # TLS fails on the server: no ALPN in common closes with CRYPTO_ERROR

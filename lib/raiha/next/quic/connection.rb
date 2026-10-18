@@ -76,6 +76,8 @@ module Raiha::Next::QUIC
       @source_connection_id = random.bytes(config.connection_id_length).b
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
+      @handshake_confirmed = false
+      @handshake_done_due = false
       # The Source Connection ID of the peer's first Initial packet; a long
       # header packet with another is dropped (RFC 9000 "Negotiating
       # Connection IDs").
@@ -104,6 +106,10 @@ module Raiha::Next::QUIC
 
     # Whether TLS has completed the handshake on this end.
     def handshake_complete? = @handshake_complete
+
+    # Whether the handshake is confirmed (RFC 9001 "Handshake Confirmed"): on
+    # a server once it is complete, on a client once HANDSHAKE_DONE comes.
+    def handshake_confirmed? = @handshake_confirmed
 
     def closing? = @state == :closing
 
@@ -209,9 +215,14 @@ module Raiha::Next::QUIC
       @peer_parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
     end
 
+    # A server confirms the handshake as it completes, and tells the client
+    # with HANDSHAKE_DONE.
     def handshake_completed(event)
       @handshake_complete = true
       @events << Event::Connected.new(handshake: event)
+      return unless @role == :server
+      @handshake_done_due = true
+      confirm(@now)
     end
 
     # TLS failed and has forgotten its secrets: the connection closes with
@@ -248,7 +259,11 @@ module Raiha::Next::QUIC
     def new_connection_id_lost(duty) = nil
     def retire_connection_id_lost(duty) = nil
     def new_token_lost(duty) = nil
-    def handshake_done_lost = nil
+    # RFC 9000 "Retransmission of Information": HANDSHAKE_DONE goes again
+    # until it is acknowledged.
+    def handshake_done_lost
+      @handshake_done_due = true if @state == :open
+    end
 
     private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
 
@@ -323,7 +338,20 @@ module Raiha::Next::QUIC
       when Wire::Frame::Ack
         Recovery::Duty.dispatch(@recovery.on_ack_received(packet_type: level, ack: frame, now:), to: self)
       when Wire::Frame::ConnectionClose then enter_draining(frame, now)
+      when Wire::Frame::HandshakeDone
+        raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
+        confirm(now)
       end
+    end
+
+    # RFC 9001 "Discarding Handshake Keys": once the handshake is
+    # confirmed, the Handshake keys go, and loss recovery counts Application
+    # Data.
+    private def confirm(now)
+      return if @handshake_confirmed
+      @handshake_confirmed = true
+      @recovery.handshake_confirmed!(now:)
+      discard_level(:handshake, now)
     end
 
     # RFC 9000 "Immediate Close": what was being sent stops, and only the
@@ -432,14 +460,20 @@ module Raiha::Next::QUIC
     end
 
     # The frames of `level` that fit in `room` bytes, and their duties: an
-    # ACK when one is owed and the packet goes anyway, or is due, then
-    # CRYPTO when frames that elicit an ACK may go.
+    # ACK when one is owed and the packet goes anyway, or is due, then, when
+    # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
       space = SPACES.fetch(level)
       ack = @recovery.ack_frame(space, now:) if @recovery.ack_owed?(space) || @recovery.ack_due?(space, now:)
       room -= Wire::Frame.encode([ack], ack_delay_exponent: own_ack_delay_exponent(level)).bytesize if ack
+      if eliciting && level == :one_rtt && @handshake_done_due && room.positive?
+        @handshake_done_due = false
+        frames << Wire::Frame::HandshakeDone.new
+        duties << Recovery::Duty::HandshakeDone.new
+        room -= 1
+      end
       while eliciting && room.positive? && (frame, duty = binding.next_crypto_frame(level, room))
         frames << frame
         duties << duty
