@@ -88,6 +88,7 @@ module Raiha::Next::QUIC
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
+    private def discard_level: (:initial | :handshake level, Float now) -> void
     private def closing_datagram: (Float now) -> String?
     private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]

@@ -197,7 +197,10 @@ module Raiha::Next::QUIC
 
     # TLSBinding::_Connection
 
-    def install_keys(level, direction, secret:, suite:) = @protection.install(level, direction, secret:, suite:)
+    def install_keys(level, direction, secret:, suite:)
+      @protection.install(level, direction, secret:, suite:)
+      @recovery.handshake_keys_installed! if level == :handshake
+    end
 
     def peer_transport_parameters(data)
       @peer_parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
@@ -275,6 +278,7 @@ module Raiha::Next::QUIC
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader)
       frames.each { |frame| receive_frame(level, frame, now) }
+      discard_level(:initial, now) if @role == :server && level == :handshake
     end
 
     # The keys a client's first Initial is sealed with, from its own
@@ -375,7 +379,20 @@ module Raiha::Next::QUIC
         used += overhead(header) + Wire::Frame.encode(frames, ack_delay_exponent: own_ack_delay_exponent(level)).bytesize
       end
       return nil if pending.empty?
-      seal(pending, now)
+      datagram = seal(pending, now)
+      discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
+      datagram
+    end
+
+    # RFC 9001 "Discarding Unused Keys": the keys of `level`, its CRYPTO
+    # stream and what was sent in it go, once. A client's Initial keys go when
+    # it first sends a Handshake packet, a server's when it first processes
+    # one.
+    private def discard_level(level, now)
+      return if @protection.discarded?(level)
+      @protection.discard(level)
+      binding.discard_level(level)
+      @recovery.discard_space(level, now:)
     end
 
     # The CONNECTION_CLOSE frame in a packet of each level there are keys to
