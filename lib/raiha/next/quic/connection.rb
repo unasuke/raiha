@@ -105,8 +105,14 @@ module Raiha::Next::QUIC
       restart_idle(now)
       @start_binding = start
       @binding = nil #: TLSBinding?
+      # A client's first Destination Connection ID, and the Source
+      # Connection ID of a Retry, which the server's transport parameters
+      # must name.
+      @original_destination_connection_id = nil #: String?
+      @retry_source_connection_id = nil #: String?
       if role == :client
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
+        @original_destination_connection_id = @destination_connection_id
         @protection.install_initial(@destination_connection_id)
         @binding = start.call(self, config.transport_parameters(initial_source_connection_id: @source_connection_id))
       else
@@ -222,8 +228,15 @@ module Raiha::Next::QUIC
       @recovery.handshake_keys_installed! if level == :handshake
     end
 
+    # The peer's transport parameters: their connection IDs must be the ones
+    # its Initial packets used, and its max_ack_delay and max_idle_timeout
+    # count from now on.
     def peer_transport_parameters(data)
-      @peer_parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
+      parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
+      authenticate_connection_ids(parameters)
+      @peer_parameters = parameters
+      @recovery.peer_max_ack_delay = parameters.max_ack_delay
+      restart_idle(@now)
     end
 
     # A server confirms the handshake as it completes, and tells the client
@@ -316,6 +329,22 @@ module Raiha::Next::QUIC
       return unless @role == :server && level == :handshake
       validate_address(now)
       discard_level(:initial, now)
+    end
+
+    # RFC 9000 "Authenticating Connection IDs": the connection IDs the peer
+    # names in its transport parameters are those of the Initial packets,
+    # and a Retry's when there was one, or the connection fails with
+    # TRANSPORT_PARAMETER_ERROR.
+    private def authenticate_connection_ids(parameters)
+      wrong = [] #: Array[Symbol]
+      wrong << :initial_source_connection_id unless parameters.initial_source_connection_id == @peer_source_connection_id
+      if @role == :client
+        wrong << :original_destination_connection_id unless parameters.original_destination_connection_id == @original_destination_connection_id
+        wrong << :retry_source_connection_id unless parameters.retry_source_connection_id == @retry_source_connection_id
+      end
+      return if wrong.empty?
+      raise Violation.new("#{wrong.join(" and ")} not as the packets had it", code: ErrorCode::TRANSPORT_PARAMETER_ERROR,
+        frame_type: CryptoStream::FRAME_TYPE)
     end
 
     # The keys a client's first Initial is sealed with, from its own

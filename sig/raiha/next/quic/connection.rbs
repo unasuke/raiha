@@ -43,6 +43,8 @@ module Raiha::Next::QUIC
     @handshake_confirmed: bool
     @handshake_done_due: bool
     @peer_source_connection_id: String?
+    @original_destination_connection_id: String?
+    @retry_source_connection_id: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -87,6 +89,7 @@ module Raiha::Next::QUIC
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset) -> Wire::Packet::Parsed?
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
+    private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
