@@ -68,6 +68,7 @@ module Raiha::Next::QUIC
     def next_packet_number: (packet_type packet_type) -> Integer
     def packet_number_length: (packet_type packet_type, Integer packet_number) -> Integer
     def largest_received: (packet_type packet_type) -> Integer?
+    def oldest_ack_eliciting: (space space) -> SentPacket?
     def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
                          duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
 
@@ -313,6 +314,7 @@ module Raiha::Next::QUIC
       NO_ECN_COUNTS: Wire::Frame::Ack::ECNCounts
 
       def sent?: (Integer packet_number) -> bool
+      def oldest_ack_eliciting: () -> SentPacket?
       def acknowledge: (Array[Range[Integer]] ranges, frame_type: Integer) -> Array[SentPacket]
       def detect_lost: (loss_delay: Float, now: Float) { (SentPacket packet, Symbol trigger) -> void } -> Array[SentPacket]
       def take_spurious: (Array[Range[Integer]] ranges) -> Array[SentPacket]

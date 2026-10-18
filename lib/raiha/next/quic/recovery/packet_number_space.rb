@@ -240,6 +240,9 @@ module Raiha::Next::QUIC
 
       def sent?(packet_number) = @sent.key?(packet_number)
 
+      # The oldest record in flight that elicits an ACK, nil when none.
+      def oldest_ack_eliciting = @sent.each_value.find { |packet| packet.ack_eliciting && packet.in_flight }
+
       # Takes the ranges of an ACK frame of `frame_type`, from the largest
       # down, and gives the records they acknowledge for the first time,
       # taken out, in packet number order. An ACK of a packet never sent, the

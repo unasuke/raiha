@@ -223,6 +223,11 @@ module Raiha::Next::QUIC
       Wire::PacketNumber.length(packet_number, largest_acked: space_of(packet_type).largest_acked_packet)
     end
 
+    # The oldest packet in flight in `space` that elicits an ACK, nil when
+    # none: what a probe carries again when nothing new waits (loss
+    # recovery's design, "Probes"). It stays recorded as it is.
+    def oldest_ack_eliciting(space) = @spaces.fetch(space).oldest_ack_eliciting
+
     # The largest packet number received in the space of `packet_type`, nil
     # before any, which the packet number of the next is decoded against.
     def largest_received(packet_type) = space_of(packet_type).largest_received

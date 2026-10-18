@@ -63,4 +63,16 @@ class RaihaNextQUICRecoverySendingTest < Minitest::Test
     recovery.on_packet_received(packet_type: :zero_rtt, packet_number: 3, ecn: :not_ect, ack_eliciting: true, now: 0.0)
     assert_equal 7, recovery.largest_received(:zero_rtt)
   end
+
+  # What a probe carries again when nothing new waits.
+  def test_oldest_ack_eliciting
+    recovery = recovery()
+    assert_nil recovery.oldest_ack_eliciting(:handshake)
+    send_packet(recovery, :handshake, now: 0.0, ack_eliciting: false, in_flight: false)
+    send_packet(recovery, :handshake, now: 0.1)
+    send_packet(recovery, :handshake, now: 0.2)
+    assert_equal 1, recovery.oldest_ack_eliciting(:handshake).packet_number
+    recovery.on_ack_received(packet_type: :handshake, ack: ack(1..1), now: 0.3)
+    assert_equal 2, recovery.oldest_ack_eliciting(:handshake).packet_number
+  end
 end
