@@ -46,14 +46,19 @@ module Raiha::Next::QUIC
       @previous_until = nil #: Float?
       @key_phase = 0
       @confirmed = false
-      # The largest 1-RTT packet number the peer has acknowledged.
+      # The largest 1-RTT packet number the peer has acknowledged, opened,
+      # and opened with keys older than the current.
       @largest_acked = nil #: Integer?
+      @largest_opened = nil #: Integer?
+      @largest_older = nil #: Integer?
       # Of the packets of the current key phase: the first number sent, the
-      # lowest opened, and how many were sent and opened.
+      # lowest opened, how many were sent and opened, and the largest an
+      # ACK frame sent with them acknowledged.
       @first_sent = nil #: Integer?
       @lowest_opened = nil #: Integer?
       @sent_count = 0
       @opened_count = 0
+      @largest_ack_sent = nil #: Integer?
     end
 
     # The Initial keys from the client's first Destination Connection ID,
@@ -97,6 +102,12 @@ module Raiha::Next::QUIC
     # next ones above it. A packet that opens with the next keys is the
     # peer's key update, which this end follows (RFC 9001 "Responding to a
     # Key Update"). `pto` is the PTO period at `now`.
+    #
+    # A Violation of KEY_UPDATE_ERROR when the peer updates again before
+    # this end has acknowledged, with the current keys, a packet of the
+    # peer's current keys (MAY), or when a packet opens with keys older than
+    # those of a packet with a lower number (MUST, RFC 9001 "Sending with
+    # Updated Keys").
     def open(level, unmasked, now:, pto:)
       keys = read_keys(level) or return nil
       return unmasked.open(keys.aead) unless level == :one_rtt
@@ -107,28 +118,47 @@ module Raiha::Next::QUIC
         payload = unmasked.open(keys.aead) or return nil
       elsif lowest ? number < lowest : @key_phase.positive?
         previous = @previous_read or return nil
-        return unmasked.open(previous.aead)
+        payload = unmasked.open(previous.aead) or return nil
+        @largest_older = number if @largest_older.nil? || number > @largest_older # steep:ignore
+        @largest_opened = number if @largest_opened.nil? || number > @largest_opened # steep:ignore
+        return payload
       else
         following = @next_read or return nil
         payload = unmasked.open(following.aead) or return nil
+        if @key_phase.positive? && !(lowest && (ack = @largest_ack_sent) && ack >= lowest)
+          key_update_error("the peer updated its keys again before an ACK of its packets with the current ones")
+        end
         update_keys
         lowest = nil
       end
+      older = @largest_older
+      key_update_error("packet #{number} opened with keys newer than packet #{older}") if older && number < older
       @previous_until = now + OLD_KEY_PTOS * pto if lowest.nil? && @previous_read
       @lowest_opened = number if lowest.nil? || number < lowest
+      @largest_opened = number if @largest_opened.nil? || number > @largest_opened # steep:ignore
       @opened_count += 1
       payload
     end
 
     # A 1-RTT packet numbered `packet_number` went out with the current
-    # keys.
-    def sent(packet_number)
+    # keys, with an ACK frame of the packets up to `acknowledging` when not
+    # nil.
+    def sent(packet_number, acknowledging: nil)
       @first_sent ||= packet_number
       @sent_count += 1
+      return unless acknowledging
+      @largest_ack_sent = acknowledging if @largest_ack_sent.nil? || acknowledging > @largest_ack_sent # steep:ignore
     end
 
-    # The peer acknowledged the 1-RTT packets up to `largest`.
+    # The peer acknowledged the 1-RTT packets up to `largest`. An ACK of a
+    # packet sent with the current keys before any packet of the peer opened
+    # with them came with older keys: the peer did not follow the update, a
+    # Violation of KEY_UPDATE_ERROR (MAY, RFC 9001 "Responding to a Key
+    # Update", as quic-go checks it).
     def acknowledged(largest)
+      if (first = @first_sent) && largest >= first && @opened_count.zero?
+        key_update_error("an ACK of packet #{largest}, sent with the current keys, came with older keys")
+      end
       @largest_acked = largest if @largest_acked.nil? || largest > @largest_acked # steep:ignore
     end
 
@@ -172,12 +202,16 @@ module Raiha::Next::QUIC
       @next_secrets.transform_values! { |secret| Crypto::Keys.next_secret(suite:, secret:, version: @version) }
       @next_read = keys.fetch(:read).update(suite:, secret: @next_secrets.fetch(:read), version: @version)
       @key_phase += 1
+      @largest_older = @largest_opened
       @first_sent = nil
       @lowest_opened = nil
       @sent_count = 0
       @opened_count = 0
+      @largest_ack_sent = nil
       @updated&.call(@key_phase)
     end
+
+    private def key_update_error(message) = raise Violation.new(message, code: ErrorCode::KEY_UPDATE_ERROR)
 
     # RFC 9001 "Receiving with Different Keys": an endpoint keeps the old
     # read keys no more than three PTOs after a packet opens with the new.

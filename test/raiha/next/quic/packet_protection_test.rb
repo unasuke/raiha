@@ -86,6 +86,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_equal 1, server.key_phase_bit
     assert_equal seal(keys_at(SERVER_SECRET, 1)), seal(server.write_keys(:one_rtt))
     assert_same hp, server.read_keys(:one_rtt).header_protection
+    server.sent(0, acknowledging: 2)
     assert open_one_rtt(server, 3, phase: 2)
     assert_equal [1, 2], phases
   end
@@ -99,6 +100,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert open_one_rtt(server, 5, phase: 0)
     assert_nil open_one_rtt(server, 11, phase: 0)
     assert_equal 1, server.key_phase
+    server.sent(0, acknowledging: 10)
     assert open_one_rtt(server, 12, phase: 2)
     assert_equal 2, server.key_phase
   end
@@ -124,10 +126,12 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_nil open_one_rtt(server, 5, phase: 0, now: 4.0)
   end
 
-  # A confirmed server that has had its packet 0 acknowledged.
+  # A confirmed server that has opened the client's packet 0 and had its
+  # own packet 0 acknowledged.
   def confirmed_server(&updated)
     one_rtt_server(&updated).tap do |server|
       server.handshake_confirmed!
+      open_one_rtt(server, 0, phase: 0)
       server.sent(0)
       server.acknowledged(0)
     end
@@ -150,7 +154,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
 
   def test_packets_opened_count_too
     server = confirmed_server
-    100.times { open_one_rtt(server, _1, phase: 0) }
+    99.times { open_one_rtt(server, _1 + 1, phase: 0) }
     server.update_keys_if_due
     assert_equal 1, server.key_phase
   end
@@ -160,6 +164,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     server = confirmed_server
     99.times { server.sent(_1 + 1) }
     server.update_keys_if_due
+    open_one_rtt(server, 1, phase: 1)
     server.sent(100)
     server.acknowledged(100)
     99_998.times { server.sent(_1 + 101) }
@@ -174,6 +179,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
   # confirmed.
   def test_no_update_before_confirmation
     server = one_rtt_server
+    open_one_rtt(server, 0, phase: 0)
     server.sent(0)
     server.acknowledged(0)
     200.times { server.sent(_1 + 1) }
@@ -189,6 +195,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
   def test_no_update_before_an_ack_of_the_current_keys
     server = one_rtt_server
     server.handshake_confirmed!
+    open_one_rtt(server, 0, phase: 0)
     server.acknowledged(4)
     200.times { server.sent(_1 + 5) }
     server.update_keys_if_due
@@ -196,6 +203,68 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     server.acknowledged(5)
     server.update_keys_if_due
     assert_equal 1, server.key_phase
+  end
+
+  def assert_key_update_error(&)
+    error = assert_raises(QUIC::Violation, &)
+    assert_equal QUIC::ErrorCode::KEY_UPDATE_ERROR, error.code
+  end
+
+  # RFC 9001 "Responding to a Key Update": the peer may update again only
+  # once this end has acknowledged, with the current keys, a packet of the
+  # peer's current keys.
+  def test_an_update_again_before_an_ack
+    server = one_rtt_server
+    open_one_rtt(server, 10, phase: 1)
+    server.sent(0, acknowledging: 9)
+    assert_key_update_error { open_one_rtt(server, 11, phase: 2) }
+  end
+
+  def test_an_update_again_after_an_ack
+    server = one_rtt_server
+    open_one_rtt(server, 10, phase: 1)
+    server.sent(0, acknowledging: 10)
+    assert open_one_rtt(server, 11, phase: 2)
+    assert_equal 2, server.key_phase
+  end
+
+  # RFC 9001 "Responding to a Key Update": an ACK of a packet of the new
+  # keys that comes before any packet of them is the peer not following
+  # the update.
+  def test_an_ack_with_older_keys
+    server = confirmed_server
+    99.times { server.sent(_1 + 1) }
+    server.update_keys_if_due
+    server.sent(100)
+    server.acknowledged(99)
+    assert_key_update_error { server.acknowledged(100) }
+  end
+
+  def test_an_ack_after_a_packet_of_the_new_keys
+    server = confirmed_server
+    99.times { server.sent(_1 + 1) }
+    server.update_keys_if_due
+    server.sent(100)
+    open_one_rtt(server, 1, phase: 1)
+    server.acknowledged(100)
+    server.sent(101)
+    server.acknowledged(101)
+  end
+
+  # RFC 9001 "Sending with Updated Keys": a packet with a higher number
+  # than one of newer keys is an error, whichever comes first.
+  def test_the_next_keys_on_a_lower_number
+    server = one_rtt_server
+    open_one_rtt(server, 5, phase: 0)
+    open_one_rtt(server, 11, phase: 0)
+    assert_key_update_error { open_one_rtt(server, 10, phase: 1) }
+  end
+
+  def test_the_previous_keys_on_a_higher_number
+    server = one_rtt_server
+    open_one_rtt(server, 7, phase: 1)
+    open_one_rtt(server, 6, phase: 0)
+    assert_key_update_error { open_one_rtt(server, 5, phase: 1) }
   end
 
   # A Key Phase bit changed on a packet that does not open with the next

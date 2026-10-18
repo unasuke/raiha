@@ -19,10 +19,13 @@ module Raiha::Next::QUIC
     @previous_until: Float?
     @confirmed: bool
     @largest_acked: Integer?
+    @largest_opened: Integer?
+    @largest_older: Integer?
     @first_sent: Integer?
     @lowest_opened: Integer?
     @sent_count: Integer
     @opened_count: Integer
+    @largest_ack_sent: Integer?
 
     attr_reader version: Version
     attr_reader key_phase: Integer
@@ -37,7 +40,7 @@ module Raiha::Next::QUIC
     def discarded?: (level level) -> bool
     def key_phase_bit: () -> Integer
     def open: (level level, Wire::Packet::Unmasked unmasked, now: Float, pto: Float) -> String?
-    def sent: (Integer packet_number) -> void
+    def sent: (Integer packet_number, ?acknowledging: Integer?) -> void
     def acknowledged: (Integer largest) -> void
     def handshake_confirmed!: () -> bool
     def update_keys_if_due: () -> void
@@ -46,6 +49,7 @@ module Raiha::Next::QUIC
     def discard: (level level) -> void
 
     private def update_keys: () -> void
+    private def key_update_error: (String message) -> bot
     private def discard_previous_keys: (Float now) -> void
   end
 end

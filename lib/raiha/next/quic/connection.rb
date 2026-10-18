@@ -637,7 +637,10 @@ module Raiha::Next::QUIC
       keys = @protection.write_keys(packet.level) or raise Error::StateError, "no keys to write #{packet.level}"
       sealed = Wire::Packet.seal(packet.header, packet_number: packet.packet_number, packet_number_length: packet.packet_number_length,
         payload:, keys:)
-      @protection.sent(packet.packet_number) if packet.level == :one_rtt
+      if packet.level == :one_rtt
+        acknowledging = packet.frames.filter_map { |frame| frame.largest if frame.is_a?(Wire::Frame::Ack) }.first
+        @protection.sent(packet.packet_number, acknowledging:)
+      end
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
       in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize
       if ack_eliciting && !@eliciting_since_received
