@@ -106,4 +106,13 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     assert_operator sizes.size, :>=, 2
     assert sizes.all? { _1 >= QUIC::Connection::MIN_INITIAL_DATAGRAM }, sizes.inspect
   end
+
+  # A server pads a datagram with an Initial packet that elicits an ACK.
+  def test_the_server_pads_its_initial
+    client = client_connection
+    server = server_connection
+    server.receive(client.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0)
+    first = server.transmits(now: 0.0).first.payload
+    assert_operator first.bytesize, :>=, QUIC::Connection::MIN_INITIAL_DATAGRAM
+  end
 end

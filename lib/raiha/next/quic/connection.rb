@@ -489,10 +489,10 @@ module Raiha::Next::QUIC
 
     # Protects the packets of a datagram and records them as sent. The
     # last is padded to make the datagram MIN_INITIAL_DATAGRAM bytes when
-    # it carries a client's Initial, and every packet so that header
-    # protection has its sample.
+    # it carries a client's Initial, or a server's that elicits an ACK, and
+    # every packet so that header protection has its sample.
     private def seal(pending, now)
-      target = @role == :client && pending.any? { |packet| packet.level == :initial } ? MIN_INITIAL_DATAGRAM : 0
+      target = pending.any? { |packet| padded_initial?(packet) } ? MIN_INITIAL_DATAGRAM : 0
       payloads = pending.map do |packet|
         payload = Wire::Frame.encode(packet.frames, ack_delay_exponent: own_ack_delay_exponent(packet.level))
         short = Wire::Packet::SAMPLE_OFFSET - packet.packet_number_length - payload.bytesize
@@ -501,6 +501,12 @@ module Raiha::Next::QUIC
       size = pending.each_with_index.sum { |packet, index| sealed_size(packet, payloads.fetch(index).bytesize) }
       payloads[-1] = padded(pending.fetch(-1), payloads.fetch(-1), target - size) if target > size
       pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now) }.join
+    end
+
+    # RFC 9000 "Datagram Size": every Initial of a client, and those of a
+    # server that elicit an ACK, go in datagrams of 1200 bytes at least.
+    private def padded_initial?(packet)
+      packet.level == :initial && (@role == :client || packet.frames.any?(&:ack_eliciting?))
     end
 
     # `payload` with `missing` bytes of PADDING, less what the Length field
