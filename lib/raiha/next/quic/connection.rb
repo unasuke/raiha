@@ -37,6 +37,10 @@ module Raiha::Next::QUIC
     # The levels a CONNECTION_CLOSE frame goes in.
     CLOSE_LEVELS = %i[initial handshake one_rtt].freeze
 
+    # RFC 9000 "Address Validation": until it has validated the client's
+    # address, a server sends at most this many times what it received.
+    AMPLIFICATION_FACTOR = 3
+
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
 
@@ -92,6 +96,12 @@ module Raiha::Next::QUIC
       @idle_deadline = nil #: Float?
       @eliciting_since_received = false
       @now = now
+      # What a server has received and sent while the client's address is
+      # not validated, and whether that has stopped it.
+      @address_validated = role == :client
+      @received_unvalidated = 0
+      @sent_unvalidated = 0
+      @amplification_limited = false
       restart_idle(now)
       @start_binding = start
       @binding = nil #: TLSBinding?
@@ -155,6 +165,7 @@ module Raiha::Next::QUIC
         return
       else return
       end
+      count_received(datagram, now) unless @address_validated
       offset = 0
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset) or break
@@ -299,7 +310,9 @@ module Raiha::Next::QUIC
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
       frames.each { |frame| receive_frame(level, frame, now) }
-      discard_level(:initial, now) if @role == :server && level == :handshake
+      return unless @role == :server && level == :handshake
+      validate_address(now)
+      discard_level(:initial, now)
     end
 
     # The keys a client's first Initial is sealed with, from its own
@@ -400,6 +413,8 @@ module Raiha::Next::QUIC
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
+      limit = [limit, amplification_budget(now)].min unless @address_validated
+      return nil if limit < MIN_INITIAL_DATAGRAM
       eliciting = @path.bytes_in_flight + limit <= @path.congestion.window
       pending = [] #: Array[Pending]
       used = 0
@@ -416,8 +431,38 @@ module Raiha::Next::QUIC
       end
       return nil if pending.empty?
       datagram = seal(pending, now)
+      @sent_unvalidated += datagram.bytesize unless @address_validated
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
       datagram
+    end
+
+    # How many bytes a server may still send before the client's address is
+    # validated. Under a datagram's worth, it stops, and loss recovery sets no
+    # timer meanwhile (RFC 9002 "Handling Anti-Amplification Limits").
+    private def amplification_budget(now)
+      budget = AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated
+      if budget < MIN_INITIAL_DATAGRAM && !@amplification_limited
+        @amplification_limited = true
+        @recovery.amplification_limited(true, now:)
+      end
+      budget
+    end
+
+    private def count_received(datagram, now)
+      @received_unvalidated += datagram.bytesize
+      return unless @amplification_limited
+      return if AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated < MIN_INITIAL_DATAGRAM
+      @amplification_limited = false
+      @recovery.amplification_limited(false, now:)
+    end
+
+    # A Handshake packet from the client proves its address.
+    private def validate_address(now)
+      return if @address_validated
+      @address_validated = true
+      return unless @amplification_limited
+      @amplification_limited = false
+      @recovery.amplification_limited(false, now:)
     end
 
     # RFC 9001 "Discarding Unused Keys": the keys of `level`, its CRYPTO
@@ -436,6 +481,7 @@ module Raiha::Next::QUIC
     # Close during the Handshake").
     private def closing_datagram(now)
       return nil unless @state == :closing && @close_frame_due
+      return nil unless @address_validated || amplification_budget(now) >= MIN_INITIAL_DATAGRAM
       @close_frame_due = false
       pending = CLOSE_LEVELS.filter_map do |level|
         next unless @protection.can_write?(level)
@@ -443,7 +489,10 @@ module Raiha::Next::QUIC
         Pending.new(level:, header: header_for(level), packet_number:, packet_number_length: @recovery.packet_number_length(level, packet_number),
           frames: [close_frame(level)], duties: [])
       end
-      pending.empty? ? nil : seal(pending, now)
+      return nil if pending.empty?
+      datagram = seal(pending, now)
+      @sent_unvalidated += datagram.bytesize unless @address_validated
+      datagram
     end
 
     # An application's error closes with APPLICATION_ERROR and no reason in

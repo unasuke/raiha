@@ -13,6 +13,7 @@ module Raiha::Next::QUIC
     CLOSE_PTOS: Integer
     MAX_REASON_LENGTH: Integer
     CLOSE_LEVELS: Array[PacketProtection::level]
+    AMPLIFICATION_FACTOR: Integer
 
     class Pending < Data
       attr_reader level: PacketProtection::level
@@ -50,6 +51,10 @@ module Raiha::Next::QUIC
     @idle_deadline: Float?
     @eliciting_since_received: bool
     @now: Float
+    @address_validated: bool
+    @received_unvalidated: Integer
+    @sent_unvalidated: Integer
+    @amplification_limited: bool
     @start_binding: ^(Connection, TransportParameters) -> TLSBinding
     @binding: TLSBinding?
 
@@ -92,6 +97,9 @@ module Raiha::Next::QUIC
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
+    private def amplification_budget: (Float now) -> Integer
+    private def count_received: (String datagram, Float now) -> void
+    private def validate_address: (Float now) -> void
     private def discard_level: (:initial | :handshake level, Float now) -> void
     private def closing_datagram: (Float now) -> String?
     private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose
