@@ -76,7 +76,10 @@ module Raiha::Next::QUIC
       @source_connection_id = random.bytes(config.connection_id_length).b
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
-      @peer_connection_id_adopted = false
+      # The Source Connection ID of the peer's first Initial packet; a long
+      # header packet with another is dropped (RFC 9000 "Negotiating
+      # Connection IDs").
+      @peer_source_connection_id = nil #: String?
       # :open, :closing, :draining or :closed (RFC 9000 "Connection
       # Termination").
       @state = :open
@@ -265,6 +268,7 @@ module Raiha::Next::QUIC
     private def receive_packet(packet, from:, ecn:, now:)
       header = packet.header
       level = header.type
+      return if header.is_a?(Wire::LongHeader) && (id = @peer_source_connection_id) && header.scid != id
       first = @role == :server && @binding.nil?
       keys = first ? first_initial_keys(header) : @protection.read_keys(level)
       return unless keys
@@ -278,7 +282,7 @@ module Raiha::Next::QUIC
       # duplicate is not.
       restart_idle(now)
       @eliciting_since_received = false
-      adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader)
+      adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
       frames.each { |frame| receive_frame(level, frame, now) }
       discard_level(:initial, now) if @role == :server && level == :handshake
     end
@@ -296,18 +300,20 @@ module Raiha::Next::QUIC
     private def accept_first_initial(header, from)
       @remote = from
       @destination_connection_id = header.scid
+      @peer_source_connection_id = header.scid
       @protection.install_initial(header.dcid)
       parameters = @config.transport_parameters(initial_source_connection_id: @source_connection_id,
         original_destination_connection_id: header.dcid)
       @binding = @start_binding.call(self, parameters)
     end
 
-    # A client takes the Source Connection ID of the server's first packet
-    # as the Destination Connection ID of its own (RFC 9000 "Negotiating
-    # Connection IDs").
+    # A client takes the Source Connection ID of the server's first Initial
+    # packet as the Destination Connection ID of its own, and only that one
+    # (RFC 9000 "Negotiating Connection IDs").
     private def adopt_peer_connection_id(header)
-      @destination_connection_id = header.scid unless @peer_connection_id_adopted
-      @peer_connection_id_adopted = true
+      return if @peer_source_connection_id
+      @destination_connection_id = header.scid
+      @peer_source_connection_id = header.scid
     end
 
     private def receive_frame(level, frame, now)

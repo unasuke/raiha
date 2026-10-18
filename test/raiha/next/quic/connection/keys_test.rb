@@ -38,4 +38,21 @@ class RaihaNextQUICConnectionKeysTest < Minitest::Test
     assert_empty closed(client)
     assert_empty closed(server)
   end
+
+  # RFC 9000 "Negotiating Connection IDs": once an end has the peer's first
+  # Initial, a packet with another Source Connection ID is dropped, here one
+  # that would have closed it.
+  def test_another_source_connection_id_is_dropped
+    client = client_connection
+    server = server_connection
+    first = client.transmits(now: 0.0).first.payload
+    server.receive(first, from: CLIENT, now: 0.0)
+    client.receive(server.transmits(now: 0.0).first.payload, from: SERVER, now: 0.0)
+    header = QUIC::Wire::Packet.parse(first, dcid_length: 8).header
+    close = "\x1c\x00\x00\x00".b
+    client.receive(forged_initial(odcid: header.dcid, dcid: header.scid, role: :server, payload: close), from: SERVER, now: 0.0)
+    server.receive(forged_initial(odcid: header.dcid, dcid: header.dcid, role: :client, payload: close), from: CLIENT, now: 0.0)
+    refute client.draining?
+    refute server.draining?
+  end
 end

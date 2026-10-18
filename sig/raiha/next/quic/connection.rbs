@@ -39,7 +39,7 @@ module Raiha::Next::QUIC
     @destination_connection_id: String
     @peer_parameters: TransportParameters?
     @handshake_complete: bool
-    @peer_connection_id_adopted: bool
+    @peer_source_connection_id: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
