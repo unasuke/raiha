@@ -95,4 +95,25 @@ class RaihaNextQUICConnectionCloseTest < Minitest::Test
     assert client.draining?
     assert_equal [[0x178, false, true]], closed(client).map { [_1.error.code, _1.error.application, _1.by_peer] }
   end
+
+  # A packet received again restarts no idle timeout: one captured and
+  # sent over and over does not keep a connection whose peer has gone.
+  def test_a_duplicate_restarts_no_idle_timeout
+    client = client_connection
+    server = server_connection
+    sent = []
+    now = 0.0
+    20.times do
+      break if client.handshake_complete? && server.handshake_complete?
+      client.transmits(now:).each do |transmit|
+        sent << transmit.payload
+        server.receive(transmit.payload, from: CLIENT, now:)
+      end
+      server.transmits(now:).each { |transmit| client.receive(transmit.payload, from: SERVER, now:) }
+      now += 0.001
+    end
+    server.receive(sent.last, from: CLIENT, now: now + 29.0)
+    server.handle_timeout(now: now + 30.5)
+    assert server.closed?
+  end
 end

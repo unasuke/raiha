@@ -271,11 +271,13 @@ module Raiha::Next::QUIC
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = unmasked.open(keys.aead) or return
       accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
-      restart_idle(now)
-      @eliciting_since_received = false
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
+      # RFC 9000 "Idle Timeout": a packet received and processed, which a
+      # duplicate is not.
+      restart_idle(now)
+      @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader)
       frames.each { |frame| receive_frame(level, frame, now) }
       discard_level(:initial, now) if @role == :server && level == :handshake
