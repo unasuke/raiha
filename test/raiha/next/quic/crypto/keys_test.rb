@@ -25,6 +25,21 @@ class RaihaNextQUICCryptoKeysTest < Minitest::Test
     assert_equal_bin s::MASK, keys.header_protection.mask(s::SAMPLE)
   end
 
+  # RFC 9001 appendix A.5: the secret after a key update, and keys that
+  # take their AEAD from it and keep their header protection.
+  def test_key_update
+    c = V::ChaCha20ShortHeader
+    suite = Suite::TLS_CHACHA20_POLY1305_SHA256
+    assert_equal_bin c::KU, Keys.next_secret(suite:, secret: c::SECRET, version: V1)
+    keys = Keys.derive(suite:, secret: c::SECRET, version: V1)
+    updated = keys.update(suite:, secret: c::KU, version: V1)
+    expected = Keys.derive(suite:, secret: c::KU, version: V1)
+    assert_equal_bin expected.aead.seal(packet_number: c::PACKET_NUMBER, header: c::HEADER, plaintext: c::PAYLOAD),
+      updated.aead.seal(packet_number: c::PACKET_NUMBER, header: c::HEADER, plaintext: c::PAYLOAD)
+    refute_equal c::CIPHERTEXT, updated.aead.seal(packet_number: c::PACKET_NUMBER, header: c::HEADER, plaintext: c::PAYLOAD)
+    assert_same keys.header_protection, updated.header_protection
+  end
+
   # The labels come from the version, so another prefix is other keys.
   def test_labels_follow_the_version
     c = V::ChaCha20ShortHeader
