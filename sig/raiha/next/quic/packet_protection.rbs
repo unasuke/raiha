@@ -7,12 +7,18 @@ module Raiha::Next::QUIC
 
     @role: :client | :server
     @keys: Hash[level, Hash[direction, Crypto::Keys]]
-    @one_rtt_secrets: Hash[direction, [String, ::Raiha::Next::TLS::CipherSuite]]
     @discarded: Array[level]
+    @updated: (^(Integer phase) -> void)?
+    @one_rtt_suite: ::Raiha::Next::TLS::CipherSuite?
+    @next_secrets: Hash[direction, String]
+    @next_read: Crypto::Keys?
+    @previous_read: Crypto::Keys?
+    @lowest_opened: Integer?
 
     attr_reader version: Version
+    attr_reader key_phase: Integer
 
-    def initialize: (role: :client | :server, version: Version) -> void
+    def initialize: (role: :client | :server, version: Version) ?{ (Integer phase) -> void } -> void
     def install_initial: (String dcid) -> Hash[direction, Crypto::Keys]
     def install: (level level, direction direction, secret: String, suite: ::Raiha::Next::TLS::CipherSuite) -> void
     def read_keys: (level level) -> Crypto::Keys?
@@ -20,6 +26,10 @@ module Raiha::Next::QUIC
     def can_read?: (level level) -> bool
     def can_write?: (level level) -> bool
     def discarded?: (level level) -> bool
+    def key_phase_bit: () -> Integer
+    def open: (level level, Wire::Packet::Unmasked unmasked) -> String?
     def discard: (level level) -> void
+
+    private def update_keys: () -> void
   end
 end

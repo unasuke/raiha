@@ -75,8 +75,8 @@ module Raiha::Next::QUIC
       @tracer = tracer
       @path = Path.new(config:, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
-      @protection = PacketProtection.new(role:, version: @version)
       @events = [] #: Array[Event::t]
+      @protection = PacketProtection.new(role:, version: @version) { |phase| @events << Event::KeyUpdated.new(phase:) }
       @source_connection_id = random.bytes(config.connection_id_length).b
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
@@ -322,7 +322,7 @@ module Raiha::Next::QUIC
       keys = first ? first_initial_keys(header) : @protection.read_keys(level)
       return unless keys
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
-      payload = unmasked.open(keys.aead) or return
+      payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked)) or return
       accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
@@ -646,7 +646,7 @@ module Raiha::Next::QUIC
 
     private def header_for(level)
       case level
-      when :one_rtt then Wire::ShortHeader.new(dcid: @destination_connection_id, key_phase: 0)
+      when :one_rtt then Wire::ShortHeader.new(dcid: @destination_connection_id, key_phase: @protection.key_phase_bit)
       else Wire::LongHeader.new(type: level, version: @version, dcid: @destination_connection_id, scid: @source_connection_id)
       end
     end

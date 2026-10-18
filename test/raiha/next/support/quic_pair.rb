@@ -33,14 +33,36 @@ module NextQUICPair
     QUIC::Connection.server(config:, tls_config:, keyring:, time:, now:, **options)
   end
 
+  # The 1-RTT keys of the secret `label` names in `keylog`, after `phase`
+  # key updates.
+  def one_rtt_keys(keylog, label, phase: 0)
+    secret = keylog.secret(label) or raise "no #{label} in the key log"
+    suite = TLS::CipherSuite::TLS_AES_128_GCM_SHA256
+    keys = QUIC::Crypto::Keys.derive(suite:, secret:, version: QUIC::Version::V1)
+    phase.times do
+      secret = QUIC::Crypto::Keys.next_secret(suite:, secret:, version: QUIC::Version::V1)
+      keys = keys.update(suite:, secret:, version: QUIC::Version::V1)
+    end
+    keys
+  end
+
   # A 1-RTT packet of `payload` as the client would send it to the server
-  # whose connection ID is `dcid`, sealed with the client's secret from
-  # `keylog`.
-  def client_one_rtt(keylog, dcid:, payload:, packet_number: 1000)
-    secret = keylog.secret("CLIENT_TRAFFIC_SECRET_0") or raise "no 1-RTT secret in the key log"
-    keys = QUIC::Crypto::Keys.derive(suite: TLS::CipherSuite::TLS_AES_128_GCM_SHA256, secret:, version: QUIC::Version::V1)
-    QUIC::Wire::Packet.seal(QUIC::Wire::ShortHeader.new(dcid:, key_phase: 0), packet_number:, packet_number_length: 2,
+  # whose connection ID is `dcid`, sealed with the client's keys of `phase`
+  # from `keylog`.
+  def client_one_rtt(keylog, dcid:, payload:, packet_number: 1000, phase: 0)
+    keys = one_rtt_keys(keylog, "CLIENT_TRAFFIC_SECRET_0", phase:)
+    QUIC::Wire::Packet.seal(QUIC::Wire::ShortHeader.new(dcid:, key_phase: phase & 1), packet_number:, packet_number_length: 2,
       payload: payload.ljust(40, "\0".b), keys:)
+  end
+
+  # The Key Phase bit and frames of the server's 1-RTT packet in
+  # `datagram`, opened with its keys of `phase` from `keylog`; nil when it
+  # does not open with them.
+  def server_one_rtt(keylog, datagram, phase:)
+    keys = one_rtt_keys(keylog, "SERVER_TRAFFIC_SECRET_0", phase:)
+    unmasked = QUIC::Wire::Packet.parse(datagram, dcid_length: 8).unmask(keys.header_protection, largest: nil)
+    payload = unmasked.open(keys.aead) or return nil
+    [unmasked.header.key_phase, QUIC::Wire::Frame.parse(payload, packet_type: :one_rtt, ack_delay_exponent: 3)]
   end
 
   # Passes datagrams each way, a millisecond apart, until both have
