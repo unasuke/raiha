@@ -11,9 +11,11 @@ module Raiha::Next::QUIC
   # read keys of the next key phase are made as soon as those of the
   # current are, so that how long a packet takes to open does not tell
   # whether its Key Phase bit changed; those of the previous phase stay
-  # for the packets the network delayed.
+  # for the packets the network delayed, OLD_KEY_PTOS PTOs from the first
+  # packet that opens with the new ones.
   class PacketProtection
     LEVELS = %i[initial zero_rtt handshake one_rtt].freeze
+    OLD_KEY_PTOS = 3
 
     attr_reader :version
     # How many times the 1-RTT keys have changed.
@@ -27,12 +29,13 @@ module Raiha::Next::QUIC
       @keys = LEVELS.to_h { |level| [level, {}] } #: Hash[level, Hash[direction, Crypto::Keys]]
       @discarded = [] #: Array[level]
       @updated = updated
-      # The 1-RTT cipher suite, the secrets of the next key phase, and the
-      # read keys of the next and the previous phase.
+      # The 1-RTT cipher suite, the secrets of the next key phase, the read
+      # keys of the next and the previous phase, and when the latter go.
       @one_rtt_suite = nil #: Raiha::Next::TLS::CipherSuite?
       @next_secrets = {} #: Hash[direction, String]
       @next_read = nil #: Crypto::Keys?
       @previous_read = nil #: Crypto::Keys?
+      @previous_until = nil #: Float?
       @key_phase = 0
       # The lowest packet number opened with the current 1-RTT keys.
       @lowest_opened = nil #: Integer?
@@ -78,26 +81,33 @@ module Raiha::Next::QUIC
     # ones below the lowest packet number opened with the current, and the
     # next ones above it. A packet that opens with the next keys is the
     # peer's key update, which this end follows (RFC 9001 "Responding to a
-    # Key Update").
-    def open(level, unmasked)
+    # Key Update"). `pto` is the PTO period at `now`.
+    def open(level, unmasked, now:, pto:)
       keys = read_keys(level) or return nil
       return unmasked.open(keys.aead) unless level == :one_rtt
+      discard_previous_keys(now)
       number = unmasked.packet_number
       lowest = @lowest_opened
       if unmasked.header.key_phase == key_phase_bit # steep:ignore
         payload = unmasked.open(keys.aead) or return nil
-        @lowest_opened = number if lowest.nil? || number < lowest
       elsif lowest ? number < lowest : @key_phase.positive?
         previous = @previous_read or return nil
-        payload = unmasked.open(previous.aead)
+        return unmasked.open(previous.aead)
       else
         following = @next_read or return nil
         payload = unmasked.open(following.aead) or return nil
         update_keys
-        @lowest_opened = number
+        lowest = nil
       end
+      @previous_until = now + OLD_KEY_PTOS * pto if lowest.nil? && @previous_read
+      @lowest_opened = number if lowest.nil? || number < lowest
       payload
     end
+
+    # When the previous 1-RTT read keys go, nil when none are to go.
+    def next_timeout = @previous_until
+
+    def handle_timeout(now:) = discard_previous_keys(now)
 
     # Forgets the keys of `level` for good (RFC 9001 "Discarding Unused
     # Keys").
@@ -113,6 +123,7 @@ module Raiha::Next::QUIC
       following = @next_read or raise Error::StateError, "no 1-RTT read keys of the next phase"
       keys = @keys.fetch(:one_rtt)
       @previous_read = keys.fetch(:read)
+      @previous_until = nil
       keys[:read] = following
       keys[:write] = keys.fetch(:write).update(suite:, secret: @next_secrets.fetch(:write), version: @version)
       @next_secrets.transform_values! { |secret| Crypto::Keys.next_secret(suite:, secret:, version: @version) }
@@ -120,6 +131,15 @@ module Raiha::Next::QUIC
       @key_phase += 1
       @lowest_opened = nil
       @updated&.call(@key_phase)
+    end
+
+    # RFC 9001 "Receiving with Different Keys": an endpoint keeps the old
+    # read keys no more than three PTOs after a packet opens with the new.
+    private def discard_previous_keys(now)
+      deadline = @previous_until or return
+      return if now < deadline
+      @previous_read = nil
+      @previous_until = nil
     end
   end
 end

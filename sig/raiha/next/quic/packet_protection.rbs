@@ -4,6 +4,7 @@ module Raiha::Next::QUIC
     type direction = :read | :write
 
     LEVELS: Array[level]
+    OLD_KEY_PTOS: Integer
 
     @role: :client | :server
     @keys: Hash[level, Hash[direction, Crypto::Keys]]
@@ -13,6 +14,7 @@ module Raiha::Next::QUIC
     @next_secrets: Hash[direction, String]
     @next_read: Crypto::Keys?
     @previous_read: Crypto::Keys?
+    @previous_until: Float?
     @lowest_opened: Integer?
 
     attr_reader version: Version
@@ -27,9 +29,12 @@ module Raiha::Next::QUIC
     def can_write?: (level level) -> bool
     def discarded?: (level level) -> bool
     def key_phase_bit: () -> Integer
-    def open: (level level, Wire::Packet::Unmasked unmasked) -> String?
+    def open: (level level, Wire::Packet::Unmasked unmasked, now: Float, pto: Float) -> String?
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
     def discard: (level level) -> void
 
     private def update_keys: () -> void
+    private def discard_previous_keys: (Float now) -> void
   end
 end

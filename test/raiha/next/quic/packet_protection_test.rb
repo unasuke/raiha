@@ -34,14 +34,15 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     keys
   end
 
-  # Opens on `server` a 1-RTT packet numbered `number` sealed with the
-  # client's keys of `phase`, its Key Phase bit `bit`.
-  def open_one_rtt(server, number, phase:, bit: phase & 1)
+  # Opens on `server` at `now` a 1-RTT packet numbered `number` sealed
+  # with the client's keys of `phase`, its Key Phase bit `bit`, the PTO
+  # period a second.
+  def open_one_rtt(server, number, phase:, bit: phase & 1, now: 0.0)
     header = QUIC::Wire::ShortHeader.new(dcid: "".b, key_phase: bit)
     packet = QUIC::Wire::Packet.seal(header, packet_number: number, packet_number_length: 4, payload: "\x01".b * 20,
       keys: keys_at(CLIENT_SECRET, phase))
     unmasked = QUIC::Wire::Packet.parse(packet, dcid_length: 0).unmask(server.read_keys(:one_rtt).header_protection, largest: nil)
-    server.open(:one_rtt, unmasked)
+    server.open(:one_rtt, unmasked, now:, pto: 1.0)
   end
 
   # Each end writes with its own Initial keys and reads with the other's
@@ -100,6 +101,27 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_equal 1, server.key_phase
     assert open_one_rtt(server, 12, phase: 2)
     assert_equal 2, server.key_phase
+  end
+
+  # RFC 9001 "Receiving with Different Keys": the previous keys go three
+  # PTOs after the first packet opens with the new ones.
+  def test_the_previous_keys_go_three_ptos_later
+    server = one_rtt_server
+    assert_nil server.next_timeout
+    open_one_rtt(server, 10, phase: 1, now: 1.0)
+    assert_equal 4.0, server.next_timeout
+    assert open_one_rtt(server, 5, phase: 0, now: 3.9)
+    server.handle_timeout(now: 4.0)
+    assert_nil server.next_timeout
+    assert_nil open_one_rtt(server, 6, phase: 0, now: 4.0)
+  end
+
+  # A packet that comes after the deadline does not open with the previous
+  # keys, whether the timeout has been handled or not.
+  def test_the_previous_keys_are_gone_at_the_deadline
+    server = one_rtt_server
+    open_one_rtt(server, 10, phase: 1, now: 1.0)
+    assert_nil open_one_rtt(server, 5, phase: 0, now: 4.0)
   end
 
   # A Key Phase bit changed on a packet that does not open with the next

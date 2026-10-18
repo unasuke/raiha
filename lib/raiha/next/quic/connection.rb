@@ -201,14 +201,16 @@ module Raiha::Next::QUIC
       transmits
     end
 
-    # When something is to be done next: a timer of loss recovery or the
-    # idle timeout while open, the end of closing or draining after.
+    # When something is to be done next: a timer of loss recovery, the
+    # idle timeout or the end of the previous 1-RTT keys while open, the end
+    # of closing or draining after.
     def next_timeout
       case @state
       when :open
         # A server at its amplification limit cannot send an ACK either, so
         # an ACK's deadline would only come round again and again.
-        [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline].compact.min
+        [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline,
+          @protection.next_timeout].compact.min
       when :closing, :draining then @close_deadline
       end
     end
@@ -219,6 +221,7 @@ module Raiha::Next::QUIC
       when :open
         idle = @idle_deadline
         return time_out_idly if idle && now >= idle
+        @protection.handle_timeout(now:)
         outcome = @recovery.on_timeout(now:)
         Recovery::Duty.dispatch(outcome, to: self)
         probe(outcome.probe) if outcome.probe
@@ -322,7 +325,7 @@ module Raiha::Next::QUIC
       keys = first ? first_initial_keys(header) : @protection.read_keys(level)
       return unless keys
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
-      payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked)) or return
+      payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period)) or return
       accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
