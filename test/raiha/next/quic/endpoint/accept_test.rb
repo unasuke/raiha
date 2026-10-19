@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
+require "raiha/next/support/quic_recovery"
 
 # The second stage of a new connection: an admitted offer reads the
 # ClientHello out of its Initial packets.
@@ -8,7 +9,32 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
 
   SCID = "s".b * 8
 
-  def endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW, now: 0.0)
+  KEYS = { stateless_reset_key: "k".b * 32 }.freeze
+
+  def endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0)
+
+  # Takes the offer of `handle` with the test server's TLS settings.
+  def accept(endpoint, handle, now: 0.0)
+    tls_config = server_config
+    endpoint.accept(handle, tls_config:, keyring: server_keyring(config: tls_config), now:)
+  end
+
+  # Takes `client`'s offer and runs the handshake, the client's datagrams
+  # through the Endpoint; gives the connection and the routes of the
+  # client's datagrams after the first.
+  def connect(endpoint, client, now: 0.0)
+    route = endpoint.receive(client.transmits(now:).first.payload, from: CLIENT, to: SERVER, now:)
+    hello = endpoint.admit(route.handle, now:)
+    connection = accept(endpoint, hello.handle, now:)
+    routes = []
+    20.times do
+      break if client.handshake_complete? && connection.handshake_complete?
+      endpoint.each_transmit(now:) { client.receive(_1.payload, from: SERVER, now:) }
+      client.transmits(now:).each { routes << endpoint.receive(_1.payload, from: CLIENT, to: SERVER, now:) }
+      now += 0.001
+    end
+    [connection, routes]
+  end
 
   # The ClientHello a client's first Initial carries.
   def client_hello(datagram)
@@ -83,6 +109,44 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_nil endpoint.receive(initial(dcid:, packet_number: 7, frames: [more]), from: CLIENT, now: 0.0)
     assert_equal 2, handle.datagrams.size
     assert_equal QUIC::Endpoint::HANDLE_LIFETIME, endpoint.next_timeout
+  end
+
+  def test_an_accepted_offer_connects
+    endpoint = endpoint()
+    client = client_connection
+    connection, routes = connect(endpoint, client)
+    assert client.handshake_complete?
+    assert connection.handshake_complete?
+    assert_equal 1, endpoint.connection_count
+    assert_equal [connection], [].tap { |all| endpoint.each_connection { all << _1 } }
+    refute_empty routes
+    assert_equal [QUIC::Route::Deliver.new(connection:)], routes.uniq
+  end
+
+  # The server's transport parameters carry the stateless reset token of
+  # its connection ID, from the Endpoint's key.
+  def test_the_reset_token_of_the_server
+    tracer = NextQUICRecovery::RecordingTracer.new
+    connect(endpoint, client_connection(tracer:))
+    remote = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters]
+    token = QUIC::StatelessReset.token(key: KEYS[:stateless_reset_key], connection_id: remote.initial_source_connection_id)
+    assert_equal token, remote.stateless_reset_token
+  end
+
+  def test_an_offer_is_accepted_once
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    accept(endpoint, handle)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+  end
+
+  def test_no_accept_before_the_client_hello_is_whole
+    first, = split_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
   end
 
   def test_an_offer_is_admitted_once

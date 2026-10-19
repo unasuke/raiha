@@ -216,6 +216,28 @@ module Raiha::Next::QUIC
       client_hello(handle)
     end
 
+    # Takes the offer of `handle`, whose ClientHello is whole, as a new
+    # connection with the TLS settings the application chose by it, and
+    # returns the Connection. It is given the datagrams the offer kept, and
+    # is found from now on by its own connection ID, which the Endpoint
+    # chooses and gives the stateless reset token of, and by the one the
+    # client chose.
+    def accept(handle, tls_config:, keyring:, now:, tracer: nil, keylog: nil)
+      pending!(handle)
+      accepted = handle.accepted or raise Error::StateError, "the ClientHello of the offer is not whole yet"
+      scid = new_connection_id
+      token = StatelessReset.token(key: @stateless_reset_key, connection_id: scid) unless scid.empty?
+      connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
+        client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
+        retry_source_connection_id: handle.retry_source_connection_id, address_validated: !handle.retry_source_connection_id.nil?,
+        source_connection_id: scid, stateless_reset_token: token)
+      forget(handle)
+      @connections[scid] = connection
+      @connections[handle.destination_connection_id] = connection
+      handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
+      connection
+    end
+
     def each_connection(&) = connections.each(&)
 
     def connection_count = connections.size
@@ -299,6 +321,15 @@ module Raiha::Next::QUIC
       end
       accepted = handle.take_client_hello or return nil
       Route::ClientHello.new(handle:, accepted:)
+    end
+
+    # A connection ID of `config.connection_id_length` bytes that leads to
+    # nothing yet.
+    private def new_connection_id
+      loop do
+        id = @random.bytes(@config.connection_id_length).b
+        return id unless @connections.key?(id) || @handles.key?(id)
+      end
     end
 
     private def pending!(handle)
