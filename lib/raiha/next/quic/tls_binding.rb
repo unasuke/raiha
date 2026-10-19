@@ -28,11 +28,12 @@ module Raiha::Next::QUIC
 
     # A client's binding, with the ClientHello already in its Initial CRYPTO
     # stream. `transport_parameters` are this end's; `time` is the wall
-    # clock TLS takes.
+    # clock TLS takes. `tracer` is the connection's, which TLS is given only
+    # when it takes TLS's traces with `tls_trace` (250 "Tracer and qlog").
     def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.client(
-        config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer:, keylog:
+        config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:
       )
       new(connection, machine, config.profile).tap { |binding| binding.pump }
     end
@@ -43,7 +44,7 @@ module Raiha::Next::QUIC
     def self.server(connection:, config:, keyring:, transport_parameters:, time:, client_hello: nil, tracer: nil, keylog: nil)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.server(
-        config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer:, keylog:
+        config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:
       )
       new(connection, machine, config.profile, consumed: client_hello&.bytes&.bytesize || 0).tap { |binding| binding.pump }
     end
@@ -51,6 +52,10 @@ module Raiha::Next::QUIC
     private_class_method def self.check(config)
       return if config.profile == Raiha::Next::TLS::Profile::QUIC
       raise ArgumentError, "the TLS Config of a QUIC connection has the QUIC profile"
+    end
+
+    private_class_method def self.tls_tracer(tracer) # steep:ignore
+      tracer if tracer.respond_to?(:tls_trace) # steep:ignore
     end
 
     private_class_method def self.extension(transport_parameters)

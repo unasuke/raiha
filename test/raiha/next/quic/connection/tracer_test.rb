@@ -8,6 +8,29 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
 
   RecordingTracer = NextQUICRecovery::RecordingTracer
 
+  # A tracer that takes TLS's traces too.
+  class TLSRecordingTracer < RecordingTracer
+    attr_reader :tls
+
+    def initialize(...)
+      super
+      @tls = []
+    end
+
+    def tls_trace(value) = @tls << value
+  end
+
+  # 250 "Tracer and qlog": TLS's traces go to a tracer with `tls_trace`;
+  # one without it is not handed to TLS, which would call it.
+  def test_tls_traces
+    client_tracer = TLSRecordingTracer.new
+    client = client_connection(tracer: client_tracer)
+    server = server_connection(tracer: RecordingTracer.new)
+    handshake(client, server)
+    assert server.handshake_complete?
+    assert client_tracer.tls.grep(TLS::Trace::PeerFinishedVerified).any?, client_tracer.tls.inspect
+  end
+
   # Every packet sent is told with its header, frames and size, and the
   # peer tells the same packets as received.
   def test_packets_sent_and_received

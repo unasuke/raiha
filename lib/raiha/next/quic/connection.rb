@@ -50,7 +50,7 @@ module Raiha::Next::QUIC
     # Initial packet waiting to be sent. `tls_config` has the QUIC profile.
     def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil)
       new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random) do |connection, parameters|
-        TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, keylog:)
+        TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:)
       end
     end
 
@@ -59,7 +59,7 @@ module Raiha::Next::QUIC
     # Connection ID, which its transport parameters carry, is known.
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random) do |connection, parameters|
-        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, keylog:)
+        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, tracer:, keylog:)
       end
     end
 
