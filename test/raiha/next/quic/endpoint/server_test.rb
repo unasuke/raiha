@@ -6,10 +6,11 @@ require "raiha/next/support/quic_pair"
 class RaihaNextQUICEndpointServerTest < Minitest::Test
   include NextQUICPair
 
+  KEYS = { retry_token_key: "r".b * 32 }.freeze
   DCID = "d".b * 8
   SCID = "s".b * 8
 
-  def endpoint(config: QUIC::Config.new) = QUIC::Endpoint.server(config:, random: Random.new(3), time: NOW, now: 0.0)
+  def endpoint(config: QUIC::Config.new(**KEYS)) = QUIC::Endpoint.server(config:, random: Random.new(3), time: NOW, now: 0.0)
 
   # A client's Initial with a PING in a datagram of `size` bytes.
   def initial(dcid: DCID, token: "".b, size: QUIC::Connection::MIN_INITIAL_DATAGRAM, type: :initial)
@@ -85,6 +86,34 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal QUIC::Route::Drop.new(reason: :buffer_full), endpoint.receive(fast_initial("x".b * 8), from: CLIENT, now: 0.0)
     endpoint.handle_timeout(now: QUIC::Endpoint::HANDLE_LIFETIME)
     assert_instance_of QUIC::Route::Incoming, endpoint.receive(fast_initial("x".b * 8), from: CLIENT, now: QUIC::Endpoint::HANDLE_LIFETIME)
+  end
+
+  # RFC 9000 "Address Validation Using Retry Packets": a Retry token shows
+  # the address, and carries the client's first Destination Connection ID.
+  def test_a_retry_token
+    token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: CLIENT, time: NOW)
+    route = endpoint.receive(initial(token:), from: CLIENT, now: 0.0)
+    assert route.address_validated
+    assert_equal "o".b * 8, route.handle.original_destination_connection_id
+    assert_equal DCID, route.handle.retry_source_connection_id
+  end
+
+  def test_a_retry_token_for_another_address
+    token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: SERVER, time: NOW)
+    assert_equal QUIC::Route::Drop.new(reason: :invalid_token), endpoint.receive(initial(token:), from: CLIENT, now: 0.0)
+  end
+
+  def test_an_expired_retry_token
+    token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: CLIENT, time: NOW)
+    later = QUIC::RetryToken::LIFETIME + 1.0
+    assert_equal QUIC::Route::Drop.new(reason: :invalid_token), endpoint.receive(initial(token:), from: CLIENT, now: later)
+  end
+
+  # A token of another kind, as NEW_TOKEN gives, is as none.
+  def test_another_token
+    route = endpoint.receive(initial(token: "\x01token".b), from: CLIENT, now: 0.0)
+    refute route.address_validated
+    assert_equal DCID, route.handle.original_destination_connection_id
   end
 
   # 250 "handle has a lifetime": an offer no one decides on goes after

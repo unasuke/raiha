@@ -56,7 +56,7 @@ module Raiha::Next::QUIC
     end
 
     # An Endpoint of a server. `random` is what it draws its own random
-    # bytes from (250 "Random").
+    # bytes from (250 "Random"), and its keys when `config` has none.
     def self.server(config:, random:, time:, now:) = new(config:, random:, time:, now:)
 
     private_class_method :new
@@ -66,6 +66,7 @@ module Raiha::Next::QUIC
       @random = random
       @time = time
       @created_at = now
+      @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
       # The connections by each connection ID that leads to them.
       @connections = {} #: Hash[String, Connection]
       # The offers by the Destination Connection ID of their Initials, and
@@ -137,15 +138,26 @@ module Raiha::Next::QUIC
     end
 
     # The first stage of a new connection, from the headers alone: no key
-    # is derived and nothing is decrypted (250 "Endpoint").
+    # is derived and nothing is decrypted (250 "Endpoint"). A Retry token
+    # shows the client receives at its address and carries its first
+    # Destination Connection ID (RFC 9000 "Address Validation Using Retry
+    # Packets"); one that does not verify is dropped. A token of another
+    # kind is as none.
     private def offer(header, datagram, from:, to:, ecn:, now:)
+      odcid = header.dcid
+      retry_scid = nil #: String?
+      unless header.token.empty? || header.token.getbyte(0) != RetryToken::KIND
+        odcid = RetryToken.verify(header.token, key: @retry_token_key, address: from, time: wall_clock(now))
+        return Route::Drop.new(reason: :invalid_token) unless odcid
+        retry_scid = header.dcid
+      end
       handle = Handle.new(remote: from, destination_connection_id: header.dcid, source_connection_id: header.scid,
-        original_destination_connection_id: header.dcid, retry_source_connection_id: nil, expires_at: now + HANDLE_LIFETIME)
+        original_destination_connection_id: odcid, retry_source_connection_id: retry_scid, expires_at: now + HANDLE_LIFETIME)
       if (dropped = keep(handle, datagram, from:, to:, ecn:))
         return dropped
       end
       @handles[header.dcid] = handle
-      Route::Incoming.new(handle:, remote: from, address_validated: false)
+      Route::Incoming.new(handle:, remote: from, address_validated: !retry_scid.nil?)
     end
 
     # Keeps `datagram` with the offer `handle`; nil, or a Route::Drop when
@@ -162,6 +174,9 @@ module Raiha::Next::QUIC
       @handles.delete(handle.destination_connection_id)
       @buffered -= handle.buffered
     end
+
+    # The wall clock at `now`.
+    private def wall_clock(now) = @time + (now - @created_at)
 
     private def instance_variables_to_inspect = %i[@config]
   end

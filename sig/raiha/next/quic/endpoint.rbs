@@ -35,6 +35,7 @@ module Raiha::Next::QUIC
     @random: Crypto::_Random
     @time: Time
     @created_at: Float
+    @retry_token_key: String
     @connections: Hash[String, Connection]
     @handles: Hash[String, Handle]
     @buffered: Integer
@@ -54,6 +55,7 @@ module Raiha::Next::QUIC
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def forget: (Handle handle) -> void
+    private def wall_clock: (Float now) -> Time
     private def instance_variables_to_inspect: () -> Array[Symbol]
   end
 end
