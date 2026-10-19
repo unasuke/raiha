@@ -1,6 +1,8 @@
 module Raiha::Next::QUIC
   class Endpoint
     HANDLE_LIFETIME: Float
+    HANDLE_BUFFER: Integer
+    HANDLES_BUFFER: Integer
 
     class Handle
       @remote: address
@@ -10,6 +12,7 @@ module Raiha::Next::QUIC
       @retry_source_connection_id: String?
       @expires_at: Float
       @datagrams: Array[[String, address, address?, ecn | :ce]]
+      @buffered: Integer
 
       attr_reader remote: address
       attr_reader destination_connection_id: String
@@ -18,6 +21,7 @@ module Raiha::Next::QUIC
       attr_reader retry_source_connection_id: String?
       attr_reader expires_at: Float
       attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
+      attr_reader buffered: Integer
 
       def initialize: (remote: address, destination_connection_id: String, source_connection_id: String,
                        original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float) -> void
@@ -33,6 +37,7 @@ module Raiha::Next::QUIC
     @created_at: Float
     @connections: Hash[String, Connection]
     @handles: Hash[String, Handle]
+    @buffered: Integer
 
     def self.server: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> Endpoint
 
@@ -47,6 +52,8 @@ module Raiha::Next::QUIC
     private def connections: () -> Array[Connection]
     private def route: (Wire::header header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t?
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
+    private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
+    private def forget: (Handle handle) -> void
     private def instance_variables_to_inspect: () -> Array[Symbol]
   end
 end

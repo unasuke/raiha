@@ -20,6 +20,14 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     seal.(size / 2 + size - first.bytesize)
   end
 
+  # An Initial of 1200 bytes to `dcid` that the first stage takes, sealed
+  # with keys of another connection ID, which it does not look at.
+  def fast_initial(dcid)
+    @fast_keys ||= QUIC::Crypto::Initial.derive(dcid: DCID, version: QUIC::Version::V1).client
+    header = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid:, scid: SCID)
+    QUIC::Wire::Packet.seal(header, packet_number: 0, packet_number_length: 2, payload: "\x01".b.ljust(1156, "\0".b), keys: @fast_keys)
+  end
+
   # A long header in a version not supported, in a datagram of `size`
   # bytes.
   def unsupported(size:) = ([0xc0, 0x0a0a0a0a, 8].pack("CNC") + DCID + [8].pack("C") + SCID).ljust(size, "\0".b)
@@ -46,12 +54,26 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal [[datagram, CLIENT, SERVER, :not_ect]], handle.datagrams
   end
 
-  # Later datagrams to the same connection ID are kept with the offer.
+  # Later datagrams to the same connection ID are kept with the offer, up
+  # to HANDLE_BUFFER bytes.
   def test_later_datagrams_go_with_the_offer
     endpoint = endpoint()
     handle = endpoint.receive(initial, from: CLIENT, now: 0.0).handle
-    assert_nil endpoint.receive(initial, from: CLIENT, now: 0.0)
-    assert_equal 2, handle.datagrams.size
+    kept = QUIC::Endpoint::HANDLE_BUFFER / QUIC::Connection::MIN_INITIAL_DATAGRAM
+    (kept - 1).times { assert_nil endpoint.receive(initial, from: CLIENT, now: 0.0) }
+    assert_equal kept, handle.datagrams.size
+    assert_equal QUIC::Route::Drop.new(reason: :buffer_full), endpoint.receive(initial, from: CLIENT, now: 0.0)
+  end
+
+  # All offers together keep HANDLES_BUFFER bytes at most; what an offer
+  # kept is let go with it.
+  def test_all_offers_keep_a_bounded_amount
+    endpoint = endpoint()
+    offers = QUIC::Endpoint::HANDLES_BUFFER / QUIC::Connection::MIN_INITIAL_DATAGRAM
+    offers.times { |i| assert_instance_of QUIC::Route::Incoming, endpoint.receive(fast_initial([i].pack("Q>")), from: CLIENT, now: 0.0) }
+    assert_equal QUIC::Route::Drop.new(reason: :buffer_full), endpoint.receive(fast_initial("x".b * 8), from: CLIENT, now: 0.0)
+    endpoint.handle_timeout(now: QUIC::Endpoint::HANDLE_LIFETIME)
+    assert_instance_of QUIC::Route::Incoming, endpoint.receive(fast_initial("x".b * 8), from: CLIENT, now: QUIC::Endpoint::HANDLE_LIFETIME)
   end
 
   # 250 "handle has a lifetime": an offer no one decides on goes after

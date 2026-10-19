@@ -14,6 +14,11 @@ module Raiha::Next::QUIC
     # How long an offer lasts unless the application decides on it, from
     # its first datagram (250 "handle has a lifetime").
     HANDLE_LIFETIME = 3.0
+    # The bytes of datagrams an offer keeps until it becomes a connection,
+    # and all offers together, so that what an attacker can make an
+    # Endpoint keep is bounded whatever the application does.
+    HANDLE_BUFFER = 64 * 1024
+    HANDLES_BUFFER = 16 * 1024 * 1024
 
     # An offer of a new connection, until the application decides on it:
     # what the headers of the client's first Initial said, and the
@@ -24,6 +29,8 @@ module Raiha::Next::QUIC
     class Handle
       attr_reader :remote, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
         :retry_source_connection_id, :expires_at, :datagrams
+      # The bytes of the datagrams kept.
+      attr_reader :buffered
 
       def initialize(remote:, destination_connection_id:, source_connection_id:, original_destination_connection_id:,
         retry_source_connection_id:, expires_at:)
@@ -34,10 +41,14 @@ module Raiha::Next::QUIC
         @retry_source_connection_id = retry_source_connection_id
         @expires_at = expires_at
         @datagrams = [] #: Array[[String, address, address?, ecn | :ce]]
+        @buffered = 0
       end
 
       # Keeps a datagram for the connection to take.
-      def keep(datagram, from:, to:, ecn:) = @datagrams << [datagram, from, to, ecn]
+      def keep(datagram, from:, to:, ecn:)
+        @buffered += datagram.bytesize
+        @datagrams << [datagram, from, to, ecn]
+      end
 
       def expired?(now) = now >= @expires_at
 
@@ -57,8 +68,10 @@ module Raiha::Next::QUIC
       @created_at = now
       # The connections by each connection ID that leads to them.
       @connections = {} #: Hash[String, Connection]
-      # The offers by the Destination Connection ID of their Initials.
+      # The offers by the Destination Connection ID of their Initials, and
+      # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
+      @buffered = 0
     end
 
     # What to do with `datagram`, which came from `from` to `to` with the
@@ -90,7 +103,7 @@ module Raiha::Next::QUIC
     # offers no one decided on. A connection that has closed is let go.
     def handle_timeout(now:)
       connections.each { |connection| connection.handle_timeout(now:) }
-      @handles.delete_if { |_, handle| handle.expired?(now) }
+      @handles.each_value.select { |handle| handle.expired?(now) }.each { |handle| forget(handle) }
       @connections.delete_if { |_, connection| connection.closed? }
     end
 
@@ -110,8 +123,7 @@ module Raiha::Next::QUIC
       end
       return Route::Drop.new(reason: :unknown_connection_id) if header.is_a?(Wire::ShortHeader)
       if (handle = @handles[header.dcid])
-        handle.keep(datagram, from:, to:, ecn:)
-        return nil
+        return keep(handle, datagram, from:, to:, ecn:)
       end
       return Route::Drop.new(reason: :unknown_connection_id) unless header.type == :initial
       # RFC 9000 "Datagram Size": a server drops an Initial in a datagram
@@ -125,9 +137,26 @@ module Raiha::Next::QUIC
     private def offer(header, datagram, from:, to:, ecn:, now:)
       handle = Handle.new(remote: from, destination_connection_id: header.dcid, source_connection_id: header.scid,
         original_destination_connection_id: header.dcid, retry_source_connection_id: nil, expires_at: now + HANDLE_LIFETIME)
-      handle.keep(datagram, from:, to:, ecn:)
+      if (dropped = keep(handle, datagram, from:, to:, ecn:))
+        return dropped
+      end
       @handles[header.dcid] = handle
       Route::Incoming.new(handle:, remote: from, address_validated: false)
+    end
+
+    # Keeps `datagram` with the offer `handle`; nil, or a Route::Drop when
+    # the offer or all of them keep as much as they may.
+    private def keep(handle, datagram, from:, to:, ecn:)
+      size = datagram.bytesize
+      return Route::Drop.new(reason: :buffer_full) if handle.buffered + size > HANDLE_BUFFER || @buffered + size > HANDLES_BUFFER
+      handle.keep(datagram, from:, to:, ecn:)
+      @buffered += size
+      nil
+    end
+
+    private def forget(handle)
+      @handles.delete(handle.destination_connection_id)
+      @buffered -= handle.buffered
     end
 
     private def instance_variables_to_inspect = %i[@config]
