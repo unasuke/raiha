@@ -150,8 +150,18 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal QUIC::Route::Drop.new(reason: :unknown_connection_id), endpoint.receive(short(dcid: "c".b * 8, size: 100), from: CLIENT, now: 0.0)
   end
 
+  # RFC 9000 "Version Negotiation": the versions supported, the connection
+  # IDs echoed in each other's places.
   def test_an_unknown_version
-    assert_equal QUIC::Route::Drop.new(reason: :unsupported_version), endpoint.receive(unsupported(size: 1200), from: CLIENT, now: 0.0)
+    route = endpoint.receive(unsupported(size: 1200), from: CLIENT, to: SERVER, now: 0.0)
+    assert_equal CLIENT, route.transmit.destination
+    assert_equal SERVER, route.transmit.source
+    negotiation = QUIC::Wire::Packet.parse(route.transmit.payload, dcid_length: 8)
+    assert_equal QUIC::Wire::VersionNegotiation.new(dcid: SCID, scid: DCID, versions: [QUIC::Version::V1.number]), negotiation
+  end
+
+  def test_an_unknown_version_in_a_small_datagram
+    assert_equal QUIC::Route::Drop.new(reason: :too_short), endpoint.receive(unsupported(size: 1199), from: CLIENT, now: 0.0)
   end
 
   # A server does not take a Version Negotiation.

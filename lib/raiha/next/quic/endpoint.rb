@@ -4,8 +4,8 @@ module Raiha::Next::QUIC
   # The connections of one UDP socket (250 "Endpoint"). It finds the
   # connection a datagram belongs to by its Destination Connection ID and
   # decides for one that belongs to none: the offer of a new connection,
-  # which the application takes or turns down, or nothing. A Connection
-  # never refers to its Endpoint.
+  # which the application takes or turns down, a Version Negotiation, or
+  # nothing. A Connection never refers to its Endpoint.
   #
   # Like a Connection it never reads a clock: `now:` is the monotonic clock,
   # and the wall clock its tokens expire by is `time:`, given once when it is
@@ -82,7 +82,7 @@ module Raiha::Next::QUIC
       packet = Wire::Packet.parse(datagram, dcid_length: @config.connection_id_length)
       case packet
       when Wire::Packet::Parsed then route(packet.header, datagram, from:, to:, ecn:, now:)
-      when Wire::UnsupportedVersion then Route::Drop.new(reason: :unsupported_version)
+      when Wire::UnsupportedVersion then negotiate(packet, datagram, from, to)
       else Route::Drop.new(reason: :unexpected_packet)
       end
     rescue Wire::Malformed
@@ -179,6 +179,16 @@ module Raiha::Next::QUIC
       @handles.delete(handle.destination_connection_id)
       @buffered -= handle.buffered
     end
+
+    # RFC 9000 "Version Negotiation": a packet of a version not supported,
+    # in a datagram large enough to start a connection, is answered with
+    # the versions that are.
+    private def negotiate(packet, datagram, from, to)
+      return Route::Drop.new(reason: :too_short) if datagram.bytesize < Connection::MIN_INITIAL_DATAGRAM
+      Route::Respond.new(transmit: transmit(packet.negotiation(@config.versions.map(&:number)).encode, from, to))
+    end
+
+    private def transmit(payload, destination, source) = Transmit.new(payload:, destination:, source:, ecn: :not_ect, segment_size: nil)
 
     # The wall clock at `now`.
     private def wall_clock(now) = @time + (now - @created_at)

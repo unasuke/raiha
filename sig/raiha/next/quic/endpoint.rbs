@@ -55,6 +55,8 @@ module Raiha::Next::QUIC
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def forget: (Handle handle) -> void
+    private def negotiate: (Wire::UnsupportedVersion packet, String datagram, address from, address? to) -> Route::t
+    private def transmit: (String payload, address destination, address? source) -> Transmit
     private def wall_clock: (Float now) -> Time
     private def instance_variables_to_inspect: () -> Array[Symbol]
   end
