@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
+require "raiha/next/support/quic_recovery"
 
 # RFC 9001 "Key Update", with the client's packets made from its key log
 # once the handshake is done.
@@ -10,12 +11,12 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
 
   def events(connection) = [].tap { |events| connection.each_event { events << _1 } }
 
-  # A server done with the handshake, the client's key log, the server's
-  # connection ID and the time.
-  def connected
+  # A server done with the handshake, with `tracer`, the client's key log,
+  # the server's connection ID and the time.
+  def connected(tracer: nil)
     keylog = Keylog.new
     client = client_connection(keylog:)
-    server = server_connection
+    server = server_connection(tracer:)
     server.receive(client.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0)
     reply = server.transmits(now: 0.0)
     server_id = QUIC::Wire::Packet.parse(reply.first.payload, dcid_length: 8).header.scid
@@ -35,6 +36,14 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
     refute_empty opened
     assert opened.all? { |bit, _, _| bit == 1 }, opened.inspect
     assert opened.flat_map(&:last).grep(QUIC::Wire::Frame::Ack).any? { _1.largest == 1000 }
+  end
+
+  # The tracer is told of the update (qlog `key_updated`).
+  def test_the_tracer_is_told
+    tracer = NextQUICRecovery::RecordingTracer.new
+    server, keylog, server_id, now = connected(tracer:)
+    server.receive(client_one_rtt(keylog, dcid: server_id, payload: PING, phase: 1), from: CLIENT, now:)
+    assert_equal [{ level: :one_rtt, now: }], tracer.of(:key_updated)
   end
 
   # RFC 9001 "Receiving with Different Keys": a packet of the previous key

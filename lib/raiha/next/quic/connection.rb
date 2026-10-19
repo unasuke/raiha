@@ -76,7 +76,7 @@ module Raiha::Next::QUIC
       @path = Path.new(config:, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
-      @protection = PacketProtection.new(role:, version: @version) { |phase| @events << Event::KeyUpdated.new(phase:) }
+      @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = random.bytes(config.connection_id_length).b
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
@@ -306,6 +306,12 @@ module Raiha::Next::QUIC
     private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
 
     private def binding = @binding || raise(Error::StateError, "no Initial packet has come from the client yet")
+
+    # The 1-RTT keys changed to those of key phase `phase`.
+    private def keys_updated(phase)
+      @events << Event::KeyUpdated.new(phase:)
+      @tracer.key_updated(level: :one_rtt, now: @now) if @tracer # steep:ignore
+    end
 
     # The packet at `offset` in `datagram`, nil when there is none to take.
     # A header that does not read is dropped with the rest of the datagram

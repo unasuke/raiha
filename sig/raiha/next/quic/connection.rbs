@@ -86,6 +86,7 @@ module Raiha::Next::QUIC
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
 
+    private def keys_updated: (Integer phase) -> void
     private def remote: () -> address
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?

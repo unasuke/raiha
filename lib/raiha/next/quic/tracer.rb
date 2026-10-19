@@ -45,6 +45,10 @@ module Raiha::Next::QUIC
     # once authenticated (:remote) (qlog `parameters_set`).
     def parameters_set(owner:, parameters:, now:) = nil
 
+    # The keys of `level` changed with a key update, which only :one_rtt
+    # has (qlog `key_updated`).
+    def key_updated(level:, now:) = nil
+
     # A packet declared lost (qlog `packet_lost`). `trigger` is
     # :reordering_threshold or :time_threshold.
     def packet_lost(packet_number:, space:, trigger:, mtu_probe:, now:) = nil
