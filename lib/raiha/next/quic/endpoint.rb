@@ -11,6 +11,10 @@ module Raiha::Next::QUIC
   # and the wall clock its tokens expire by is `time:`, given once when it is
   # made.
   class Endpoint
+    # How long an offer lasts unless the application decides on it, from
+    # its first datagram (250 "handle has a lifetime").
+    HANDLE_LIFETIME = 3.0
+
     # An offer of a new connection, until the application decides on it:
     # what the headers of the client's first Initial said, and the
     # datagrams that came for it. `destination_connection_id` is the one the
@@ -19,22 +23,25 @@ module Raiha::Next::QUIC
     # `retry_source_connection_id`, nil without one.
     class Handle
       attr_reader :remote, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
-        :retry_source_connection_id, :datagrams
+        :retry_source_connection_id, :expires_at, :datagrams
 
       def initialize(remote:, destination_connection_id:, source_connection_id:, original_destination_connection_id:,
-        retry_source_connection_id:)
+        retry_source_connection_id:, expires_at:)
         @remote = remote
         @destination_connection_id = destination_connection_id
         @source_connection_id = source_connection_id
         @original_destination_connection_id = original_destination_connection_id
         @retry_source_connection_id = retry_source_connection_id
+        @expires_at = expires_at
         @datagrams = [] #: Array[[String, address, address?, ecn | :ce]]
       end
 
       # Keeps a datagram for the connection to take.
       def keep(datagram, from:, to:, ecn:) = @datagrams << [datagram, from, to, ecn]
 
-      private def instance_variables_to_inspect = %i[@remote]
+      def expired?(now) = now >= @expires_at
+
+      private def instance_variables_to_inspect = %i[@remote @expires_at]
     end
 
     # An Endpoint of a server. `random` is what it draws its own random
@@ -73,13 +80,17 @@ module Raiha::Next::QUIC
       each_connection { |connection| connection.each_transmit(now:, &) }
     end
 
-    # When something is to be done next: a connection's timer.
-    def next_timeout = connections.filter_map(&:next_timeout).min
+    # When something is to be done next: a connection's timer or the end of
+    # an offer.
+    def next_timeout
+      [*connections.filter_map(&:next_timeout), *@handles.each_value.map(&:expires_at)].min
+    end
 
-    # Runs out what is due at `now`: the timers of the connections. A
-    # connection that has closed is let go.
+    # Runs out what is due at `now`: the timers of the connections, and the
+    # offers no one decided on. A connection that has closed is let go.
     def handle_timeout(now:)
       connections.each { |connection| connection.handle_timeout(now:) }
+      @handles.delete_if { |_, handle| handle.expired?(now) }
       @connections.delete_if { |_, connection| connection.closed? }
     end
 
@@ -113,7 +124,7 @@ module Raiha::Next::QUIC
     # is derived and nothing is decrypted (250 "Endpoint").
     private def offer(header, datagram, from:, to:, ecn:, now:)
       handle = Handle.new(remote: from, destination_connection_id: header.dcid, source_connection_id: header.scid,
-        original_destination_connection_id: header.dcid, retry_source_connection_id: nil)
+        original_destination_connection_id: header.dcid, retry_source_connection_id: nil, expires_at: now + HANDLE_LIFETIME)
       handle.keep(datagram, from:, to:, ecn:)
       @handles[header.dcid] = handle
       Route::Incoming.new(handle:, remote: from, address_validated: false)

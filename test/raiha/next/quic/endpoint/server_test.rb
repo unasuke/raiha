@@ -54,6 +54,17 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal 2, handle.datagrams.size
   end
 
+  # 250 "handle has a lifetime": an offer no one decides on goes after
+  # HANDLE_LIFETIME seconds.
+  def test_an_offer_expires
+    endpoint = endpoint()
+    endpoint.receive(initial, from: CLIENT, now: 0.0)
+    assert_equal QUIC::Endpoint::HANDLE_LIFETIME, endpoint.next_timeout
+    endpoint.handle_timeout(now: QUIC::Endpoint::HANDLE_LIFETIME)
+    assert_nil endpoint.next_timeout
+    assert_instance_of QUIC::Route::Incoming, endpoint.receive(initial, from: CLIENT, now: QUIC::Endpoint::HANDLE_LIFETIME)
+  end
+
   # RFC 9000 "Datagram Size".
   def test_an_initial_under_1200_bytes
     assert_equal QUIC::Route::Drop.new(reason: :too_short), endpoint.receive(initial(size: 1199), from: CLIENT, now: 0.0)

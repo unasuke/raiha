@@ -1,11 +1,14 @@
 module Raiha::Next::QUIC
   class Endpoint
+    HANDLE_LIFETIME: Float
+
     class Handle
       @remote: address
       @destination_connection_id: String
       @source_connection_id: String
       @original_destination_connection_id: String
       @retry_source_connection_id: String?
+      @expires_at: Float
       @datagrams: Array[[String, address, address?, ecn | :ce]]
 
       attr_reader remote: address
@@ -13,11 +16,13 @@ module Raiha::Next::QUIC
       attr_reader source_connection_id: String
       attr_reader original_destination_connection_id: String
       attr_reader retry_source_connection_id: String?
+      attr_reader expires_at: Float
       attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
 
       def initialize: (remote: address, destination_connection_id: String, source_connection_id: String,
-                       original_destination_connection_id: String, retry_source_connection_id: String?) -> void
+                       original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float) -> void
       def keep: (String datagram, from: address, to: address?, ecn: ecn | :ce) -> void
+      def expired?: (Float now) -> bool
 
       private def instance_variables_to_inspect: () -> Array[Symbol]
     end
