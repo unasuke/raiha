@@ -1,0 +1,47 @@
+module Raiha::Next::QUIC
+  class Endpoint
+    class Handle
+      @remote: address
+      @destination_connection_id: String
+      @source_connection_id: String
+      @original_destination_connection_id: String
+      @retry_source_connection_id: String?
+      @datagrams: Array[[String, address, address?, ecn | :ce]]
+
+      attr_reader remote: address
+      attr_reader destination_connection_id: String
+      attr_reader source_connection_id: String
+      attr_reader original_destination_connection_id: String
+      attr_reader retry_source_connection_id: String?
+      attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
+
+      def initialize: (remote: address, destination_connection_id: String, source_connection_id: String,
+                       original_destination_connection_id: String, retry_source_connection_id: String?) -> void
+      def keep: (String datagram, from: address, to: address?, ecn: ecn | :ce) -> void
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+    end
+
+    @config: Config
+    @random: Crypto::_Random
+    @time: Time
+    @created_at: Float
+    @connections: Hash[String, Connection]
+    @handles: Hash[String, Handle]
+
+    def self.server: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> Endpoint
+
+    def initialize: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> void
+    def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> Route::t?
+    def each_transmit: (now: Float) { (Transmit) -> void } -> void
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+    def each_connection: () { (Connection) -> void } -> void
+    def connection_count: () -> Integer
+
+    private def connections: () -> Array[Connection]
+    private def route: (Wire::header header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t?
+    private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
+    private def instance_variables_to_inspect: () -> Array[Symbol]
+  end
+end

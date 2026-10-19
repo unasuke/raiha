@@ -1,0 +1,51 @@
+module Raiha::Next::QUIC
+  module Route
+    type t = Deliver | Incoming | ClientHello | Respond | Foreign | Drop
+
+    class Deliver < Data
+      attr_reader connection: Connection
+
+      def self.new: (connection: Connection) -> instance
+                  | (Connection connection) -> instance
+    end
+
+    class Incoming < Data
+      attr_reader handle: Endpoint::Handle
+      attr_reader remote: address
+      attr_reader address_validated: bool
+
+      def self.new: (handle: Endpoint::Handle, remote: address, address_validated: bool) -> instance
+                  | (Endpoint::Handle handle, address remote, bool address_validated) -> instance
+    end
+
+    class ClientHello < Data
+      attr_reader handle: Endpoint::Handle
+      attr_reader accepted: ::Raiha::Next::TLS::Handshake::Accepted
+
+      def self.new: (handle: Endpoint::Handle, accepted: ::Raiha::Next::TLS::Handshake::Accepted) -> instance
+                  | (Endpoint::Handle handle, ::Raiha::Next::TLS::Handshake::Accepted accepted) -> instance
+    end
+
+    class Respond < Data
+      attr_reader transmit: Transmit
+
+      def self.new: (transmit: Transmit) -> instance
+                  | (Transmit transmit) -> instance
+    end
+
+    class Foreign < Data
+      attr_reader worker: Integer
+      attr_reader datagram: String
+
+      def self.new: (worker: Integer, datagram: String) -> instance
+                  | (Integer worker, String datagram) -> instance
+    end
+
+    class Drop < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+  end
+end
