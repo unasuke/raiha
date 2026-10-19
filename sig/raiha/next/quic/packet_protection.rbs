@@ -12,7 +12,8 @@ module Raiha::Next::QUIC
     @keys: Hash[level, Hash[direction, Crypto::Keys]]
     @discarded: Array[level]
     @updated: (^(Integer phase) -> void)?
-    @one_rtt_suite: ::Raiha::Next::TLS::CipherSuite?
+    @suite: ::Raiha::Next::TLS::CipherSuite
+    @failures: Integer
     @next_secrets: Hash[direction, String]
     @next_read: Crypto::Keys?
     @previous_read: Crypto::Keys?
@@ -50,6 +51,8 @@ module Raiha::Next::QUIC
 
     private def update_keys: () -> void
     private def key_update_error: (String message) -> bot
+    private def open_with: (Crypto::Keys keys, Wire::Packet::Unmasked unmasked) -> String?
+    private def authentication_failed: () -> nil
     private def discard_previous_keys: (Float now) -> void
   end
 end

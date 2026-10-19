@@ -267,6 +267,25 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_key_update_error { open_one_rtt(server, 5, phase: 1) }
   end
 
+  # RFC 9001 "Limits on AEAD Usage": packets that fail authentication are
+  # counted across all keys, and one more than the integrity limit is
+  # AEAD_LIMIT_REACHED.
+  def test_the_integrity_limit
+    limits = { quic: Raiha::Next::TLS::CipherSuite::Limits.new(confidentiality: nil, integrity: 2) }
+    suite = SUITE.with(limits:)
+    server = protection(:server)
+    server.install(:handshake, :read, secret: CLIENT_SECRET, suite:)
+    server.install(:one_rtt, :read, secret: CLIENT_SECRET, suite:)
+    header = QUIC::Wire::LongHeader.new(type: :handshake, version: QUIC::Version::V1, dcid: "".b, scid: "".b)
+    forged = QUIC::Wire::Packet.seal(header, packet_number: 0, packet_number_length: 4, payload: "\x01".b * 20, keys: keys_at(SERVER_SECRET, 0))
+    unmasked = QUIC::Wire::Packet.parse(forged, dcid_length: 0).unmask(server.read_keys(:handshake).header_protection, largest: nil)
+    assert_nil server.open(:handshake, unmasked, now: 0.0, pto: 1.0)
+    assert_nil open_one_rtt(server, 1, phase: 1, bit: 0)
+    assert open_one_rtt(server, 2, phase: 0)
+    error = assert_raises(QUIC::Violation) { open_one_rtt(server, 3, phase: 0, bit: 1) }
+    assert_equal QUIC::ErrorCode::AEAD_LIMIT_REACHED, error.code
+  end
+
   # A Key Phase bit changed on a packet that does not open with the next
   # keys changes nothing.
   def test_a_changed_bit_alone_updates_nothing

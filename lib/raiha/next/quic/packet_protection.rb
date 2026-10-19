@@ -19,6 +19,10 @@ module Raiha::Next::QUIC
   # FIRST_KEY_UPDATE_INTERVAL packets sent or opened with the first keys,
   # and KEY_UPDATE_INTERVAL with each later ones (quic-go's
   # `FirstKeyUpdateInterval` and `KeyUpdateInterval`).
+  #
+  # Packets that fail authentication are counted across all keys, and past
+  # the integrity limit of the AEAD the connection closes (RFC 9001 "Limits
+  # on AEAD Usage").
   class PacketProtection
     LEVELS = %i[initial zero_rtt handshake one_rtt].freeze
     OLD_KEY_PTOS = 3
@@ -37,9 +41,12 @@ module Raiha::Next::QUIC
       @keys = LEVELS.to_h { |level| [level, {}] } #: Hash[level, Hash[direction, Crypto::Keys]]
       @discarded = [] #: Array[level]
       @updated = updated
-      # The 1-RTT cipher suite, the secrets of the next key phase, the read
-      # keys of the next and the previous phase, and when the latter go.
-      @one_rtt_suite = nil #: Raiha::Next::TLS::CipherSuite?
+      # The cipher suite TLS selected, the Initial keys' until it has.
+      @suite = Crypto::Initial::SUITE
+      # How many packets have failed authentication.
+      @failures = 0
+      # The secrets of the next key phase, the read keys of the next and the
+      # previous phase, and when the latter go.
       @next_secrets = {} #: Hash[direction, String]
       @next_read = nil #: Crypto::Keys?
       @previous_read = nil #: Crypto::Keys?
@@ -75,8 +82,8 @@ module Raiha::Next::QUIC
       raise ArgumentError, "the Initial keys come from the connection ID" if level == :initial
       raise ArgumentError, "#{level} is discarded" if @discarded.include?(level)
       keys = @keys.fetch(level)[direction] = Crypto::Keys.derive(suite:, secret:, version: @version)
+      @suite = suite
       return unless level == :one_rtt
-      @one_rtt_suite = suite
       following = @next_secrets[direction] = Crypto::Keys.next_secret(suite:, secret:, version: @version)
       @next_read = keys.update(suite:, secret: following, version: @version) if direction == :read
     end
@@ -107,24 +114,25 @@ module Raiha::Next::QUIC
     # this end has acknowledged, with the current keys, a packet of the
     # peer's current keys (MAY), or when a packet opens with keys older than
     # those of a packet with a lower number (MUST, RFC 9001 "Sending with
-    # Updated Keys").
+    # Updated Keys"); of AEAD_LIMIT_REACHED when more packets have failed
+    # authentication than the integrity limit.
     def open(level, unmasked, now:, pto:)
       keys = read_keys(level) or return nil
-      return unmasked.open(keys.aead) unless level == :one_rtt
+      return open_with(keys, unmasked) unless level == :one_rtt
       discard_previous_keys(now)
       number = unmasked.packet_number
       lowest = @lowest_opened
       if unmasked.header.key_phase == key_phase_bit # steep:ignore
-        payload = unmasked.open(keys.aead) or return nil
+        payload = open_with(keys, unmasked) or return nil
       elsif lowest ? number < lowest : @key_phase.positive?
         previous = @previous_read or return nil
-        payload = unmasked.open(previous.aead) or return nil
+        payload = open_with(previous, unmasked) or return nil
         @largest_older = number if @largest_older.nil? || number > @largest_older # steep:ignore
         @largest_opened = number if @largest_opened.nil? || number > @largest_opened # steep:ignore
         return payload
       else
         following = @next_read or return nil
-        payload = unmasked.open(following.aead) or return nil
+        payload = open_with(following, unmasked) or return nil
         if @key_phase.positive? && !(lowest && (ack = @largest_ack_sent) && ack >= lowest)
           key_update_error("the peer updated its keys again before an ACK of its packets with the current ones")
         end
@@ -192,7 +200,7 @@ module Raiha::Next::QUIC
     # The 1-RTT keys of the next key phase in place of the current, which
     # stay to read the previous phase's packets.
     private def update_keys
-      suite = @one_rtt_suite or raise Error::StateError, "no 1-RTT keys to update"
+      suite = @suite
       following = @next_read or raise Error::StateError, "no 1-RTT read keys of the next phase"
       keys = @keys.fetch(:one_rtt)
       @previous_read = keys.fetch(:read)
@@ -212,6 +220,19 @@ module Raiha::Next::QUIC
     end
 
     private def key_update_error(message) = raise Violation.new(message, code: ErrorCode::KEY_UPDATE_ERROR)
+
+    private def open_with(keys, unmasked) = unmasked.open(keys.aead) || authentication_failed
+
+    # RFC 9001 "Limits on AEAD Usage": once more packets have failed
+    # authentication, across all keys, than the integrity limit of the AEAD
+    # TLS selected, the connection closes with AEAD_LIMIT_REACHED and
+    # processes no more.
+    private def authentication_failed
+      @failures += 1
+      limit = @suite.integrity_limit(:quic)
+      return nil unless limit && @failures > limit
+      raise Violation.new("#{@failures} packets failed authentication, over the limit of #{limit}", code: ErrorCode::AEAD_LIMIT_REACHED)
+    end
 
     # RFC 9001 "Receiving with Different Keys": an endpoint keeps the old
     # read keys no more than three PTOs after a packet opens with the new.
