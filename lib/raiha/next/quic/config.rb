@@ -23,7 +23,8 @@ module Raiha::Next::QUIC
   #
   # retry_token_key and stateless_reset_key are the secrets an Endpoint
   # makes its Retry tokens and stateless reset tokens with; every worker
-  # serving the same connections must have the same ones (250 "Ractor").
+  # serving the same connections, in Ractors or processes, must have the
+  # same ones.
   # Left nil, an Endpoint draws its own, which only one process can use.
   # inspect does not show them.
   class Config < Data.define(

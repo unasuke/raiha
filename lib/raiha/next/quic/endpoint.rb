@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Raiha::Next::QUIC
-  # The connections of one UDP socket (250 "Endpoint"). It finds the
+  # The connections of one UDP socket. It finds the
   # connection a datagram belongs to by its Destination Connection ID and
   # decides for one that belongs to none: the offer of a new connection,
   # which the application takes or turns down, a Version Negotiation, a
@@ -26,7 +26,7 @@ module Raiha::Next::QUIC
     RESET_RATE = 1.0
     RESET_ADDRESSES = 1024
     # How long an offer lasts unless the application decides on it, from
-    # its first datagram (250 "handle has a lifetime").
+    # its first datagram, so that one the application forgets goes too.
     HANDLE_LIFETIME = 3.0
     # The bytes of datagrams an offer keeps until it becomes a connection,
     # and all offers together, so that what an attacker can make an
@@ -70,7 +70,8 @@ module Raiha::Next::QUIC
     end
 
     # An Endpoint of a server. `random` is what it draws its own random
-    # bytes from (250 "Random"), and its keys when `config` has none.
+    # bytes from, a seeded Random in tests, and its keys when `config` has
+    # none.
     def self.server(config:, random:, time:, now:) = new(config:, random:, time:, now:)
 
     private_class_method :new
@@ -155,7 +156,8 @@ module Raiha::Next::QUIC
     end
 
     # The first stage of a new connection, from the headers alone: no key
-    # is derived and nothing is decrypted (250 "Endpoint"). A Retry token
+    # is derived and nothing is decrypted, so that a Retry or a refusal
+    # costs little under attack. A Retry token
     # shows the client receives at its address and carries its first
     # Destination Connection ID (RFC 9000 "Address Validation Using Retry
     # Packets"); one that does not verify is dropped. A token of another

@@ -1,7 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/quic/test"
 
-# 259 "Test::Network and Test::Bottleneck".
+# One bottleneck link: bandwidth, delay, a tail-drop queue and CE marks.
 class RaihaNextQUICTestBottleneckTest < Minitest::Test
   Test = Raiha::Next::QUIC::Test
 

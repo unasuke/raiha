@@ -1,8 +1,8 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
-# 250 "Endpoint": what a server's Endpoint does with datagrams that belong
-# to no connection.
+# What a server's Endpoint does with datagrams that belong to no
+# connection.
 class RaihaNextQUICEndpointServerTest < Minitest::Test
   include NextQUICPair
 
@@ -126,8 +126,7 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal DCID, route.handle.original_destination_connection_id
   end
 
-  # 250 "handle has a lifetime": an offer no one decides on goes after
-  # HANDLE_LIFETIME seconds.
+  # An offer no one decides on goes after HANDLE_LIFETIME seconds.
   def test_an_offer_expires
     endpoint = endpoint()
     endpoint.receive(initial, from: CLIENT, now: 0.0)

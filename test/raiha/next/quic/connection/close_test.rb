@@ -1,7 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
-# RFC 9000 "Connection Termination", as 250 "Closing" applies it.
+# RFC 9000 "Connection Termination".
 class RaihaNextQUICConnectionCloseTest < Minitest::Test
   include NextQUICPair
 

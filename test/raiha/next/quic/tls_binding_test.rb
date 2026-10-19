@@ -1,7 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_tls"
 
-# 250 "TLS binding": the handshake carried in CRYPTO frames, with the
+# The handshake carried in CRYPTO frames, with the
 # Machine's outputs and events told to the connection.
 class RaihaNextQUICTLSBindingTest < Minitest::Test
   include NextQUICTLS

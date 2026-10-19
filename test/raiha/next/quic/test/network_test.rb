@@ -1,7 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/quic/test"
 
-# 250 "Test API": nodes on a virtual clock, with path models between them.
+# Nodes on a virtual clock, with path models between them.
 class RaihaNextQUICTestNetworkTest < Minitest::Test
   QUIC = Raiha::Next::QUIC
   Test = QUIC::Test

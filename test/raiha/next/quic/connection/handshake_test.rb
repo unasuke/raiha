@@ -1,8 +1,8 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
-# 250 appendix, acceptance test (1): two connections back to back
-# complete the handshake with no socket, Fiber or real time.
+# Two connections back to back complete the handshake with no socket,
+# Fiber or real time.
 class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
   include NextQUICPair
 

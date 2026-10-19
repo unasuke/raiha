@@ -2,7 +2,7 @@ require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 require "raiha/next/support/quic_recovery"
 
-# 250 "Tracer and qlog": what a connection tells its tracer.
+# What a connection tells its tracer.
 class RaihaNextQUICConnectionTracerTest < Minitest::Test
   include NextQUICPair
 
@@ -20,7 +20,7 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
     def tls_trace(value) = @tls << value
   end
 
-  # 250 "Tracer and qlog": TLS's traces go to a tracer with `tls_trace`;
+  # TLS's traces go to a tracer with `tls_trace`;
   # one without it is not handed to TLS, which would call it.
   def test_tls_traces
     client_tracer = TLSRecordingTracer.new

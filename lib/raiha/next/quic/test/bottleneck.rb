@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module Raiha::Next::QUIC::Test
-  # A path model of one bottleneck link (259 "Test::Network and
-  # Test::Bottleneck"): datagrams wait in a queue of `queue` bytes, go out
+  # A path model of one bottleneck link: datagrams wait in a queue of
+  # `queue` bytes, go out
   # one after another at `bandwidth` bits per second, and arrive `delay`
   # seconds after they have gone out. One that does not fit in the queue is
   # dropped (tail-drop). With a `ce_threshold`, an ECT(0) datagram that finds

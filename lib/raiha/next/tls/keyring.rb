@@ -69,7 +69,7 @@ module Raiha::Next::TLS
     end
 
     # Where the connection's random bytes come from, for a QUIC connection
-    # as well as for TLS (250 "Random numbers").
+    # as well as for TLS, so that a seeded one makes a test repeatable.
     attr_reader :random
 
     def random_bytes(length) = @random.bytes(length)

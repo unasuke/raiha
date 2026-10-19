@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Raiha::Next::QUIC
-  # One QUIC connection, sans-IO (250 "sans-IO core — Connection"): it is
+  # One QUIC connection, sans-IO: it is
   # given datagrams with `receive` and the time with `handle_timeout`, and
   # hands back the datagrams to send with `each_transmit` and what happened
   # with `each_event`. It never reads a clock; `now:` is the monotonic

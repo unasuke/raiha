@@ -6,8 +6,8 @@ module Raiha::Next::QUIC::Test
   class Datagram < Data.define(:payload, :source, :destination, :ecn); end
 
   # Endpoints and connections wired together on a virtual clock, so that a
-  # handshake or a transfer runs with no socket and no real time (250 "Test
-  # API"). A node is anything with `receive(payload, from:, to:, ecn:, now:)`,
+  # handshake or a transfer runs with no socket and no real time. A node is
+  # anything with `receive(payload, from:, to:, ecn:, now:)`,
   # `each_transmit(now:)`, `next_timeout` and `handle_timeout(now:)`, added at
   # an address; what it sends goes to the node at the destination address.
   #

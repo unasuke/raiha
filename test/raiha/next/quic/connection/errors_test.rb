@@ -1,7 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
-# 250 "Errors": what the network sends never raises. A header that does
+# What the network sends never raises. A header that does
 # not read is dropped, since anyone could have sent it; what breaks a
 # packet that opened closes the connection with its error.
 class RaihaNextQUICConnectionErrorsTest < Minitest::Test

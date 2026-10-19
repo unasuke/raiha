@@ -1,8 +1,7 @@
 require "raiha/next/support/quic_tls"
 
 # A client and a server Connection of the next release of raiha, wired to
-# each other with nothing in between (250 appendix, "sans-IO, two
-# connections back to back").
+# each other with nothing in between.
 module NextQUICPair
   include NextQUICTLS
 

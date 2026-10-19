@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Raiha::Next::QUIC
-  # What an Endpoint did with a datagram it received (250 "Endpoint").
+  # What an Endpoint did with a datagram it received.
   module Route
     # Given to the connection it belongs to.
     class Deliver < Data.define(:connection)
@@ -25,7 +25,7 @@ module Raiha::Next::QUIC
     class Respond < Data.define(:transmit)
     end
 
-    # For another worker (250 "Ractor").
+    # For another worker, whose connection ID it has.
     class Foreign < Data.define(:worker, :datagram)
     end
 

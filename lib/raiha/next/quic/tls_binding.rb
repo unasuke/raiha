@@ -2,7 +2,7 @@
 
 module Raiha::Next::QUIC
   # The one place of the QUIC layer that drives the TLS layer's handshake
-  # Machine (250 "TLS binding"). It carries TLS's messages in the CRYPTO
+  # Machine. It carries TLS's messages in the CRYPTO
   # frames of each encryption level and hands those it receives to the
   # Machine by RFC 9001 "Sending and Receiving Handshake Messages": the
   # current level's in order, a finished level's never past what it had
@@ -29,7 +29,7 @@ module Raiha::Next::QUIC
     # A client's binding, with the ClientHello already in its Initial CRYPTO
     # stream. `transport_parameters` are this end's; `time` is the wall
     # clock TLS takes. `tracer` is the connection's, which TLS is given only
-    # when it takes TLS's traces with `tls_trace` (250 "Tracer and qlog").
+    # when it takes TLS's traces with `tls_trace`.
     def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.client(
@@ -87,9 +87,8 @@ module Raiha::Next::QUIC
       feed(time) if level == read_level
     end
 
-    # Tells the connection what the Machine has put out (250 "Writing the
-    # outputs and events"). A message of a level whose keys are gone has
-    # nowhere to go.
+    # Tells the connection what the Machine has put out. A message of a
+    # level whose keys are gone has nowhere to go.
     def pump
       @machine.each_output do |output|
         case output
