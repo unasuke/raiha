@@ -4,13 +4,18 @@ module Raiha::Next::QUIC
   # The connections of one UDP socket (250 "Endpoint"). It finds the
   # connection a datagram belongs to by its Destination Connection ID and
   # decides for one that belongs to none: the offer of a new connection,
-  # which the application takes or turns down, a Version Negotiation, or
-  # nothing. A Connection never refers to its Endpoint.
+  # which the application takes or turns down, a Version Negotiation, a
+  # Stateless Reset, or nothing. A Connection never refers to its Endpoint.
   #
   # Like a Connection it never reads a clock: `now:` is the monotonic clock,
   # and the wall clock its tokens expire by is `time:`, given once when it is
   # made.
   class Endpoint
+    # RFC 9000 "Stateless Reset": a reset is shorter than the packet that
+    # triggered it, so that two endpoints cannot keep one going, and no
+    # longer than this, one byte short of the 43 bytes RFC 9000 has resets
+    # match, so that a reset reflects little.
+    MAX_RESET_LENGTH = 42
     # How long an offer lasts unless the application decides on it, from
     # its first datagram (250 "handle has a lifetime").
     HANDLE_LIFETIME = 3.0
@@ -67,6 +72,7 @@ module Raiha::Next::QUIC
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
+      @stateless_reset_key = config.stateless_reset_key || random.bytes(Config::MIN_KEY_LENGTH).b
       # The connections by each connection ID that leads to them.
       @connections = {} #: Hash[String, Connection]
       # The offers by the Destination Connection ID of their Initials, and
@@ -116,13 +122,13 @@ module Raiha::Next::QUIC
 
     # Where a packet with a header that reads goes: to the connection of its
     # Destination Connection ID, else, for a client's Initial, to the offer
-    # of a new connection.
+    # of a new connection, and for a short header, a Stateless Reset.
     private def route(header, datagram, from:, to:, ecn:, now:)
       if (connection = @connections[header.dcid])
         connection.receive(datagram, from:, to:, ecn:, now:)
         return Route::Deliver.new(connection:)
       end
-      return Route::Drop.new(reason: :unknown_connection_id) if header.is_a?(Wire::ShortHeader)
+      return reset(header.dcid, datagram, from, to) if header.is_a?(Wire::ShortHeader)
       if (handle = @handles[header.dcid])
         # Before the server answers, the client sends only Initial and 0-RTT
         # packets, from where its first came.
@@ -186,6 +192,15 @@ module Raiha::Next::QUIC
     private def negotiate(packet, datagram, from, to)
       return Route::Drop.new(reason: :too_short) if datagram.bytesize < Connection::MIN_INITIAL_DATAGRAM
       Route::Respond.new(transmit: transmit(packet.negotiation(@config.versions.map(&:number)).encode, from, to))
+    end
+
+    # RFC 9000 "Stateless Reset": a short header packet of no connection is
+    # answered with a reset whose token comes from its connection ID.
+    private def reset(dcid, datagram, from, to)
+      length = [datagram.bytesize - 1, MAX_RESET_LENGTH].min
+      return Route::Drop.new(reason: :unknown_connection_id) if length < StatelessReset::MIN_LENGTH
+      token = StatelessReset.token(key: @stateless_reset_key, connection_id: dcid)
+      Route::Respond.new(transmit: transmit(StatelessReset.packet(token:, length:, random: @random), from, to))
     end
 
     private def transmit(payload, destination, source) = Transmit.new(payload:, destination:, source:, ecn: :not_ect, segment_size: nil)

@@ -1,5 +1,6 @@
 module Raiha::Next::QUIC
   class Endpoint
+    MAX_RESET_LENGTH: Integer
     HANDLE_LIFETIME: Float
     HANDLE_BUFFER: Integer
     HANDLES_BUFFER: Integer
@@ -36,6 +37,7 @@ module Raiha::Next::QUIC
     @time: Time
     @created_at: Float
     @retry_token_key: String
+    @stateless_reset_key: String
     @connections: Hash[String, Connection]
     @handles: Hash[String, Handle]
     @buffered: Integer
@@ -56,6 +58,7 @@ module Raiha::Next::QUIC
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def forget: (Handle handle) -> void
     private def negotiate: (Wire::UnsupportedVersion packet, String datagram, address from, address? to) -> Route::t
+    private def reset: (String dcid, String datagram, address from, address? to) -> Route::t
     private def transmit: (String payload, address destination, address? source) -> Transmit
     private def wall_clock: (Float now) -> Time
     private def instance_variables_to_inspect: () -> Array[Symbol]

@@ -6,7 +6,7 @@ require "raiha/next/support/quic_pair"
 class RaihaNextQUICEndpointServerTest < Minitest::Test
   include NextQUICPair
 
-  KEYS = { retry_token_key: "r".b * 32 }.freeze
+  KEYS = { retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32 }.freeze
   DCID = "d".b * 8
   SCID = "s".b * 8
 
@@ -146,8 +146,17 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal QUIC::Route::Drop.new(reason: :unknown_connection_id), endpoint.receive(initial(type: :handshake), from: CLIENT, now: 0.0)
   end
 
-  def test_a_short_header_packet_of_no_connection
-    assert_equal QUIC::Route::Drop.new(reason: :unknown_connection_id), endpoint.receive(short(dcid: "c".b * 8, size: 100), from: CLIENT, now: 0.0)
+  # RFC 9000 "Stateless Reset": a short header packet of no connection is
+  # answered with a reset whose token comes from its connection ID, 42
+  # bytes at most and shorter than the packet.
+  def test_a_stateless_reset
+    route = endpoint.receive(short(dcid: "c".b * 8, size: 100), from: CLIENT, to: SERVER, now: 0.0)
+    assert_equal [CLIENT, SERVER], [route.transmit.destination, route.transmit.source]
+    reset = route.transmit.payload
+    assert_equal QUIC::Endpoint::MAX_RESET_LENGTH, reset.bytesize
+    assert_equal 0x40, reset.getbyte(0) & 0xc0
+    assert QUIC::StatelessReset.match?(reset, [QUIC::StatelessReset.token(key: KEYS[:stateless_reset_key], connection_id: "c".b * 8)])
+    assert_equal 29, endpoint.receive(short(dcid: "c".b * 8, size: 30), from: CLIENT, now: 0.0).transmit.payload.bytesize
   end
 
   # RFC 9000 "Version Negotiation": the versions supported, the connection
