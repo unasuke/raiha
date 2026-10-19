@@ -67,10 +67,12 @@ module Raiha::Next::QUIC
     def self.client: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String,
                       remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
     def self.server: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, time: Time, now: Float,
-                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
+                      ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool) -> Connection
 
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
-                     random: ::Raiha::Next::TLS::Keyring::_Random) { (Connection, TransportParameters) -> TLSBinding } -> void
+                     random: ::Raiha::Next::TLS::Keyring::_Random, ?original_destination_connection_id: String?,
+                     ?retry_source_connection_id: String?, ?address_validated: bool) { (Connection, TransportParameters) -> TLSBinding } -> void
     def handshake_complete?: () -> bool
     def handshake_confirmed?: () -> bool
     def closing?: () -> bool

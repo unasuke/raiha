@@ -24,12 +24,22 @@ class RaihaNextQUICConnectionAmplificationTest < Minitest::Test
 
   # A server whose certificate chain makes its flight longer than three
   # datagrams.
-  def long_flight_server
+  def long_flight_server(**options)
     identity = NextTLSPair.server_identity
     long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [NextTLSPair.ca.der] * 8, key_der: identity.key_der)
     tls_config = server_config
     keyring = TLS::Keyring.server(config: tls_config, identities: [long], random: Random.new(2))
-    QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0)
+    QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0, **options)
+  end
+
+  # A server told the address is validated, by a Retry token its Endpoint
+  # checked, is not limited.
+  def test_a_validated_address
+    client = client_connection
+    server = long_flight_server(address_validated: true)
+    first = client.transmits(now: 0.0).first.payload
+    server.receive(first, from: CLIENT, now: 0.0)
+    assert_operator server.transmits(now: 0.0).sum { _1.payload.bytesize }, :>, 3 * first.bytesize
   end
 
   # A client that says nothing after its first Initial gets no more than

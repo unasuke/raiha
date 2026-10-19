@@ -57,15 +57,24 @@ module Raiha::Next::QUIC
     # A server connection, which takes the client's first Initial packet as
     # it comes and starts TLS then, when the client's first Destination
     # Connection ID, which its transport parameters carry, is known.
-    def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil)
-      new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random) do |connection, parameters|
-        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, tracer:, keylog:)
+    #
+    # An Endpoint that has taken the offer of the connection gives what it
+    # learned: the ClientHello its Acceptor read (`client_hello`), and after
+    # a Retry the client's first Destination Connection ID and the Retry's
+    # Source Connection ID, which the transport parameters name, and that
+    # the client's address is validated.
+    def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
+      original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false)
+      new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
+        retry_source_connection_id:, address_validated:) do |connection, parameters|
+        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:)
       end
     end
 
     private_class_method :new
 
-    def initialize(role:, config:, now:, time:, remote:, tracer:, random:, &start)
+    def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
+      retry_source_connection_id: nil, address_validated: role == :client, &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -98,7 +107,7 @@ module Raiha::Next::QUIC
       @now = now
       # What a server has received and sent while the client's address is
       # not validated, and whether that has stopped it.
-      @address_validated = role == :client
+      @address_validated = address_validated
       @received_unvalidated = 0
       @sent_unvalidated = 0
       @amplification_limited = false
@@ -110,8 +119,8 @@ module Raiha::Next::QUIC
       # A client's first Destination Connection ID, and the Source
       # Connection ID of a Retry, which the server's transport parameters
       # must name.
-      @original_destination_connection_id = nil #: String?
-      @retry_source_connection_id = nil #: String?
+      @original_destination_connection_id = original_destination_connection_id
+      @retry_source_connection_id = retry_source_connection_id
       if role == :client
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
         @original_destination_connection_id = @destination_connection_id
@@ -399,8 +408,9 @@ module Raiha::Next::QUIC
       @destination_connection_id = header.scid
       @peer_source_connection_id = header.scid
       @protection.install_initial(header.dcid)
+      @original_destination_connection_id ||= header.dcid
       parameters = @config.transport_parameters(initial_source_connection_id: @source_connection_id,
-        original_destination_connection_id: header.dcid)
+        original_destination_connection_id: @original_destination_connection_id, retry_source_connection_id: @retry_source_connection_id)
       @tracer.parameters_set(owner: :local, parameters:, now: @now) if @tracer # steep:ignore
       @binding = @start_binding.call(self, parameters)
     end
