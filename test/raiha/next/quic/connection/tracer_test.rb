@@ -26,6 +26,48 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
     assert_includes server_tracer.of(:packet_sent).map { _1[:header].packet_type }, :one_rtt
   end
 
+  def dropped(tracer) = tracer.of(:packet_dropped).map { [_1[:reason], _1[:raw_length]] }
+
+  # Bytes that do not read as a packet are dropped to the end of the
+  # datagram.
+  def test_a_header_that_does_not_read
+    tracer = RecordingTracer.new
+    server_connection(tracer:).receive("\x00".b * 50, from: CLIENT, now: 0.0)
+    assert_equal [[:invalid, 50]], dropped(tracer)
+  end
+
+  def test_a_version_not_supported
+    tracer = RecordingTracer.new
+    datagram = [0xc0, 0x0a0a0a0a, 0, 0].pack("CNCC") + "\x00".b * 1200
+    server_connection(tracer:).receive(datagram, from: CLIENT, now: 0.0)
+    assert_equal [[:unsupported, datagram.bytesize]], dropped(tracer)
+  end
+
+  # A packet that does not open, and one that comes again.
+  def test_a_forged_packet_and_a_duplicate
+    tracer = RecordingTracer.new
+    server = server_connection(tracer:)
+    first = client_connection.transmits(now: 0.0).first.payload
+    forged = first.dup
+    forged.setbyte(forged.bytesize - 1, forged.getbyte(forged.bytesize - 1) ^ 1)
+    server.receive(forged, from: CLIENT, now: 0.0)
+    server.receive(first, from: CLIENT, now: 0.0)
+    server.receive(first, from: CLIENT, now: 0.0)
+    assert_equal [[:decryption_failure, 1200], [:duplicate, 1200]], dropped(tracer)
+  end
+
+  # A 1-RTT packet before the keys to read it.
+  def test_no_keys_yet
+    tracer = RecordingTracer.new
+    client = client_connection(tracer:)
+    scid = QUIC::Wire::Packet.parse(client.transmits(now: 0.0).first.payload, dcid_length: 8).header.scid
+    keys = QUIC::Crypto::Keys.derive(suite: TLS::CipherSuite::TLS_AES_128_GCM_SHA256, secret: "s".b * 32, version: QUIC::Version::V1)
+    packet = QUIC::Wire::Packet.seal(QUIC::Wire::ShortHeader.new(dcid: scid), packet_number: 0, packet_number_length: 2,
+      payload: "\x01".b * 30, keys:)
+    client.receive(packet, from: SERVER, now: 0.0)
+    assert_equal [[:key_unavailable, packet.bytesize]], dropped(tracer)
+  end
+
   # A tracer that does not ask for the frames is not given them.
   def test_frames_only_when_asked
     tracer = RecordingTracer.new(frames: false)

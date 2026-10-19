@@ -176,7 +176,7 @@ module Raiha::Next::QUIC
       count_received(datagram, now) unless @address_validated
       offset = 0
       while offset < datagram.bytesize
-        packet = parse_packet(datagram, offset) or break
+        packet = parse_packet(datagram, offset, now) or break
         receive_packet(packet, from:, ecn:, now:)
         offset = packet.end_offset
         break unless @state == :open
@@ -307,33 +307,46 @@ module Raiha::Next::QUIC
     # The packet at `offset` in `datagram`, nil when there is none to take.
     # A header that does not read is dropped with the rest of the datagram
     # and nothing else: before its protection is off, anyone could have sent
-    # it.
-    private def parse_packet(datagram, offset)
+    # it. So is a packet of a version not supported, and a Version
+    # Negotiation or Retry packet, which fill the datagram.
+    private def parse_packet(datagram, offset, now)
       packet = Wire::Packet.parse(datagram, offset:, dcid_length: @source_connection_id.bytesize)
-      packet if packet.is_a?(Wire::Packet::Parsed)
+      return packet if packet.is_a?(Wire::Packet::Parsed)
+      dropped(packet.is_a?(Wire::UnsupportedVersion) ? :unsupported : :general, datagram.bytesize - offset, now)
     rescue Wire::Malformed
+      dropped(:invalid, datagram.bytesize - offset, now)
+    end
+
+    # Tells the tracer that `length` bytes of packets were dropped for
+    # `reason`, a trigger of qlog `packet_dropped`.
+    private def dropped(reason, length, now)
+      @tracer.packet_dropped(reason:, raw_length: length, now:) if @tracer # steep:ignore
       nil
     end
 
     private def receive_packet(packet, from:, ecn:, now:)
       header = packet.header
       level = header.type
-      return if header.is_a?(Wire::LongHeader) && (id = @peer_source_connection_id) && header.scid != id
+      length = packet.end_offset - packet.offset
+      if header.is_a?(Wire::LongHeader) && (id = @peer_source_connection_id) && header.scid != id
+        return dropped(:connection_unknown, length, now)
+      end
       # RFC 9000 "Datagram Size": a server drops an Initial packet in a
       # datagram under 1200 bytes.
-      return if @role == :server && level == :initial && packet.datagram.bytesize < MIN_INITIAL_DATAGRAM
+      return dropped(:invalid, length, now) if @role == :server && level == :initial && packet.datagram.bytesize < MIN_INITIAL_DATAGRAM
       first = @role == :server && @binding.nil?
-      keys = first ? first_initial_keys(header) : @protection.read_keys(level)
-      return unless keys
+      keys = (first ? first_initial_keys(header) : @protection.read_keys(level)) or return dropped(:key_unavailable, length, now)
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
-      payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period)) or return
+      payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period))
+      return dropped(:decryption_failure, length, now) unless payload
       accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
-      return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
+      processed = @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
+      return dropped(:duplicate, length, now) unless processed
       if @tracer
         @tracer.packet_received(header: Tracer::PacketHeader.of(unmasked.header, unmasked.packet_number), # steep:ignore
-          frames: @tracer.trace_frames? ? frames : nil, raw_length: packet.end_offset - packet.offset, now:) # steep:ignore
+          frames: @tracer.trace_frames? ? frames : nil, raw_length: length, now:) # steep:ignore
       end
       # RFC 9000 "Idle Timeout": a packet received and processed, which a
       # duplicate is not.

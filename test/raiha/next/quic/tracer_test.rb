@@ -27,6 +27,7 @@ class RaihaNextQUICTracerTest < Minitest::Test
     assert_nil tracer.packet_sent(header:, frames: nil, raw_length: 40, now: 1.0)
     assert_nil tracer.packet_received(header:, frames: nil, raw_length: 40, now: 1.0)
     refute tracer.trace_frames?
+    assert_nil tracer.packet_dropped(reason: :duplicate, raw_length: 40, now: 1.0)
   end
 
   # A short header has the Key Phase bit and no version or Source

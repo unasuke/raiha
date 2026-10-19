@@ -88,7 +88,8 @@ module Raiha::Next::QUIC
 
     private def remote: () -> address
     private def binding: () -> TLSBinding
-    private def parse_packet: (String datagram, Integer offset) -> Wire::Packet::Parsed?
+    private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
+    private def dropped: (Symbol reason, Integer length, Float now) -> nil
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?

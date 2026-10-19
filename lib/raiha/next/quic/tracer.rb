@@ -35,6 +35,12 @@ module Raiha::Next::QUIC
     # Whether `packet_sent` and `packet_received` are given the frames.
     def trace_frames? = false
 
+    # Packets of `raw_length` bytes dropped (qlog `packet_dropped`).
+    # `reason` is a trigger of qlog: :invalid, :unsupported,
+    # :connection_unknown, :key_unavailable, :decryption_failure, :duplicate
+    # or :general.
+    def packet_dropped(reason:, raw_length:, now:) = nil
+
     # A packet declared lost (qlog `packet_lost`). `trigger` is
     # :reordering_threshold or :time_threshold.
     def packet_lost(packet_number:, space:, trigger:, mtu_probe:, now:) = nil
