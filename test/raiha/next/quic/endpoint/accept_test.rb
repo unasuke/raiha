@@ -70,6 +70,21 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_instance_of QUIC::Route::ClientHello, endpoint.admit(handle, now: 0.0)
   end
 
+  # Once the ClientHello is whole, what more comes is kept for the
+  # connection and not read: a forged Initial with more CRYPTO data, which
+  # anyone who saw the first can make, does not end the offer.
+  def test_nothing_more_is_read_once_the_client_hello_is_whole
+    first = client_connection.transmits(now: 0.0).first.payload
+    dcid = QUIC::Wire::Packet.parse(first, dcid_length: 8).header.dcid
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    more = QUIC::Wire::Frame::Crypto.new(offset: client_hello(first).bytesize, data: "\x01".b)
+    assert_nil endpoint.receive(initial(dcid:, packet_number: 7, frames: [more]), from: CLIENT, now: 0.0)
+    assert_equal 2, handle.datagrams.size
+    assert_equal QUIC::Endpoint::HANDLE_LIFETIME, endpoint.next_timeout
+  end
+
   def test_an_offer_is_admitted_once
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle

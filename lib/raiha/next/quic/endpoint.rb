@@ -91,10 +91,13 @@ module Raiha::Next::QUIC
 
       # Reads the CRYPTO frames of the Initial packets of `datagram` that
       # open into the Acceptor. What breaks a rule once a packet has opened
-      # ends the ClientHello.
+      # ends the ClientHello. Once it is whole, nothing more is read: anyone
+      # who saw the client's Initial can make Initial packets, and the
+      # connection, which reads them all again, is to judge them.
       def read(datagram, time:, dcid_length:)
         acceptor = @acceptor or return
         keys = @keys or return
+        return if acceptor.accepted
         offset = 0
         while offset < datagram.bytesize && !failed?
           packet = parse(datagram, offset, dcid_length) or break
