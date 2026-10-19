@@ -16,6 +16,13 @@ module Raiha::Next::QUIC
     # longer than this, one byte short of the 43 bytes RFC 9000 has resets
     # match, so that a reset reflects little.
     MAX_RESET_LENGTH = 42
+    # RFC 9000 "Looping": each address is sent resets from a token bucket of
+    # RESET_BURST, refilled at RESET_RATE a second, and at most
+    # RESET_ADDRESSES addresses are kept at once, so that the resets an
+    # attacker can draw are bounded too.
+    RESET_BURST = 10.0
+    RESET_RATE = 1.0
+    RESET_ADDRESSES = 1024
     # How long an offer lasts unless the application decides on it, from
     # its first datagram (250 "handle has a lifetime").
     HANDLE_LIFETIME = 3.0
@@ -79,6 +86,8 @@ module Raiha::Next::QUIC
       # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
       @buffered = 0
+      # What is left of each address's stateless resets, and when.
+      @resets = {} #: Hash[address, [Float, Float]]
     end
 
     # What to do with `datagram`, which came from `from` to `to` with the
@@ -128,7 +137,7 @@ module Raiha::Next::QUIC
         connection.receive(datagram, from:, to:, ecn:, now:)
         return Route::Deliver.new(connection:)
       end
-      return reset(header.dcid, datagram, from, to) if header.is_a?(Wire::ShortHeader)
+      return reset(header.dcid, datagram, from, to, now) if header.is_a?(Wire::ShortHeader)
       if (handle = @handles[header.dcid])
         # Before the server answers, the client sends only Initial and 0-RTT
         # packets, from where its first came.
@@ -195,12 +204,28 @@ module Raiha::Next::QUIC
     end
 
     # RFC 9000 "Stateless Reset": a short header packet of no connection is
-    # answered with a reset whose token comes from its connection ID.
-    private def reset(dcid, datagram, from, to)
+    # answered with a reset whose token comes from its connection ID, when
+    # the address has resets left.
+    private def reset(dcid, datagram, from, to, now)
       length = [datagram.bytesize - 1, MAX_RESET_LENGTH].min
       return Route::Drop.new(reason: :unknown_connection_id) if length < StatelessReset::MIN_LENGTH
+      return Route::Drop.new(reason: :reset_rate_limited) unless take_reset(from, now)
       token = StatelessReset.token(key: @stateless_reset_key, connection_id: dcid)
       Route::Respond.new(transmit: transmit(StatelessReset.packet(token:, length:, random: @random), from, to))
+    end
+
+    # Takes a reset from the bucket of `address`. A new address finds room
+    # only when the table has some, once the buckets that have filled up
+    # again are forgotten.
+    private def take_reset(address, now)
+      unless @resets.key?(address)
+        @resets.delete_if { |_, (tokens, at)| tokens + (now - at) * RESET_RATE >= RESET_BURST } if @resets.size >= RESET_ADDRESSES
+        return false if @resets.size >= RESET_ADDRESSES
+      end
+      tokens, at = @resets.fetch(address, [RESET_BURST, now])
+      tokens = [tokens + (now - at) * RESET_RATE, RESET_BURST].min # steep:ignore
+      @resets[address] = [tokens >= 1 ? tokens - 1 : tokens, now]
+      tokens >= 1
     end
 
     private def transmit(payload, destination, source) = Transmit.new(payload:, destination:, source:, ecn: :not_ect, segment_size: nil)

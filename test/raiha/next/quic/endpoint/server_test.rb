@@ -159,6 +159,27 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal 29, endpoint.receive(short(dcid: "c".b * 8, size: 30), from: CLIENT, now: 0.0).transmit.payload.bytesize
   end
 
+  # RFC 9000 "Looping": each address has RESET_BURST resets, refilled at
+  # RESET_RATE a second.
+  def test_resets_are_limited_by_address
+    endpoint = endpoint()
+    packet = short(dcid: "c".b * 8, size: 100)
+    QUIC::Endpoint::RESET_BURST.to_i.times { assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 0.0) }
+    assert_equal QUIC::Route::Drop.new(reason: :reset_rate_limited), endpoint.receive(packet, from: CLIENT, now: 0.0)
+    assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: ["192.0.2.9", 9], now: 0.0)
+    assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 1.0 / QUIC::Endpoint::RESET_RATE)
+  end
+
+  # At most RESET_ADDRESSES addresses are kept; a new one gets a reset once
+  # a bucket has filled up again.
+  def test_the_addresses_kept_for_resets_are_bounded
+    endpoint = endpoint()
+    packet = short(dcid: "c".b * 8, size: 100)
+    QUIC::Endpoint::RESET_ADDRESSES.times { endpoint.receive(packet, from: ["198.51.100.1", _1], now: 0.0) }
+    assert_equal QUIC::Route::Drop.new(reason: :reset_rate_limited), endpoint.receive(packet, from: CLIENT, now: 0.0)
+    assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 1.0 / QUIC::Endpoint::RESET_RATE)
+  end
+
   # RFC 9000 "Version Negotiation": the versions supported, the connection
   # IDs echoed in each other's places.
   def test_an_unknown_version
