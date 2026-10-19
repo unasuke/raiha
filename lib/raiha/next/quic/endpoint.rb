@@ -143,6 +143,10 @@ module Raiha::Next::QUIC
     # Destination Connection ID (RFC 9000 "Address Validation Using Retry
     # Packets"); one that does not verify is dropped. A token of another
     # kind is as none.
+    #
+    # Without a Retry, the connection ID is the client's first, which RFC
+    # 9000 "Negotiating Connection IDs" has 8 bytes at least, and an
+    # Initial with a shorter one is dropped; after one, it is the server's.
     private def offer(header, datagram, from:, to:, ecn:, now:)
       odcid = header.dcid
       retry_scid = nil #: String?
@@ -151,6 +155,7 @@ module Raiha::Next::QUIC
         return Route::Drop.new(reason: :invalid_token) unless odcid
         retry_scid = header.dcid
       end
+      return Route::Drop.new(reason: :short_connection_id) if retry_scid.nil? && header.dcid.bytesize < Connection::INITIAL_DCID_LENGTH
       handle = Handle.new(remote: from, destination_connection_id: header.dcid, source_connection_id: header.scid,
         original_destination_connection_id: odcid, retry_source_connection_id: retry_scid, expires_at: now + HANDLE_LIFETIME)
       if (dropped = keep(handle, datagram, from:, to:, ecn:))

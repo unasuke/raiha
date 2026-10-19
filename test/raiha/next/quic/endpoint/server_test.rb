@@ -88,6 +88,16 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_instance_of QUIC::Route::Incoming, endpoint.receive(fast_initial("x".b * 8), from: CLIENT, now: QUIC::Endpoint::HANDLE_LIFETIME)
   end
 
+  # RFC 9000 "Negotiating Connection IDs": a client's first Destination
+  # Connection ID has 8 bytes at least; after a Retry it is the server's,
+  # of the length the server chose.
+  def test_a_short_first_connection_id
+    endpoint = endpoint(config: QUIC::Config.new(**KEYS, connection_id_length: 4))
+    assert_equal QUIC::Route::Drop.new(reason: :short_connection_id), endpoint.receive(initial(dcid: "d".b * 7), from: CLIENT, now: 0.0)
+    token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: CLIENT, time: NOW)
+    assert_instance_of QUIC::Route::Incoming, endpoint.receive(initial(dcid: "r".b * 4, token:), from: CLIENT, now: 0.0)
+  end
+
   # RFC 9000 "Address Validation Using Retry Packets": a Retry token shows
   # the address, and carries the client's first Destination Connection ID.
   def test_a_retry_token
