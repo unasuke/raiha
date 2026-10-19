@@ -331,6 +331,10 @@ module Raiha::Next::QUIC
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       return unless @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
+      if @tracer
+        @tracer.packet_received(header: Tracer::PacketHeader.of(unmasked.header, unmasked.packet_number), # steep:ignore
+          frames: @tracer.trace_frames? ? frames : nil, raw_length: packet.end_offset - packet.offset, now:) # steep:ignore
+      end
       # RFC 9000 "Idle Timeout": a packet received and processed, which a
       # duplicate is not.
       restart_idle(now)
@@ -653,6 +657,10 @@ module Raiha::Next::QUIC
       if packet.level == :one_rtt
         acknowledging = packet.frames.filter_map { |frame| frame.largest if frame.is_a?(Wire::Frame::Ack) }.first
         @protection.sent(packet.packet_number, acknowledging:)
+      end
+      if @tracer
+        @tracer.packet_sent(header: Tracer::PacketHeader.of(packet.header, packet.packet_number), # steep:ignore
+          frames: @tracer.trace_frames? ? packet.frames : nil, raw_length: sealed.bytesize, now:) # steep:ignore
       end
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
       in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize

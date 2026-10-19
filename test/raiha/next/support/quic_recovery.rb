@@ -4,17 +4,23 @@ require "raiha/next/quic"
 module NextQUICRecovery
   QUIC = Raiha::Next::QUIC
 
-  # A tracer that keeps every event as [name, keywords].
+  # A tracer that keeps every event as [name, keywords], and asks for the
+  # frames unless `frames` is false.
   class RecordingTracer
     include Raiha::Next::QUIC::Tracer
 
     attr_reader :events
 
-    def initialize = @events = []
+    def initialize(frames: true)
+      @events = []
+      @frames = frames
+    end
 
-    Raiha::Next::QUIC::Tracer.instance_methods(false).each do |name|
+    (Raiha::Next::QUIC::Tracer.instance_methods(false) - [:trace_frames?]).each do |name|
       define_method(name) { |**keywords| @events << [name, keywords] }
     end
+
+    def trace_frames? = @frames
 
     def of(name) = @events.filter_map { |event, keywords| keywords if event == name }
   end

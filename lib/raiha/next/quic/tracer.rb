@@ -10,6 +10,31 @@ module Raiha::Next::QUIC
   # Times are Float seconds of the monotonic clock; a qlog writer turns them
   # into milliseconds. `space` is :initial, :handshake or :application_data.
   module Tracer
+    # A packet's header as qlog writes it (qlog `PacketHeader`): its type
+    # and number, and the version and connection IDs of a long header or
+    # the Key Phase bit of a short one.
+    class PacketHeader < Data.define(:packet_type, :packet_number, :version, :dcid, :scid, :key_phase)
+      # The header of the packet with the Wire header `header` numbered
+      # `packet_number`.
+      def self.of(header, packet_number)
+        case header
+        when Wire::LongHeader
+          new(packet_type: header.type, packet_number:, version: header.version.number, dcid: header.dcid, scid: header.scid, key_phase: nil)
+        else new(packet_type: :one_rtt, packet_number:, version: nil, dcid: header.dcid, scid: nil, key_phase: header.key_phase)
+        end
+      end
+    end
+
+    # A packet sent (qlog `packet_sent`) and one received and processed
+    # (qlog `packet_received`): its PacketHeader, its frames when
+    # `trace_frames?`, nil otherwise, and how many bytes it took.
+    def packet_sent(header:, frames:, raw_length:, now:) = nil
+
+    def packet_received(header:, frames:, raw_length:, now:) = nil
+
+    # Whether `packet_sent` and `packet_received` are given the frames.
+    def trace_frames? = false
+
     # A packet declared lost (qlog `packet_lost`). `trigger` is
     # :reordering_threshold or :time_threshold.
     def packet_lost(packet_number:, space:, trigger:, mtu_probe:, now:) = nil
