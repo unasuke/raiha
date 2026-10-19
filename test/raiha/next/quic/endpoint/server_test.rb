@@ -170,14 +170,18 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 1.0 / QUIC::Endpoint::RESET_RATE)
   end
 
-  # At most RESET_ADDRESSES addresses are kept; a new one gets a reset once
-  # a bucket has filled up again.
-  def test_the_addresses_kept_for_resets_are_bounded
+  # At most RESET_ADDRESSES buckets are kept, the least recently used
+  # going first: a new address is never shut out, and one whose bucket
+  # went starts again with a full one.
+  def test_the_buckets_kept_for_resets_are_bounded
     endpoint = endpoint()
     packet = short(dcid: "c".b * 8, size: 100)
-    QUIC::Endpoint::RESET_ADDRESSES.times { endpoint.receive(packet, from: ["198.51.100.1", _1], now: 0.0) }
+    QUIC::Endpoint::RESET_BURST.to_i.times { endpoint.receive(packet, from: CLIENT, now: 0.0) }
     assert_equal QUIC::Route::Drop.new(reason: :reset_rate_limited), endpoint.receive(packet, from: CLIENT, now: 0.0)
-    assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 1.0 / QUIC::Endpoint::RESET_RATE)
+    QUIC::Endpoint::RESET_ADDRESSES.times do |port|
+      assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: ["198.51.100.1", port], now: 0.0)
+    end
+    assert_instance_of QUIC::Route::Respond, endpoint.receive(packet, from: CLIENT, now: 0.0)
   end
 
   # RFC 9000 "Version Negotiation": the versions supported, the connection

@@ -17,9 +17,11 @@ module Raiha::Next::QUIC
     # match, so that a reset reflects little.
     MAX_RESET_LENGTH = 42
     # RFC 9000 "Looping": each address is sent resets from a token bucket of
-    # RESET_BURST, refilled at RESET_RATE a second, and at most
-    # RESET_ADDRESSES addresses are kept at once, so that the resets an
-    # attacker can draw are bounded too.
+    # RESET_BURST, refilled at RESET_RATE a second. At most RESET_ADDRESSES
+    # buckets are kept, the least recently used going first, so that no
+    # address is shut out; an address whose bucket went gets a full one,
+    # and since a reset is shorter than what triggered it, no more is sent
+    # than came.
     RESET_BURST = 10.0
     RESET_RATE = 1.0
     RESET_ADDRESSES = 1024
@@ -214,16 +216,12 @@ module Raiha::Next::QUIC
       Route::Respond.new(transmit: transmit(StatelessReset.packet(token:, length:, random: @random), from, to))
     end
 
-    # Takes a reset from the bucket of `address`. A new address finds room
-    # only when the table has some, once the buckets that have filled up
-    # again are forgotten.
+    # Takes a reset from the bucket of `address`, which goes to the end of
+    # the table as the most recently used.
     private def take_reset(address, now)
-      unless @resets.key?(address)
-        @resets.delete_if { |_, (tokens, at)| tokens + (now - at) * RESET_RATE >= RESET_BURST } if @resets.size >= RESET_ADDRESSES
-        return false if @resets.size >= RESET_ADDRESSES
-      end
-      tokens, at = @resets.fetch(address, [RESET_BURST, now])
-      tokens = [tokens + (now - at) * RESET_RATE, RESET_BURST].min # steep:ignore
+      tokens, at = @resets.delete(address) || [RESET_BURST, now]
+      @resets.shift if @resets.size >= RESET_ADDRESSES
+      tokens = [tokens + (now - at) * RESET_RATE, RESET_BURST].min
       @resets[address] = [tokens >= 1 ? tokens - 1 : tokens, now]
       tokens >= 1
     end
