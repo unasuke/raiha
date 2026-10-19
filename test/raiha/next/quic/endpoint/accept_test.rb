@@ -133,6 +133,17 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_equal token, remote.stateless_reset_token
   end
 
+  # Zero-length connection IDs leave room for one connection only.
+  def test_no_free_connection_id
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(connection_id_length: 0), random: Random.new(3), time: NOW, now: 0.0)
+    2.times do |i|
+      handle = endpoint.receive(client_connection(random: Random.new(10 + i)).transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+      endpoint.admit(handle, now: 0.0)
+      next accept(endpoint, handle) if i.zero?
+      assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+    end
+  end
+
   def test_an_offer_is_accepted_once
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle

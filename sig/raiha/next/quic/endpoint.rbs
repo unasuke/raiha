@@ -9,6 +9,7 @@ module Raiha::Next::QUIC
     HANDLE_LIFETIME: Float
     HANDLE_BUFFER: Integer
     HANDLES_BUFFER: Integer
+    CONNECTION_ID_ATTEMPTS: Integer
 
     class Handle
       @remote: address

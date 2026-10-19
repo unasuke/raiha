@@ -35,6 +35,9 @@ module Raiha::Next::QUIC
     # Endpoint keep is bounded whatever the application does.
     HANDLE_BUFFER = 64 * 1024
     HANDLES_BUFFER = 16 * 1024 * 1024
+    # How many connection IDs an Endpoint draws for a new connection before
+    # it gives up on finding one that leads to nothing yet.
+    CONNECTION_ID_ATTEMPTS = 8
 
     # An offer of a new connection, until the application decides on it:
     # what the headers of the client's first Initial said, and the
@@ -324,12 +327,15 @@ module Raiha::Next::QUIC
     end
 
     # A connection ID of `config.connection_id_length` bytes that leads to
-    # nothing yet.
+    # nothing yet. With none found in CONNECTION_ID_ATTEMPTS draws, as with
+    # zero-length connection IDs, which only one connection can have, the
+    # Endpoint can take no more connections: Error::StateError.
     private def new_connection_id
-      loop do
+      CONNECTION_ID_ATTEMPTS.times do
         id = @random.bytes(@config.connection_id_length).b
         return id unless @connections.key?(id) || @handles.key?(id)
       end
+      raise Error::StateError, "no connection ID of #{@config.connection_id_length} bytes is free for another connection"
     end
 
     private def pending!(handle)
