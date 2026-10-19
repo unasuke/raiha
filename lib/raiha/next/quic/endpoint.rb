@@ -42,15 +42,19 @@ module Raiha::Next::QUIC
     # client chose, which its Initial keys come from; the client's first, the
     # original, differs from it after a Retry, as does
     # `retry_source_connection_id`, nil without one.
+    #
+    # Once admitted, the offer reads the ClientHello out of the Initial
+    # packets with the client's Initial keys, into the TLS layer's Acceptor.
     class Handle
-      attr_reader :remote, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
+      attr_reader :remote, :version, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
         :retry_source_connection_id, :expires_at, :datagrams
       # The bytes of the datagrams kept.
       attr_reader :buffered
 
-      def initialize(remote:, destination_connection_id:, source_connection_id:, original_destination_connection_id:,
+      def initialize(remote:, version:, destination_connection_id:, source_connection_id:, original_destination_connection_id:,
         retry_source_connection_id:, expires_at:)
         @remote = remote
+        @version = version
         @destination_connection_id = destination_connection_id
         @source_connection_id = source_connection_id
         @original_destination_connection_id = original_destination_connection_id
@@ -58,6 +62,12 @@ module Raiha::Next::QUIC
         @expires_at = expires_at
         @datagrams = [] #: Array[[String, address, address?, ecn | :ce]]
         @buffered = 0
+        @acceptor = nil #: Raiha::Next::TLS::Handshake::Acceptor?
+        @keys = nil #: Crypto::Keys?
+        @crypto = CryptoStream.new(:initial)
+        @largest = nil #: Integer?
+        @violation = nil #: Violation?
+        @offered = false
       end
 
       # Keeps a datagram for the connection to take.
@@ -67,6 +77,66 @@ module Raiha::Next::QUIC
       end
 
       def expired?(now) = now >= @expires_at
+
+      def admitted? = !@acceptor.nil?
+
+      # Starts reading the ClientHello, from the datagrams kept so far.
+      # `time` is the wall clock; short header packets have connection IDs
+      # of `dcid_length` bytes.
+      def admit(time:, dcid_length:)
+        @acceptor = Raiha::Next::TLS::Handshake::Acceptor.new
+        @keys = Crypto::Initial.derive(dcid: @destination_connection_id, version: @version).client
+        @datagrams.each { |datagram, *| read(datagram, time:, dcid_length:) }
+      end
+
+      # Reads the CRYPTO frames of the Initial packets of `datagram` that
+      # open into the Acceptor. What breaks a rule once a packet has opened
+      # ends the ClientHello.
+      def read(datagram, time:, dcid_length:)
+        acceptor = @acceptor or return
+        keys = @keys or return
+        offset = 0
+        while offset < datagram.bytesize && !failed?
+          packet = parse(datagram, offset, dcid_length) or break
+          offset = packet.end_offset
+          next unless packet.header.type == :initial && packet.header.dcid == @destination_connection_id
+          unmasked = packet.unmask(keys.header_protection, largest: @largest)
+          payload = unmasked.open(keys.aead) or next
+          @largest = unmasked.packet_number if @largest.nil? || unmasked.packet_number > @largest # steep:ignore
+          Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT).each do |frame|
+            @crypto.receive(frame.offset, frame.data, limit: Raiha::Next::TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE) if frame.is_a?(Wire::Frame::Crypto)
+          end
+          bytes = @crypto.read
+          acceptor.receive(bytes, epoch: :initial, now: time) unless bytes.empty?
+        end
+      rescue Violation => error
+        @violation = error
+      end
+
+      # Whether the ClientHello could not be read: its CRYPTO frames broke a
+      # rule, or the Acceptor failed on what they carried.
+      def failed? = !@violation.nil? || @acceptor&.failed? || false
+
+      # The ClientHello once whole, nil before.
+      def accepted = @acceptor&.accepted
+
+      # The ClientHello, the first time it is whole and asked for.
+      def take_client_hello
+        return nil if @offered
+        accepted = self.accepted or return nil
+        @offered = true
+        accepted
+      end
+
+      # The packet at `offset` in `datagram`; nil when there is none, or its
+      # header does not read, which ends the datagram as anyone could have
+      # sent it.
+      private def parse(datagram, offset, dcid_length)
+        packet = Wire::Packet.parse(datagram, offset:, dcid_length:)
+        packet if packet.is_a?(Wire::Packet::Parsed)
+      rescue Wire::Malformed
+        nil
+      end
 
       private def instance_variables_to_inspect = %i[@remote @expires_at]
     end
@@ -131,6 +201,18 @@ module Raiha::Next::QUIC
       @connections.delete_if { |_, connection| connection.closed? }
     end
 
+    # The second stage of the offer of `handle`: the Endpoint reads the
+    # ClientHello out of its Initial packets, sending nothing meanwhile, ACKs
+    # included. Route::ClientHello when it is whole by now, else nil; the
+    # datagrams to come complete it. A ClientHello that cannot be read ends
+    # the offer.
+    def admit(handle, now:)
+      pending!(handle)
+      raise Error::StateError, "the offer is admitted already" if handle.admitted?
+      handle.admit(time: wall_clock(now), dcid_length: @config.connection_id_length)
+      client_hello(handle)
+    end
+
     def each_connection(&) = connections.each(&)
 
     def connection_count = connections.size
@@ -151,7 +233,12 @@ module Raiha::Next::QUIC
         # packets, from where its first came.
         return Route::Drop.new(reason: :address_mismatch) unless from == handle.remote
         return Route::Drop.new(reason: :unexpected_packet) if header.type == :handshake
-        return keep(handle, datagram, from:, to:, ecn:)
+        if (dropped = keep(handle, datagram, from:, to:, ecn:))
+          return dropped
+        end
+        return nil unless handle.admitted?
+        handle.read(datagram, time: wall_clock(now), dcid_length: @config.connection_id_length)
+        return client_hello(handle)
       end
       return Route::Drop.new(reason: :unknown_connection_id) unless header.type == :initial
       # RFC 9000 "Datagram Size": a server drops an Initial in a datagram
@@ -180,7 +267,7 @@ module Raiha::Next::QUIC
         retry_scid = header.dcid
       end
       return Route::Drop.new(reason: :short_connection_id) if retry_scid.nil? && header.dcid.bytesize < Connection::INITIAL_DCID_LENGTH
-      handle = Handle.new(remote: from, destination_connection_id: header.dcid, source_connection_id: header.scid,
+      handle = Handle.new(remote: from, version: header.version, destination_connection_id: header.dcid, source_connection_id: header.scid,
         original_destination_connection_id: odcid, retry_source_connection_id: retry_scid, expires_at: now + HANDLE_LIFETIME)
       if (dropped = keep(handle, datagram, from:, to:, ecn:))
         return dropped
@@ -197,6 +284,23 @@ module Raiha::Next::QUIC
       handle.keep(datagram, from:, to:, ecn:)
       @buffered += size
       nil
+    end
+
+    # What the second stage of `handle` has come to: Route::ClientHello the
+    # first time the ClientHello is whole, nil before and when it could not
+    # be read, which ends the offer.
+    private def client_hello(handle)
+      if handle.failed?
+        forget(handle)
+        return nil
+      end
+      accepted = handle.take_client_hello or return nil
+      Route::ClientHello.new(handle:, accepted:)
+    end
+
+    private def pending!(handle)
+      return if @handles[handle.destination_connection_id].equal?(handle)
+      raise Error::StateError, "the offer has been decided on or has expired"
     end
 
     private def forget(handle)

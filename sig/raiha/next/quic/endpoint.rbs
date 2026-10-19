@@ -12,6 +12,7 @@ module Raiha::Next::QUIC
 
     class Handle
       @remote: address
+      @version: Version
       @destination_connection_id: String
       @source_connection_id: String
       @original_destination_connection_id: String
@@ -19,8 +20,15 @@ module Raiha::Next::QUIC
       @expires_at: Float
       @datagrams: Array[[String, address, address?, ecn | :ce]]
       @buffered: Integer
+      @acceptor: ::Raiha::Next::TLS::Handshake::Acceptor?
+      @keys: Crypto::Keys?
+      @crypto: CryptoStream
+      @largest: Integer?
+      @violation: Violation?
+      @offered: bool
 
       attr_reader remote: address
+      attr_reader version: Version
       attr_reader destination_connection_id: String
       attr_reader source_connection_id: String
       attr_reader original_destination_connection_id: String
@@ -29,10 +37,18 @@ module Raiha::Next::QUIC
       attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
       attr_reader buffered: Integer
 
-      def initialize: (remote: address, destination_connection_id: String, source_connection_id: String,
+      def initialize: (remote: address, version: Version, destination_connection_id: String, source_connection_id: String,
                        original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float) -> void
       def keep: (String datagram, from: address, to: address?, ecn: ecn | :ce) -> void
       def expired?: (Float now) -> bool
+      def admitted?: () -> bool
+      def admit: (time: Time, dcid_length: Integer) -> void
+      def read: (String datagram, time: Time, dcid_length: Integer) -> void
+      def failed?: () -> bool
+      def accepted: () -> ::Raiha::Next::TLS::Handshake::Accepted?
+      def take_client_hello: () -> ::Raiha::Next::TLS::Handshake::Accepted?
+
+      private def parse: (String datagram, Integer offset, Integer dcid_length) -> Wire::Packet::Parsed?
 
       private def instance_variables_to_inspect: () -> Array[Symbol]
     end
@@ -57,6 +73,7 @@ module Raiha::Next::QUIC
     def each_transmit: (now: Float) { (Transmit) -> void } -> void
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
+    def admit: (Handle handle, now: Float) -> Route::ClientHello?
     def each_connection: () { (Connection) -> void } -> void
     def connection_count: () -> Integer
 
@@ -64,6 +81,8 @@ module Raiha::Next::QUIC
     private def route: (Wire::header header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t?
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
+    private def client_hello: (Handle handle) -> Route::ClientHello?
+    private def pending!: (Handle handle) -> void
     private def forget: (Handle handle) -> void
     private def negotiate: (Wire::UnsupportedVersion packet, String datagram, address from, address? to) -> Route::t
     private def reset: (String dcid, String datagram, address from, address? to, Float now) -> Route::t
