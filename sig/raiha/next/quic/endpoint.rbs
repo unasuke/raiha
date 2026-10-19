@@ -45,7 +45,9 @@ module Raiha::Next::QUIC
       def admitted?: () -> bool
       def admit: (time: Time, dcid_length: Integer) -> void
       def read: (String datagram, time: Time, dcid_length: Integer) -> void
+      def error: () -> ConnectionError?
       def failed?: () -> bool
+      def local: () -> address?
       def accepted: () -> ::Raiha::Next::TLS::Handshake::Accepted?
       def take_client_hello: () -> ::Raiha::Next::TLS::Handshake::Accepted?
 
@@ -63,6 +65,7 @@ module Raiha::Next::QUIC
     @connections: Hash[String, Connection]
     @handles: Hash[String, Handle]
     @buffered: Integer
+    @transmits: Array[Transmit]
     @resets: Hash[address, [Float, Float]]
     @reset_total: Float
     @reset_total_at: Float
@@ -85,6 +88,7 @@ module Raiha::Next::QUIC
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def client_hello: (Handle handle) -> Route::ClientHello?
+    private def close: (Handle handle, ConnectionError error) -> void
     private def new_connection_id: () -> String
     private def pending!: (Handle handle) -> void
     private def forget: (Handle handle) -> void

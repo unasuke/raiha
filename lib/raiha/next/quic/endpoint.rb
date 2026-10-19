@@ -119,9 +119,22 @@ module Raiha::Next::QUIC
         @violation = error
       end
 
-      # Whether the ClientHello could not be read: its CRYPTO frames broke a
-      # rule, or the Acceptor failed on what they carried.
-      def failed? = !@violation.nil? || @acceptor&.failed? || false
+      # Why the ClientHello could not be read, as the error to close with:
+      # its CRYPTO frames broke a rule, or the Acceptor failed on what they
+      # carried (RFC 9001 "TLS Errors"). nil while it can be.
+      def error
+        if (violation = @violation)
+          ConnectionError.new(code: violation.code, frame_type: violation.frame_type || 0, reason: violation.message, application: false)
+        elsif (acceptor = @acceptor)&.failed?
+          code = TLSBinding.error_code(Raiha::Next::TLS::Profile::QUIC, acceptor.alert, acceptor.reason)
+          ConnectionError.new(code:, frame_type: CryptoStream::FRAME_TYPE, reason: acceptor.reason.to_s, application: false)
+        end
+      end
+
+      def failed? = !error.nil?
+
+      # The address the first datagram came to, which an answer goes from.
+      def local = @datagrams.dig(0, 2)
 
       # The ClientHello once whole, nil before.
       def accepted = @acceptor&.accepted
@@ -167,6 +180,8 @@ module Raiha::Next::QUIC
       # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
       @buffered = 0
+      # What the Endpoint sends itself, for the offers.
+      @transmits = [] #: Array[Transmit]
       # What is left of each address's stateless resets and of all of them,
       # and when.
       @resets = {} #: Hash[address, [Float, Float]]
@@ -188,8 +203,11 @@ module Raiha::Next::QUIC
       Route::Drop.new(reason: :malformed)
     end
 
-    # Each datagram the connections have to send now.
+    # Each datagram to send now: the Endpoint's own, then the connections'.
     def each_transmit(now:, &)
+      while (transmit = @transmits.shift)
+        yield transmit
+      end
       each_connection { |connection| connection.each_transmit(now:, &) }
     end
 
@@ -211,7 +229,7 @@ module Raiha::Next::QUIC
     # ClientHello out of its Initial packets, sending nothing meanwhile, ACKs
     # included. Route::ClientHello when it is whole by now, else nil; the
     # datagrams to come complete it. A ClientHello that cannot be read ends
-    # the offer.
+    # the offer with a CONNECTION_CLOSE.
     def admit(handle, now:)
       pending!(handle)
       raise Error::StateError, "the offer is admitted already" if handle.admitted?
@@ -316,14 +334,30 @@ module Raiha::Next::QUIC
 
     # What the second stage of `handle` has come to: Route::ClientHello the
     # first time the ClientHello is whole, nil before and when it could not
-    # be read, which ends the offer.
+    # be read, which closes the offer.
     private def client_hello(handle)
-      if handle.failed?
-        forget(handle)
+      if (error = handle.error)
+        close(handle, error)
         return nil
       end
       accepted = handle.take_client_hello or return nil
       Route::ClientHello.new(handle:, accepted:)
+    end
+
+    # Ends the offer of `handle` with a CONNECTION_CLOSE of `error` in an
+    # Initial packet, the server's only, sealed with the server's Initial
+    # keys of the client's connection ID (RFC 9000 "Immediate Close during
+    # the Handshake"). It is far smaller than the Initial that came, as the
+    # anti-amplification limit asks.
+    private def close(handle, error)
+      reason = error.reason.b.byteslice(0, Connection::MAX_REASON_LENGTH) #: String
+      frame = Wire::Frame::ConnectionClose.new(code: error.code, frame_type: error.frame_type, reason:, application: false)
+      header = Wire::LongHeader.new(type: :initial, version: handle.version, dcid: handle.source_connection_id, scid: new_connection_id)
+      keys = Crypto::Initial.derive(dcid: handle.destination_connection_id, version: handle.version).server
+      payload = Wire::Frame.encode([frame], ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
+      packet = Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
+      @transmits << transmit(packet, handle.remote, handle.local)
+      forget(handle)
     end
 
     # A connection ID of `config.connection_id_length` bytes that leads to

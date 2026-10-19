@@ -49,6 +49,14 @@ module Raiha::Next::QUIC
       new(connection, machine, config.profile, consumed: client_hello&.bytes&.bytesize || 0).tap { |binding| binding.pump }
     end
 
+    # RFC 9001 "TLS Errors": the error a TLS failure closes the connection
+    # with, an alert as CRYPTO_ERROR and the failures RFC 9001 names as
+    # PROTOCOL_VIOLATION, by `profile`.
+    def self.error_code(profile, alert, reason)
+      return ErrorCode::PROTOCOL_VIOLATION if profile.protocol_violation_reasons.include?(reason)
+      alert ? ErrorCode.crypto_error(Raiha::Next::TLS::IANA.alert_code(alert)) : ErrorCode::INTERNAL_ERROR
+    end
+
     private_class_method def self.check(config)
       return if config.profile == Raiha::Next::TLS::Profile::QUIC
       raise ArgumentError, "the TLS Config of a QUIC connection has the QUIC profile"
@@ -102,7 +110,7 @@ module Raiha::Next::QUIC
         case event
         in Raiha::Next::TLS::Event::PeerExtension(type: TRANSPORT_PARAMETERS, data:) then @connection.peer_transport_parameters(data)
         in Raiha::Next::TLS::Event::HandshakeComplete then @connection.handshake_completed(event)
-        in Raiha::Next::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(error_code(alert, reason), reason)
+        in Raiha::Next::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(TLSBinding.error_code(@profile, alert, reason), reason)
         else @connection.tls_event(event)
         end
       end
@@ -148,11 +156,5 @@ module Raiha::Next::QUIC
 
     private def stream_of(duty) = @streams[LEVEL_OF_SPACE.fetch(duty.space)]
 
-    # RFC 9001 "TLS Errors": an alert as CRYPTO_ERROR, and the failures RFC
-    # 9001 names as PROTOCOL_VIOLATION.
-    private def error_code(alert, reason)
-      return ErrorCode::PROTOCOL_VIOLATION if @profile.protocol_violation_reasons.include?(reason)
-      alert ? ErrorCode.crypto_error(Raiha::Next::TLS::IANA.alert_code(alert)) : ErrorCode::INTERNAL_ERROR
-    end
   end
 end

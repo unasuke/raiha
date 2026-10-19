@@ -29,6 +29,7 @@ module Raiha::Next::QUIC
     def self.server: (connection: _Connection, config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
                       transport_parameters: TransportParameters, time: Time, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
                       ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> TLSBinding
+    def self.error_code: (::Raiha::Next::TLS::Profile profile, Symbol? alert, Symbol? reason) -> Integer
     private def self.check: (::Raiha::Next::TLS::Config config) -> void
     private def self.tls_tracer: (_Tracer? tracer) -> ::Raiha::Next::TLS::Trace::_Tracer?
     private def self.extension: (TransportParameters transport_parameters) -> ::Raiha::Next::TLS::Extension::Opaque
@@ -48,6 +49,5 @@ module Raiha::Next::QUIC
     private def read_level: () -> PacketProtection::level
     private def feed: (Time time) -> void
     private def stream_of: (Recovery::Duty::Crypto duty) -> CryptoStream?
-    private def error_code: (Symbol? alert, Symbol reason) -> Integer
   end
 end

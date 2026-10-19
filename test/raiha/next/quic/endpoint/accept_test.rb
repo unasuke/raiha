@@ -174,7 +174,19 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_raises(QUIC::Error::StateError) { endpoint.admit(handle, now: QUIC::Endpoint::HANDLE_LIFETIME) }
   end
 
-  # A ClientHello the Acceptor fails on ends the offer.
+  # What the Endpoint sent itself, each as the frames of the server's
+  # Initial packet to the client whose first connection ID was `dcid`.
+  def closes(endpoint, dcid)
+    keys = QUIC::Crypto::Initial.derive(dcid:, version: QUIC::Version::V1).server
+    [].tap { |sent| endpoint.each_transmit(now: 0.0) { sent << _1 } }.map do |transmit|
+      assert_equal CLIENT, transmit.destination
+      payload = QUIC::Wire::Packet.parse(transmit.payload, dcid_length: 8).unmask(keys.header_protection, largest: nil).open(keys.aead)
+      QUIC::Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: 3)
+    end
+  end
+
+  # RFC 9001 "TLS Errors": a ClientHello the Acceptor fails on ends the
+  # offer with a CONNECTION_CLOSE of the alert as CRYPTO_ERROR.
   def test_a_broken_client_hello
     endpoint = endpoint()
     datagram = initial(dcid: "d".b * 8, packet_number: 0, frames: [QUIC::Wire::Frame::Crypto.new(offset: 0, data: "\x01\x00\x00\x05hello".b)])
@@ -182,9 +194,12 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_nil endpoint.admit(handle, now: 0.0)
     assert_nil endpoint.next_timeout
     assert_raises(QUIC::Error::StateError) { endpoint.admit(handle, now: 0.0) }
+    close, = closes(endpoint, "d".b * 8).flatten
+    assert_equal [QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:decode_error)), 0x06], [close.code, close.frame_type]
   end
 
-  # CRYPTO data past what an Acceptor takes ends the offer.
+  # RFC 9000 "Cryptographic Message Buffering": CRYPTO data past what an
+  # Acceptor takes ends the offer with CRYPTO_BUFFER_EXCEEDED.
   def test_crypto_past_the_limit
     endpoint = endpoint()
     offset = TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE
@@ -192,5 +207,6 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     handle = endpoint.receive(datagram, from: CLIENT, now: 0.0).handle
     assert_nil endpoint.admit(handle, now: 0.0)
     assert_nil endpoint.next_timeout
+    assert_equal [QUIC::ErrorCode::CRYPTO_BUFFER_EXCEEDED], closes(endpoint, "d".b * 8).flatten.map(&:code)
   end
 end
