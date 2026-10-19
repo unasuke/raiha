@@ -53,6 +53,20 @@ class RaihaNextQUICConnectionTransportParametersTest < Minitest::Test
     assert_equal ["o".b * 8, "r".b * 8], [local.original_destination_connection_id, local.retry_source_connection_id]
   end
 
+  # An Endpoint chooses each connection's Source Connection ID, and gives a
+  # server the stateless reset token of it, which the transport parameters
+  # carry.
+  def test_what_an_endpoint_chooses
+    tracer = NextQUICRecovery::RecordingTracer.new
+    client = client_connection(source_connection_id: "c".b * 8)
+    server = server_connection(source_connection_id: "s".b * 8, stateless_reset_token: "t".b * 16, tracer:)
+    first = client.transmits(now: 0.0).first.payload
+    assert_equal "c".b * 8, QUIC::Wire::Packet.parse(first, dcid_length: 8).header.scid
+    server.receive(first, from: CLIENT, now: 0.0)
+    assert_equal "s".b * 8, QUIC::Wire::Packet.parse(server.transmits(now: 0.0).first.payload, dcid_length: 8).header.scid
+    assert_equal "t".b * 16, tracer.of(:parameters_set).find { _1[:owner] == :local }[:parameters].stateless_reset_token
+  end
+
   def test_matching_ones_connect
     client, server = run_pair
     assert client.handshake_confirmed?

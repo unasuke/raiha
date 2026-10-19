@@ -48,8 +48,10 @@ module Raiha::Next::QUIC
 
     # A client connection to `remote` ([host, port]), with its first
     # Initial packet waiting to be sent. `tls_config` has the QUIC profile.
-    def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil)
-      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random) do |connection, parameters|
+    # The connection's Source Connection ID is `source_connection_id`, which
+    # an Endpoint routes by, or one of its own.
+    def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil)
+      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:) do |connection, parameters|
         TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:)
       end
     end
@@ -62,11 +64,14 @@ module Raiha::Next::QUIC
     # learned: the ClientHello its Acceptor read (`client_hello`), and after
     # a Retry the client's first Destination Connection ID and the Retry's
     # Source Connection ID, which the transport parameters name, and that
-    # the client's address is validated.
+    # the client's address is validated. It also chooses the connection's
+    # Source Connection ID, and gives its `stateless_reset_token`, which the
+    # transport parameters carry (RFC 9000 "Stateless Reset").
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
-      original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false)
+      original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
+      stateless_reset_token: nil)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
-        retry_source_connection_id:, address_validated:) do |connection, parameters|
+        retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:)
       end
     end
@@ -74,7 +79,7 @@ module Raiha::Next::QUIC
     private_class_method :new
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
-      retry_source_connection_id: nil, address_validated: role == :client, &start)
+      retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -86,7 +91,8 @@ module Raiha::Next::QUIC
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
-      @source_connection_id = random.bytes(config.connection_id_length).b
+      @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
+      @stateless_reset_token = stateless_reset_token
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
       @handshake_confirmed = false
@@ -410,7 +416,8 @@ module Raiha::Next::QUIC
       @protection.install_initial(header.dcid)
       @original_destination_connection_id ||= header.dcid
       parameters = @config.transport_parameters(initial_source_connection_id: @source_connection_id,
-        original_destination_connection_id: @original_destination_connection_id, retry_source_connection_id: @retry_source_connection_id)
+        original_destination_connection_id: @original_destination_connection_id, retry_source_connection_id: @retry_source_connection_id,
+        stateless_reset_token: @stateless_reset_token)
       @tracer.parameters_set(owner: :local, parameters:, now: @now) if @tracer # steep:ignore
       @binding = @start_binding.call(self, parameters)
     end

@@ -37,6 +37,7 @@ module Raiha::Next::QUIC
     @protection: PacketProtection
     @events: Array[Event::t]
     @source_connection_id: String
+    @stateless_reset_token: String?
     @destination_connection_id: String
     @peer_parameters: TransportParameters?
     @handshake_complete: bool
@@ -65,14 +66,17 @@ module Raiha::Next::QUIC
     attr_reader path: Path
 
     def self.client: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String,
-                      remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
+                      remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?,
+                      ?source_connection_id: String?) -> Connection
     def self.server: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, time: Time, now: Float,
                       ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
-                      ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool) -> Connection
+                      ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool,
+                      ?source_connection_id: String?, ?stateless_reset_token: String?) -> Connection
 
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
                      random: ::Raiha::Next::TLS::Keyring::_Random, ?original_destination_connection_id: String?,
-                     ?retry_source_connection_id: String?, ?address_validated: bool) { (Connection, TransportParameters) -> TLSBinding } -> void
+                     ?retry_source_connection_id: String?, ?address_validated: bool, ?source_connection_id: String?,
+                     ?stateless_reset_token: String?) { (Connection, TransportParameters) -> TLSBinding } -> void
     def handshake_complete?: () -> bool
     def handshake_confirmed?: () -> bool
     def closing?: () -> bool
