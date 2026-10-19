@@ -183,8 +183,9 @@ module Raiha::Next::QUIC
       end
     rescue Violation => error
       # What a packet that opened breaks closes the connection; only an
-      # authenticated peer gets here (250 "Errors").
-      enter_closing(ConnectionError.new(code: error.code, frame_type: error.frame_type || 0, reason: error.message, application: false), now)
+      # authenticated peer gets here, or one past the integrity limit (250
+      # "Errors").
+      close_for(error, now)
     end
 
     # Each datagram there is to send now.
@@ -422,6 +423,11 @@ module Raiha::Next::QUIC
       @events << Event::Closed.new(error:, by_peer: false)
     end
 
+    private def close_for(violation, now)
+      error = ConnectionError.new(code: violation.code, frame_type: violation.frame_type || 0, reason: violation.message, application: false)
+      enter_closing(error, now)
+    end
+
     # The peer closed: nothing more is sent, and what comes is dropped for
     # three PTOs (RFC 9000 "Draining Connection State").
     private def enter_draining(frame, now)
@@ -454,14 +460,21 @@ module Raiha::Next::QUIC
     # The next datagram to send, nil when there is nothing. What elicits an
     # ACK goes only while the congestion window has room for a datagram
     # more, or a probe is due. The 1-RTT keys change first when a key update
-    # is due. While closing, only the CONNECTION_CLOSE frame, when due.
+    # is due; when they cannot and are at their confidentiality limit, the
+    # connection closes. While closing, only the CONNECTION_CLOSE frame, when
+    # due.
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
       return nil if limit < MIN_INITIAL_DATAGRAM
       eliciting = @path.bytes_in_flight + limit <= @path.congestion.window || @probes.values.any?(&:positive?)
-      @protection.update_keys_if_due
+      begin
+        @protection.update_keys_if_due
+      rescue Violation => error
+        close_for(error, now)
+        return closing_datagram(now)
+      end
       pending = [] #: Array[Pending]
       used = 0
       LEVELS.each do |level|

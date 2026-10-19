@@ -97,6 +97,7 @@ module Raiha::Next::QUIC
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
     private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void
+    private def close_for: (Violation violation, Float now) -> void
     private def enter_draining: (Wire::Frame::ConnectionClose frame, Float now) -> void
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void

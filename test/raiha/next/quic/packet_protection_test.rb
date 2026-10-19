@@ -286,6 +286,45 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
     assert_equal QUIC::ErrorCode::AEAD_LIMIT_REACHED, error.code
   end
 
+  # A server whose 1-RTT keys are of a suite that allows 3 packets per key,
+  # its handshake confirmed and a packet of the client opened.
+  def limited_server
+    limits = { quic: Raiha::Next::TLS::CipherSuite::Limits.new(confidentiality: 3, integrity: nil) }
+    suite = SUITE.with(limits:)
+    protection(:server).tap do |server|
+      server.install(:one_rtt, :write, secret: SERVER_SECRET, suite:)
+      server.install(:one_rtt, :read, secret: CLIENT_SECRET, suite:)
+      server.handshake_confirmed!
+      open_one_rtt(server, 0, phase: 0)
+    end
+  end
+
+  # RFC 9001 "Limits on AEAD Usage": the keys update before they protect
+  # more packets than the confidentiality limit, whatever the interval.
+  def test_an_update_before_the_confidentiality_limit
+    server = limited_server
+    server.sent(0)
+    server.acknowledged(0)
+    server.sent(1)
+    server.update_keys_if_due
+    assert_equal 1, server.key_phase
+  end
+
+  # RFC 9001 "Limits on AEAD Usage": keys that cannot be updated close the
+  # connection with AEAD_LIMIT_REACHED while one packet is left for the
+  # CONNECTION_CLOSE, and are not used after it.
+  def test_the_confidentiality_limit
+    server = limited_server
+    server.sent(0)
+    server.update_keys_if_due
+    server.sent(1)
+    error = assert_raises(QUIC::Violation) { server.update_keys_if_due }
+    assert_equal QUIC::ErrorCode::AEAD_LIMIT_REACHED, error.code
+    assert server.can_write?(:one_rtt)
+    server.sent(2)
+    refute server.can_write?(:one_rtt)
+  end
+
   # A Key Phase bit changed on a packet that does not open with the next
   # keys changes nothing.
   def test_a_changed_bit_alone_updates_nothing

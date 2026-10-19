@@ -21,8 +21,9 @@ module Raiha::Next::QUIC
   # `FirstKeyUpdateInterval` and `KeyUpdateInterval`).
   #
   # Packets that fail authentication are counted across all keys, and past
-  # the integrity limit of the AEAD the connection closes (RFC 9001 "Limits
-  # on AEAD Usage").
+  # the integrity limit of the AEAD the connection closes; so does it when
+  # the 1-RTT keys are about to reach the confidentiality limit and cannot
+  # be updated (RFC 9001 "Limits on AEAD Usage").
   class PacketProtection
     LEVELS = %i[initial zero_rtt handshake one_rtt].freeze
     OLD_KEY_PTOS = 3
@@ -151,11 +152,17 @@ module Raiha::Next::QUIC
     # A 1-RTT packet numbered `packet_number` went out with the current
     # keys, with an ACK frame of the packets up to `acknowledging` when not
     # nil.
+    #
+    # Keys that have protected as many packets as the confidentiality limit
+    # are not used again.
     def sent(packet_number, acknowledging: nil)
       @first_sent ||= packet_number
       @sent_count += 1
-      return unless acknowledging
-      @largest_ack_sent = acknowledging if @largest_ack_sent.nil? || acknowledging > @largest_ack_sent # steep:ignore
+      if acknowledging && (@largest_ack_sent.nil? || acknowledging > @largest_ack_sent) # steep:ignore
+        @largest_ack_sent = acknowledging
+      end
+      limit = @suite.confidentiality_limit(:quic)
+      @keys.fetch(:one_rtt).delete(:write) if limit && @sent_count >= limit
     end
 
     # The peer acknowledged the 1-RTT packets up to `largest`. An ACK of a
@@ -172,17 +179,21 @@ module Raiha::Next::QUIC
 
     def handshake_confirmed! = @confirmed = true
 
-    # Moves to the keys of the next key phase when an update is due: the
-    # handshake confirmed, a packet sent with the current keys acknowledged
-    # (RFC 9001 "Initiating a Key Update"), and as many packets gone with
-    # them as the interval.
+    # Moves to the keys of the next key phase when an update is due: as
+    # many packets gone with the current keys as the interval, or all but
+    # one the confidentiality limit allows. An update needs the handshake
+    # confirmed and a packet sent with the current keys acknowledged (RFC
+    # 9001 "Initiating a Key Update"); without them at the limit, a
+    # Violation of AEAD_LIMIT_REACHED, whose CONNECTION_CLOSE is the last
+    # packet the keys protect.
     def update_keys_if_due
-      return unless @confirmed && @next_read
-      first = @first_sent or return
-      acked = @largest_acked or return
-      return if acked < first
-      return if [@sent_count, @opened_count].max < (@key_phase.zero? ? FIRST_KEY_UPDATE_INTERVAL : KEY_UPDATE_INTERVAL)
-      update_keys
+      limit = @suite.confidentiality_limit(:quic)
+      exhausted = limit && @sent_count >= limit - 1
+      return unless exhausted || [@sent_count, @opened_count].max >= (@key_phase.zero? ? FIRST_KEY_UPDATE_INTERVAL : KEY_UPDATE_INTERVAL)
+      return update_keys if update_allowed?
+      return unless exhausted
+      raise Violation.new("#{@sent_count} packets sent with the 1-RTT keys, which cannot be updated, near the limit of #{limit}",
+        code: ErrorCode::AEAD_LIMIT_REACHED)
     end
 
     # When the previous 1-RTT read keys go, nil when none are to go.
@@ -217,6 +228,13 @@ module Raiha::Next::QUIC
       @opened_count = 0
       @largest_ack_sent = nil
       @updated&.call(@key_phase)
+    end
+
+    private def update_allowed?
+      return false unless @confirmed && @next_read
+      first = @first_sent or return false
+      acked = @largest_acked or return false
+      acked >= first
     end
 
     private def key_update_error(message) = raise Violation.new(message, code: ErrorCode::KEY_UPDATE_ERROR)

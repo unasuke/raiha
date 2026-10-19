@@ -50,6 +50,7 @@ module Raiha::Next::QUIC
     def discard: (level level) -> void
 
     private def update_keys: () -> void
+    private def update_allowed?: () -> bool
     private def key_update_error: (String message) -> bot
     private def open_with: (Crypto::Keys keys, Wire::Packet::Unmasked unmasked) -> String?
     private def authentication_failed: () -> nil
