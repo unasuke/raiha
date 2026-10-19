@@ -65,6 +65,17 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal QUIC::Route::Drop.new(reason: :buffer_full), endpoint.receive(initial, from: CLIENT, now: 0.0)
   end
 
+  # An offer keeps only what its client sends before the server answers:
+  # Initial and 0-RTT packets from the address of the first.
+  def test_an_offer_keeps_only_its_client
+    endpoint = endpoint()
+    handle = endpoint.receive(initial, from: CLIENT, now: 0.0).handle
+    assert_equal QUIC::Route::Drop.new(reason: :address_mismatch), endpoint.receive(initial, from: ["203.0.113.66", 4444], now: 0.0)
+    assert_equal QUIC::Route::Drop.new(reason: :unexpected_packet), endpoint.receive(initial(type: :handshake), from: CLIENT, now: 0.0)
+    assert_nil endpoint.receive(initial(type: :zero_rtt), from: CLIENT, now: 0.0)
+    assert_equal 2, handle.datagrams.size
+  end
+
   # All offers together keep HANDLES_BUFFER bytes at most; what an offer
   # kept is let go with it.
   def test_all_offers_keep_a_bounded_amount

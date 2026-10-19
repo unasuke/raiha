@@ -123,6 +123,10 @@ module Raiha::Next::QUIC
       end
       return Route::Drop.new(reason: :unknown_connection_id) if header.is_a?(Wire::ShortHeader)
       if (handle = @handles[header.dcid])
+        # Before the server answers, the client sends only Initial and 0-RTT
+        # packets, from where its first came.
+        return Route::Drop.new(reason: :address_mismatch) unless from == handle.remote
+        return Route::Drop.new(reason: :unexpected_packet) if header.type == :handshake
         return keep(handle, datagram, from:, to:, ecn:)
       end
       return Route::Drop.new(reason: :unknown_connection_id) unless header.type == :initial
