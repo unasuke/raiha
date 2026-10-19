@@ -26,7 +26,21 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
     assert_includes server_tracer.of(:packet_sent).map { _1[:header].packet_type }, :one_rtt
   end
 
-  def dropped(tracer) = tracer.of(:packet_dropped).map { [_1[:reason], _1[:raw_length]] }
+  # Each end tells its own transport parameters and the peer's: one's
+  # local are the other's remote.
+  def test_transport_parameters
+    client_tracer = RecordingTracer.new
+    server_tracer = RecordingTracer.new
+    handshake(client_connection(tracer: client_tracer), server_connection(tracer: server_tracer))
+    client = client_tracer.of(:parameters_set)
+    server = server_tracer.of(:parameters_set)
+    assert_equal [:local, :remote], client.map { _1[:owner] }
+    assert_equal [:local, :remote], server.map { _1[:owner] }
+    assert_equal client.first[:parameters], server.last[:parameters]
+    assert_equal server.first[:parameters], client.last[:parameters]
+  end
+
+  def dropped(tracer) =tracer.of(:packet_dropped).map { [_1[:reason], _1[:raw_length]] }
 
   # Bytes that do not read as a packet are dropped to the end of the
   # datagram.

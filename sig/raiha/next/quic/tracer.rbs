@@ -9,6 +9,7 @@ module Raiha::Next::QUIC
     def packet_received: (header: Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
     def trace_frames?: () -> bool
     def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> void
+    def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
     def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> void
     def metrics_updated: (now: Float, **metric metrics) -> void
     def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> void
@@ -38,6 +39,7 @@ module Raiha::Next::QUIC
     def packet_received: (header: PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> nil
     def trace_frames?: () -> bool
     def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> nil
+    def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> nil
     def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> nil
     def metrics_updated: (now: Float, **metric metrics) -> nil
     def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> nil

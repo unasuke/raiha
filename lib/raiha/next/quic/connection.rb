@@ -116,7 +116,9 @@ module Raiha::Next::QUIC
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
         @original_destination_connection_id = @destination_connection_id
         @protection.install_initial(@destination_connection_id)
-        @binding = start.call(self, config.transport_parameters(initial_source_connection_id: @source_connection_id))
+        parameters = config.transport_parameters(initial_source_connection_id: @source_connection_id)
+        @tracer.parameters_set(owner: :local, parameters:, now:) if @tracer # steep:ignore
+        @binding = start.call(self, parameters)
       else
         @destination_connection_id = "".b
       end
@@ -245,6 +247,7 @@ module Raiha::Next::QUIC
     def peer_transport_parameters(data)
       parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
       authenticate_connection_ids(parameters)
+      @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
       @peer_parameters = parameters
       @recovery.peer_max_ack_delay = parameters.max_ack_delay
       restart_idle(@now)
@@ -392,6 +395,7 @@ module Raiha::Next::QUIC
       @protection.install_initial(header.dcid)
       parameters = @config.transport_parameters(initial_source_connection_id: @source_connection_id,
         original_destination_connection_id: header.dcid)
+      @tracer.parameters_set(owner: :local, parameters:, now: @now) if @tracer # steep:ignore
       @binding = @start_binding.call(self, parameters)
     end
 

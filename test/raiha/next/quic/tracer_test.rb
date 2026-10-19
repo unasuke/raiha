@@ -28,6 +28,8 @@ class RaihaNextQUICTracerTest < Minitest::Test
     assert_nil tracer.packet_received(header:, frames: nil, raw_length: 40, now: 1.0)
     refute tracer.trace_frames?
     assert_nil tracer.packet_dropped(reason: :duplicate, raw_length: 40, now: 1.0)
+    parameters = Raiha::Next::QUIC::Config.new.transport_parameters(initial_source_connection_id: "c".b)
+    assert_nil tracer.parameters_set(owner: :local, parameters:, now: 1.0)
   end
 
   # A short header has the Key Phase bit and no version or Source

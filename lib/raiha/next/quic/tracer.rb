@@ -41,6 +41,10 @@ module Raiha::Next::QUIC
     # or :general.
     def packet_dropped(reason:, raw_length:, now:) = nil
 
+    # The transport parameters of this end (`owner` :local) or of the peer,
+    # once authenticated (:remote) (qlog `parameters_set`).
+    def parameters_set(owner:, parameters:, now:) = nil
+
     # A packet declared lost (qlog `packet_lost`). `trigger` is
     # :reordering_threshold or :time_threshold.
     def packet_lost(packet_number:, space:, trigger:, mtu_probe:, now:) = nil
