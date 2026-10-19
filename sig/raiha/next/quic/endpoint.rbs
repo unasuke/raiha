@@ -4,6 +4,8 @@ module Raiha::Next::QUIC
     RESET_BURST: Float
     RESET_RATE: Float
     RESET_ADDRESSES: Integer
+    RESET_TOTAL_BURST: Float
+    RESET_TOTAL_RATE: Float
     HANDLE_LIFETIME: Float
     HANDLE_BUFFER: Integer
     HANDLES_BUFFER: Integer
@@ -45,6 +47,8 @@ module Raiha::Next::QUIC
     @handles: Hash[String, Handle]
     @buffered: Integer
     @resets: Hash[address, [Float, Float]]
+    @reset_total: Float
+    @reset_total_at: Float
 
     def self.server: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> Endpoint
 

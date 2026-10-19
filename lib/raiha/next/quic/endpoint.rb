@@ -19,12 +19,14 @@ module Raiha::Next::QUIC
     # RFC 9000 "Looping": each address is sent resets from a token bucket of
     # RESET_BURST, refilled at RESET_RATE a second. At most RESET_ADDRESSES
     # buckets are kept, the least recently used going first, so that no
-    # address is shut out; an address whose bucket went gets a full one,
-    # and since a reset is shorter than what triggered it, no more is sent
-    # than came.
+    # address is shut out. An address whose bucket went starts again with a
+    # full one, so all resets together come from one more bucket, of
+    # RESET_TOTAL_BURST refilled at RESET_TOTAL_RATE a second.
     RESET_BURST = 10.0
     RESET_RATE = 1.0
     RESET_ADDRESSES = 1024
+    RESET_TOTAL_BURST = 1000.0
+    RESET_TOTAL_RATE = 100.0
     # How long an offer lasts unless the application decides on it, from
     # its first datagram, so that one the application forgets goes too.
     HANDLE_LIFETIME = 3.0
@@ -89,8 +91,11 @@ module Raiha::Next::QUIC
       # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
       @buffered = 0
-      # What is left of each address's stateless resets, and when.
+      # What is left of each address's stateless resets and of all of them,
+      # and when.
       @resets = {} #: Hash[address, [Float, Float]]
+      @reset_total = RESET_TOTAL_BURST
+      @reset_total_at = now
     end
 
     # What to do with `datagram`, which came from `from` to `to` with the
@@ -219,13 +224,17 @@ module Raiha::Next::QUIC
     end
 
     # Takes a reset from the bucket of `address`, which goes to the end of
-    # the table as the most recently used.
+    # the table as the most recently used, and from the bucket of all.
     private def take_reset(address, now)
       tokens, at = @resets.delete(address) || [RESET_BURST, now]
       @resets.shift if @resets.size >= RESET_ADDRESSES
       tokens = [tokens + (now - at) * RESET_RATE, RESET_BURST].min
-      @resets[address] = [tokens >= 1 ? tokens - 1 : tokens, now]
-      tokens >= 1
+      total = [@reset_total + (now - @reset_total_at) * RESET_TOTAL_RATE, RESET_TOTAL_BURST].min
+      taken = tokens >= 1 && total >= 1
+      @resets[address] = [taken ? tokens - 1 : tokens, now]
+      @reset_total = taken ? total - 1 : total
+      @reset_total_at = now
+      taken
     end
 
     private def transmit(payload, destination, source) = Transmit.new(payload:, destination:, source:, ecn: :not_ect, segment_size: nil)
