@@ -113,6 +113,13 @@ module Raiha::Next::QUIC
       @idle_deadline = nil #: Float?
       @eliciting_since_received = false
       @now = now
+      # What Stats counts: the packets and their bytes each way, and when
+      # the handshake completed.
+      @packets_sent = 0
+      @bytes_sent = 0
+      @packets_received = 0
+      @bytes_received = 0
+      @handshake_completed_at = nil #: Float?
       # What a server has received and sent while the client's address is
       # not validated, and whether that has stopped it.
       @address_validated = address_validated
@@ -162,6 +169,18 @@ module Raiha::Next::QUIC
 
     # Why the connection closed, nil while it is open.
     def close_reason = @close_error
+
+    # What the connection has done so far.
+    def stats
+      rtt = @path.rtt
+      completed = @handshake_completed_at
+      Stats.new(rtt: rtt.smoothed_rtt, rtt_var: rtt.rttvar, min_rtt: rtt.min_rtt, congestion_window: @path.congestion.window,
+        bytes_in_flight: @path.bytes_in_flight, packets_sent: @packets_sent, packets_received: @packets_received,
+        packets_lost: @recovery.packets_lost, packets_spuriously_lost: @recovery.packets_spuriously_lost, bytes_sent: @bytes_sent,
+        bytes_received: @bytes_received, path_mtu: @path.max_datagram_size, handshake_duration: completed && completed - @created_at,
+        receive_window: @streams.window.size, send_buffer_bytes: @streams.buffered, blocked_sent: @streams.blocked_sent,
+        blocked_received: @streams.blocked_received)
+    end
 
     # Up to `max_bytes` received on `stream_id`, read by the application:
     # "" when nothing is there yet, nil once the stream has ended, as
@@ -368,6 +387,7 @@ module Raiha::Next::QUIC
     # with HANDSHAKE_DONE.
     def handshake_completed(event)
       @handshake_complete = true
+      @handshake_completed_at = @now
       @events << Event::Connected.new(handshake: event)
       return unless @role == :server
       @handshake_done_due = true
@@ -537,6 +557,8 @@ module Raiha::Next::QUIC
       # RFC 9000 "Idle Timeout": a packet received and processed, which a
       # duplicate is not.
       restart_idle(now)
+      @packets_received += 1
+      @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
       frames.each { |frame| receive_frame(level, frame, now) }
@@ -925,6 +947,8 @@ module Raiha::Next::QUIC
         @tracer.packet_sent(header: Tracer::PacketHeader.of(packet.header, packet.packet_number), # steep:ignore
           frames: @tracer.trace_frames? ? packet.frames : nil, raw_length: sealed.bytesize, now:) # steep:ignore
       end
+      @packets_sent += 1
+      @bytes_sent += sealed.bytesize
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
       in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize
       if ack_eliciting && !@eliciting_since_received

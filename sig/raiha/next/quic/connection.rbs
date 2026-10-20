@@ -38,6 +38,11 @@ module Raiha::Next::QUIC
     @events: Array[Event::t]
     @streams: Streams
     @datagrams: Datagrams
+    @packets_sent: Integer
+    @bytes_sent: Integer
+    @packets_received: Integer
+    @bytes_received: Integer
+    @handshake_completed_at: Float?
     @source_connection_id: String
     @stateless_reset_token: String?
     @destination_connection_id: String
@@ -87,6 +92,7 @@ module Raiha::Next::QUIC
     def draining?: () -> bool
     def closed?: () -> bool
     def close_reason: () -> ConnectionError?
+    def stats: () -> Stats
     def stream_read: (Integer stream_id, Integer max_bytes) -> String?
     def readable_streams: () -> Enumerator[Integer, Array[Integer]]
     def open_stream: (?direction: :bidi | :uni) -> Integer?

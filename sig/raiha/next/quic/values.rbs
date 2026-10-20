@@ -56,6 +56,31 @@ module Raiha::Next::QUIC
   type address = [String, Integer]
   type ecn = :not_ect | :ect0 | :ect1
 
+  class Stats < Data
+    attr_reader rtt: Float
+    attr_reader rtt_var: Float
+    attr_reader min_rtt: Float?
+    attr_reader congestion_window: Integer
+    attr_reader bytes_in_flight: Integer
+    attr_reader packets_sent: Integer
+    attr_reader packets_received: Integer
+    attr_reader packets_lost: Integer
+    attr_reader packets_spuriously_lost: Integer
+    attr_reader bytes_sent: Integer
+    attr_reader bytes_received: Integer
+    attr_reader path_mtu: Integer
+    attr_reader handshake_duration: Float?
+    attr_reader receive_window: Integer
+    attr_reader send_buffer_bytes: Integer
+    attr_reader blocked_sent: Integer
+    attr_reader blocked_received: Integer
+
+    def self.new: (rtt: Float, rtt_var: Float, min_rtt: Float?, congestion_window: Integer, bytes_in_flight: Integer,
+                   packets_sent: Integer, packets_received: Integer, packets_lost: Integer, packets_spuriously_lost: Integer,
+                   bytes_sent: Integer, bytes_received: Integer, path_mtu: Integer, handshake_duration: Float?,
+                   receive_window: Integer, send_buffer_bytes: Integer, blocked_sent: Integer, blocked_received: Integer) -> instance
+  end
+
   class Transmit < Data
     ECN: Array[ecn]
 

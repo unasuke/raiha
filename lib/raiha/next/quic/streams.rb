@@ -72,6 +72,12 @@ module Raiha::Next::QUIC
 
     # The connection's receive window.
     attr_reader :window
+    # The stream data not sent or not acknowledged.
+    attr_reader :buffered
+    # How many BLOCKED frames the peer's limits made this end send, not
+    # counting those sent again, and how many the peer sent.
+    attr_reader :blocked_sent
+    attr_reader :blocked_received
 
     # Events go to `events`.
     def initialize(role:, config:, events:, now:)
@@ -109,6 +115,8 @@ module Raiha::Next::QUIC
       @ended = { bidi: 0, uni: 0 }
       @max_streams_resend = { bidi: false, uni: false }
       @max_streams_asked = { bidi: false, uni: false }
+      @blocked_sent = 0
+      @blocked_received = 0
     end
 
     # The peer's transport parameters, which set the limits of what this
@@ -153,7 +161,7 @@ module Raiha::Next::QUIC
       @send_queue << stream_id unless @send_queue.include?(stream_id)
       unless whole
         @wanting << stream_id unless @wanting.include?(stream_id)
-        sender.blocked! if sender.credit.zero?
+        @blocked_sent += 1 if sender.credit.zero? && sender.blocked!
         data_blocked if @written == @peer_max_data
       end
       accepted
@@ -198,6 +206,7 @@ module Raiha::Next::QUIC
     # The peer cannot open a stream past the limit told: MAX_STREAMS goes
     # at once if there is room not told yet.
     def receive_streams_blocked(frame)
+      @blocked_received += 1
       direction = frame.bidirectional ? :bidi : :uni #: :bidi | :uni
       @max_streams_asked[direction] = true
     end
@@ -259,9 +268,13 @@ module Raiha::Next::QUIC
 
     # The peer is blocked by the connection's limit or a stream's: credit
     # not told yet goes at once.
-    def receive_data_blocked(frame) = @window.blocked!
+    def receive_data_blocked(frame)
+      @blocked_received += 1
+      @window.blocked!
+    end
 
     def receive_stream_data_blocked(frame, now:)
+      @blocked_received += 1
       receiver = receiver_for(frame.stream_id, frame_type: Wire::Frame::StreamDataBlocked::TYPES.fetch(0), now:) or return
       receiver.window.blocked!
     end
@@ -472,6 +485,7 @@ module Raiha::Next::QUIC
       return if @data_blocked_at == @peer_max_data
       @data_blocked_at = @peer_max_data
       @data_blocked_due = true
+      @blocked_sent += 1
     end
 
     # No stream of `direction` opens past the peer's `limit`: nil, and
@@ -480,6 +494,7 @@ module Raiha::Next::QUIC
       return nil if @streams_blocked_at.fetch(direction) == limit
       @streams_blocked_at[direction] = limit
       @streams_blocked_due[direction] = true
+      @blocked_sent += 1
       nil
     end
 

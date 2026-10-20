@@ -9,6 +9,7 @@ end
 require_relative "quic/error"
 require_relative "quic/error_code"
 require_relative "quic/transmit"
+require_relative "quic/stats"
 require_relative "quic/event"
 require_relative "quic/tracer"
 require_relative "quic/version"

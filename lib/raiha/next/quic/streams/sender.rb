@@ -117,9 +117,10 @@ module Raiha::Next::QUIC
       end
 
       # A write was cut short by the peer's limit: STREAM_DATA_BLOCKED
-      # with it is due, once for each value of the limit.
+      # with it is due, once for each value of the limit. Whether it is due
+      # now.
       def blocked!
-        return if @blocked_at == @limit
+        return false if @blocked_at == @limit
         @blocked_at = @limit
         @blocked_due = true
       end

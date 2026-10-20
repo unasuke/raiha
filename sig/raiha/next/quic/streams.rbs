@@ -31,8 +31,13 @@ module Raiha::Next::QUIC
     @ended: Hash[:bidi | :uni, Integer]
     @max_streams_resend: Hash[:bidi | :uni, bool]
     @max_streams_asked: Hash[:bidi | :uni, bool]
+    @blocked_sent: Integer
+    @blocked_received: Integer
 
     attr_reader window: ReceiveWindow
+    attr_reader buffered: Integer
+    attr_reader blocked_sent: Integer
+    attr_reader blocked_received: Integer
 
     def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float) -> void
     def peer_parameters=: (TransportParameters parameters) -> TransportParameters
@@ -111,7 +116,7 @@ module Raiha::Next::QUIC
       def initialize: (size: Integer, max: Integer, now: Float) -> void
       def receive: (Integer end_offset, frame_type: Integer) -> void
       def consume: (Integer bytes) -> void
-      def blocked!: () -> void
+      def blocked!: () -> bool
       def lost: (Integer maximum) -> void
       def update_due?: () -> bool
       def advance: (now: Float, rtt: Float?) -> Integer
@@ -198,7 +203,7 @@ module Raiha::Next::QUIC
       def next_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
       def acked: (Integer offset, Integer length, bool fin) -> Integer
       def lost: (Integer offset, Integer length, bool fin) -> void
-      def blocked!: () -> void
+      def blocked!: () -> bool
       def blocked_due?: () -> bool
       def blocked_sent: () -> void
       def blocked_lost: (Integer maximum) -> void
