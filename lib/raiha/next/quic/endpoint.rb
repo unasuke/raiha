@@ -8,6 +8,11 @@ module Raiha::Next::QUIC
   # Stateless Reset, a CONNECTION_CLOSE for a Retry token that does not
   # verify, or nothing. A Connection never refers to its Endpoint.
   #
+  # A client's Endpoint makes its connections with `connect` and takes no
+  # offers; a Version Negotiation or a Retry goes to the connection it is
+  # for. Either finds a Stateless Reset of its peers among the datagrams of
+  # no connection.
+  #
   # Like a Connection it never reads a clock: `now:` is the monotonic clock,
   # and the wall clock its tokens expire by is `time:`, given once when it is
   # made.
@@ -174,19 +179,25 @@ module Raiha::Next::QUIC
     # An Endpoint of a server. `random` is what it draws its own random
     # bytes from, a seeded Random in tests, and its keys when `config` has
     # none.
-    def self.server(config:, random:, time:, now:) = new(config:, random:, time:, now:)
+    def self.server(config:, random:, time:, now:) = new(role: :server, config:, random:, time:, now:)
+
+    # An Endpoint of a client.
+    def self.client(config:, random:, time:, now:) = new(role: :client, config:, random:, time:, now:)
 
     private_class_method :new
 
-    def initialize(config:, random:, time:, now:)
+    def initialize(role:, config:, random:, time:, now:)
+      @role = role
       @config = config
       @random = random
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
       @stateless_reset_key = config.stateless_reset_key || random.bytes(Config::MIN_KEY_LENGTH).b
-      # The connections by each connection ID that leads to them.
+      # The connections by each connection ID that leads to them, and by the
+      # peer's address.
       @connections = {} #: Hash[String, Connection]
+      @peers = {} #: Hash[address, Array[Connection]]
       # The offers by the Destination Connection ID of their Initials, and
       # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
@@ -207,11 +218,25 @@ module Raiha::Next::QUIC
       packet = Wire::Packet.parse(datagram, dcid_length: @config.connection_id_length)
       case packet
       when Wire::Packet::Parsed then route(packet.header, datagram, from:, to:, ecn:, now:)
-      when Wire::UnsupportedVersion then negotiate(packet, datagram, from, to)
-      else Route::Drop.new(reason: :unexpected_packet)
+      when Wire::UnsupportedVersion
+        @role == :server ? negotiate(packet, datagram, from, to) : Route::Drop.new(reason: :unsupported_version)
+      else
+        @role == :client ? deliver(packet.dcid, datagram, from:, to:, ecn:, now:) : Route::Drop.new(reason: :unexpected_packet)
       end
     rescue Wire::Malformed
-      Route::Drop.new(reason: :malformed)
+      (connection = reset_of(datagram, from, now)) ? Route::Deliver.new(connection:) : Route::Drop.new(reason: :malformed)
+    end
+
+    # A new client connection to `remote` with the TLS settings given, its
+    # first Initial waiting to be sent, found by the Source Connection ID
+    # the Endpoint chooses for it. A server's Endpoint connects to no one:
+    # Error::Usage.
+    def connect(tls_config:, keyring:, server_name:, remote:, now:, tracer: nil, keylog: nil)
+      raise Error::Usage, "a server's Endpoint does not connect" unless @role == :client
+      scid = new_connection_id
+      connection = Connection.client(config: @config, tls_config:, keyring:, server_name:, remote:, time: wall_clock(now), now:, tracer:,
+        keylog:, source_connection_id: scid)
+      add(connection, [scid], remote)
     end
 
     # Each datagram to send now: the Endpoint's own, then the connections'.
@@ -234,6 +259,8 @@ module Raiha::Next::QUIC
       connections.each { |connection| connection.handle_timeout(now:) }
       @handles.each_value.select { |handle| handle.expired?(now) }.each { |handle| forget(handle) }
       @connections.delete_if { |_, connection| connection.closed? }
+      @peers.each_value { |peers| peers.delete_if(&:closed?) }
+      @peers.delete_if { |_, peers| peers.empty? }
     end
 
     # The second stage of the offer of `handle`: the Endpoint reads the
@@ -264,8 +291,7 @@ module Raiha::Next::QUIC
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: !handle.retry_source_connection_id.nil?,
         source_connection_id: scid, stateless_reset_token: token)
       forget(handle)
-      @connections[scid] = connection
-      @connections[handle.destination_connection_id] = connection
+      add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
       connection
     end
@@ -310,14 +336,19 @@ module Raiha::Next::QUIC
     private def connections = @connections.values.uniq
 
     # Where a packet with a header that reads goes: to the connection of its
-    # Destination Connection ID, else, for a client's Initial, to the offer
-    # of a new connection, and for a short header, a Stateless Reset.
+    # Destination Connection ID, else, for a short header, to a connection
+    # it is a Stateless Reset of, and at a server, for a client's Initial,
+    # to the offer of a new connection, and for a short header, a Stateless
+    # Reset.
     private def route(header, datagram, from:, to:, ecn:, now:)
-      if (connection = @connections[header.dcid])
-        connection.receive(datagram, from:, to:, ecn:, now:)
-        return Route::Deliver.new(connection:)
+      return deliver(header.dcid, datagram, from:, to:, ecn:, now:) if @connections.key?(header.dcid)
+      if header.is_a?(Wire::ShortHeader)
+        if (connection = reset_of(datagram, from, now))
+          return Route::Deliver.new(connection:)
+        end
+        return @role == :server ? reset(header.dcid, datagram, from, to, now) : Route::Drop.new(reason: :unknown_connection_id)
       end
-      return reset(header.dcid, datagram, from, to, now) if header.is_a?(Wire::ShortHeader)
+      return Route::Drop.new(reason: :unknown_connection_id) unless @role == :server
       if (handle = @handles[header.dcid])
         # Before the server answers, the client sends only Initial and 0-RTT
         # packets, from where its first came.
@@ -391,6 +422,26 @@ module Raiha::Next::QUIC
       end
       accepted = handle.take_client_hello or return nil
       Route::ClientHello.new(handle:, accepted:)
+    end
+
+    # Gives `datagram` to the connection of `dcid`.
+    private def deliver(dcid, datagram, from:, to:, ecn:, now:)
+      connection = @connections[dcid] or return Route::Drop.new(reason: :unknown_connection_id)
+      connection.receive(datagram, from:, to:, ecn:, now:)
+      Route::Deliver.new(connection:)
+    end
+
+    # RFC 9000 "Detecting a Stateless Reset": the connection to the address
+    # `datagram` came from that takes it as a Stateless Reset of its peer,
+    # which then drains; nil when none does. A reset has a connection ID of
+    # no connection, or none that reads.
+    private def reset_of(datagram, from, now) = @peers[from]&.find { |connection| connection.take_stateless_reset(datagram, now:) }
+
+    # Keeps `connection`, found by `ids` and by the address of its peer.
+    private def add(connection, ids, peer)
+      ids.each { |id| @connections[id] = connection }
+      (@peers[peer] ||= []) << connection
+      connection
     end
 
     # Ends the offer of `handle` with a CONNECTION_CLOSE of `error` in an

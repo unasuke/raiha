@@ -57,6 +57,7 @@ module Raiha::Next::QUIC
       private def instance_variables_to_inspect: () -> Array[Symbol]
     end
 
+    @role: :client | :server
     @config: Config
     @random: Crypto::_Random
     @time: Time
@@ -64,6 +65,7 @@ module Raiha::Next::QUIC
     @retry_token_key: String
     @stateless_reset_key: String
     @connections: Hash[String, Connection]
+    @peers: Hash[address, Array[Connection]]
     @handles: Hash[String, Handle]
     @buffered: Integer
     @transmits: Array[Transmit]
@@ -72,9 +74,12 @@ module Raiha::Next::QUIC
     @reset_total_at: Float
 
     def self.server: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> Endpoint
+    def self.client: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> Endpoint
 
-    def initialize: (config: Config, random: Crypto::_Random, time: Time, now: Float) -> void
+    def initialize: (role: :client | :server, config: Config, random: Crypto::_Random, time: Time, now: Float) -> void
     def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> Route::t?
+    def connect: (tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String, remote: address, now: Float,
+                  ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
     def each_transmit: (now: Float) { (Transmit) -> void } -> void
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
@@ -92,6 +97,9 @@ module Raiha::Next::QUIC
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def client_hello: (Handle handle) -> Route::ClientHello?
+    private def deliver: (String dcid, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
+    private def reset_of: (String datagram, address from, Float now) -> Connection?
+    private def add: (Connection connection, Array[String] ids, address peer) -> Connection
     private def close: (Handle handle, ConnectionError error) -> void
     private def close_packet: (Version version, client_dcid: String, client_scid: String, error: ConnectionError) -> String
     private def new_connection_id: () -> String
