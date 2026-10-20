@@ -42,7 +42,7 @@ module Raiha::Next::QUIC
   )
     include Raiha::Next::TLS::MaskedInspect
 
-    DEFAULT_CONGESTION_CONTROL = Congestion::NewReno
+    DEFAULT_CONGESTION_CONTROL = Congestion::Cubic
     # RFC 9002 "Initial and Minimum Congestion Window". Made shareable here,
     # where self is the class.
     DEFAULT_INITIAL_WINDOW = Ractor.make_shareable(->(max_datagram_size) { [10 * max_datagram_size, [14_720, 2 * max_datagram_size].max].min })

@@ -57,9 +57,10 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert Config.new(max_stream_receive_window: 10 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024)
   end
 
-  # Until CUBIC comes, NewReno is the default; a name becomes its class.
+  # CUBIC is the default; a name becomes its class.
   def test_congestion_control
-    assert_same QUIC::Congestion::NewReno, Config.new.congestion_control
+    assert_same QUIC::Congestion::Cubic, Config.new.congestion_control
+    assert_same QUIC::Congestion::Cubic, Config.new(congestion_control: :cubic).congestion_control
     assert_same QUIC::Congestion::NewReno, Config.new(congestion_control: :new_reno).congestion_control
     own = Class.new(QUIC::Congestion::NewReno)
     assert_same own, Config.new(congestion_control: own).congestion_control

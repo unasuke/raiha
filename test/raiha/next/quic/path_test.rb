@@ -8,7 +8,7 @@ class RaihaNextQUICPathTest < Minitest::Test
 
   def test_starts_from_the_config
     path = path(initial_max_datagram_size: 1350)
-    assert_kind_of QUIC::Congestion::NewReno, path.congestion
+    assert_kind_of QUIC::Congestion::Cubic, path.congestion
     assert_equal [13_500, 1350, 10], [path.congestion.window, path.max_datagram_size, path.window_packets]
     assert_equal [0, 0, 0.333], [path.bytes_in_flight, path.ack_eliciting_in_flight, path.rtt.smoothed_rtt]
   end
