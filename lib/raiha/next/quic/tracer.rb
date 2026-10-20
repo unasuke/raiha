@@ -77,5 +77,13 @@ module Raiha::Next::QUIC
     # The congestion controller changed state (qlog
     # `congestion_state_updated`). The states are the algorithm's own.
     def congestion_state_updated(old:, new:, now:) = nil
+
+    # Sending on the connection, or on stream `stream_id`, became :blocked
+    # by the peer's limit, `reason` :connection_flow_control or
+    # :stream_flow_control, or :unblocked as the limit grew (qlog
+    # `connection_data_blocked_updated` and `stream_data_blocked_updated`).
+    def connection_data_blocked_updated(old:, new:, reason:, now:) = nil
+
+    def stream_data_blocked_updated(stream_id:, old:, new:, reason:, now:) = nil
   end
 end

@@ -103,12 +103,12 @@ class RaihaNextQUICStreamsTest < Minitest::Test
   def test_a_lost_blocked_frame
     s = with_peer(initial_max_data: 100)
     stream_id = s.open(:bidi, now: 0.0) || flunk
-    s.write(stream_id, "x".b * 200, fin: false)
+    s.write(stream_id, "x".b * 200, fin: false, now: 0.0)
     frame, duty = s.next_blocked(100)
     assert_equal QUIC::Wire::Frame::DataBlocked.new(maximum: 100), frame
     s.data_blocked_lost(duty)
     assert_equal frame, s.next_blocked(100)&.first
-    s.receive_max_data(QUIC::Wire::Frame::MaxData.new(maximum: 300))
+    s.receive_max_data(QUIC::Wire::Frame::MaxData.new(maximum: 300), now: 0.0)
     s.data_blocked_lost(duty)
     assert_nil s.next_blocked(100)
   end
@@ -154,7 +154,7 @@ class RaihaNextQUICStreamsTest < Minitest::Test
   def test_lost_resets_and_stops
     s = with_peer
     stream_id = s.open(:bidi, now: 0.0) || flunk
-    s.write(stream_id, "abc".b, fin: false)
+    s.write(stream_id, "abc".b, fin: false, now: 0.0)
     s.reset(stream_id, 5)
     frame, duty = s.next_abandon(100)
     assert_equal QUIC::Wire::Frame::ResetStream.new(stream_id:, error_code: 5, final_size: 0), frame

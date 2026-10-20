@@ -1,5 +1,7 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
+require "stringio"
+require "json"
 
 # The peer's limits on what a Connection sends: a write cut short by them
 # tells the peer with a BLOCKED frame, and goes on once MAX_DATA or
@@ -105,5 +107,45 @@ class RaihaNextQUICConnectionStreamLimitsTest < Minitest::Test
     assert_nil client.open_stream
     assert_equal [QUIC::Wire::Frame::StreamsBlocked.new(bidirectional: true, maximum: 2)],
       client_frames(client, now:).grep(QUIC::Wire::Frame::StreamsBlocked)
+  end
+
+  # Keeps what it hears of flow control blocking.
+  class BlockedTracer
+    include Raiha::Next::QUIC::Tracer
+
+    attr_reader :log
+
+    def initialize = @log = []
+
+    def connection_data_blocked_updated(old:, new:, reason:, now:) = @log << [:connection, new, reason]
+
+    def stream_data_blocked_updated(stream_id:, old:, new:, reason:, now:) = @log << [stream_id, new, reason]
+  end
+
+  # The tracer hears when the peer's credit blocks the connection or a
+  # stream, and when the limit grows past it; a qlog writes both.
+  def test_the_tracer_hears_of_blocking
+    tracer = BlockedTracer.new
+    @keylog = Keylog.new
+    client = client_connection(keylog: @keylog, tracer:)
+    server = server_connection(config: QUIC::Config.new(initial_max_stream_data_bidi_remote: 1000, initial_max_data: 1500))
+    now = exchange(client, server, now: handshake(client, server), rounds: 3)
+    first = client.open_stream
+    second = client.open_stream
+    client.stream_write(first, "a" * 2000)
+    client.stream_write(second, "b" * 2000)
+    assert_equal [[first, :blocked, :stream_flow_control], [:connection, :blocked, :connection_flow_control]], tracer.log
+    now = exchange(client, server, now:)
+    read_all(server, first)
+    read_all(server, second)
+    exchange(client, server, now:)
+    assert_includes tracer.log, [first, :unblocked, :stream_flow_control]
+    assert_includes tracer.log, [:connection, :unblocked, :connection_flow_control]
+    io = StringIO.new
+    qlog = QUIC::Qlog::Tracer.new(io, vantage_point: :client)
+    qlog.stream_data_blocked_updated(stream_id: 0, old: :unblocked, new: :blocked, reason: :stream_flow_control, now: 1.0)
+    record = JSON.parse(io.string.split("\x1e").last)
+    assert_equal ["quic:stream_data_blocked_updated", { "old" => "unblocked", "new" => "blocked", "stream_id" => 0, "reason" => "stream_flow_control" }],
+      record.values_at("name", "data")
   end
 end

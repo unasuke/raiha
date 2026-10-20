@@ -37,7 +37,9 @@ module Raiha::Next::QUIC
   # write the peer's credit cuts short, or a stream the peer's limit keeps
   # from opening, sends DATA_BLOCKED, STREAM_DATA_BLOCKED or
   # STREAMS_BLOCKED with the limit, once for each value of it; one this
-  # end's send buffer cuts short sends none. Frames are taken from the
+  # end's send buffer cuts short sends none. The tracer hears when the
+  # peer's credit blocks the connection or a stream, and when it no longer
+  # does. Frames are taken from the
   # streams with something to send in turn, one a time.
   #
   # The application stops reading a stream with STOP_SENDING, or resets
@@ -80,10 +82,11 @@ module Raiha::Next::QUIC
     attr_reader :blocked_received
 
     # Events go to `events`.
-    def initialize(role:, config:, events:, now:)
+    def initialize(role:, config:, events:, now:, tracer: nil)
       @role = role
       @config = config
       @events = events
+      @tracer = tracer
       @window = ReceiveWindow.new(size: config.initial_max_data, max: config.max_receive_window, now:)
       @receivers = {} #: Hash[Integer, Receiver]
       @senders = {} #: Hash[Integer, Sender]
@@ -117,6 +120,10 @@ module Raiha::Next::QUIC
       @max_streams_asked = { bidi: false, uni: false }
       @blocked_sent = 0
       @blocked_received = 0
+      # Whether the peer's credit blocks the connection, and the streams it
+      # blocks.
+      @connection_blocked = false
+      @flow_blocked = [] #: Array[Integer]
     end
 
     # The peer's transport parameters, which set the limits of what this
@@ -150,7 +157,7 @@ module Raiha::Next::QUIC
     # Writes as much of `data` to `stream_id` as there is room for, and
     # the end of the stream with `fin` when all of it fits: how many bytes
     # were taken.
-    def write(stream_id, data, fin:)
+    def write(stream_id, data, fin:, now:)
       sender = sender_for(stream_id)
       accepted = [data.bytesize, room_for(sender)].min
       whole = accepted == data.bytesize
@@ -161,8 +168,8 @@ module Raiha::Next::QUIC
       @send_queue << stream_id unless @send_queue.include?(stream_id)
       unless whole
         @wanting << stream_id unless @wanting.include?(stream_id)
-        @blocked_sent += 1 if sender.credit.zero? && sender.blocked!
-        data_blocked if @written == @peer_max_data
+        stream_blocked(stream_id, now) if sender.credit.zero?
+        data_blocked(now) if @written == @peer_max_data
       end
       accepted
     end
@@ -250,15 +257,23 @@ module Raiha::Next::QUIC
     def stop_sending_lost(duty) = @receivers[duty.stream_id]&.stop_lost
 
     # The peer's limits grew: what they now let through can be written.
-    def receive_max_data(frame)
+    def receive_max_data(frame, now:)
       return unless frame.maximum > @peer_max_data
       @peer_max_data = frame.maximum
+      if @connection_blocked
+        @connection_blocked = false
+        @tracer&.connection_data_blocked_updated(old: :blocked, new: :unblocked, reason: :connection_flow_control, now:)
+      end
       writable_again
     end
 
     def receive_max_stream_data(frame, now:)
       sender = sender_part(frame.stream_id, frame_type: Wire::Frame::MaxStreamData::TYPES.fetch(0), now:) or return
-      writable_again if sender.raise_limit(frame.maximum)
+      return unless sender.raise_limit(frame.maximum)
+      if @flow_blocked.delete(frame.stream_id)
+        @tracer&.stream_data_blocked_updated(stream_id: frame.stream_id, old: :blocked, new: :unblocked, reason: :stream_flow_control, now:)
+      end
+      writable_again
     end
 
     def receive_max_streams(frame)
@@ -467,6 +482,7 @@ module Raiha::Next::QUIC
       @senders.delete(stream_id)
       @send_queue.delete(stream_id)
       @wanting.delete(stream_id)
+      @flow_blocked.delete(stream_id)
       @ended[stream_id & UNIDIRECTIONAL == 0 ? :bidi : :uni] += 1 unless local?(stream_id)
     end
 
@@ -481,11 +497,24 @@ module Raiha::Next::QUIC
     private def sends?(stream_id) = !(!local?(stream_id) && stream_id & UNIDIRECTIONAL != 0)
 
     # The connection's credit cut a write short.
-    private def data_blocked
+    private def data_blocked(now)
+      unless @connection_blocked
+        @connection_blocked = true
+        @tracer&.connection_data_blocked_updated(old: :unblocked, new: :blocked, reason: :connection_flow_control, now:)
+      end
       return if @data_blocked_at == @peer_max_data
       @data_blocked_at = @peer_max_data
       @data_blocked_due = true
       @blocked_sent += 1
+    end
+
+    # The stream's credit cut a write to `stream_id` short.
+    private def stream_blocked(stream_id, now)
+      sender = @senders.fetch(stream_id)
+      @blocked_sent += 1 if sender.blocked!
+      return if @flow_blocked.include?(stream_id)
+      @flow_blocked << stream_id
+      @tracer&.stream_data_blocked_updated(stream_id:, old: :unblocked, new: :blocked, reason: :stream_flow_control, now:)
     end
 
     # No stream of `direction` opens past the peer's `limit`: nil, and

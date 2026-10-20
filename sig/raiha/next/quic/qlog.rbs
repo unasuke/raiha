@@ -29,6 +29,8 @@ module Raiha::Next::QUIC
       def recovery_parameters_set: (now: Float, **metric parameters) -> void
       def spurious_loss: (packet_number: Integer, space: space, now: Float) -> void
       def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+      def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+      def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
       def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
       def key_updated: (level: PacketProtection::level, now: Float) -> void
       def tls_trace: (::Raiha::Next::TLS::Trace::t value) -> void

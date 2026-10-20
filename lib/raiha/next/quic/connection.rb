@@ -90,7 +90,7 @@ module Raiha::Next::QUIC
       @path = Path.new(config:, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
-      @streams = Streams.new(role:, config:, events: @events, now:)
+      @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
       @datagrams = Datagrams.new(config:, events: @events)
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
@@ -205,7 +205,7 @@ module Raiha::Next::QUIC
     # can take more.
     def stream_write(stream_id, data, fin: false)
       open!
-      @streams.write(stream_id, data, fin:)
+      @streams.write(stream_id, data, fin:, now: @now)
     end
 
     # Queues `data` to go in a DATAGRAM frame, never sent again, by
@@ -630,7 +630,7 @@ module Raiha::Next::QUIC
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
       when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
-      when Wire::Frame::MaxData then @streams.receive_max_data(frame)
+      when Wire::Frame::MaxData then @streams.receive_max_data(frame, now:)
       when Wire::Frame::MaxStreamData then @streams.receive_max_stream_data(frame, now:)
       when Wire::Frame::MaxStreams then @streams.receive_max_streams(frame)
       when Wire::Frame::DataBlocked then @streams.receive_data_blocked(frame)

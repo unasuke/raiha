@@ -11,6 +11,9 @@ module Raiha::Next::QUIC
     @role: :client | :server
     @config: Config
     @events: Array[Event::t]
+    @tracer: _Tracer?
+    @connection_blocked: bool
+    @flow_blocked: Array[Integer]
     @window: ReceiveWindow
     @receivers: Hash[Integer, Receiver]
     @senders: Hash[Integer, Sender]
@@ -39,7 +42,7 @@ module Raiha::Next::QUIC
     attr_reader blocked_sent: Integer
     attr_reader blocked_received: Integer
 
-    def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float) -> void
+    def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float, ?tracer: _Tracer?) -> void
     def peer_parameters=: (TransportParameters parameters) -> TransportParameters
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
     def read: (Integer stream_id, Integer max_bytes) -> String?
@@ -48,7 +51,7 @@ module Raiha::Next::QUIC
     def max_data_lost: (Recovery::Duty::MaxData duty) -> void
     def max_stream_data_lost: (Recovery::Duty::MaxStreamData duty) -> void
     def open: (:bidi | :uni direction, now: Float) -> Integer?
-    def write: (Integer stream_id, String data, fin: bool) -> Integer
+    def write: (Integer stream_id, String data, fin: bool, now: Float) -> Integer
     def writable_bytes: (Integer stream_id) -> Integer
     def writable: () -> Array[Integer]
     def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
@@ -64,7 +67,7 @@ module Raiha::Next::QUIC
     def stop_sending_lost: (Recovery::Duty::StopSending duty) -> void
     def receive_streams_blocked: (Wire::Frame::StreamsBlocked frame) -> void
     def max_streams_lost: (Recovery::Duty::MaxStreams duty) -> void
-    def receive_max_data: (Wire::Frame::MaxData frame) -> void
+    def receive_max_data: (Wire::Frame::MaxData frame, now: Float) -> void
     def receive_max_stream_data: (Wire::Frame::MaxStreamData frame, now: Float) -> void
     def receive_max_streams: (Wire::Frame::MaxStreams frame) -> void
     def receive_data_blocked: (Wire::Frame::DataBlocked frame) -> void
@@ -83,7 +86,8 @@ module Raiha::Next::QUIC
     private def over?: (Integer stream_id) -> bool
     private def receives?: (Integer stream_id) -> bool
     private def sends?: (Integer stream_id) -> bool
-    private def data_blocked: () -> void
+    private def data_blocked: (Float now) -> void
+    private def stream_blocked: (Integer stream_id, Float now) -> void
     private def streams_blocked: (:bidi | :uni direction, Integer limit) -> nil
     private def fits?: (Wire::Frame::t frame, Integer room) -> bool
     private def sender_part: (Integer stream_id, frame_type: Integer, now: Float) -> Sender?

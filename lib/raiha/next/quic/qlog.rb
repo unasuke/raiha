@@ -73,6 +73,14 @@ module Raiha::Next::QUIC
 
       def congestion_state_updated(old:, new:, now:) = event(now, "quic:congestion_state_updated", { old: old.to_s, new: new.to_s })
 
+      def connection_data_blocked_updated(old:, new:, reason:, now:)
+        event(now, "quic:connection_data_blocked_updated", { old: old.to_s, new: new.to_s, reason: reason.to_s })
+      end
+
+      def stream_data_blocked_updated(stream_id:, old:, new:, reason:, now:)
+        event(now, "quic:stream_data_blocked_updated", { old: old.to_s, new: new.to_s, stream_id:, reason: reason.to_s })
+      end
+
       def parameters_set(owner:, parameters:, now:)
         event(now, "quic:parameters_set", { owner: owner.to_s, **values(parameters.to_h.compact) })
       end

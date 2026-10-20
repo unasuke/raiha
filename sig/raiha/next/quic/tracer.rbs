@@ -18,6 +18,8 @@ module Raiha::Next::QUIC
     def recovery_parameters_set: (now: Float, **metric parameters) -> void
     def spurious_loss: (packet_number: Integer, space: space, now: Float) -> void
     def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+    def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+    def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
   end
 
   module Tracer
@@ -49,5 +51,7 @@ module Raiha::Next::QUIC
     def recovery_parameters_set: (now: Float, **metric parameters) -> nil
     def spurious_loss: (packet_number: Integer, space: space, now: Float) -> nil
     def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> nil
+    def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
+    def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
   end
 end
