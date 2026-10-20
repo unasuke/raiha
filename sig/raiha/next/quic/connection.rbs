@@ -46,6 +46,7 @@ module Raiha::Next::QUIC
     @peer_source_connection_id: String?
     @original_destination_connection_id: String?
     @retry_source_connection_id: String?
+    @token: String
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -96,6 +97,7 @@ module Raiha::Next::QUIC
     private def remote: () -> address
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
+    private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
     private def authenticate_connection_ids: (TransportParameters parameters) -> void

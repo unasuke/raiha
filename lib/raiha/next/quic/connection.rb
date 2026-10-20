@@ -127,6 +127,8 @@ module Raiha::Next::QUIC
       # must name.
       @original_destination_connection_id = original_destination_connection_id
       @retry_source_connection_id = retry_source_connection_id
+      # The token a client's Initials carry, from a Retry.
+      @token = Wire::EMPTY
       if role == :client
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
         @original_destination_connection_id = @destination_connection_id
@@ -332,13 +334,39 @@ module Raiha::Next::QUIC
     # A header that does not read is dropped with the rest of the datagram
     # and nothing else: before its protection is off, anyone could have sent
     # it. So is a packet of a version not supported, and a Version
-    # Negotiation or Retry packet, which fill the datagram.
+    # Negotiation packet, which fills the datagram. A Retry, which fills it
+    # too, a client may take.
     private def parse_packet(datagram, offset, now)
       packet = Wire::Packet.parse(datagram, offset:, dcid_length: @source_connection_id.bytesize)
-      return packet if packet.is_a?(Wire::Packet::Parsed)
-      dropped(packet.is_a?(Wire::UnsupportedVersion) ? :unsupported : :general, datagram.bytesize - offset, now)
+      case packet
+      when Wire::Packet::Parsed then packet
+      when Wire::Retry then take_retry(packet, datagram.bytesize - offset, now)
+      else dropped(packet.is_a?(Wire::UnsupportedVersion) ? :unsupported : :general, datagram.bytesize - offset, now)
+      end
     rescue Wire::Malformed
       dropped(:invalid, datagram.bytesize - offset, now)
+    end
+
+    # RFC 9000 "Retry Packet": a client takes one Retry, to its connection
+    # ID, before any packet of the server has opened, with the tag of its
+    # first Destination Connection ID and a Source Connection ID other than
+    # that. Its Initials go from then on to that connection ID with the
+    # Retry's token, under the Initial keys of it, and what they carried
+    # goes again (RFC 9002 "Handling Retry"); the transport parameters of
+    # the server must name the Retry's Source Connection ID. Nil, as the
+    # Retry fills the datagram.
+    private def take_retry(packet, length, now)
+      odcid = @original_destination_connection_id
+      unless @role == :client && @retry_source_connection_id.nil? && @peer_source_connection_id.nil? && odcid &&
+          packet.dcid == @source_connection_id && packet.scid != @destination_connection_id && packet.authentic?(odcid)
+        return dropped(:general, length, now)
+      end
+      @retry_source_connection_id = packet.scid
+      @destination_connection_id = packet.scid
+      @token = packet.token
+      @protection.install_initial(packet.scid)
+      Recovery::Duty.dispatch(@recovery.on_retry(now:), to: self)
+      nil
     end
 
     # Tells the tracer that `length` bytes of packets were dropped for
@@ -718,6 +746,8 @@ module Raiha::Next::QUIC
     private def header_for(level)
       case level
       when :one_rtt then Wire::ShortHeader.new(dcid: @destination_connection_id, key_phase: @protection.key_phase_bit)
+      when :initial
+        Wire::LongHeader.new(type: level, version: @version, dcid: @destination_connection_id, scid: @source_connection_id, token: @token)
       else Wire::LongHeader.new(type: level, version: @version, dcid: @destination_connection_id, scid: @source_connection_id)
       end
     end
