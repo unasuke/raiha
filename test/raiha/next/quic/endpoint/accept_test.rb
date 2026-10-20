@@ -175,6 +175,22 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_equal QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:unrecognized_name)), client.close_reason.code
   end
 
+  # The application refuses an offer, at its first stage or its second:
+  # a CONNECTION_CLOSE of the transport error, CONNECTION_REFUSED unless it
+  # says another.
+  def test_refuse
+    [false, true].each do |admitted|
+      client = client_connection
+      endpoint = endpoint()
+      handle = endpoint.receive(client.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+      endpoint.admit(handle, now: 0.0) if admitted
+      endpoint.refuse(handle)
+      assert_raises(QUIC::Error::StateError) { endpoint.refuse(handle) }
+      endpoint.each_transmit(now: 0.0) { client.receive(_1.payload, from: SERVER, now: 0.0) }
+      assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, client.close_reason.code
+    end
+  end
+
   def test_reject_takes_the_alerts_of_the_acceptor
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle

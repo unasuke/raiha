@@ -278,6 +278,14 @@ module Raiha::Next::QUIC
       close(handle, handle.reject(description))
     end
 
+    # Turns down the offer of `handle`, at either stage, with the transport
+    # error `error_code` in a CONNECTION_CLOSE: CONNECTION_REFUSED, say,
+    # for a server that takes no more connections.
+    def refuse(handle, error_code: ErrorCode::CONNECTION_REFUSED)
+      pending!(handle)
+      close(handle, ConnectionError.new(code: error_code, frame_type: 0, reason: "", application: false))
+    end
+
     def each_connection(&) = connections.each(&)
 
     def connection_count = connections.size
