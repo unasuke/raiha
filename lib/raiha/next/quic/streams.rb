@@ -19,8 +19,12 @@ module Raiha::Next::QUIC
   # control's design, "Detecting Violations"). The connection has received
   # the sum of how far each stream has, counted however the data has
   # gaps (CVE-2026-75804). The holes of all the streams together are at
-  # most MAX_RECV_GAPS, past which the connection closes with
-  # INTERNAL_ERROR rather than dropping data an ACK has already covered.
+  # most one for each datagram the connection's largest receive window
+  # holds, past which the connection closes with INTERNAL_ERROR rather
+  # than dropping data an ACK has already covered: a peer that sends in
+  # bursts loses up to every other datagram when a queue overflows, which
+  # stays under it, and holes of a byte each stay some thirteen thousand
+  # pieces with the default window.
   #
   # A stream that had nothing to read and has now tells the application
   # with Event::StreamReadable, once, as the application reads it until it
@@ -57,8 +61,6 @@ module Raiha::Next::QUIC
   # yet is an eighth of that limit, at least one (flow control's design,
   # "Stream Limits").
   class Streams
-    # The holes the data received may have, all the streams together.
-    MAX_RECV_GAPS = 1000
     # The low bits of a stream ID: who opened it, and which way it goes.
     SERVER_INITIATED = 0x01
     UNIDIRECTIONAL = 0x02
@@ -74,6 +76,8 @@ module Raiha::Next::QUIC
 
     # The connection's receive window.
     attr_reader :window
+    # The holes the data received may have, all the streams together.
+    attr_reader :max_gaps
     # The stream data not sent or not acknowledged.
     attr_reader :buffered
     # How many BLOCKED frames the peer's limits made this end send, not
@@ -93,6 +97,7 @@ module Raiha::Next::QUIC
       # How many streams of each type (the low two bits of an ID) are open.
       @opened = [0, 0, 0, 0]
       @gaps = 0
+      @max_gaps = config.max_receive_window / config.initial_max_datagram_size
       @peer_parameters = nil #: TransportParameters?
       # What the peer allows this end to send on the connection, and how
       # much it has written; the bytes not acknowledged, of all the streams.
@@ -388,8 +393,8 @@ module Raiha::Next::QUIC
         return retire(frame.stream_id)
       end
       gaps = @gaps - receiver.gaps + receiver.gaps_with(frame.offset, length)
-      if gaps > MAX_RECV_GAPS
-        raise Violation.new("data received in more than #{MAX_RECV_GAPS} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
+      if gaps > @max_gaps
+        raise Violation.new("data received in more than #{@max_gaps} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
       end
       @gaps = gaps
       readable = receiver.readable?

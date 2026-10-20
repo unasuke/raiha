@@ -61,11 +61,15 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     assert_violation(QUIC::ErrorCode::FLOW_CONTROL_ERROR) { s.receive_stream(stream(1, 500, "x"), now: 0.0) }
   end
 
-  # A byte at every other offset makes a hole of each; the one past
-  # MAX_RECV_GAPS closes the connection.
-  def test_at_most_a_thousand_holes
-    s = streams(initial_max_data: 10_000, initial_max_stream_data_bidi_remote: 5000, initial_max_streams_bidi: 4)
-    QUIC::Streams::MAX_RECV_GAPS.times { |gap| s.receive_stream(stream(1 + 4 * (gap % 2), 2 * (gap / 2) + 1, "x"), now: 0.0) }
+  # A byte at every other offset makes a hole of each; the one past one
+  # for each datagram the largest connection window holds closes the
+  # connection.
+  def test_a_hole_for_each_datagram_of_the_window
+    assert_equal 15 * 1024 * 1024 / 1200, streams.max_gaps
+    s = streams(initial_max_data: 12_000, max_receive_window: 12_000, initial_max_stream_data_bidi_local: 8000,
+      initial_max_stream_data_bidi_remote: 8000, initial_max_stream_data_uni: 8000, max_stream_receive_window: 8000, initial_max_streams_bidi: 4)
+    assert_equal 10, s.max_gaps
+    10.times { |gap| s.receive_stream(stream(1 + 4 * (gap % 2), 2 * (gap / 2) + 1, "x"), now: 0.0) }
     assert_violation(QUIC::ErrorCode::INTERNAL_ERROR) { s.receive_stream(stream(9, 1, "x"), now: 0.0) }
   end
 

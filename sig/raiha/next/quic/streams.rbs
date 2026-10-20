@@ -1,6 +1,5 @@
 module Raiha::Next::QUIC
   class Streams
-    MAX_RECV_GAPS: Integer
     SERVER_INITIATED: Integer
     UNIDIRECTIONAL: Integer
     CONNECTION_WINDOW_FACTOR: Float
@@ -19,6 +18,7 @@ module Raiha::Next::QUIC
     @senders: Hash[Integer, Sender]
     @opened: Array[Integer]
     @gaps: Integer
+    @max_gaps: Integer
     @peer_parameters: TransportParameters?
     @peer_max_data: Integer
     @written: Integer
@@ -38,6 +38,7 @@ module Raiha::Next::QUIC
     @blocked_received: Integer
 
     attr_reader window: ReceiveWindow
+    attr_reader max_gaps: Integer
     attr_reader buffered: Integer
     attr_reader blocked_sent: Integer
     attr_reader blocked_received: Integer

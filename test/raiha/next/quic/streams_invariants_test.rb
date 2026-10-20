@@ -7,7 +7,7 @@ require "raiha/next/quic"
 # limit told goes down; what is consumed is at most what is received, and
 # that at most the limit, on each stream and on the connection; the
 # connection has received the sum of what each stream has; no window
-# shrinks or grows past its maximum; and the holes are at most 1,000. The
+# shrinks or grows past its maximum; and the holes are within their limit. The
 # frames are ones the peer may send, as the rules broken are tried
 # elsewhere. A run that breaks one is kept as a case of its own, with its
 # seed. RAIHA_FLOW_SEEDS (default 30) and RAIHA_FLOW_STEPS (default 300)
@@ -99,6 +99,6 @@ class RaihaNextQUICStreamsInvariantsTest < Minitest::Test
       sizes[key] = window.size
     end
     assert_equal received.values.sum, streams.window.received, "#{where}: the connection's count is not the streams' sum"
-    assert_operator streams.instance_variable_get(:@gaps), :<=, QUIC::Streams::MAX_RECV_GAPS, where
+    assert_operator streams.instance_variable_get(:@gaps), :<=, streams.max_gaps, where
   end
 end
