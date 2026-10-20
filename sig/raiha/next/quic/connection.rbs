@@ -138,6 +138,7 @@ module Raiha::Next::QUIC
     private def sealed_size: (Pending packet, Integer length) -> Integer
     private def own_ack_delay_exponent: (PacketProtection::level level) -> Integer
     private def peer_ack_delay_exponent: (PacketProtection::level level) -> Integer
+    private def rtt_sample: () -> Float?
     private def tls_time: (Float now) -> Time
   end
 end

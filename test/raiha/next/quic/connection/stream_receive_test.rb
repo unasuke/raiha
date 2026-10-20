@@ -2,7 +2,8 @@ require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
 # A server Connection receiving a stream: the application hears when there
-# is something to read, and reads it as IO#read reads.
+# is something to read, reads it as IO#read reads, and the peer gets
+# credit back as it does.
 class RaihaNextQUICConnectionStreamReceiveTest < Minitest::Test
   include NextQUICPair
 
@@ -35,6 +36,11 @@ class RaihaNextQUICConnectionStreamReceiveTest < Minitest::Test
 
   def events(connection) = [].tap { |all| connection.each_event { all << _1 } }
 
+  # The frames of the server's 1-RTT packets now.
+  def server_frames(server, now: 0.2)
+    server.transmits(now:).flat_map { |transmit| server_one_rtt(@keylog, transmit.payload, phase: 0)&.last || [] }
+  end
+
   def test_reading_a_stream
     server = server_with
     send_frames(server, stream(0, "hello "))
@@ -66,6 +72,25 @@ class RaihaNextQUICConnectionStreamReceiveTest < Minitest::Test
   def test_no_stream_to_read
     server = server_with
     assert_raises(QUIC::Error::StreamError) { server.stream_read(4, 10) }
+  end
+
+  # A quarter of the window read brings MAX_STREAM_DATA of what was read
+  # plus the window; nothing read, no credit.
+  def test_credit_goes_back_as_the_data_is_read
+    server = server_with(initial_max_stream_data_bidi_remote: 4000, initial_max_data: 100_000)
+    send_frames(server, stream(0, "x" * 1100))
+    assert_empty server_frames(server).grep(QUIC::Wire::Frame::MaxStreamData)
+    server.stream_read(0, 999)
+    assert_empty server_frames(server).grep(QUIC::Wire::Frame::MaxStreamData)
+    server.stream_read(0, 1)
+    assert_equal [QUIC::Wire::Frame::MaxStreamData.new(stream_id: 0, maximum: 5000)], server_frames(server).grep(QUIC::Wire::Frame::MaxStreamData)
+  end
+
+  def test_connection_credit
+    server = server_with(initial_max_stream_data_bidi_remote: 4000, initial_max_data: 4000)
+    send_frames(server, stream(0, "x" * 1000), stream(0, "y" * 1000, stream_id: 4))
+    server.stream_read(0, 1000)
+    assert_equal [QUIC::Wire::Frame::MaxData.new(maximum: 5000)], server_frames(server).grep(QUIC::Wire::Frame::MaxData)
   end
 
   # Data past the stream's limit closes the connection.

@@ -323,16 +323,18 @@ module Raiha::Next::QUIC
 
     def ack_frame_acked(duty) = @recovery.ack_frame_acknowledged(duty.space, largest: duty.largest)
 
-    # Streams, flow control, connection IDs and tokens are not sent yet, so
-    # their duties never come back.
+    def max_data_lost(duty) = @streams.max_data_lost(duty)
+
+    def max_stream_data_lost(duty) = @streams.max_stream_data_lost(duty)
+
+    # Stream data, connection IDs and tokens are not sent yet, so their
+    # duties never come back.
 
     def stream_data_acked(duty) = nil
     def reset_stream_acked(duty) = nil
     def stream_data_lost(duty) = nil
     def reset_stream_lost(duty) = nil
     def stop_sending_lost(duty) = nil
-    def max_data_lost(duty) = nil
-    def max_stream_data_lost(duty) = nil
     def max_streams_lost(duty) = nil
     def data_blocked_lost(duty) = nil
     def stream_data_blocked_lost(duty) = nil
@@ -736,6 +738,11 @@ module Raiha::Next::QUIC
         duties << duty
         room -= Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
       end
+      while eliciting && level == :one_rtt && (credit, credit_duty = @streams.next_credit(room, now:, rtt: rtt_sample))
+        frames << credit
+        duties << credit_duty
+        room -= Wire::Frame.encode([credit], ack_delay_exponent: 0).bytesize
+      end
       if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
         frames << Wire::Frame::Ping.new
         room -= 1
@@ -839,6 +846,9 @@ module Raiha::Next::QUIC
       return DEFAULT_ACK_DELAY_EXPONENT unless level == :one_rtt
       @peer_parameters&.ack_delay_exponent || DEFAULT_ACK_DELAY_EXPONENT
     end
+
+    # The path's smoothed RTT, nil before its first sample.
+    private def rtt_sample = @path.rtt.first_sample_at && @path.rtt.smoothed_rtt
 
     # TLS's wall clock at `now`.
     private def tls_time(now) = @time + (now - @created_at)

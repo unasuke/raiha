@@ -24,13 +24,21 @@ module Raiha::Next::QUIC
   #
   # A stream that had nothing to read and has now tells the application
   # with Event::StreamReadable, once, as the application reads it until it
-  # gives "" or nil.
+  # gives "" or nil. Credit goes back as MAX_DATA and MAX_STREAM_DATA as
+  # the data is read; a stream's window that grows takes the connection's
+  # to one and a half times it at least, so that one stream cannot use up
+  # the connection's window.
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
     # The low bits of a stream ID: who opened it, and which way it goes.
     SERVER_INITIATED = 0x01
     UNIDIRECTIONAL = 0x02
+    # How much wider than a stream's window the connection's is kept.
+    CONNECTION_WINDOW_FACTOR = 1.5
+    # The longest a limit takes as a varint: a credit frame is put together
+    # only where it fits with that, as its value is fixed as it goes.
+    MAX_VARINT_SIZE = 8
 
     # The connection's receive window.
     attr_reader :window
@@ -85,6 +93,32 @@ module Raiha::Next::QUIC
     def readable
       @receivers.filter_map { |stream_id, receiver| stream_id if receiver.readable? }
     end
+
+    # The next MAX_DATA or MAX_STREAM_DATA frame due and its duty, in no
+    # more than `room` bytes; nil when none is. `rtt` is the smoothed RTT,
+    # nil before the first sample. A stream whose final size is known needs
+    # no more credit.
+    def next_credit(room, now:, rtt:)
+      if @window.update_due?
+        return nil if room < 1 + MAX_VARINT_SIZE
+        maximum = @window.advance(now:, rtt:)
+        return [Wire::Frame::MaxData.new(maximum:), Recovery::Duty::MaxData.new(maximum:)]
+      end
+      @receivers.each do |stream_id, receiver|
+        window = receiver.window
+        next unless window.update_due? && receiver.final_size.nil?
+        return nil if room < 1 + Wire::Varint.size(stream_id) + MAX_VARINT_SIZE
+        size = window.size
+        maximum = window.advance(now:, rtt:)
+        @window.grow_to((window.size * CONNECTION_WINDOW_FACTOR).ceil, now:) if window.size > size
+        return [Wire::Frame::MaxStreamData.new(stream_id:, maximum:), Recovery::Duty::MaxStreamData.new(stream_id:, maximum:)]
+      end
+      nil
+    end
+
+    def max_data_lost(duty) = @window.lost(duty.maximum)
+
+    def max_stream_data_lost(duty) = @receivers[duty.stream_id]&.window&.lost(duty.maximum)
 
     # Whether `stream_id` was opened by this end.
     def local?(stream_id) = (stream_id & SERVER_INITIATED == SERVER_INITIATED) == (@role == :server)
