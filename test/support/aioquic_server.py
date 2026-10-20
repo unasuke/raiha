@@ -20,8 +20,8 @@ class ServerProtocol(QuicConnectionProtocol):
             self.transmit()
 
 
-async def main(certfile, keyfile, port):
-    config = QuicConfiguration(is_client=False)
+async def main(certfile, keyfile, port, alpn):
+    config = QuicConfiguration(is_client=False, alpn_protocols=alpn)
     config.load_cert_chain(certfile, keyfile)
 
     server = await serve(
@@ -40,5 +40,6 @@ if __name__ == "__main__":
     parser.add_argument("--certfile", required=True)
     parser.add_argument("--keyfile", required=True)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--alpn", action="append")
     args = parser.parse_args()
-    asyncio.run(main(args.certfile, args.keyfile, args.port))
+    asyncio.run(main(args.certfile, args.keyfile, args.port, args.alpn))

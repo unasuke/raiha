@@ -31,14 +31,17 @@ class ClientProtocol(QuicConnectionProtocol):
                 self.stream_data_received.set()
 
 
-async def main(host, port, data_hex):
-    config = QuicConfiguration(is_client=True)
+async def main(host, port, data_hex, alpn):
+    config = QuicConfiguration(is_client=True, alpn_protocols=alpn)
     config.verify_mode = ssl.CERT_NONE
 
     async with connect(
         host, port, configuration=config, create_protocol=ClientProtocol
     ) as protocol:
         await asyncio.wait_for(protocol.handshake_complete.wait(), timeout=5)
+        # With no data, the handshake alone: the connection closes here.
+        if data_hex is None:
+            return
 
         stream_id = protocol._quic.get_next_available_stream_id()
         protocol._quic.send_stream_data(
@@ -56,6 +59,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--data", required=True)
+    parser.add_argument("--data")
+    parser.add_argument("--alpn", action="append")
     args = parser.parse_args()
-    asyncio.run(main(args.host, args.port, args.data))
+    asyncio.run(main(args.host, args.port, args.data, args.alpn))
