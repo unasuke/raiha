@@ -98,6 +98,7 @@ module Raiha::Next::QUIC
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
+    private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
     private def authenticate_connection_ids: (TransportParameters parameters) -> void

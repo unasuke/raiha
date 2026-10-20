@@ -333,18 +333,39 @@ module Raiha::Next::QUIC
     # The packet at `offset` in `datagram`, nil when there is none to take.
     # A header that does not read is dropped with the rest of the datagram
     # and nothing else: before its protection is off, anyone could have sent
-    # it. So is a packet of a version not supported, and a Version
-    # Negotiation packet, which fills the datagram. A Retry, which fills it
-    # too, a client may take.
+    # it. So is a packet of a version not supported. A Retry or a Version
+    # Negotiation packet, which fill the datagram, a client may take.
     private def parse_packet(datagram, offset, now)
       packet = Wire::Packet.parse(datagram, offset:, dcid_length: @source_connection_id.bytesize)
       case packet
       when Wire::Packet::Parsed then packet
       when Wire::Retry then take_retry(packet, datagram.bytesize - offset, now)
-      else dropped(packet.is_a?(Wire::UnsupportedVersion) ? :unsupported : :general, datagram.bytesize - offset, now)
+      when Wire::VersionNegotiation then take_version_negotiation(packet, datagram.bytesize - offset, now)
+      else dropped(:unsupported, datagram.bytesize - offset, now)
       end
     rescue Wire::Malformed
       dropped(:invalid, datagram.bytesize - offset, now)
+    end
+
+    # RFC 9000 "Handling Version Negotiation Packets": a client of version 1
+    # alone abandons the connection, sending nothing, on a Version
+    # Negotiation that does not list its version, before it has taken any
+    # other packet; one that echoes its connection IDs, as the server's has
+    # to (RFC 9000 "Version Negotiation Packet"). Any other is dropped. Nil,
+    # as the packet fills the datagram.
+    private def take_version_negotiation(packet, length, now)
+      unless @role == :client && @peer_source_connection_id.nil? && @retry_source_connection_id.nil? &&
+          packet.dcid == @source_connection_id && packet.scid == @original_destination_connection_id &&
+          !packet.versions.include?(@version.number)
+        return dropped(:general, length, now)
+      end
+      reason = "the server takes none of the versions offered, but #{packet.versions.map { |version| format("0x%08x", version) }.join(", ")}"
+      error = ConnectionError.new(code: ErrorCode::CONNECTION_REFUSED, frame_type: 0, reason:, application: false)
+      @state = :closed
+      @close_error = error
+      @binding&.discard
+      @events << Event::Closed.new(error:, by_peer: true)
+      nil
     end
 
     # RFC 9000 "Retry Packet": a client takes one Retry, to its connection
