@@ -23,7 +23,7 @@ module Raiha::Next::QUIC
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
     def read: (Integer stream_id, Integer max_bytes) -> String?
     def readable: () -> Array[Integer]
-    def next_credit: (Integer room, now: Float, rtt: Float?) -> ([Wire::Frame::MaxData, Recovery::Duty::MaxData] | [Wire::Frame::MaxStreamData, Recovery::Duty::MaxStreamData])?
+    def next_credit: (Integer room, now: Float, rtt: Float?) -> [Wire::Frame::MaxData | Wire::Frame::MaxStreamData, Recovery::Duty::MaxData | Recovery::Duty::MaxStreamData]?
     def max_data_lost: (Recovery::Duty::MaxData duty) -> void
     def max_stream_data_lost: (Recovery::Duty::MaxStreamData duty) -> void
     def local?: (Integer stream_id) -> bool
