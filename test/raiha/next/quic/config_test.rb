@@ -94,6 +94,13 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert_raises(ArgumentError) { Config.new(pacing_granularity: 0.0) }
   end
 
+  def test_fast_convergence_and_beta_ecn
+    config = Config.new
+    assert_equal [true, nil], [config.fast_convergence, config.beta_ecn]
+    assert_equal [false, 0.85], Config.new(fast_convergence: false, beta_ecn: 0.85).then { [_1.fast_convergence, _1.beta_ecn] }
+    [0.0, 1.0, 1.5].each { |beta_ecn| assert_raises(ArgumentError) { Config.new(beta_ecn:) } }
+  end
+
   def test_transport_parameters
     config = Config.new(max_idle_timeout: 10.0, max_datagram_frame_size: 65_535)
     client = config.transport_parameters(initial_source_connection_id: "c".b * 8)

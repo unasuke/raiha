@@ -30,6 +30,8 @@ module Raiha::Next::QUIC
     attr_reader initial_window: Congestion::_InitialWindow
     attr_reader startup: Congestion::_Startup?
     attr_reader pacing_granularity: Float
+    attr_reader fast_convergence: bool
+    attr_reader beta_ecn: Float?
     attr_reader retry_token_key: String?
     attr_reader stateless_reset_key: String?
 
@@ -43,7 +45,7 @@ module Raiha::Next::QUIC
                    ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                    ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                    ?startup: Congestion::_Startup?, ?pacing_granularity: Float,
-                   ?retry_token_key: String?, ?stateless_reset_key: String?) -> instance
+                   ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?) -> instance
     def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                      ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
                      ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
@@ -54,7 +56,7 @@ module Raiha::Next::QUIC
                      ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                      ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                      ?startup: Congestion::_Startup?, ?pacing_granularity: Float,
-                     ?retry_token_key: String?, ?stateless_reset_key: String?) -> void
+                     ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?) -> void
     def masked_members: () -> Array[Symbol]
 
     def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
