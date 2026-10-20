@@ -50,19 +50,21 @@ module NextQUICGolden
   end
 
   # A client and a server on a network of `seed`, linked by `recorder`,
-  # which keeps every datagram either sends, and then `model`.
-  def network(seed:, recorder:, model: [])
+  # which keeps every datagram either sends, and then `model`, each with
+  # its tracer of `tracers`.
+  def network(seed:, recorder:, model: [], tracers: {})
     net = QUIC::Test::Network.new(seed:)
     client_tls = tls_config(:client)
     client_keyring = TLS::Keyring.client(config: client_tls, random: Random.new(seed + 1),
       key_exchange: TLS::Test::FixedKEM.new({ x25519: "\x03".b * 32 }))
     client = net.add(QUIC::Connection.client(config: QUIC::Config.new, tls_config: client_tls, keyring: client_keyring,
-      server_name: "localhost", remote: SERVER, time: TIME, now: 0.0), address: CLIENT)
+      server_name: "localhost", remote: SERVER, time: TIME, now: 0.0, tracer: tracers[:client]), address: CLIENT)
     server_tls = tls_config(:server)
     identity = TLS::Keyring::Identity.new(cert_der: [LEAF.der, CA.der], key_der: LEAF.key_der)
     server_keyring = TLS::Keyring.server(config: server_tls, identities: [identity], random: Random.new(seed + 2),
       key_exchange: TLS::Test::FixedKEM.new({ x25519: "\x04".b * 32 }))
-    server = net.add_server(config: QUIC::Config.new, tls_config: server_tls, keyring: server_keyring, time: TIME, address: SERVER)
+    server = net.add_server(config: QUIC::Config.new, tls_config: server_tls, keyring: server_keyring, time: TIME, address: SERVER,
+      tracer: tracers[:server])
     net.link(client, server, model: [recorder, *model])
     [net, client, server]
   end

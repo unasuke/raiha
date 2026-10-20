@@ -1,0 +1,44 @@
+module Raiha::Next::QUIC
+  module Qlog
+    type json = String | Integer | Float | bool | nil | Array[json] | Hash[Symbol, json]
+
+    interface _Writer
+      def write: (*String) -> untyped
+    end
+
+    class Tracer
+      include Raiha::Next::QUIC::Tracer
+
+      RECORD_SEPARATOR: String
+      PACKET_TYPES: Hash[Wire::LongHeader::packet_type | :one_rtt, String]
+      SPACE_PACKET_TYPES: Hash[space, String]
+      TIMES: Array[Symbol]
+
+      @io: _Writer
+      @now: Float
+
+      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?) -> void
+      def trace_frames?: () -> bool
+      def packet_sent: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_received: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> void
+      def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> void
+      def metrics_updated: (now: Float, **metric metrics) -> void
+      def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> void
+      def ecn_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+      def recovery_parameters_set: (now: Float, **metric parameters) -> void
+      def spurious_loss: (packet_number: Integer, space: space, now: Float) -> void
+      def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+      def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
+      def key_updated: (level: PacketProtection::level, now: Float) -> void
+      def tls_trace: (::Raiha::Next::TLS::Trace::t value) -> void
+
+      private def packet: (String name, Raiha::Next::QUIC::Tracer::PacketHeader header, Array[Wire::Frame::t]? frames, Integer raw_length, Float now) -> void
+      private def frame: (Wire::Frame::t frame) -> Hash[Symbol, json]
+      private def values: (Hash[Symbol, untyped] fields) -> Hash[Symbol, json]
+      private def event: (Float now, String name, Hash[Symbol, json] data) -> void
+      private def write: (Hash[Symbol, json] record) -> void
+      private def hex: (String bytes) -> String
+    end
+  end
+end
