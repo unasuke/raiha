@@ -9,4 +9,5 @@ module Raiha::Next::QUIC
 end
 
 require_relative "congestion/new_reno"
+require_relative "congestion/cubic"
 require_relative "congestion/algorithms"

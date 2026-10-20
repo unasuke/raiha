@@ -71,5 +71,57 @@ module Raiha::Next::QUIC
       private def congestion_event: (Float sent_at, Float now, ?beta: Float?) -> void
       private def update_state: (Float now) -> void
     end
+
+    class Cubic
+      BETA: Float
+      C: Float
+      ALPHA: Float
+      MAX_TARGET_FACTOR: Float
+
+      @max_datagram_size: Integer
+      @initial_window: _InitialWindow
+      @fast_convergence: bool
+      @beta_ecn: Float?
+      @cwnd: Float
+      @ssthresh: Float?
+      @recovery_start: Float?
+      @in_recovery: bool
+      @app_limited: bool
+      @initial: bool
+      @epoch_start: Float?
+      @w_max: Float
+      @k: Float
+      @w_est: Float
+      @alpha: Float
+      @cwnd_prior: Float?
+      @app_limited_since: Float?
+      @after_timeout: bool
+      @state: Symbol
+      @tracer: _Tracer?
+
+      def self.requires_rate_sample?: () -> bool
+
+      attr_reader state: Symbol
+
+      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> void
+      def window: () -> Integer
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> nil
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> nil
+      def metrics: () -> Hash[Symbol, Integer]
+
+      private def slow_start?: () -> bool
+      private def pause_epoch: (bool app_limited, Float now) -> void
+      private def avoid_congestion: (Integer acked_bytes, Float smoothed_rtt, Float now) -> void
+      private def start_epoch: (Float now) -> void
+      private def w_cubic: (Float t) -> Float
+      private def congestion_event: (Float sent_at, Float now, Float beta) -> void
+      private def update_state: (Float now) -> void
+    end
   end
 end

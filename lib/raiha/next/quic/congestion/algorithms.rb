@@ -3,7 +3,7 @@
 module Raiha::Next::QUIC
   module Congestion
     # The algorithms that come with the layer, by name.
-    ALGORITHMS = { new_reno: NewReno }.freeze
+    ALGORITHMS = { cubic: Cubic, new_reno: NewReno }.freeze
 
     # The algorithm `name` stands for: a Symbol of ALGORITHMS, or a class,
     # one of these or of the application's own, passed through as it is.
