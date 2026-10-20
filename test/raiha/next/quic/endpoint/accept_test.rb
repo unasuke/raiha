@@ -160,6 +160,37 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
   end
 
+  # The application turns the ClientHello down with a TLS alert: a
+  # CONNECTION_CLOSE of CRYPTO_ERROR, which closes the client.
+  def test_reject
+    client = client_connection
+    endpoint = endpoint()
+    first = client.transmits(now: 0.0).first.payload
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    endpoint.reject(handle, :unrecognized_name)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+    endpoint.each_transmit(now: 0.0) { client.receive(_1.payload, from: SERVER, now: 0.0) }
+    assert client.draining?
+    assert_equal QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:unrecognized_name)), client.close_reason.code
+  end
+
+  def test_reject_takes_the_alerts_of_the_acceptor
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(ArgumentError) { endpoint.reject(handle, :bad_record_mac) }
+  end
+
+  def test_no_reject_before_the_client_hello_is_whole
+    first, = split_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    assert_raises(QUIC::Error::StateError) { endpoint.reject(handle, :unrecognized_name) }
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::StateError) { endpoint.reject(handle, :unrecognized_name) }
+  end
+
   def test_an_offer_is_admitted_once
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle

@@ -133,6 +133,16 @@ module Raiha::Next::QUIC
 
       def failed? = !error.nil?
 
+      # Turns the whole ClientHello down with the TLS alert `description`,
+      # one of the Acceptor's REJECT_ALERTS (another raises ArgumentError),
+      # and gives the error to close with.
+      def reject(description)
+        acceptor = @acceptor
+        raise Error::StateError, "the ClientHello of the offer is not whole yet" unless acceptor&.accepted
+        acceptor.reject(description)
+        error or raise Error::StateError, "the Acceptor took no alert"
+      end
+
       # The address the first datagram came to, which an answer goes from.
       def local = @datagrams.dig(0, 2)
 
@@ -257,6 +267,15 @@ module Raiha::Next::QUIC
       @connections[handle.destination_connection_id] = connection
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
       connection
+    end
+
+    # Turns down the offer of `handle`, whose ClientHello is whole, with the
+    # TLS alert `description` as CRYPTO_ERROR, as the application chose by
+    # the ClientHello. It is one of those the Acceptor rejects with;
+    # another raises ArgumentError.
+    def reject(handle, description)
+      pending!(handle)
+      close(handle, handle.reject(description))
     end
 
     def each_connection(&) = connections.each(&)
