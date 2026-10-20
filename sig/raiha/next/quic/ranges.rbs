@@ -1,0 +1,7 @@
+module Raiha::Next::QUIC
+  module Ranges
+    def self?.empty?: (Range[Integer] range) -> bool
+    def self?.add: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
+    def self?.subtract: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
+  end
+end

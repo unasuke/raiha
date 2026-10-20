@@ -30,8 +30,5 @@ module Raiha::Next::QUIC
     private def send_end: () -> Integer
     private def exceeded: (String message) -> bot
     private def fill: (Range[Integer] range) -> void
-    private def empty?: (Range[Integer] range) -> bool
-    private def add: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
-    private def subtract: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]
   end
 end

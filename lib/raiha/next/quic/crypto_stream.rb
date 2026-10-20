@@ -54,7 +54,7 @@ module Raiha::Next::QUIC
     # or nothing fits.
     def next_frame(room)
       range = @lost.first || (@next_offset...send_end)
-      return nil if empty?(range)
+      return nil if Ranges.empty?(range)
       offset = range.begin
       length = [range.end - offset, room - 1 - Wire::Varint.size(offset) - Wire::Varint.size(room)].min
       return nil unless length.positive?
@@ -62,7 +62,7 @@ module Raiha::Next::QUIC
         @next_offset += length
       else
         rest = (offset + length)...range.end
-        empty?(rest) ? @lost.shift : @lost[0] = rest
+        Ranges.empty?(rest) ? @lost.shift : @lost[0] = rest
       end
       data = @sent.byteslice(offset - @sent_base, length) #: String
       [Wire::Frame::Crypto.new(offset:, data:), Recovery::Duty::Crypto.new(space: @space, offset:, length:)]
@@ -71,8 +71,8 @@ module Raiha::Next::QUIC
     # A range sent was acknowledged: it is not sent again, and the bytes up
     # to the first gap are let go.
     def acked(offset, length)
-      @acked = add(@acked, offset...(offset + length))
-      @lost = subtract(@lost, offset...(offset + length))
+      @acked = Ranges.add(@acked, offset...(offset + length))
+      @lost = Ranges.subtract(@lost, offset...(offset + length))
       first = @acked.first or return
       return unless first.begin <= @sent_base && first.end > @sent_base
       @sent = @sent.byteslice((first.end - @sent_base)..) #: String
@@ -82,8 +82,8 @@ module Raiha::Next::QUIC
     # A range sent was lost: what of it is not acknowledged goes again.
     def lost(offset, length)
       range = [offset, @sent_base].max...(offset + length)
-      return if empty?(range)
-      @lost = @acked.reduce([range]) { |left, acked| subtract(left, acked) }.reduce(@lost) { |lost, part| add(lost, part) }
+      return if Ranges.empty?(range)
+      @lost = @acked.reduce([range]) { |left, acked| Ranges.subtract(left, acked) }.reduce(@lost) { |lost, part| Ranges.add(lost, part) }
     end
 
     # Bytes received at `offset`, kept until read; a Violation of
@@ -153,29 +153,6 @@ module Raiha::Next::QUIC
         last += 1
       end
       @filled[first...last] = [start...finish]
-    end
-
-    private def empty?(range) = range.begin >= range.end
-
-    # `ranges` with `range` added, merged, in order.
-    private def add(ranges, range)
-      merged = ranges + [range]
-      merged.sort_by!(&:begin)
-      merged.each_with_object([]) do |part, result|
-        last = result.last
-        if last && part.begin <= last.end
-          result[-1] = last.begin...[last.end, part.end].max
-        else
-          result << part
-        end
-      end
-    end
-
-    # `ranges` without `range`.
-    private def subtract(ranges, range)
-      ranges.flat_map do |part|
-        [part.begin...[part.end, range.begin].min, [part.begin, range.end].max...part.end].reject { |piece| empty?(piece) }
-      end
     end
   end
 end
