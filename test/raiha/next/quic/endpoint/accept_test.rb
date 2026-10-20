@@ -133,6 +133,20 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_equal token, remote.stateless_reset_token
   end
 
+  # A ClientHello that cannot be read is closed even when no connection ID
+  # is free, which the CONNECTION_CLOSE needs none of.
+  def test_a_close_with_no_free_connection_id
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(connection_id_length: 0), random: Random.new(3), time: NOW, now: 0.0)
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    accept(endpoint, handle)
+    datagram = initial(dcid: "d".b * 8, packet_number: 0, frames: [QUIC::Wire::Frame::Crypto.new(offset: 0, data: "\x01\x00\x00\x05hello".b)])
+    other = ["192.0.2.7", 7]
+    handle = endpoint.receive(datagram, from: other, now: 0.0).handle
+    assert_nil endpoint.admit(handle, now: 0.0)
+    assert_equal 1, [].tap { |sent| endpoint.each_transmit(now: 0.0) { sent << _1 if _1.destination == other } }.size
+  end
+
   # Zero-length connection IDs leave room for one connection only.
   def test_no_free_connection_id
     endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(connection_id_length: 0), random: Random.new(3), time: NOW, now: 0.0)

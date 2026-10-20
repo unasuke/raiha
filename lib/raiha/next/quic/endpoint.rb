@@ -375,11 +375,13 @@ module Raiha::Next::QUIC
     # Initial packet, the server's only, sealed with the server's Initial
     # keys of the client's connection ID (RFC 9000 "Immediate Close during
     # the Handshake"). It is far smaller than the Initial that came, as the
-    # anti-amplification limit asks.
+    # anti-amplification limit asks. Its Source Connection ID leads nowhere,
+    # as no connection follows, so it is drawn with nothing to avoid.
     private def close(handle, error)
       reason = error.reason.b.byteslice(0, Connection::MAX_REASON_LENGTH) #: String
       frame = Wire::Frame::ConnectionClose.new(code: error.code, frame_type: error.frame_type, reason:, application: false)
-      header = Wire::LongHeader.new(type: :initial, version: handle.version, dcid: handle.source_connection_id, scid: new_connection_id)
+      scid = @random.bytes(@config.connection_id_length).b
+      header = Wire::LongHeader.new(type: :initial, version: handle.version, dcid: handle.source_connection_id, scid:)
       keys = Crypto::Initial.derive(dcid: handle.destination_connection_id, version: handle.version).server
       payload = Wire::Frame.encode([frame], ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
       packet = Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
