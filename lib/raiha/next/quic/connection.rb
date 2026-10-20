@@ -129,6 +129,8 @@ module Raiha::Next::QUIC
       @retry_source_connection_id = retry_source_connection_id
       # The token a client's Initials carry, from a Retry.
       @token = Wire::EMPTY
+      # The stateless reset tokens the peer gave.
+      @reset_tokens = [] #: Array[String]
       if role == :client
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
         @original_destination_connection_id = @destination_connection_id
@@ -193,18 +195,30 @@ module Raiha::Next::QUIC
       else return
       end
       count_received(datagram, now) unless @address_validated
+      processed = false
       offset = 0
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset, now) or break
-        receive_packet(packet, from:, ecn:, now:)
+        processed = true if receive_packet(packet, from:, ecn:, now:)
         offset = packet.end_offset
         break unless @state == :open
       end
+      take_stateless_reset(datagram, now:) unless processed
     rescue Violation => error
       # What a packet that opened breaks closes the connection; only an
       # authenticated peer gets here, or one past the integrity limit (250
       # "Errors").
       close_for(error, now)
+    end
+
+    # RFC 9000 "Detecting a Stateless Reset": whether `datagram`, none of
+    # whose packets this connection could take, ends in a stateless reset
+    # token the peer gave, which the connection then drains on, sending
+    # nothing more. Each token is compared in constant time.
+    def take_stateless_reset(datagram, now:)
+      return false unless @state == :open && StatelessReset.match?(datagram, @reset_tokens)
+      enter_draining(ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "stateless reset", application: false), now)
+      true
     end
 
     # Each datagram there is to send now.
@@ -264,6 +278,8 @@ module Raiha::Next::QUIC
     def peer_transport_parameters(data)
       parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
       authenticate_connection_ids(parameters)
+      token = parameters.stateless_reset_token
+      @reset_tokens << token if token
       @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
       @peer_parameters = parameters
       @recovery.peer_max_ack_delay = parameters.max_ack_delay
@@ -427,9 +443,11 @@ module Raiha::Next::QUIC
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
       frames.each { |frame| receive_frame(level, frame, now) }
-      return unless @role == :server && level == :handshake
-      validate_address(now)
-      discard_level(:initial, now)
+      if @role == :server && level == :handshake
+        validate_address(now)
+        discard_level(:initial, now)
+      end
+      true
     end
 
     # RFC 9000 "Authenticating Connection IDs": the connection IDs the peer
@@ -487,7 +505,8 @@ module Raiha::Next::QUIC
       when Wire::Frame::Ack
         Recovery::Duty.dispatch(@recovery.on_ack_received(packet_type: level, ack: frame, now:), to: self)
         @protection.acknowledged(frame.largest) if level == :one_rtt
-      when Wire::Frame::ConnectionClose then enter_draining(frame, now)
+      when Wire::Frame::ConnectionClose
+        enter_draining(ConnectionError.new(code: frame.code, frame_type: frame.frame_type, reason: frame.reason, application: frame.application), now)
       when Wire::Frame::HandshakeDone
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
@@ -523,8 +542,7 @@ module Raiha::Next::QUIC
 
     # The peer closed: nothing more is sent, and what comes is dropped for
     # three PTOs (RFC 9000 "Draining Connection State").
-    private def enter_draining(frame, now)
-      error = ConnectionError.new(code: frame.code, frame_type: frame.frame_type, reason: frame.reason, application: frame.application)
+    private def enter_draining(error, now)
       @state = :draining
       @close_error = error
       @close_deadline = now + CLOSE_PTOS * @path.rtt.pto_period

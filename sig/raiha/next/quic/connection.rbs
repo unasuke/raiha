@@ -47,6 +47,7 @@ module Raiha::Next::QUIC
     @original_destination_connection_id: String?
     @retry_source_connection_id: String?
     @token: String
+    @reset_tokens: Array[String]
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -92,6 +93,7 @@ module Raiha::Next::QUIC
     def transmits: (now: Float) -> Array[Transmit]
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
+    def take_stateless_reset: (String datagram, now: Float) -> bool
 
     private def keys_updated: (Integer phase) -> void
     private def remote: () -> address
@@ -100,7 +102,7 @@ module Raiha::Next::QUIC
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
     private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
-    private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> void
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> bool?
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from) -> void
@@ -109,7 +111,7 @@ module Raiha::Next::QUIC
     private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void
     private def close_for: (Violation violation, Float now) -> void
-    private def enter_draining: (Wire::Frame::ConnectionClose frame, Float now) -> void
+    private def enter_draining: (ConnectionError error, Float now) -> void
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
