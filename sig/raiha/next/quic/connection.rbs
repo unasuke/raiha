@@ -37,6 +37,7 @@ module Raiha::Next::QUIC
     @protection: PacketProtection
     @events: Array[Event::t]
     @streams: Streams
+    @datagrams: Datagrams
     @source_connection_id: String
     @stateless_reset_token: String?
     @destination_connection_id: String
@@ -91,6 +92,8 @@ module Raiha::Next::QUIC
     def open_stream: (?direction: :bidi | :uni) -> Integer?
     def stream_write: (Integer stream_id, String data, ?fin: bool) -> Integer
     def stream_writable_bytes: (Integer stream_id) -> Integer
+    def datagram_send: (String data, ?expires_at: Float?, ?urgency: Integer) -> bool
+    def datagram_max_size: () -> Integer?
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stop_sending: (Integer stream_id, error_code: Integer) -> void
     def writable_streams: () -> Enumerator[Integer, Array[Integer]]

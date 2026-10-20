@@ -91,6 +91,7 @@ module Raiha::Next::QUIC
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:)
+      @datagrams = Datagrams.new(config:, events: @events)
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
       @stateless_reset_token = stateless_reset_token
@@ -187,6 +188,30 @@ module Raiha::Next::QUIC
       @streams.write(stream_id, data, fin:)
     end
 
+    # Queues `data` to go in a DATAGRAM frame, never sent again, by
+    # `expires_at` on the monotonic clock if given, before those of a higher
+    # `urgency` (0 to 7, as RFC 9218 counts it): whether it was queued. Not
+    # when the peer does not take DATAGRAM frames, `data` is over
+    # `datagram_max_size`, or too many wait.
+    def datagram_send(data, expires_at: nil, urgency: 3)
+      open!
+      raise ArgumentError, "urgency is 0 to 7, not #{urgency.inspect}" unless urgency.is_a?(Integer) && urgency.between?(0, 7)
+      @datagrams.send(data, expires_at:, urgency:, max_size: datagram_max_size)
+    end
+
+    # The most data a DATAGRAM frame can carry now: the peer's
+    # max_datagram_frame_size, its max_udp_payload_size and the path's
+    # datagram size each less what goes around it. nil while the peer has
+    # not taken DATAGRAM frames, which may be for good.
+    def datagram_max_size
+      peer = @peer_parameters or return nil
+      frame = peer.max_datagram_frame_size
+      return nil if frame.zero?
+      packet = [@path.max_datagram_size, peer.max_udp_payload_size].min - SHORT_HEADER_OVERHEAD - @destination_connection_id.bytesize
+      size = [frame, packet].min
+      size - 1 - Wire::Varint.size(size)
+    end
+
     # How many bytes a write to `stream_id` would take now.
     def stream_writable_bytes(stream_id) = @streams.writable_bytes(stream_id)
 
@@ -218,10 +243,14 @@ module Raiha::Next::QUIC
       enter_closing(ConnectionError.new(code: error_code, frame_type: application ? nil : 0, reason:, application:), now)
     end
 
-    def next_event = @events.shift
+    def next_event
+      event = @events.shift
+      @datagrams.taken(event) if event
+      event
+    end
 
     def each_event
-      while (event = @events.shift)
+      while (event = next_event)
         yield event
       end
     end
@@ -583,6 +612,7 @@ module Raiha::Next::QUIC
       when Wire::Frame::ResetStream then @streams.receive_reset_stream(frame, now:)
       when Wire::Frame::StopSending then @streams.receive_stop_sending(frame, now:)
       when Wire::Frame::StreamsBlocked then @streams.receive_streams_blocked(frame)
+      when Wire::Frame::Datagram then @datagrams.receive(frame)
       end
     end
 
@@ -779,8 +809,8 @@ module Raiha::Next::QUIC
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
-    # RESET_STREAM and STOP_SENDING, BLOCKED frames, stream data, and a PING
-    # for a probe with nothing else.
+    # RESET_STREAM and STOP_SENDING, BLOCKED frames, DATAGRAM frames, stream
+    # data, and a PING for a probe with nothing else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -813,6 +843,10 @@ module Raiha::Next::QUIC
         frames << blocked
         duties << blocked_duty
         room -= Wire::Frame.encode([blocked], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && (datagram = @datagrams.next_frame(room, now:))
+        frames << datagram
+        room -= Wire::Frame.encode([datagram], ack_delay_exponent: 0).bytesize
       end
       while eliciting && level == :one_rtt && room.positive? && (data, data_duty = @streams.next_stream_frame(room))
         frames << data
