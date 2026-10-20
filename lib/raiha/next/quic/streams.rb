@@ -28,6 +28,14 @@ module Raiha::Next::QUIC
   # the data is read; a stream's window that grows takes the connection's
   # to one and a half times it at least, so that one stream cannot use up
   # the connection's window.
+  #
+  # Sending, a write takes what the stream's credit, the connection's and
+  # this end's send buffer, max_send_buffer bytes of data not sent or not
+  # acknowledged, all leave room for, and no more; a stream written less
+  # than asked tells the application with Event::StreamWritable, once,
+  # when it can take some again (flow control's design, "Sending"). Frames
+  # are taken from the streams with something to send in turn, one a
+  # time.
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
@@ -55,12 +63,98 @@ module Raiha::Next::QUIC
       @opened = [0, 0, 0, 0]
       @gaps = 0
       @peer_parameters = nil #: TransportParameters?
+      # What the peer allows this end to send on the connection, and how
+      # much it has written; the bytes not acknowledged, of all the streams.
+      @peer_max_data = 0
+      @written = 0
+      @buffered = 0
+      # How many streams of each direction the peer allows this end to open.
+      @peer_max_streams = { bidi: 0, uni: 0 }
+      # The streams with something to send, in the order they take turns,
+      # and those written less than asked.
+      @send_queue = [] #: Array[Integer]
+      @wanting = [] #: Array[Integer]
     end
 
     # The peer's transport parameters, which set the limits of what this
     # end sends.
     def peer_parameters=(parameters)
       @peer_parameters = parameters
+      @peer_max_data = parameters.initial_max_data
+      @peer_max_streams = { bidi: parameters.initial_max_streams_bidi, uni: parameters.initial_max_streams_uni }
+    end
+
+    # Opens a stream of this end going `direction`, :bidi or :uni: its ID,
+    # or nil when the peer allows no more.
+    def open(direction, now:)
+      type = (@role == :server ? SERVER_INITIATED : 0) | (direction == :uni ? UNIDIRECTIONAL : 0)
+      index = @opened.fetch(type)
+      return nil if index >= @peer_max_streams.fetch(direction)
+      stream_id = index << 2 | type
+      @opened[type] = index + 1
+      peer = @peer_parameters or raise Error::StateError, "the peer's transport parameters have not come"
+      if direction == :uni
+        @senders[stream_id] = Sender.new(stream_id:, limit: peer.initial_max_stream_data_uni)
+      else
+        @senders[stream_id] = Sender.new(stream_id:, limit: peer.initial_max_stream_data_bidi_remote)
+        window = ReceiveWindow.new(size: @config.initial_max_stream_data_bidi_local, max: @config.max_stream_receive_window, now:)
+        @receivers[stream_id] = Receiver.new(window:)
+      end
+      stream_id
+    end
+
+    # Writes as much of `data` to `stream_id` as there is room for, and
+    # the end of the stream with `fin` when all of it fits: how many bytes
+    # were taken.
+    def write(stream_id, data, fin:)
+      sender = sender_for(stream_id)
+      accepted = [data.bytesize, room_for(sender)].min
+      whole = accepted == data.bytesize
+      taken = data.byteslice(0, accepted) #: String
+      sender.write(taken, fin: fin && whole)
+      @written += accepted
+      @buffered += accepted
+      @send_queue << stream_id unless @send_queue.include?(stream_id)
+      @wanting << stream_id unless whole || @wanting.include?(stream_id)
+      accepted
+    end
+
+    # How many bytes a write to `stream_id` would take now.
+    def writable_bytes(stream_id) = room_for(sender_for(stream_id))
+
+    # The streams a write would take something on.
+    def writable = @senders.filter_map { |stream_id, sender| stream_id if !sender.fin? && room_for(sender).positive? }
+
+    # The next STREAM frame and its duty in no more than `room` bytes, from
+    # the next stream in turn with something to send; nil when none has,
+    # or the frame does not fit.
+    def next_stream_frame(room)
+      while (stream_id = @send_queue.first)
+        sender = @senders[stream_id]
+        unless sender&.pending?
+          @send_queue.shift
+          next
+        end
+        pair = sender.next_frame(room) or return nil
+        @send_queue.rotate!
+        return pair
+      end
+      nil
+    end
+
+    # Data sent was acknowledged: the bytes let go leave room in the send
+    # buffer.
+    def stream_data_acked(duty)
+      sender = @senders[duty.stream_id] or return
+      @buffered -= sender.acked(duty.offset, duty.length, duty.fin)
+      writable_again
+    end
+
+    # Data sent was lost: it goes again.
+    def stream_data_lost(duty)
+      sender = @senders[duty.stream_id] or return
+      sender.lost(duty.offset, duty.length, duty.fin)
+      @send_queue << duty.stream_id unless @send_queue.include?(duty.stream_id)
     end
 
     # Takes a STREAM frame: its data is kept, once every check passes.
@@ -119,6 +213,29 @@ module Raiha::Next::QUIC
     def max_data_lost(duty) = @window.lost(duty.maximum)
 
     def max_stream_data_lost(duty) = @receivers[duty.stream_id]&.window&.lost(duty.maximum)
+
+    # The sending part of `stream_id` for the application to write to.
+    private def sender_for(stream_id)
+      sender = @senders[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
+      raise Error::StreamError, "stream #{stream_id} has ended" if sender.fin?
+      sender
+    end
+
+    # What the stream's credit, the connection's and the send buffer all
+    # leave room for.
+    private def room_for(sender) = [sender.credit, @peer_max_data - @written, @config.max_send_buffer - @buffered].min
+
+    # The streams written less than asked that can take some now hear so;
+    # one that has ended since is let go.
+    private def writable_again
+      @wanting.reject! do |stream_id|
+        sender = @senders[stream_id]
+        next true if sender.nil? || sender.fin?
+        next false unless room_for(sender).positive?
+        @events << Event::StreamWritable.new(stream_id:)
+        true
+      end
+    end
 
     # Whether `stream_id` was opened by this end.
     def local?(stream_id) = (stream_id & SERVER_INITIATED == SERVER_INITIATED) == (@role == :server)

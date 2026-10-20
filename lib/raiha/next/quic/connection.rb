@@ -169,6 +169,30 @@ module Raiha::Next::QUIC
     # The streams a read would give something on.
     def readable_streams = @streams.readable.each
 
+    # Opens a stream going `direction`, :bidi or :uni: its ID, or nil when
+    # the peer allows no more yet.
+    def open_stream(direction: :bidi)
+      raise ArgumentError, "a stream goes :bidi or :uni, not #{direction.inspect}" unless %i[bidi uni].include?(direction)
+      open!
+      @streams.open(direction, now: @now)
+    end
+
+    # Writes `data` to `stream_id`, as much of it as the stream's credit,
+    # the connection's and the send buffer leave room for, and ends the
+    # stream with `fin` when all of it is taken: how many bytes were taken.
+    # Less than all of it, and Event::StreamWritable tells when the stream
+    # can take more.
+    def stream_write(stream_id, data, fin: false)
+      open!
+      @streams.write(stream_id, data, fin:)
+    end
+
+    # How many bytes a write to `stream_id` would take now.
+    def stream_writable_bytes(stream_id) = @streams.writable_bytes(stream_id)
+
+    # The streams a write would take something on.
+    def writable_streams = @streams.writable.each
+
     # Closes the connection with `error_code`, an application's unless
     # `application` is false: a CONNECTION_CLOSE frame goes out, and the
     # connection stays closing, answering what comes with it again, for
@@ -323,16 +347,18 @@ module Raiha::Next::QUIC
 
     def ack_frame_acked(duty) = @recovery.ack_frame_acknowledged(duty.space, largest: duty.largest)
 
+    def stream_data_acked(duty) = @streams.stream_data_acked(duty)
+
+    def stream_data_lost(duty) = @streams.stream_data_lost(duty)
+
     def max_data_lost(duty) = @streams.max_data_lost(duty)
 
     def max_stream_data_lost(duty) = @streams.max_stream_data_lost(duty)
 
-    # Stream data, connection IDs and tokens are not sent yet, so their
-    # duties never come back.
+    # Resets, connection IDs and tokens are not sent yet, so their duties
+    # never come back.
 
-    def stream_data_acked(duty) = nil
     def reset_stream_acked(duty) = nil
-    def stream_data_lost(duty) = nil
     def reset_stream_lost(duty) = nil
     def stop_sending_lost(duty) = nil
     def max_streams_lost(duty) = nil
@@ -349,6 +375,11 @@ module Raiha::Next::QUIC
     end
 
     private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
+
+    # A connection closing or closed takes no more from the application.
+    private def open!
+      raise Error::StateError, "the connection is #{@state}" unless @state == :open
+    end
 
     private def binding = @binding || raise(Error::StateError, "no Initial packet has come from the client yet")
 
@@ -718,8 +749,8 @@ module Raiha::Next::QUIC
 
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
-    # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, and a
-    # PING for a probe with nothing else.
+    # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
+    # stream data, and a PING for a probe with nothing else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -742,6 +773,11 @@ module Raiha::Next::QUIC
         frames << credit
         duties << credit_duty
         room -= Wire::Frame.encode([credit], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && room.positive? && (data, data_duty = @streams.next_stream_frame(room))
+        frames << data
+        duties << data_duty
+        room -= Wire::Frame.encode([data], ack_delay_exponent: 0).bytesize
       end
       if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
         frames << Wire::Frame::Ping.new

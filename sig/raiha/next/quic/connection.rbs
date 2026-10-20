@@ -88,6 +88,10 @@ module Raiha::Next::QUIC
     def close_reason: () -> ConnectionError?
     def stream_read: (Integer stream_id, Integer max_bytes) -> String?
     def readable_streams: () -> Enumerator[Integer, Array[Integer]]
+    def open_stream: (?direction: :bidi | :uni) -> Integer?
+    def stream_write: (Integer stream_id, String data, ?fin: bool) -> Integer
+    def stream_writable_bytes: (Integer stream_id) -> Integer
+    def writable_streams: () -> Enumerator[Integer, Array[Integer]]
     def close: (?error_code: Integer, ?reason: String, ?application: bool, now: Float) -> void
     def next_event: () -> Event::t?
     def each_event: () { (Event::t) -> void } -> void
@@ -139,6 +143,7 @@ module Raiha::Next::QUIC
     private def own_ack_delay_exponent: (PacketProtection::level level) -> Integer
     private def peer_ack_delay_exponent: (PacketProtection::level level) -> Integer
     private def rtt_sample: () -> Float?
+    private def open!: () -> void
     private def tls_time: (Float now) -> Time
   end
 end

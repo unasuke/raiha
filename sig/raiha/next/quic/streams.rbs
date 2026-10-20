@@ -15,6 +15,12 @@ module Raiha::Next::QUIC
     @opened: Array[Integer]
     @gaps: Integer
     @peer_parameters: TransportParameters?
+    @peer_max_data: Integer
+    @written: Integer
+    @buffered: Integer
+    @peer_max_streams: Hash[:bidi | :uni, Integer]
+    @send_queue: Array[Integer]
+    @wanting: Array[Integer]
 
     attr_reader window: ReceiveWindow
 
@@ -26,10 +32,20 @@ module Raiha::Next::QUIC
     def next_credit: (Integer room, now: Float, rtt: Float?) -> [Wire::Frame::MaxData | Wire::Frame::MaxStreamData, Recovery::Duty::MaxData | Recovery::Duty::MaxStreamData]?
     def max_data_lost: (Recovery::Duty::MaxData duty) -> void
     def max_stream_data_lost: (Recovery::Duty::MaxStreamData duty) -> void
+    def open: (:bidi | :uni direction, now: Float) -> Integer?
+    def write: (Integer stream_id, String data, fin: bool) -> Integer
+    def writable_bytes: (Integer stream_id) -> Integer
+    def writable: () -> Array[Integer]
+    def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+    def stream_data_acked: (Recovery::Duty::Stream duty) -> void
+    def stream_data_lost: (Recovery::Duty::Stream duty) -> void
     def local?: (Integer stream_id) -> bool
 
     private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?
     private def check_opened: (Integer stream_id, frame_type: Integer) -> void
+    private def sender_for: (Integer stream_id) -> Sender
+    private def room_for: (Sender sender) -> Integer
+    private def writable_again: () -> void
     private def open_peer_streams: (Integer stream_id, frame_type: Integer, now: Float) -> void
     private def open_peer_stream: (Integer stream_id, Float now) -> void
 
