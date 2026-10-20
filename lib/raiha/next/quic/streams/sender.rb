@@ -33,6 +33,9 @@ module Raiha::Next::QUIC
         @fin = false
         @fin_sent = false
         @fin_acked = false
+        # The limit a STREAM_DATA_BLOCKED is due or went for.
+        @blocked_at = nil #: Integer?
+        @blocked_due = false
       end
 
       # What the peer's limit leaves to write.
@@ -101,6 +104,28 @@ module Raiha::Next::QUIC
         range = [offset, @base].max...(offset + length)
         return if Ranges.empty?(range)
         @lost = @acked.reduce([range]) { |left, acked| Ranges.subtract(left, acked) }.reduce(@lost) { |lost, part| Ranges.add(lost, part) }
+      end
+
+      # A write was cut short by the peer's limit: STREAM_DATA_BLOCKED
+      # with it is due, once for each value of the limit.
+      def blocked!
+        return if @blocked_at == @limit
+        @blocked_at = @limit
+        @blocked_due = true
+      end
+
+      # Whether STREAM_DATA_BLOCKED with the limit is due.
+      def blocked_due? = @blocked_due
+
+      # STREAM_DATA_BLOCKED went: it is not due any more.
+      def blocked_sent
+        @blocked_due = false
+      end
+
+      # A STREAM_DATA_BLOCKED with `maximum` was lost: it goes again while
+      # that limit still holds the stream back.
+      def blocked_lost(maximum)
+        @blocked_due = true if maximum == @limit && credit.zero?
       end
 
       # The bytes held: written and not acknowledged.

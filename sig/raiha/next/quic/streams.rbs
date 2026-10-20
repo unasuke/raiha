@@ -21,6 +21,10 @@ module Raiha::Next::QUIC
     @peer_max_streams: Hash[:bidi | :uni, Integer]
     @send_queue: Array[Integer]
     @wanting: Array[Integer]
+    @data_blocked_at: Integer?
+    @data_blocked_due: bool
+    @streams_blocked_at: Hash[:bidi | :uni, Integer?]
+    @streams_blocked_due: Hash[:bidi | :uni, bool]
 
     attr_reader window: ReceiveWindow
 
@@ -39,10 +43,23 @@ module Raiha::Next::QUIC
     def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
     def stream_data_acked: (Recovery::Duty::Stream duty) -> void
     def stream_data_lost: (Recovery::Duty::Stream duty) -> void
+    def receive_max_data: (Wire::Frame::MaxData frame) -> void
+    def receive_max_stream_data: (Wire::Frame::MaxStreamData frame, now: Float) -> void
+    def receive_max_streams: (Wire::Frame::MaxStreams frame) -> void
+    def receive_data_blocked: (Wire::Frame::DataBlocked frame) -> void
+    def receive_stream_data_blocked: (Wire::Frame::StreamDataBlocked frame, now: Float) -> void
+    def next_blocked: (Integer room) -> [Wire::Frame::DataBlocked | Wire::Frame::StreamsBlocked | Wire::Frame::StreamDataBlocked, Recovery::Duty::DataBlocked | Recovery::Duty::StreamsBlocked | Recovery::Duty::StreamDataBlocked]?
+    def data_blocked_lost: (Recovery::Duty::DataBlocked duty) -> void
+    def stream_data_blocked_lost: (Recovery::Duty::StreamDataBlocked duty) -> void
+    def streams_blocked_lost: (Recovery::Duty::StreamsBlocked duty) -> void
     def local?: (Integer stream_id) -> bool
 
     private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?
     private def check_opened: (Integer stream_id, frame_type: Integer) -> void
+    private def data_blocked: () -> void
+    private def streams_blocked: (:bidi | :uni direction, Integer limit) -> nil
+    private def fits?: (Wire::Frame::t frame, Integer room) -> bool
+    private def sender_part: (Integer stream_id, frame_type: Integer, now: Float) -> Sender?
     private def sender_for: (Integer stream_id) -> Sender
     private def room_for: (Sender sender) -> Integer
     private def writable_again: () -> void
@@ -125,6 +142,8 @@ module Raiha::Next::QUIC
       @fin: bool
       @fin_sent: bool
       @fin_acked: bool
+      @blocked_at: Integer?
+      @blocked_due: bool
 
       attr_reader stream_id: Integer
       attr_reader limit: Integer
@@ -139,6 +158,10 @@ module Raiha::Next::QUIC
       def next_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
       def acked: (Integer offset, Integer length, bool fin) -> Integer
       def lost: (Integer offset, Integer length, bool fin) -> void
+      def blocked!: () -> void
+      def blocked_due?: () -> bool
+      def blocked_sent: () -> void
+      def blocked_lost: (Integer maximum) -> void
       def buffered: () -> Integer
       def all_acked?: () -> bool
 

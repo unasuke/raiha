@@ -68,4 +68,58 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     QUIC::Streams::MAX_RECV_GAPS.times { |gap| s.receive_stream(stream(1 + 4 * (gap % 2), 2 * (gap / 2) + 1, "x"), now: 0.0) }
     assert_violation(QUIC::ErrorCode::INTERNAL_ERROR) { s.receive_stream(stream(9, 1, "x"), now: 0.0) }
   end
+
+  # Streams of a client whose peer, the server, sent these limits.
+  def with_peer(**limits)
+    s = streams
+    s.peer_parameters = QUIC::Config.new(**limits).transport_parameters(initial_source_connection_id: "s".b * 8)
+    s
+  end
+
+  # MAX_STREAM_DATA is for a part that sends: the server's unidirectional
+  # stream only receives here.
+  def test_max_stream_data_for_a_stream_that_only_receives
+    s = streams
+    assert_violation(QUIC::ErrorCode::STREAM_STATE_ERROR) do
+      s.receive_max_stream_data(QUIC::Wire::Frame::MaxStreamData.new(stream_id: 3, maximum: 10), now: 0.0)
+    end
+  end
+
+  # The peer allows one stream; STREAMS_BLOCKED goes once, and MAX_STREAMS
+  # lets more open.
+  def test_streams_blocked_and_max_streams
+    s = with_peer(initial_max_streams_bidi: 1)
+    assert_equal 0, s.open(:bidi, now: 0.0)
+    assert_nil s.open(:bidi, now: 0.0)
+    assert_equal QUIC::Wire::Frame::StreamsBlocked.new(bidirectional: true, maximum: 1), s.next_blocked(100)&.first
+    assert_nil s.open(:bidi, now: 0.0)
+    assert_nil s.next_blocked(100)
+    s.receive_max_streams(QUIC::Wire::Frame::MaxStreams.new(bidirectional: true, maximum: 3))
+    assert_equal [4, 8], [s.open(:bidi, now: 0.0), s.open(:bidi, now: 0.0)]
+  end
+
+  # A lost DATA_BLOCKED goes again while the limit still holds; not once
+  # MAX_DATA has raised it.
+  def test_a_lost_blocked_frame
+    s = with_peer(initial_max_data: 100)
+    stream_id = s.open(:bidi, now: 0.0) || flunk
+    s.write(stream_id, "x".b * 200, fin: false)
+    frame, duty = s.next_blocked(100)
+    assert_equal QUIC::Wire::Frame::DataBlocked.new(maximum: 100), frame
+    s.data_blocked_lost(duty)
+    assert_equal frame, s.next_blocked(100)&.first
+    s.receive_max_data(QUIC::Wire::Frame::MaxData.new(maximum: 300))
+    s.data_blocked_lost(duty)
+    assert_nil s.next_blocked(100)
+  end
+
+  # A blocked peer gets credit not told yet at once.
+  def test_data_blocked_brings_credit
+    s = streams(initial_max_data: 1000)
+    s.receive_stream(stream(1, 0, "x" * 100), now: 0.0)
+    s.read(1, 100)
+    assert_nil s.next_credit(100, now: 0.0, rtt: nil)
+    s.receive_data_blocked(QUIC::Wire::Frame::DataBlocked.new(maximum: 1000))
+    assert_equal QUIC::Wire::Frame::MaxData.new(maximum: 1100), s.next_credit(100, now: 0.0, rtt: nil)&.first
+  end
 end

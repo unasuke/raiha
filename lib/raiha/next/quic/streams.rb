@@ -33,9 +33,12 @@ module Raiha::Next::QUIC
   # this end's send buffer, max_send_buffer bytes of data not sent or not
   # acknowledged, all leave room for, and no more; a stream written less
   # than asked tells the application with Event::StreamWritable, once,
-  # when it can take some again (flow control's design, "Sending"). Frames
-  # are taken from the streams with something to send in turn, one a
-  # time.
+  # when it can take some again (flow control's design, "Sending"). A
+  # write the peer's credit cuts short, or a stream the peer's limit keeps
+  # from opening, sends DATA_BLOCKED, STREAM_DATA_BLOCKED or
+  # STREAMS_BLOCKED with the limit, once for each value of it; one this
+  # end's send buffer cuts short sends none. Frames are taken from the
+  # streams with something to send in turn, one a time.
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
@@ -74,6 +77,12 @@ module Raiha::Next::QUIC
       # and those written less than asked.
       @send_queue = [] #: Array[Integer]
       @wanting = [] #: Array[Integer]
+      # The limits a DATA_BLOCKED and a STREAMS_BLOCKED of each direction
+      # are due or went for, and which are due.
+      @data_blocked_at = nil #: Integer?
+      @data_blocked_due = false
+      @streams_blocked_at = { bidi: nil, uni: nil } #: Hash[:bidi | :uni, Integer?]
+      @streams_blocked_due = { bidi: false, uni: false }
     end
 
     # The peer's transport parameters, which set the limits of what this
@@ -89,7 +98,8 @@ module Raiha::Next::QUIC
     def open(direction, now:)
       type = (@role == :server ? SERVER_INITIATED : 0) | (direction == :uni ? UNIDIRECTIONAL : 0)
       index = @opened.fetch(type)
-      return nil if index >= @peer_max_streams.fetch(direction)
+      limit = @peer_max_streams.fetch(direction)
+      return streams_blocked(direction, limit) if index >= limit
       stream_id = index << 2 | type
       @opened[type] = index + 1
       peer = @peer_parameters or raise Error::StateError, "the peer's transport parameters have not come"
@@ -115,8 +125,81 @@ module Raiha::Next::QUIC
       @written += accepted
       @buffered += accepted
       @send_queue << stream_id unless @send_queue.include?(stream_id)
-      @wanting << stream_id unless whole || @wanting.include?(stream_id)
+      unless whole
+        @wanting << stream_id unless @wanting.include?(stream_id)
+        sender.blocked! if sender.credit.zero?
+        data_blocked if @written == @peer_max_data
+      end
       accepted
+    end
+
+    # The peer's limits grew: what they now let through can be written.
+    def receive_max_data(frame)
+      return unless frame.maximum > @peer_max_data
+      @peer_max_data = frame.maximum
+      writable_again
+    end
+
+    def receive_max_stream_data(frame, now:)
+      sender = sender_part(frame.stream_id, frame_type: Wire::Frame::MaxStreamData::TYPES.fetch(0), now:) or return
+      writable_again if sender.raise_limit(frame.maximum)
+    end
+
+    def receive_max_streams(frame)
+      direction = frame.bidirectional ? :bidi : :uni #: :bidi | :uni
+      @peer_max_streams[direction] = frame.maximum if frame.maximum > @peer_max_streams.fetch(direction)
+    end
+
+    # The peer is blocked by the connection's limit or a stream's: credit
+    # not told yet goes at once.
+    def receive_data_blocked(frame) = @window.blocked!
+
+    def receive_stream_data_blocked(frame, now:)
+      receiver = receiver_for(frame.stream_id, frame_type: Wire::Frame::StreamDataBlocked::TYPES.fetch(0), now:) or return
+      receiver.window.blocked!
+    end
+
+    # The next DATA_BLOCKED, STREAMS_BLOCKED or STREAM_DATA_BLOCKED due and
+    # its duty, in no more than `room` bytes; nil when none is or it does
+    # not fit.
+    def next_blocked(room)
+      if @data_blocked_due
+        frame = Wire::Frame::DataBlocked.new(maximum: @peer_max_data)
+        return nil unless fits?(frame, room)
+        @data_blocked_due = false
+        return [frame, Recovery::Duty::DataBlocked.new(maximum: frame.maximum)]
+      end
+      @streams_blocked_due.each do |direction, due|
+        next unless due
+        bidirectional = direction == :bidi
+        frame = Wire::Frame::StreamsBlocked.new(bidirectional:, maximum: @peer_max_streams.fetch(direction))
+        return nil unless fits?(frame, room)
+        @streams_blocked_due[direction] = false
+        return [frame, Recovery::Duty::StreamsBlocked.new(bidirectional:, maximum: frame.maximum)]
+      end
+      @senders.each do |stream_id, sender|
+        next unless sender.blocked_due?
+        frame = Wire::Frame::StreamDataBlocked.new(stream_id:, maximum: sender.limit)
+        return nil unless fits?(frame, room)
+        sender.blocked_sent
+        return [frame, Recovery::Duty::StreamDataBlocked.new(stream_id:, maximum: frame.maximum)]
+      end
+      nil
+    end
+
+    # A BLOCKED frame was lost: it goes again while its limit still holds
+    # this end back.
+    def data_blocked_lost(duty)
+      @data_blocked_due = true if duty.maximum == @peer_max_data && @written == @peer_max_data
+    end
+
+    def stream_data_blocked_lost(duty) = @senders[duty.stream_id]&.blocked_lost(duty.maximum)
+
+    def streams_blocked_lost(duty)
+      direction = duty.bidirectional ? :bidi : :uni #: :bidi | :uni
+      limit = @peer_max_streams.fetch(direction)
+      type = (@role == :server ? SERVER_INITIATED : 0) | (duty.bidirectional ? 0 : UNIDIRECTIONAL)
+      @streams_blocked_due[direction] = true if duty.maximum == limit && @opened.fetch(type) >= limit
     end
 
     # How many bytes a write to `stream_id` would take now.
@@ -213,6 +296,36 @@ module Raiha::Next::QUIC
     def max_data_lost(duty) = @window.lost(duty.maximum)
 
     def max_stream_data_lost(duty) = @receivers[duty.stream_id]&.window&.lost(duty.maximum)
+
+    # The connection's credit cut a write short.
+    private def data_blocked
+      return if @data_blocked_at == @peer_max_data
+      @data_blocked_at = @peer_max_data
+      @data_blocked_due = true
+    end
+
+    # No stream of `direction` opens past the peer's `limit`: nil, and
+    # STREAMS_BLOCKED with it, once for each value of the limit.
+    private def streams_blocked(direction, limit)
+      return nil if @streams_blocked_at.fetch(direction) == limit
+      @streams_blocked_at[direction] = limit
+      @streams_blocked_due[direction] = true
+      nil
+    end
+
+    private def fits?(frame, room) = Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize <= room
+
+    # The sending part of `stream_id` for a frame of `frame_type`, opening
+    # the peer's streams up to it; nil when the stream is over, and a
+    # Violation when it has no sending part or cannot be open.
+    private def sender_part(stream_id, frame_type:, now:)
+      if !local?(stream_id) && stream_id & UNIDIRECTIONAL != 0
+        raise Violation.new("stream #{stream_id} only receives", code: ErrorCode::STREAM_STATE_ERROR, frame_type:)
+      end
+      open_peer_streams(stream_id, frame_type:, now:) unless local?(stream_id)
+      check_opened(stream_id, frame_type:)
+      @senders[stream_id]
+    end
 
     # The sending part of `stream_id` for the application to write to.
     private def sender_for(stream_id)

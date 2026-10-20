@@ -355,6 +355,12 @@ module Raiha::Next::QUIC
 
     def max_stream_data_lost(duty) = @streams.max_stream_data_lost(duty)
 
+    def data_blocked_lost(duty) = @streams.data_blocked_lost(duty)
+
+    def stream_data_blocked_lost(duty) = @streams.stream_data_blocked_lost(duty)
+
+    def streams_blocked_lost(duty) = @streams.streams_blocked_lost(duty)
+
     # Resets, connection IDs and tokens are not sent yet, so their duties
     # never come back.
 
@@ -362,9 +368,6 @@ module Raiha::Next::QUIC
     def reset_stream_lost(duty) = nil
     def stop_sending_lost(duty) = nil
     def max_streams_lost(duty) = nil
-    def data_blocked_lost(duty) = nil
-    def stream_data_blocked_lost(duty) = nil
-    def streams_blocked_lost(duty) = nil
     def new_connection_id_lost(duty) = nil
     def retire_connection_id_lost(duty) = nil
     def new_token_lost(duty) = nil
@@ -554,6 +557,11 @@ module Raiha::Next::QUIC
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
       when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
+      when Wire::Frame::MaxData then @streams.receive_max_data(frame)
+      when Wire::Frame::MaxStreamData then @streams.receive_max_stream_data(frame, now:)
+      when Wire::Frame::MaxStreams then @streams.receive_max_streams(frame)
+      when Wire::Frame::DataBlocked then @streams.receive_data_blocked(frame)
+      when Wire::Frame::StreamDataBlocked then @streams.receive_stream_data_blocked(frame, now:)
       end
     end
 
@@ -750,7 +758,8 @@ module Raiha::Next::QUIC
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
-    # stream data, and a PING for a probe with nothing else.
+    # BLOCKED frames, stream data, and a PING for a probe with nothing
+    # else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -773,6 +782,11 @@ module Raiha::Next::QUIC
         frames << credit
         duties << credit_duty
         room -= Wire::Frame.encode([credit], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && (blocked, blocked_duty = @streams.next_blocked(room))
+        frames << blocked
+        duties << blocked_duty
+        room -= Wire::Frame.encode([blocked], ack_delay_exponent: 0).bytesize
       end
       while eliciting && level == :one_rtt && room.positive? && (data, data_duty = @streams.next_stream_frame(room))
         frames << data
