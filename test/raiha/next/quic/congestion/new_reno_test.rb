@@ -17,7 +17,7 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
     def congestion_state_updated(old:, new:, now:) = @states << [old, new]
   end
 
-  def new_reno(tracer: nil) = NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, tracer:)
+  def new_reno(tracer: nil) = NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::Next::QUIC::Config.new, tracer:)
 
   def ack(cc, bytes, sent_at:, now:, app_limited: false)
     cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, app_limited:, now:)

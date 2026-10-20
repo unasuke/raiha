@@ -23,7 +23,7 @@ module Raiha::Next::QUIC
     # A congestion control algorithm: the class itself.
     interface _Algorithm
       def requires_rate_sample?: () -> bool
-      def new: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _Controller
+      def new: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> _Controller
     end
 
     # A class that wraps a controller while the connection starts, as Rapid
@@ -55,7 +55,7 @@ module Raiha::Next::QUIC
       attr_reader window: Integer
       attr_reader state: Symbol
 
-      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> void
+      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> void
       def minimum_window: () -> Integer
       def on_packet_sent: (bytes: Integer, now: Float) -> nil
       def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,

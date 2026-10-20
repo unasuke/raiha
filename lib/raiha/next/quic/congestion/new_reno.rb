@@ -23,7 +23,9 @@ module Raiha::Next::QUIC
 
       # `initial_window` turns a maximum datagram size into the initial
       # window, so that it can be worked out again when the size changes.
-      def initialize(max_datagram_size:, initial_window:, tracer: nil)
+      # `config` is the connection's Config, which an algorithm reads its own
+      # settings from.
+      def initialize(max_datagram_size:, initial_window:, config:, tracer: nil)
         @max_datagram_size = max_datagram_size
         @initial_window = initial_window
         @window = initial_window.call(max_datagram_size)

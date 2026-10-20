@@ -30,7 +30,8 @@ module Raiha::Next::QUIC
     # Packets").
     def start_over
       @rtt = Recovery::RttEstimator.new
-      @congestion = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, tracer: @tracer)
+      @congestion = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, config: @config,
+        tracer: @tracer)
       @bytes_in_flight = 0
       @ack_eliciting_in_flight = 0
       @packets_in_flight = 0

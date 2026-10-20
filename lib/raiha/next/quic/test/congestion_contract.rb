@@ -94,7 +94,10 @@ module Raiha::Next::QUIC::Test
       assert_equal cc.window, cc.metrics[:congestion_window]
     end
 
-    private def new_controller = congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: Raiha::Next::QUIC::Config::DEFAULT_INITIAL_WINDOW)
+    private def new_controller
+      congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: Raiha::Next::QUIC::Config::DEFAULT_INITIAL_WINDOW,
+        config: Raiha::Next::QUIC::Config.new(congestion_control:))
+    end
 
     private def acknowledge(cc, bytes, sent_at:, now:, app_limited: false)
       cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, app_limited:, now:)
