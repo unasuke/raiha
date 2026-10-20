@@ -9,3 +9,4 @@ end
 
 require_relative "streams/receive_window"
 require_relative "streams/receiver"
+require_relative "streams/sender"

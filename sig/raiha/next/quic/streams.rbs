@@ -63,5 +63,37 @@ module Raiha::Next::QUIC
       private def clip: (Integer offset, Integer length) -> [Integer, Integer]
       private def touching: (Integer start, Integer finish) -> [Integer, Integer]
     end
+
+    class Sender
+      @stream_id: Integer
+      @limit: Integer
+      @buffer: String
+      @base: Integer
+      @written: Integer
+      @next_offset: Integer
+      @lost: Array[Range[Integer]]
+      @acked: Array[Range[Integer]]
+      @fin: bool
+      @fin_sent: bool
+      @fin_acked: bool
+
+      attr_reader stream_id: Integer
+      attr_reader limit: Integer
+      attr_reader written: Integer
+
+      def initialize: (stream_id: Integer, limit: Integer) -> void
+      def credit: () -> Integer
+      def fin?: () -> bool
+      def write: (String data, fin: bool) -> void
+      def raise_limit: (Integer maximum) -> bool
+      def pending?: () -> bool
+      def next_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+      def acked: (Integer offset, Integer length, bool fin) -> Integer
+      def lost: (Integer offset, Integer length, bool fin) -> void
+      def buffered: () -> Integer
+      def all_acked?: () -> bool
+
+      private def fin_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+    end
   end
 end
