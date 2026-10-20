@@ -9,6 +9,25 @@ class RaihaNextQUICTestNetworkTest < Minitest::Test
   A = ["192.0.2.1", 4433].freeze
   B = ["192.0.2.2", 443].freeze
 
+  # A node whose first timer, run out, sets another that is due at once,
+  # with nothing sent.
+  class Chained
+    attr_reader :handled
+
+    def initialize
+      @timeouts = [1.0, 0.5]
+      @handled = []
+    end
+
+    def receive(*, **) = nil
+
+    def each_transmit(now:) = nil
+
+    def next_timeout = @timeouts.first
+
+    def handle_timeout(now:) = @handled << [@timeouts.shift, now]
+  end
+
   # Sends what it is told to at the times it is told, and keeps what it
   # receives with the time.
   class Node
@@ -157,5 +176,14 @@ class RaihaNextQUICTestNetworkTest < Minitest::Test
     clock.advance(0.5)
     assert_equal 1.5, clock.now
     assert_raises(ArgumentError) { clock.advance_to(1.0) }
+  end
+
+  # A timer run out can set another that is due at once; it runs out too,
+  # in the same instant.
+  def test_a_timer_that_sets_another_due_at_once
+    net = Test::Network.new(seed: 1)
+    node = net.add(Chained.new, address: A)
+    net.advance(2.0)
+    assert_equal [[1.0, 1.0], [0.5, 1.0]], node.handled
   end
 end

@@ -87,13 +87,16 @@ module Raiha::Next::QUIC::Test
     end
 
     # Everything due at this instant: timers run out, datagrams sent and
-    # delivered, until nothing more happens.
+    # delivered, until nothing more happens. A timer run out can set
+    # another that is due at once, as a PTO after a loss timer may be.
     private def settle
       MAX_ROUNDS.times do
         moved = false
         @nodes.each_value do |node|
           timeout = node.next_timeout
-          node.handle_timeout(now:) if timeout && timeout <= now
+          next unless timeout && timeout <= now
+          moved = true
+          node.handle_timeout(now:)
         end
         @nodes.each do |address, node|
           node.each_transmit(now:) do |transmit|
