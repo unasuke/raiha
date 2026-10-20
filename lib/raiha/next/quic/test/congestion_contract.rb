@@ -11,8 +11,8 @@ module Raiha::Next::QUIC::Test
   #   end
   module CongestionContract
     MAX_DATAGRAM_SIZE = 1200
-    # The states of the algorithms that come with the layer and of those
-    # 259 names; an algorithm of its own may add to them.
+    # The states of the algorithms that come with the layer, Rapid Start's
+    # among them; an algorithm of its own may add to them.
     KNOWN_STATES = %i[
       slow_start congestion_avoidance recovery application_limited reno_friendly concave convex rapid_start
     ].freeze
