@@ -286,6 +286,22 @@ module Raiha::Next::QUIC
       close(handle, ConnectionError.new(code: error_code, frame_type: 0, reason: "", application: false))
     end
 
+    # Answers the offer of `handle`, at either stage, with a Retry (RFC 9000
+    # "Address Validation Using Retry Packets"): a token of the client's
+    # first connection ID and address, which the Initial it sends next
+    # brings back to show it receives there, and a connection ID it sends
+    # that Initial to. An offer whose Initial brought a Retry token already
+    # cannot have another: Error::Usage.
+    def retry(handle, now:)
+      pending!(handle)
+      raise Error::Usage, "an offer after a Retry cannot be retried" if handle.retry_source_connection_id
+      token = RetryToken.mint(key: @retry_token_key, original_destination_connection_id: handle.original_destination_connection_id,
+        address: handle.remote, time: wall_clock(now))
+      packet = Wire::Retry.new(version: handle.version, dcid: handle.source_connection_id, scid: new_connection_id, token:)
+      @transmits << transmit(packet.seal(handle.destination_connection_id), handle.remote, handle.local)
+      forget(handle)
+    end
+
     def each_connection(&) = connections.each(&)
 
     def connection_count = connections.size

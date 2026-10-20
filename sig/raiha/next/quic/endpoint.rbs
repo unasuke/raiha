@@ -83,6 +83,7 @@ module Raiha::Next::QUIC
                  ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> Connection
     def reject: (Handle handle, Symbol description) -> void
     def refuse: (Handle handle, ?error_code: Integer) -> void
+    def retry: (Handle handle, now: Float) -> void
     def each_connection: () { (Connection) -> void } -> void
     def connection_count: () -> Integer
 

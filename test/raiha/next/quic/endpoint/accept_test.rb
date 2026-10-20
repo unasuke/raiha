@@ -205,6 +205,31 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     end
   end
 
+  # RFC 9000 "Retry Packet": a Retry to the client's connection ID, whose
+  # tag is of its first, and whose token brings the offer back with the
+  # address validated.
+  def test_retry
+    client = client_connection
+    first = client.transmits(now: 0.0).first.payload
+    header = QUIC::Wire::Packet.parse(first, dcid_length: 8).header
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: "r".b * 32), random: Random.new(3), time: NOW, now: 0.0)
+    endpoint.retry(endpoint.receive(first, from: CLIENT, to: SERVER, now: 0.0).handle, now: 0.0)
+    sent = [].tap { |all| endpoint.each_transmit(now: 0.0) { all << _1 } }
+    assert_equal [[CLIENT, SERVER]], sent.map { [_1.destination, _1.source] }
+    packet = QUIC::Wire::Packet.parse(sent.first.payload, dcid_length: 8)
+    assert_instance_of QUIC::Wire::Retry, packet
+    assert packet.authentic?(header.dcid)
+    assert_equal header.scid, packet.dcid
+    assert_equal header.dcid, QUIC::RetryToken.verify(packet.token, key: "r".b * 32, address: CLIENT, time: NOW)
+    again = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid: packet.scid, scid: SCID, token: packet.token)
+    keys = QUIC::Crypto::Initial.derive(dcid: packet.scid, version: QUIC::Version::V1).client
+    again = QUIC::Wire::Packet.seal(again, packet_number: 1, packet_number_length: 2, payload: "\x01".b.ljust(1200, "\0".b), keys:)
+    route = endpoint.receive(again, from: CLIENT, now: 0.1)
+    assert route.address_validated
+    assert_equal header.dcid, route.handle.original_destination_connection_id
+    assert_raises(QUIC::Error::Usage) { endpoint.retry(route.handle, now: 0.1) }
+  end
+
   def test_reject_takes_the_alerts_of_the_acceptor
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
