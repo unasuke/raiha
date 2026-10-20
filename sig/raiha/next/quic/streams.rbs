@@ -1,0 +1,37 @@
+module Raiha::Next::QUIC
+  class Streams
+    class ReceiveWindow
+      UPDATE_THRESHOLD: Rational
+      ROUND_TRIPS: Integer
+
+      @size: Integer
+      @max: Integer
+      @limit: Integer
+      @received: Integer
+      @consumed: Integer
+      @blocked: bool
+      @resend: bool
+      @period_start: Float
+      @period_consumed: Integer
+
+      attr_reader size: Integer
+      attr_reader limit: Integer
+      attr_reader received: Integer
+      attr_reader consumed: Integer
+
+      def initialize: (size: Integer, max: Integer, now: Float) -> void
+      def receive: (Integer end_offset, frame_type: Integer) -> void
+      def consume: (Integer bytes) -> void
+      def blocked!: () -> void
+      def lost: (Integer maximum) -> void
+      def update_due?: () -> bool
+      def advance: (now: Float, rtt: Float?) -> Integer
+      def grow_to: (Integer size, now: Float) -> void
+
+      private def credit_due?: () -> bool
+      private def next_limit: () -> Integer
+      private def tune: (Float now, Float? rtt) -> void
+      private def start_period: (Float now) -> void
+    end
+  end
+end
