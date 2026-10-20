@@ -1,0 +1,133 @@
+require "raiha/next/test_helper"
+require "raiha/next/support/quic_pair"
+require "objspace"
+
+# What other implementations of QUIC were broken by, each tried on this
+# one at the handshake: frames that fill memory, state taken before the
+# client's address is validated, packets of the other role, and the order
+# of the calls of the application. The bounds of CRYPTO reassembly in
+# themselves are tested with CryptoStream, the end of an offer with the
+# Endpoint, and HANDSHAKE_DONE from a client with the handshake.
+class RaihaNextQUICKnownVulnerabilitiesTest < Minitest::Test
+  include NextQUICPair
+
+  # A client's Initial to `dcid` with `frames`, padded to 1200 bytes.
+  def initial(dcid:, frames:, packet_number: 1)
+    header = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid:, scid: "c".b * 8)
+    keys = QUIC::Crypto::Initial.derive(dcid:, version: QUIC::Version::V1).client
+    payload = QUIC::Wire::Frame.encode(frames, ack_delay_exponent: 3)
+    first = QUIC::Wire::Packet.seal(header, packet_number:, packet_number_length: 2, payload:, keys:)
+    QUIC::Wire::Packet.seal(header, packet_number:, packet_number_length: 2, payload: payload.ljust(payload.bytesize + 1200 - first.bytesize, "\0".b), keys:)
+  end
+
+  # A CRYPTO frame far past what is read is CRYPTO_BUFFER_EXCEEDED before
+  # anything of its offset is taken.
+  def test_crypto_far_ahead
+    server = server_connection
+    server.receive(initial(dcid: "d".b * 8, frames: [QUIC::Wire::Frame::Crypto.new(offset: 0, data: "\x01".b)]), from: CLIENT, now: 0.0)
+    far = QUIC::Wire::Frame::Crypto.new(offset: 1 << 40, data: "x".b)
+    server.receive(initial(dcid: "d".b * 8, frames: [far], packet_number: 2), from: CLIENT, now: 0.0)
+    assert_equal QUIC::ErrorCode::CRYPTO_BUFFER_EXCEEDED, server.close_reason&.code
+  end
+
+  # CRYPTO data is kept in a String of its own, never as a part of the
+  # datagram it came in, which a substring of it to its end would keep
+  # whole (CVE-2026-54873).
+  def test_crypto_data_does_not_keep_the_datagram
+    datagram = "\x01".b * 5000
+    tail = datagram.byteslice(1000..)
+    assert ObjectSpace.dump(tail).include?('"shared":true'), "a substring to the end is shared"
+    stream = QUIC::CryptoStream.new(:initial)
+    stream.receive(0, tail, limit: 8192)
+    refute ObjectSpace.dump(stream.instance_variable_get(:@window)).include?('"shared":true'), "the CRYPTO data is shared"
+  end
+
+  # The first stage of a new connection derives no key, so that an
+  # attacker's Initials cost the server their headers alone.
+  def test_the_first_stage_derives_no_key
+    counter = Module.new do
+      attr_accessor :derived
+
+      def derive(...)
+        self.derived = (derived || 0) + 1
+        super
+      end
+    end
+    QUIC::Crypto::Initial.singleton_class.prepend(counter)
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW, now: 0.0)
+    datagram = client_connection.transmits(now: 0.0).first.payload
+    QUIC::Crypto::Initial.derived = 0
+    assert_instance_of QUIC::Route::Incoming, endpoint.receive(datagram, from: CLIENT, now: 0.0)
+    assert_equal 0, QUIC::Crypto::Initial.derived
+  end
+
+  # A client's Initial packet to `dcid` with a PING, of `size` bytes.
+  def ping(dcid:, packet_number:, size:)
+    header = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid:, scid: "c".b * 8)
+    keys = QUIC::Crypto::Initial.derive(dcid:, version: QUIC::Version::V1).client
+    seal = ->(length) { QUIC::Wire::Packet.seal(header, packet_number:, packet_number_length: 2, payload: "\x01".b.ljust(length, "\0".b), keys:) }
+    seal.(size - (seal.(100).bytesize - 100))
+  end
+
+  # A datagram of four coalesced packets lets a server whose client's
+  # address is not validated send three times its length more, once for
+  # the datagram, not for each packet in it (CVE-2026-35191). The server's
+  # certificate chain makes it want to send far more.
+  def test_the_amplification_limit_counts_each_datagram_once
+    identity = NextTLSPair.server_identity
+    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [NextTLSPair.ca.der] * 8, key_der: identity.key_der)
+    tls_config = server_config
+    keyring = TLS::Keyring.server(config: tls_config, identities: [long], random: Random.new(2))
+    server = QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0)
+    first = client_connection.transmits(now: 0.0).first.payload
+    dcid = QUIC::Wire::Packet.parse(first, dcid_length: 8).header.dcid
+    server.receive(first, from: CLIENT, now: 0.0)
+    sent = server.transmits(now: 0.0).sum { _1.payload.bytesize }
+    coalesced = (2..5).map { ping(dcid:, packet_number: _1, size: 300) }.join
+    assert_equal 1200, coalesced.bytesize
+    server.receive(coalesced, from: CLIENT, now: 0.01)
+    sent += server.transmits(now: 0.01).sum { _1.payload.bytesize }
+    assert_operator sent, :<=, 3 * (first.bytesize + coalesced.bytesize)
+    assert_operator sent, :>, 3 * first.bytesize
+  end
+
+  # A server takes no packet that only a client takes: a Retry or a
+  # Version Negotiation is dropped.
+  def test_a_server_takes_no_retry_or_version_negotiation
+    client = client_connection
+    server = server_connection
+    first = client.transmits(now: 0.0).first.payload
+    header = QUIC::Wire::Packet.parse(first, dcid_length: 8).header
+    server.receive(first, from: CLIENT, now: 0.0)
+    server_id = QUIC::Wire::Packet.parse(server.transmits(now: 0.0).first.payload, dcid_length: 8).header.scid
+    retry_packet = QUIC::Wire::Retry.new(version: QUIC::Version::V1, dcid: server_id, scid: "r".b * 8, token: "t".b).seal(header.scid)
+    negotiation = QUIC::Wire::VersionNegotiation.new(dcid: server_id, scid: header.scid, versions: [0x0a0a0a0a]).encode
+    server.receive(retry_packet, from: CLIENT, now: 0.01)
+    server.receive(negotiation, from: CLIENT, now: 0.01)
+    refute server.closed?
+    assert_nil server.close_reason
+  end
+
+  # An application may stop taking datagrams halfway and run a timer out
+  # before it takes the rest: the handshake goes on as before (by analogy
+  # with CVE-2026-84782).
+  def test_a_timer_between_datagrams
+    client = client_connection
+    server = server_connection
+    now = 0.0
+    20.times do
+      break if client.handshake_complete? && server.handshake_complete?
+      server.each_transmit(now:) do |transmit|
+        client.receive(transmit.payload, from: SERVER, now:)
+        break
+      end
+      timeout = server.next_timeout
+      server.handle_timeout(now: now = timeout) if timeout && timeout < now + 1.5
+      server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+      client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+      now += 0.001
+    end
+    assert client.handshake_complete?
+    assert server.handshake_complete?
+  end
+end
