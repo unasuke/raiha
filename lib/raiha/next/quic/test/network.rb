@@ -50,6 +50,15 @@ module Raiha::Next::QUIC::Test
 
     def address_of(node) = @addresses.fetch(node)
 
+    # Puts a server's Endpoint on the network at `address`, run by a
+    # Test::Server that takes every offer with `tls_config` and `keyring`,
+    # and gives the Test::Server. `time` is the wall clock the Endpoint
+    # starts at; its random bytes come from the seed.
+    def add_server(config:, tls_config:, keyring:, time:, address:, **options)
+      endpoint = Raiha::Next::QUIC::Endpoint.server(config:, random: Random.new(@random.rand(1 << 64)), time:, now:)
+      add(Server.new(endpoint, tls_config:, keyring:, **options), address:)
+    end
+
     # Links two nodes with `model` both ways, or with `forward` from `a` to
     # `b` and `reverse` back.
     def link(a, b, model: nil, forward: model, reverse: model)

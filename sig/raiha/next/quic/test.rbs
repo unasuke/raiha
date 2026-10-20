@@ -152,6 +152,8 @@ module Raiha::Next::QUIC::Test
     def now: () -> Float
     def add: [N < _Node] (N node, address: ::Raiha::Next::QUIC::address) -> N
     def address_of: (_Node node) -> ::Raiha::Next::QUIC::address
+    def add_server: (config: ::Raiha::Next::QUIC::Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
+                     time: Time, address: ::Raiha::Next::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?) -> Server
     def link: (_Node a, _Node b, ?model: model?, ?forward: model?, ?reverse: model?) -> self
     def run_until: (?within: Float) { () -> boolish } -> bool
     def advance: (Float seconds) -> void
@@ -253,5 +255,29 @@ module Raiha::Next::QUIC::Test
       def each_delivery: (now: Float) { (Datagram) -> void } -> void
       def next_timeout: () -> Float?
     end
+  end
+end
+
+module Raiha::Next::QUIC::Test
+  class Server
+    @endpoint: ::Raiha::Next::QUIC::Endpoint
+    @tls_config: ::Raiha::Next::TLS::Config
+    @keyring: ::Raiha::Next::TLS::Keyring
+    @retry_unvalidated: bool
+    @tracer: ::Raiha::Next::QUIC::_Tracer?
+    @transmits: Array[::Raiha::Next::QUIC::Transmit]
+
+    attr_reader endpoint: ::Raiha::Next::QUIC::Endpoint
+
+    def initialize: (::Raiha::Next::QUIC::Endpoint endpoint, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
+                     ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?) -> void
+    def receive: (String payload, from: ::Raiha::Next::QUIC::address, to: ::Raiha::Next::QUIC::address?,
+                  ecn: ::Raiha::Next::QUIC::ecn | :ce, now: Float) -> void
+    def each_transmit: (now: Float) { (::Raiha::Next::QUIC::Transmit) -> void } -> void
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+    def connections: () -> Array[::Raiha::Next::QUIC::Connection]
+
+    private def dispatch: (::Raiha::Next::QUIC::Route::t? route, Float now) -> void
   end
 end
