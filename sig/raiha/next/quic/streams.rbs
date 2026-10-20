@@ -33,5 +33,35 @@ module Raiha::Next::QUIC
       private def tune: (Float now, Float? rtt) -> void
       private def start_period: (Float now) -> void
     end
+
+    class Receiver
+      class Chunk
+        attr_accessor offset: Integer
+        attr_accessor data: String
+
+        def initialize: (Integer offset, String data) -> void
+        def end_offset: () -> Integer
+      end
+
+      @window: ReceiveWindow
+      @ranges: Array[Chunk]
+      @read_offset: Integer
+      @final_size: Integer?
+
+      attr_reader window: ReceiveWindow
+      attr_reader final_size: Integer?
+      attr_reader read_offset: Integer
+
+      def initialize: (window: ReceiveWindow) -> void
+      def admit: (Integer end_offset, fin: bool, frame_type: Integer) -> Integer
+      def gaps_with: (Integer offset, Integer length) -> Integer
+      def gaps: () -> Integer
+      def insert: (Integer offset, String data) -> void
+      def read: (Integer max_bytes) -> String?
+      def readable?: () -> bool
+
+      private def clip: (Integer offset, Integer length) -> [Integer, Integer]
+      private def touching: (Integer start, Integer finish) -> [Integer, Integer]
+    end
   end
 end

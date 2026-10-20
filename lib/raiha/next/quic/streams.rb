@@ -8,3 +8,4 @@ module Raiha::Next::QUIC
 end
 
 require_relative "streams/receive_window"
+require_relative "streams/receiver"
