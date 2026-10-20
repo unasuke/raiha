@@ -81,4 +81,85 @@ class RaihaNextQUICCongestionCubicTest < Minitest::Test
     assert_in_delta 0.529, Cubic::ALPHA, 0.001
     assert_same Cubic, Raiha::Next::QUIC::Congestion.resolve(:cubic)
   end
+
+  # A controller whose window has grown to `segments` in slow start and
+  # was then cut by a loss at 2.0 s.
+  def after_a_loss(segments, **config)
+    cc = cubic(**config)
+    ack(cc, segments * MDS - cc.window, sent_at: 0.0, now: 1.0)
+    lose(cc, sent_at: 1.9, now: 2.0)
+    cc
+  end
+
+  # One ACK frame of a whole window every `rtt` from `from` until `to`: the
+  # time, window and state after each.
+  def round_trips(cc, from:, to:, rtt: 0.1, app_limited: false)
+    trace = [] #: Array[[Float, Integer, Symbol]]
+    now = from
+    while now < to - 1e-9
+      now += rtt
+      ack(cc, cc.window, sent_at: now - rtt / 2, now:, smoothed_rtt: rtt, app_limited:)
+      trace << [now, cc.window, cc.state]
+    end
+    trace
+  end
+
+  # From 70 segments after a loss at 100, the window rises fast and slows
+  # towards W_max (concave), and past it speeds up again (convex), at about
+  # K = cbrt(30 / C) = 4.22 s after the stage began. The first ACK of the
+  # stage, where W_cubic(0) is the window itself, is W_est's; later on, AIMD
+  # outgrows the cubic function again.
+  def test_from_concave_to_convex
+    cc = after_a_loss(100)
+    trace = round_trips(cc, from: 2.0, to: 7.5).drop_while { |_, _, state| state == :reno_friendly }
+    assert_equal %i[concave convex], trace.map(&:last).chunk_while { _1 == _2 }.map(&:first)
+    convex_at, window, = trace.find { |_, _, state| state == :convex }
+    assert_operator window, :>=, 100 * MDS
+    assert_in_delta 2.0 + 4.22, convex_at, 0.25
+    steps = trace.each_cons(2).map { |(_, a, _), (_, b, _)| b - a }
+    concave = steps.first(trace.index { |_, _, state| state == :convex } - 1)
+    assert_operator concave.first, :>, concave.last
+    assert_operator steps.last, :>, steps[trace.index { |_, _, state| state == :convex }]
+  end
+
+  # RFC 9438 "Fast Convergence": a second reduction below W_max lowers
+  # W_max to 0.85 of the window, so the window levels off lower than it
+  # would without.
+  def test_fast_convergence
+    windows = [true, false].map do |fast_convergence|
+      cc = after_a_loss(100, fast_convergence:)
+      round_trips(cc, from: 2.0, to: 2.5)
+      lose(cc, sent_at: 2.45, now: 2.5)
+      round_trips(cc, from: 2.5, to: 5.0).last[1]
+    end
+    assert_operator windows[0], :<, windows[1]
+  end
+
+  # With a small window and a short round trip, AIMD grows faster than the
+  # cubic function: the window follows W_est by 0.53 segments a round trip,
+  # then by one once W_est reaches the window before the loss (RFC 9438
+  # "Reno-Friendly Region").
+  def test_reno_friendly_region
+    cc = after_a_loss(10)
+    trace = round_trips(cc, from: 2.0, to: 2.3, rtt: 0.01)
+    assert trace.all? { |_, _, state| state == :reno_friendly }, trace.map(&:last).inspect
+    steps = trace.each_cons(2).map { |(_, a, _), (_, b, _)| b - a }
+    assert_in_delta 0.529 * MDS, steps.first, 2
+    assert_in_delta MDS, steps.last, 2
+  end
+
+  # The time of the stage stands still while the connection sends nothing:
+  # after twenty seconds idle, the window goes on from where it was, where
+  # without the pause it would have jumped by half, as far as one ACK frame
+  # takes it (RFC 9438 "Window Increase Function").
+  def test_no_jump_after_an_idle_period
+    paused = after_a_loss(100)
+    before = round_trips(paused, from: 2.0, to: 3.0).last[1]
+    ack(paused, MDS, sent_at: 3.05, now: 3.1, app_limited: true)
+    after = round_trips(paused, from: 23.0, to: 23.1).last[1]
+    assert_operator after, :<, before * 1.1
+    jumped = after_a_loss(100)
+    round_trips(jumped, from: 2.0, to: 3.0)
+    assert_operator round_trips(jumped, from: 23.0, to: 23.1).last[1], :>=, before * 1.4
+  end
 end
