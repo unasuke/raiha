@@ -131,8 +131,9 @@ module Raiha::Next::QUIC
       @retry_source_connection_id = retry_source_connection_id
       # The token a client's Initials carry, from a Retry.
       @token = Wire::EMPTY
-      # The stateless reset tokens the peer gave.
-      @reset_tokens = [] #: Array[String]
+      # The connection IDs the peer issued, from its transport parameters
+      # on.
+      @peer_ids = nil #: PeerConnectionIDs?
       if role == :client
         @destination_connection_id = random.bytes(INITIAL_DCID_LENGTH).b
         @original_destination_connection_id = @destination_connection_id
@@ -292,7 +293,7 @@ module Raiha::Next::QUIC
     # token the peer gave, which the connection then drains on, sending
     # nothing more. Each token is compared in constant time.
     def take_stateless_reset(datagram, now:)
-      return false unless @state == :open && StatelessReset.match?(datagram, @reset_tokens)
+      return false unless @state == :open && StatelessReset.match?(datagram, @peer_ids&.reset_tokens || [])
       enter_draining(ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "stateless reset", application: false), now)
       true
     end
@@ -354,8 +355,8 @@ module Raiha::Next::QUIC
     def peer_transport_parameters(data)
       parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
       authenticate_connection_ids(parameters)
-      token = parameters.stateless_reset_token
-      @reset_tokens << token if token
+      @peer_ids = PeerConnectionIDs.new(@destination_connection_id, stateless_reset_token: parameters.stateless_reset_token,
+        limit: @config.active_connection_id_limit)
       @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
       @peer_parameters = parameters
       @streams.peer_parameters = parameters
@@ -412,11 +413,14 @@ module Raiha::Next::QUIC
 
     def max_streams_lost(duty) = @streams.max_streams_lost(duty)
 
+    def retire_connection_id_acked(duty) = @peer_ids&.retire_acked(duty)
+
+    def retire_connection_id_lost(duty) = @peer_ids&.retire_lost(duty)
+
     # Connection IDs and tokens are not sent yet, so their duties never
     # come back.
 
     def new_connection_id_lost(duty) = nil
-    def retire_connection_id_lost(duty) = nil
     def new_token_lost(duty) = nil
     # RFC 9000 "Retransmission of Information": HANDSHAKE_DONE goes again
     # until it is acknowledged.
@@ -613,6 +617,15 @@ module Raiha::Next::QUIC
       when Wire::Frame::StopSending then @streams.receive_stop_sending(frame, now:)
       when Wire::Frame::StreamsBlocked then @streams.receive_streams_blocked(frame)
       when Wire::Frame::Datagram then @datagrams.receive(frame)
+      when Wire::Frame::NewConnectionID
+        ids = @peer_ids or raise Violation.new("NEW_CONNECTION_ID before the transport parameters", frame_type: PeerConnectionIDs::FRAME_TYPE)
+        ids.receive(frame)
+        @destination_connection_id = ids.current
+      # This end has issued no connection ID but the one the packet itself
+      # carries, which a RETIRE_CONNECTION_ID frame must not name (RFC 9000
+      # "RETIRE_CONNECTION_ID Frames").
+      when Wire::Frame::RetireConnectionID
+        raise Violation.new("RETIRE_CONNECTION_ID of #{frame.sequence_number}, which is the only one or was never issued", frame_type: 0x19)
       end
     end
 
@@ -809,8 +822,9 @@ module Raiha::Next::QUIC
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
-    # RESET_STREAM and STOP_SENDING, BLOCKED frames, DATAGRAM frames, stream
-    # data, and a PING for a probe with nothing else.
+    # RESET_STREAM and STOP_SENDING, RETIRE_CONNECTION_ID, BLOCKED frames,
+    # DATAGRAM frames, stream data, and a PING for a probe with nothing
+    # else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -838,6 +852,11 @@ module Raiha::Next::QUIC
         frames << abandon
         duties << abandon_duty
         room -= Wire::Frame.encode([abandon], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && (retire, retire_duty = @peer_ids&.next_frame(room))
+        frames << retire
+        duties << retire_duty
+        room -= Wire::Frame.encode([retire], ack_delay_exponent: 0).bytesize
       end
       while eliciting && level == :one_rtt && (blocked, blocked_duty = @streams.next_blocked(room))
         frames << blocked

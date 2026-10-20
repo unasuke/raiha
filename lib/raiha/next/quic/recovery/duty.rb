@@ -71,8 +71,9 @@ module Raiha::Next::QUIC
         in Crypto then owner.crypto_data_acked(duty)
         in Ack then owner.ack_frame_acked(duty)
         in ResetStream then owner.reset_stream_acked(duty)
+        in RetireConnectionID then owner.retire_connection_id_acked(duty)
         in StopSending | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked |
-           NewConnectionID | RetireConnectionID | NewToken | HandshakeDone
+           NewConnectionID | NewToken | HandshakeDone
           nil
         end
       end

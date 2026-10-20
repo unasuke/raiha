@@ -49,7 +49,7 @@ module Raiha::Next::QUIC
     @original_destination_connection_id: String?
     @retry_source_connection_id: String?
     @token: String
-    @reset_tokens: Array[String]
+    @peer_ids: PeerConnectionIDs?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
