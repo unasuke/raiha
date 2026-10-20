@@ -11,6 +11,9 @@ module Raiha::Next::QUIC
     # acknowledged or lost as a Recovery::Duty::Stream. What was
     # acknowledged is not sent again, and the bytes up to the first that
     # was not are let go.
+    #
+    # Reset, it sends no more data and keeps none; RESET_STREAM goes with
+    # the final size, the furthest it sent, until acknowledged.
     class Sender
       attr_reader :stream_id
       # The peer's limit on the stream (MAX_STREAM_DATA).
@@ -36,6 +39,11 @@ module Raiha::Next::QUIC
         # The limit a STREAM_DATA_BLOCKED is due or went for.
         @blocked_at = nil #: Integer?
         @blocked_due = false
+        # The error code of RESET_STREAM, whether it is due and was
+        # acknowledged.
+        @reset_code = nil #: Integer?
+        @reset_due = false
+        @reset_acked = false
       end
 
       # What the peer's limit leaves to write.
@@ -60,11 +68,12 @@ module Raiha::Next::QUIC
         true
       end
 
-      def pending? = !@lost.empty? || @next_offset < @written || (@fin && !@fin_sent)
+      def pending? = !reset? && (!@lost.empty? || @next_offset < @written || (@fin && !@fin_sent))
 
       # The next frame and its duty in no more than `room` bytes, nil when
       # nothing waits or nothing fits.
       def next_frame(room)
+        return nil if reset?
         range = @lost.first || (@next_offset...@written)
         return fin_frame(room) if Ranges.empty?(range)
         offset = range.begin
@@ -87,7 +96,7 @@ module Raiha::Next::QUIC
       # bytes let go, up to the first that was not acknowledged.
       def acked(offset, length, fin)
         @fin_acked = true if fin
-        return 0 if length.zero?
+        return 0 if length.zero? || reset?
         @acked = Ranges.add(@acked, offset...(offset + length))
         @lost = Ranges.subtract(@lost, offset...(offset + length))
         first = @acked.fetch(0)
@@ -100,6 +109,7 @@ module Raiha::Next::QUIC
 
       # A frame was lost: what of it was not acknowledged goes again.
       def lost(offset, length, fin)
+        return if reset?
         @fin_sent = false if fin && !@fin_acked
         range = [offset, @base].max...(offset + length)
         return if Ranges.empty?(range)
@@ -126,6 +136,44 @@ module Raiha::Next::QUIC
       # that limit still holds the stream back.
       def blocked_lost(maximum)
         @blocked_due = true if maximum == @limit && credit.zero?
+      end
+
+      def reset? = !@reset_code.nil?
+
+      # The final size of a reset stream: the furthest it sent.
+      def final_size = @next_offset
+
+      # The application, or the peer's STOP_SENDING, abandons the stream
+      # with `error_code`: RESET_STREAM is due, the data held is let go, and
+      # what was written and never sent no longer counts. Nothing when it
+      # was reset already or all of it was acknowledged. The bytes let go
+      # and the bytes never sent.
+      def reset!(error_code)
+        return [0, 0] if reset? || all_acked?
+        @reset_code = error_code
+        @reset_due = true
+        released = buffered
+        unsent = @written - @next_offset
+        @buffer = "".b
+        @base = @written
+        @lost = []
+        [released, unsent]
+      end
+
+      # The error code of the RESET_STREAM due, nil when none is.
+      def reset_due = @reset_due ? @reset_code : nil
+
+      def reset_sent
+        @reset_due = false
+      end
+
+      def reset_acked
+        @reset_acked = true
+      end
+
+      # RESET_STREAM was lost: it goes again until acknowledged.
+      def reset_lost
+        @reset_due = true unless @reset_acked
       end
 
       # The bytes held: written and not acknowledged.

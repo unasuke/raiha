@@ -91,6 +91,8 @@ module Raiha::Next::QUIC
     def open_stream: (?direction: :bidi | :uni) -> Integer?
     def stream_write: (Integer stream_id, String data, ?fin: bool) -> Integer
     def stream_writable_bytes: (Integer stream_id) -> Integer
+    def stream_reset: (Integer stream_id, error_code: Integer) -> void
+    def stream_stop_sending: (Integer stream_id, error_code: Integer) -> void
     def writable_streams: () -> Enumerator[Integer, Array[Integer]]
     def close: (?error_code: Integer, ?reason: String, ?application: bool, now: Float) -> void
     def next_event: () -> Event::t?

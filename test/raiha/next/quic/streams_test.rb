@@ -122,4 +122,52 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     s.receive_data_blocked(QUIC::Wire::Frame::DataBlocked.new(maximum: 1000))
     assert_equal QUIC::Wire::Frame::MaxData.new(maximum: 1100), s.next_credit(100, now: 0.0, rtt: nil)&.first
   end
+
+  def reset_stream(stream_id, final_size, error_code: 1) = QUIC::Wire::Frame::ResetStream.new(stream_id:, error_code:, final_size:)
+
+  # RESET_STREAM ends a stream as FIN does, and is checked as it is.
+  def test_reset_stream_checks
+    s = streams(initial_max_stream_data_bidi_remote: 1000)
+    s.receive_stream(stream(1, 0, "abc", fin: true), now: 0.0)
+    assert_violation(QUIC::ErrorCode::FINAL_SIZE_ERROR) { s.receive_reset_stream(reset_stream(1, 5), now: 0.0) }
+    assert_violation(QUIC::ErrorCode::FLOW_CONTROL_ERROR) { s.receive_reset_stream(reset_stream(5, 1001), now: 0.0) }
+    assert_violation(QUIC::ErrorCode::STREAM_STATE_ERROR) { s.receive_reset_stream(reset_stream(2, 0), now: 0.0) }
+    stop = QUIC::Wire::Frame::StopSending.new(stream_id: 3, error_code: 0)
+    assert_violation(QUIC::ErrorCode::STREAM_STATE_ERROR) { s.receive_stop_sending(stop, now: 0.0) }
+  end
+
+  # A reset tells the application once, and gives back to the connection
+  # what the stream had not read, up to its final size.
+  def test_a_reset_gives_credit_back
+    events = []
+    s = streams(events:)
+    s.receive_stream(stream(1, 0, "abc"), now: 0.0)
+    s.receive_reset_stream(reset_stream(1, 100), now: 0.0)
+    s.receive_reset_stream(reset_stream(1, 100), now: 0.0)
+    assert_equal [QUIC::Event::StreamReadable.new(stream_id: 1), QUIC::Event::StreamReset.new(stream_id: 1, error_code: 1, final_size: 100)],
+      events
+    assert_equal [100, 100], [s.window.received, s.window.consumed]
+  end
+
+  # A lost RESET_STREAM goes again until acknowledged; a lost
+  # STOP_SENDING, unless the peer has reset the stream since.
+  def test_lost_resets_and_stops
+    s = with_peer
+    stream_id = s.open(:bidi, now: 0.0) || flunk
+    s.write(stream_id, "abc".b, fin: false)
+    s.reset(stream_id, 5)
+    frame, duty = s.next_abandon(100)
+    assert_equal QUIC::Wire::Frame::ResetStream.new(stream_id:, error_code: 5, final_size: 0), frame
+    s.reset_stream_lost(duty)
+    assert_equal frame, s.next_abandon(100)&.first
+    s.reset_stream_acked(duty)
+    s.reset_stream_lost(duty)
+    assert_nil s.next_abandon(100)
+    s.receive_stream(stream(1, 0, "x"), now: 0.0)
+    s.stop_sending(1, 6)
+    _, stop = s.next_abandon(100)
+    s.receive_reset_stream(reset_stream(1, 1), now: 0.0)
+    s.stop_sending_lost(stop)
+    assert_nil s.next_abandon(100)
+  end
 end

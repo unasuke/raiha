@@ -6,6 +6,11 @@ module Raiha::Next::QUIC
     # its receive window, the data received but not read, and the final
     # size once known.
     #
+    # Abandoned, when the application stops reading or the peer resets the
+    # stream, it keeps no data: what was received and not read is
+    # consumed, and so is what comes after, so that the credit goes back
+    # (flow control's design, "Accounting").
+    #
     # Data waits as ranges that neither overlap nor touch, in order, each
     # in a String of the stream's own, so that nothing of a datagram is
     # kept; a range is found with `bsearch_index` and joined to those it
@@ -36,6 +41,12 @@ module Raiha::Next::QUIC
         @ranges = [] #: Array[Chunk]
         @read_offset = 0
         @final_size = nil #: Integer?
+        @stopped = false
+        @reset = false
+        # The error code of the STOP_SENDING the application asked for, and
+        # whether it is due.
+        @stop_code = nil #: Integer?
+        @stop_due = false
       end
 
       # Takes the end of a frame of `frame_type` that ends at `end_offset`,
@@ -124,10 +135,63 @@ module Raiha::Next::QUIC
         "".b
       end
 
+      # The application stops reading with `error_code`: STOP_SENDING is
+      # due, and what was received and not read is consumed. The bytes
+      # consumed.
+      def stop!(error_code)
+        return 0 if @stopped || @reset
+        @stopped = true
+        @stop_code = error_code
+        @stop_due = true
+        drop_to(@window.received)
+      end
+
+      # The peer reset the stream at `final_size`, admitted: what was not
+      # read up to it is consumed. The bytes consumed.
+      def reset!(final_size)
+        @reset = true
+        @final_size = final_size
+        @stop_due = false
+        drop_to(final_size)
+      end
+
+      def reset? = @reset
+
+      # Whether the stream keeps no data any more.
+      def abandoned? = @stopped || @reset
+
+      # Data admitted to an abandoned stream is consumed as it comes. The
+      # bytes consumed.
+      def discard = drop_to(@window.received)
+
+      # The error code of the STOP_SENDING due, nil when none is.
+      def stop_due = @stop_due ? @stop_code : nil
+
+      # STOP_SENDING went.
+      def stop_sent
+        @stop_due = false
+      end
+
+      # STOP_SENDING was lost: it goes again unless the peer has reset the
+      # stream since, or sent all of it.
+      def stop_lost
+        @stop_due = true unless @reset || (@final_size && @window.received == @final_size)
+      end
+
       # Whether a read gives anything: data, or the end.
       def readable?
         head = @ranges.first
         (head && head.offset == @read_offset) || @final_size == @read_offset
+      end
+
+      # The data up to `offset` is consumed, and none is kept: the bytes
+      # consumed.
+      private def drop_to(offset)
+        consumed = [offset - @read_offset, 0].max
+        @ranges.clear
+        @read_offset += consumed
+        @window.consume(consumed)
+        consumed
       end
 
       # `offset` and `length` cut to what is past the read data.

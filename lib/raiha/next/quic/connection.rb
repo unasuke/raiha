@@ -190,6 +190,20 @@ module Raiha::Next::QUIC
     # How many bytes a write to `stream_id` would take now.
     def stream_writable_bytes(stream_id) = @streams.writable_bytes(stream_id)
 
+    # Abandons sending on `stream_id`: RESET_STREAM goes with
+    # `error_code`, and what was written and not acknowledged goes nowhere.
+    def stream_reset(stream_id, error_code:)
+      open!
+      @streams.reset(stream_id, error_code)
+    end
+
+    # Stops reading `stream_id`: STOP_SENDING asks the peer with
+    # `error_code` to stop sending, and what comes is let go.
+    def stream_stop_sending(stream_id, error_code:)
+      open!
+      @streams.stop_sending(stream_id, error_code)
+    end
+
     # The streams a write would take something on.
     def writable_streams = @streams.writable.each
 
@@ -351,6 +365,12 @@ module Raiha::Next::QUIC
 
     def stream_data_lost(duty) = @streams.stream_data_lost(duty)
 
+    def reset_stream_acked(duty) = @streams.reset_stream_acked(duty)
+
+    def reset_stream_lost(duty) = @streams.reset_stream_lost(duty)
+
+    def stop_sending_lost(duty) = @streams.stop_sending_lost(duty)
+
     def max_data_lost(duty) = @streams.max_data_lost(duty)
 
     def max_stream_data_lost(duty) = @streams.max_stream_data_lost(duty)
@@ -361,12 +381,9 @@ module Raiha::Next::QUIC
 
     def streams_blocked_lost(duty) = @streams.streams_blocked_lost(duty)
 
-    # Resets, connection IDs and tokens are not sent yet, so their duties
-    # never come back.
+    # Stream counts, connection IDs and tokens are not sent yet, so their
+    # duties never come back.
 
-    def reset_stream_acked(duty) = nil
-    def reset_stream_lost(duty) = nil
-    def stop_sending_lost(duty) = nil
     def max_streams_lost(duty) = nil
     def new_connection_id_lost(duty) = nil
     def retire_connection_id_lost(duty) = nil
@@ -562,6 +579,8 @@ module Raiha::Next::QUIC
       when Wire::Frame::MaxStreams then @streams.receive_max_streams(frame)
       when Wire::Frame::DataBlocked then @streams.receive_data_blocked(frame)
       when Wire::Frame::StreamDataBlocked then @streams.receive_stream_data_blocked(frame, now:)
+      when Wire::Frame::ResetStream then @streams.receive_reset_stream(frame, now:)
+      when Wire::Frame::StopSending then @streams.receive_stop_sending(frame, now:)
       end
     end
 
@@ -758,8 +777,8 @@ module Raiha::Next::QUIC
     # The frames of `level` that fit in `room` bytes, and their duties: an
     # ACK when one is owed and the packet goes anyway, or is due, then, when
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
-    # BLOCKED frames, stream data, and a PING for a probe with nothing
-    # else.
+    # RESET_STREAM and STOP_SENDING, BLOCKED frames, stream data, and a PING
+    # for a probe with nothing else.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -782,6 +801,11 @@ module Raiha::Next::QUIC
         frames << credit
         duties << credit_duty
         room -= Wire::Frame.encode([credit], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && (abandon, abandon_duty = @streams.next_abandon(room))
+        frames << abandon
+        duties << abandon_duty
+        room -= Wire::Frame.encode([abandon], ack_delay_exponent: 0).bytesize
       end
       while eliciting && level == :one_rtt && (blocked, blocked_duty = @streams.next_blocked(room))
         frames << blocked

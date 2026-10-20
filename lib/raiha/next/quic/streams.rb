@@ -39,6 +39,13 @@ module Raiha::Next::QUIC
   # STREAMS_BLOCKED with the limit, once for each value of it; one this
   # end's send buffer cuts short sends none. Frames are taken from the
   # streams with something to send in turn, one a time.
+  #
+  # The application stops reading a stream with STOP_SENDING, or resets
+  # one it writes with RESET_STREAM; a peer's STOP_SENDING resets the
+  # stream with its error code (RFC 9000 "Solicited State Transitions").
+  # What a stream abandoned on either end held goes back to the
+  # connection's window at once, and its receiving part gets no more
+  # credit.
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
@@ -133,6 +140,70 @@ module Raiha::Next::QUIC
       accepted
     end
 
+    # The application resets `stream_id` with `error_code`.
+    def reset(stream_id, error_code)
+      sender = @senders[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
+      abandon_sending(sender, error_code)
+    end
+
+    # The application stops reading `stream_id`, asking the peer with
+    # `error_code` to stop sending.
+    def stop_sending(stream_id, error_code)
+      receiver = @receivers[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to read"
+      gaps = receiver.gaps
+      consumed = receiver.stop!(error_code)
+      @gaps -= gaps - receiver.gaps
+      @window.consume(consumed)
+    end
+
+    # The peer reset a stream: checked as the end of data is, and the
+    # application hears of it once.
+    def receive_reset_stream(frame, now:)
+      type = Wire::Frame::ResetStream::TYPES.fetch(0)
+      receiver = receiver_for(frame.stream_id, frame_type: type, now:) or return
+      grown = receiver.admit(frame.final_size, fin: true, frame_type: type)
+      @window.receive(@window.received + grown, frame_type: type)
+      return if receiver.reset?
+      gaps = receiver.gaps
+      @window.consume(receiver.reset!(frame.final_size))
+      @gaps -= gaps
+      @events << Event::StreamReset.new(stream_id: frame.stream_id, error_code: frame.error_code, final_size: frame.final_size)
+    end
+
+    # The peer asks this end to stop sending a stream: it is reset with
+    # the same error code, and the application hears of it.
+    def receive_stop_sending(frame, now:)
+      sender = sender_part(frame.stream_id, frame_type: Wire::Frame::StopSending::TYPES.fetch(0), now:) or return
+      @events << Event::StopSending.new(stream_id: frame.stream_id, error_code: frame.error_code)
+      abandon_sending(sender, frame.error_code)
+    end
+
+    # The next RESET_STREAM or STOP_SENDING due and its duty, in no more
+    # than `room` bytes; nil when none is or it does not fit.
+    def next_abandon(room)
+      @senders.each do |stream_id, sender|
+        code = sender.reset_due or next
+        frame = Wire::Frame::ResetStream.new(stream_id:, error_code: code, final_size: sender.final_size)
+        return nil unless fits?(frame, room)
+        sender.reset_sent
+        return [frame, Recovery::Duty::ResetStream.new(stream_id:)]
+      end
+      @receivers.each do |stream_id, receiver|
+        code = receiver.stop_due or next
+        frame = Wire::Frame::StopSending.new(stream_id:, error_code: code)
+        return nil unless fits?(frame, room)
+        receiver.stop_sent
+        return [frame, Recovery::Duty::StopSending.new(stream_id:)]
+      end
+      nil
+    end
+
+    def reset_stream_acked(duty) = @senders[duty.stream_id]&.reset_acked
+
+    def reset_stream_lost(duty) = @senders[duty.stream_id]&.reset_lost
+
+    def stop_sending_lost(duty) = @receivers[duty.stream_id]&.stop_lost
+
     # The peer's limits grew: what they now let through can be written.
     def receive_max_data(frame)
       return unless frame.maximum > @peer_max_data
@@ -206,7 +277,7 @@ module Raiha::Next::QUIC
     def writable_bytes(stream_id) = room_for(sender_for(stream_id))
 
     # The streams a write would take something on.
-    def writable = @senders.filter_map { |stream_id, sender| stream_id if !sender.fin? && room_for(sender).positive? }
+    def writable = @senders.filter_map { |stream_id, sender| stream_id if !sender.fin? && !sender.reset? && room_for(sender).positive? }
 
     # The next STREAM frame and its duty in no more than `room` bytes, from
     # the next stream in turn with something to send; nil when none has,
@@ -247,6 +318,7 @@ module Raiha::Next::QUIC
       length = frame.data.bytesize
       grown = receiver.admit(frame.offset + length, fin: frame.fin, frame_type: type)
       @window.receive(@window.received + grown, frame_type: type)
+      return @window.consume(receiver.discard) if receiver.abandoned?
       gaps = @gaps - receiver.gaps + receiver.gaps_with(frame.offset, length)
       if gaps > MAX_RECV_GAPS
         raise Violation.new("data received in more than #{MAX_RECV_GAPS} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
@@ -283,7 +355,7 @@ module Raiha::Next::QUIC
       end
       @receivers.each do |stream_id, receiver|
         window = receiver.window
-        next unless window.update_due? && receiver.final_size.nil?
+        next unless window.update_due? && receiver.final_size.nil? && !receiver.abandoned?
         return nil if room < 1 + Wire::Varint.size(stream_id) + MAX_VARINT_SIZE
         size = window.size
         maximum = window.advance(now:, rtt:)
@@ -330,8 +402,17 @@ module Raiha::Next::QUIC
     # The sending part of `stream_id` for the application to write to.
     private def sender_for(stream_id)
       sender = @senders[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
-      raise Error::StreamError, "stream #{stream_id} has ended" if sender.fin?
+      raise Error::StreamError, "stream #{stream_id} has ended" if sender.fin? || sender.reset?
       sender
+    end
+
+    # A stream's sending part is reset: the data it held leaves the send
+    # buffer, and what it never sent the connection's count.
+    private def abandon_sending(sender, error_code)
+      released, unsent = sender.reset!(error_code)
+      @buffered -= released
+      @written -= unsent
+      writable_again
     end
 
     # What the stream's credit, the connection's and the send buffer all
@@ -343,7 +424,7 @@ module Raiha::Next::QUIC
     private def writable_again
       @wanting.reject! do |stream_id|
         sender = @senders[stream_id]
-        next true if sender.nil? || sender.fin?
+        next true if sender.nil? || sender.fin? || sender.reset?
         next false unless room_for(sender).positive?
         @events << Event::StreamWritable.new(stream_id:)
         true

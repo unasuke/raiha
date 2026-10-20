@@ -43,6 +43,14 @@ module Raiha::Next::QUIC
     def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
     def stream_data_acked: (Recovery::Duty::Stream duty) -> void
     def stream_data_lost: (Recovery::Duty::Stream duty) -> void
+    def reset: (Integer stream_id, Integer error_code) -> void
+    def stop_sending: (Integer stream_id, Integer error_code) -> void
+    def receive_reset_stream: (Wire::Frame::ResetStream frame, now: Float) -> void
+    def receive_stop_sending: (Wire::Frame::StopSending frame, now: Float) -> void
+    def next_abandon: (Integer room) -> [Wire::Frame::ResetStream | Wire::Frame::StopSending, Recovery::Duty::ResetStream | Recovery::Duty::StopSending]?
+    def reset_stream_acked: (Recovery::Duty::ResetStream duty) -> void
+    def reset_stream_lost: (Recovery::Duty::ResetStream duty) -> void
+    def stop_sending_lost: (Recovery::Duty::StopSending duty) -> void
     def receive_max_data: (Wire::Frame::MaxData frame) -> void
     def receive_max_stream_data: (Wire::Frame::MaxStreamData frame, now: Float) -> void
     def receive_max_streams: (Wire::Frame::MaxStreams frame) -> void
@@ -61,6 +69,7 @@ module Raiha::Next::QUIC
     private def fits?: (Wire::Frame::t frame, Integer room) -> bool
     private def sender_part: (Integer stream_id, frame_type: Integer, now: Float) -> Sender?
     private def sender_for: (Integer stream_id) -> Sender
+    private def abandon_sending: (Sender sender, Integer error_code) -> void
     private def room_for: (Sender sender) -> Integer
     private def writable_again: () -> void
     private def open_peer_streams: (Integer stream_id, frame_type: Integer, now: Float) -> void
@@ -113,6 +122,10 @@ module Raiha::Next::QUIC
       @ranges: Array[Chunk]
       @read_offset: Integer
       @final_size: Integer?
+      @stopped: bool
+      @reset: bool
+      @stop_code: Integer?
+      @stop_due: bool
 
       attr_reader window: ReceiveWindow
       attr_reader final_size: Integer?
@@ -125,7 +138,16 @@ module Raiha::Next::QUIC
       def insert: (Integer offset, String data) -> void
       def read: (Integer max_bytes) -> String?
       def readable?: () -> bool
+      def stop!: (Integer error_code) -> Integer
+      def reset!: (Integer final_size) -> Integer
+      def reset?: () -> bool
+      def abandoned?: () -> bool
+      def discard: () -> Integer
+      def stop_due: () -> Integer?
+      def stop_sent: () -> void
+      def stop_lost: () -> void
 
+      private def drop_to: (Integer offset) -> Integer
       private def clip: (Integer offset, Integer length) -> [Integer, Integer]
       private def touching: (Integer start, Integer finish) -> [Integer, Integer]
     end
@@ -144,6 +166,9 @@ module Raiha::Next::QUIC
       @fin_acked: bool
       @blocked_at: Integer?
       @blocked_due: bool
+      @reset_code: Integer?
+      @reset_due: bool
+      @reset_acked: bool
 
       attr_reader stream_id: Integer
       attr_reader limit: Integer
@@ -162,6 +187,13 @@ module Raiha::Next::QUIC
       def blocked_due?: () -> bool
       def blocked_sent: () -> void
       def blocked_lost: (Integer maximum) -> void
+      def reset?: () -> bool
+      def final_size: () -> Integer
+      def reset!: (Integer error_code) -> [Integer, Integer]
+      def reset_due: () -> Integer?
+      def reset_sent: () -> void
+      def reset_acked: () -> void
+      def reset_lost: () -> void
       def buffered: () -> Integer
       def all_acked?: () -> bool
 
