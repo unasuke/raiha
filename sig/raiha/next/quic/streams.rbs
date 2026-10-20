@@ -1,5 +1,30 @@
 module Raiha::Next::QUIC
   class Streams
+    MAX_RECV_GAPS: Integer
+    SERVER_INITIATED: Integer
+    UNIDIRECTIONAL: Integer
+
+    @role: :client | :server
+    @config: Config
+    @window: ReceiveWindow
+    @receivers: Hash[Integer, Receiver]
+    @senders: Hash[Integer, Sender]
+    @opened: Array[Integer]
+    @gaps: Integer
+    @peer_parameters: TransportParameters?
+
+    attr_reader window: ReceiveWindow
+
+    def initialize: (role: :client | :server, config: Config, now: Float) -> void
+    def peer_parameters=: (TransportParameters parameters) -> TransportParameters
+    def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
+    def local?: (Integer stream_id) -> bool
+
+    private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?
+    private def check_opened: (Integer stream_id, frame_type: Integer) -> void
+    private def open_peer_streams: (Integer stream_id, frame_type: Integer, now: Float) -> void
+    private def open_peer_stream: (Integer stream_id, Float now) -> void
+
     class ReceiveWindow
       UPDATE_THRESHOLD: Rational
       ROUND_TRIPS: Integer
