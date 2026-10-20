@@ -21,7 +21,8 @@ module Raiha::Next::QUIC
     end
 
     # A datagram the Endpoint answers itself, with nothing kept: a Version
-    # Negotiation or a Stateless Reset.
+    # Negotiation, a Stateless Reset, or a CONNECTION_CLOSE for a Retry
+    # token that does not verify.
     class Respond < Data.define(:transmit)
     end
 

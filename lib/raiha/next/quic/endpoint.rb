@@ -5,7 +5,8 @@ module Raiha::Next::QUIC
   # connection a datagram belongs to by its Destination Connection ID and
   # decides for one that belongs to none: the offer of a new connection,
   # which the application takes or turns down, a Version Negotiation, a
-  # Stateless Reset, or nothing. A Connection never refers to its Endpoint.
+  # Stateless Reset, a CONNECTION_CLOSE for a Retry token that does not
+  # verify, or nothing. A Connection never refers to its Endpoint.
   #
   # Like a Connection it never reads a clock: `now:` is the monotonic clock,
   # and the wall clock its tokens expire by is `time:`, given once when it is
@@ -341,8 +342,9 @@ module Raiha::Next::QUIC
     # costs little under attack. A Retry token
     # shows the client receives at its address and carries its first
     # Destination Connection ID (RFC 9000 "Address Validation Using Retry
-    # Packets"); one that does not verify is dropped. A token of another
-    # kind is as none.
+    # Packets"); one that does not verify is answered with a CONNECTION_CLOSE
+    # of INVALID_TOKEN, as the client would not take another Retry (the same
+    # section). A token of another kind is as none.
     #
     # Without a Retry, the connection ID is the client's first, which RFC
     # 9000 "Negotiating Connection IDs" has 8 bytes at least, and an
@@ -352,7 +354,11 @@ module Raiha::Next::QUIC
       retry_scid = nil #: String?
       unless header.token.empty? || header.token.getbyte(0) != RetryToken::KIND
         odcid = RetryToken.verify(header.token, key: @retry_token_key, address: from, time: wall_clock(now))
-        return Route::Drop.new(reason: :invalid_token) unless odcid
+        unless odcid
+          error = ConnectionError.new(code: ErrorCode::INVALID_TOKEN, frame_type: 0, reason: "", application: false)
+          packet = close_packet(header.version, client_dcid: header.dcid, client_scid: header.scid, error:)
+          return Route::Respond.new(transmit: transmit(packet, from, to))
+        end
         retry_scid = header.dcid
       end
       return Route::Drop.new(reason: :short_connection_id) if retry_scid.nil? && header.dcid.bytesize < Connection::INITIAL_DCID_LENGTH
@@ -394,15 +400,22 @@ module Raiha::Next::QUIC
     # anti-amplification limit asks. Its Source Connection ID leads nowhere,
     # as no connection follows, so it is drawn with nothing to avoid.
     private def close(handle, error)
+      packet = close_packet(handle.version, client_dcid: handle.destination_connection_id, client_scid: handle.source_connection_id, error:)
+      @transmits << transmit(packet, handle.remote, handle.local)
+      forget(handle)
+    end
+
+    # The server's Initial packet with a CONNECTION_CLOSE of `error` to the
+    # client whose Initial had the connection IDs `client_dcid` and
+    # `client_scid`.
+    private def close_packet(version, client_dcid:, client_scid:, error:)
       reason = error.reason.b.byteslice(0, Connection::MAX_REASON_LENGTH) #: String
       frame = Wire::Frame::ConnectionClose.new(code: error.code, frame_type: error.frame_type, reason:, application: false)
       scid = @random.bytes(@config.connection_id_length).b
-      header = Wire::LongHeader.new(type: :initial, version: handle.version, dcid: handle.source_connection_id, scid:)
-      keys = Crypto::Initial.derive(dcid: handle.destination_connection_id, version: handle.version).server
+      header = Wire::LongHeader.new(type: :initial, version:, dcid: client_scid, scid:)
+      keys = Crypto::Initial.derive(dcid: client_dcid, version:).server
       payload = Wire::Frame.encode([frame], ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
-      packet = Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
-      @transmits << transmit(packet, handle.remote, handle.local)
-      forget(handle)
+      Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
     end
 
     # A connection ID of `config.connection_id_length` bytes that leads to

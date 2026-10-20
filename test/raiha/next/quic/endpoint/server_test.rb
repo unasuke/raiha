@@ -108,15 +108,29 @@ class RaihaNextQUICEndpointServerTest < Minitest::Test
     assert_equal DCID, route.handle.retry_source_connection_id
   end
 
+  # The code of the CONNECTION_CLOSE in the server's Initial packet that
+  # `route` answers a client's Initial to DCID with.
+  def close_code(route)
+    keys = QUIC::Crypto::Initial.derive(dcid: DCID, version: QUIC::Version::V1).server
+    payload = QUIC::Wire::Packet.parse(route.transmit.payload, dcid_length: 8).unmask(keys.header_protection, largest: nil).open(keys.aead)
+    QUIC::Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: 3).first.code
+  end
+
+  # RFC 9000 "Address Validation Using Retry Packets": a Retry token that
+  # does not verify is answered with INVALID_TOKEN, and nothing is kept.
   def test_a_retry_token_for_another_address
+    endpoint = endpoint()
     token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: SERVER, time: NOW)
-    assert_equal QUIC::Route::Drop.new(reason: :invalid_token), endpoint.receive(initial(token:), from: CLIENT, now: 0.0)
+    route = endpoint.receive(initial(token:), from: CLIENT, now: 0.0)
+    assert_equal CLIENT, route.transmit.destination
+    assert_equal QUIC::ErrorCode::INVALID_TOKEN, close_code(route)
+    assert_nil endpoint.next_timeout
   end
 
   def test_an_expired_retry_token
     token = QUIC::RetryToken.mint(key: KEYS[:retry_token_key], original_destination_connection_id: "o".b * 8, address: CLIENT, time: NOW)
     later = QUIC::RetryToken::LIFETIME + 1.0
-    assert_equal QUIC::Route::Drop.new(reason: :invalid_token), endpoint.receive(initial(token:), from: CLIENT, now: later)
+    assert_equal QUIC::ErrorCode::INVALID_TOKEN, close_code(endpoint.receive(initial(token:), from: CLIENT, now: later))
   end
 
   # A token of another kind, as NEW_TOKEN gives, is as none.

@@ -93,6 +93,7 @@ module Raiha::Next::QUIC
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def client_hello: (Handle handle) -> Route::ClientHello?
     private def close: (Handle handle, ConnectionError error) -> void
+    private def close_packet: (Version version, client_dcid: String, client_scid: String, error: ConnectionError) -> String
     private def new_connection_id: () -> String
     private def pending!: (Handle handle) -> void
     private def forget: (Handle handle) -> void
