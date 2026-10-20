@@ -152,6 +152,7 @@ module Raiha::Next::QUIC
       end
       @pto_count = 0
       set_loss_detection_timer(now)
+      trace_metrics(now)
       Outcome.new(acked: Outcome::NO_PACKETS, lost: initial.select(&:ack_eliciting) + zero_rtt, probe: nil)
     end
 

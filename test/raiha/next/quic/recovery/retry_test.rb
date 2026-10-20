@@ -50,4 +50,14 @@ class RaihaNextQUICRecoveryRetryTest < Minitest::Test
     recovery.on_retry(now: 1.001)
     assert_in_delta 0.005, recovery.path.rtt.smoothed_rtt
   end
+
+  # The tracer is told of the metrics a Retry changes, its RTT sample
+  # among them.
+  def test_the_metrics_of_a_retry
+    tracer = RecordingTracer.new
+    recovery = recovery(role: :client, tracer:)
+    send_packet(recovery, :initial, now: 1.0)
+    recovery.on_retry(now: 1.1)
+    assert_in_delta 0.1, tracer.of(:metrics_updated).last[:latest_rtt], 1e-9
+  end
 end
