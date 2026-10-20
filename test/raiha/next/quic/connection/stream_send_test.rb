@@ -113,4 +113,22 @@ class RaihaNextQUICConnectionStreamSendTest < Minitest::Test
     assert_raises(QUIC::Error::StateError) { client.stream_write(stream_id, "late") }
     assert_raises(QUIC::Error::StateError) { client.open_stream }
   end
+
+  # The server allows two streams at once: when both are over on both
+  # ends, MAX_STREAMS lets the client open more.
+  def test_room_for_more_streams
+    client, server, now = connected(server_config: QUIC::Config.new(initial_max_streams_bidi: 2))
+    streams = Array.new(2) { client.open_stream }
+    assert_nil client.open_stream
+    streams.each { |stream_id| client.stream_write(stream_id, "ping", fin: true) }
+    now = exchange(client, server, now:)
+    streams.each do |stream_id|
+      read_all(server, stream_id)
+      server.stream_write(stream_id, "pong", fin: true)
+    end
+    now = exchange(client, server, now:)
+    streams.each { |stream_id| assert_equal "pong", read_all(client, stream_id) }
+    exchange(client, server, now:)
+    assert_equal 8, client.open_stream
+  end
 end

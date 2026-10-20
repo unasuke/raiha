@@ -381,10 +381,11 @@ module Raiha::Next::QUIC
 
     def streams_blocked_lost(duty) = @streams.streams_blocked_lost(duty)
 
-    # Stream counts, connection IDs and tokens are not sent yet, so their
-    # duties never come back.
+    def max_streams_lost(duty) = @streams.max_streams_lost(duty)
 
-    def max_streams_lost(duty) = nil
+    # Connection IDs and tokens are not sent yet, so their duties never
+    # come back.
+
     def new_connection_id_lost(duty) = nil
     def retire_connection_id_lost(duty) = nil
     def new_token_lost(duty) = nil
@@ -581,6 +582,7 @@ module Raiha::Next::QUIC
       when Wire::Frame::StreamDataBlocked then @streams.receive_stream_data_blocked(frame, now:)
       when Wire::Frame::ResetStream then @streams.receive_reset_stream(frame, now:)
       when Wire::Frame::StopSending then @streams.receive_stop_sending(frame, now:)
+      when Wire::Frame::StreamsBlocked then @streams.receive_streams_blocked(frame)
       end
     end
 

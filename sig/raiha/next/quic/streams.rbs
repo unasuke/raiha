@@ -5,6 +5,8 @@ module Raiha::Next::QUIC
     UNIDIRECTIONAL: Integer
     CONNECTION_WINDOW_FACTOR: Float
     MAX_VARINT_SIZE: Integer
+    STREAM_CREDIT_SHARE: Integer
+    DIRECTIONS: Array[:bidi | :uni]
 
     @role: :client | :server
     @config: Config
@@ -25,6 +27,10 @@ module Raiha::Next::QUIC
     @data_blocked_due: bool
     @streams_blocked_at: Hash[:bidi | :uni, Integer?]
     @streams_blocked_due: Hash[:bidi | :uni, bool]
+    @local_max_streams: Hash[:bidi | :uni, Integer]
+    @ended: Hash[:bidi | :uni, Integer]
+    @max_streams_resend: Hash[:bidi | :uni, bool]
+    @max_streams_asked: Hash[:bidi | :uni, bool]
 
     attr_reader window: ReceiveWindow
 
@@ -33,7 +39,7 @@ module Raiha::Next::QUIC
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
     def read: (Integer stream_id, Integer max_bytes) -> String?
     def readable: () -> Array[Integer]
-    def next_credit: (Integer room, now: Float, rtt: Float?) -> [Wire::Frame::MaxData | Wire::Frame::MaxStreamData, Recovery::Duty::MaxData | Recovery::Duty::MaxStreamData]?
+    def next_credit: (Integer room, now: Float, rtt: Float?) -> [Wire::Frame::MaxData | Wire::Frame::MaxStreams | Wire::Frame::MaxStreamData, Recovery::Duty::MaxData | Recovery::Duty::MaxStreams | Recovery::Duty::MaxStreamData]?
     def max_data_lost: (Recovery::Duty::MaxData duty) -> void
     def max_stream_data_lost: (Recovery::Duty::MaxStreamData duty) -> void
     def open: (:bidi | :uni direction, now: Float) -> Integer?
@@ -51,6 +57,8 @@ module Raiha::Next::QUIC
     def reset_stream_acked: (Recovery::Duty::ResetStream duty) -> void
     def reset_stream_lost: (Recovery::Duty::ResetStream duty) -> void
     def stop_sending_lost: (Recovery::Duty::StopSending duty) -> void
+    def receive_streams_blocked: (Wire::Frame::StreamsBlocked frame) -> void
+    def max_streams_lost: (Recovery::Duty::MaxStreams duty) -> void
     def receive_max_data: (Wire::Frame::MaxData frame) -> void
     def receive_max_stream_data: (Wire::Frame::MaxStreamData frame, now: Float) -> void
     def receive_max_streams: (Wire::Frame::MaxStreams frame) -> void
@@ -64,6 +72,12 @@ module Raiha::Next::QUIC
 
     private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?
     private def check_opened: (Integer stream_id, frame_type: Integer) -> void
+    private def streams_allowed: (:bidi | :uni direction) -> Integer
+    private def max_streams_due?: (:bidi | :uni direction) -> bool
+    private def retire: (Integer stream_id) -> void
+    private def over?: (Integer stream_id) -> bool
+    private def receives?: (Integer stream_id) -> bool
+    private def sends?: (Integer stream_id) -> bool
     private def data_blocked: () -> void
     private def streams_blocked: (:bidi | :uni direction, Integer limit) -> nil
     private def fits?: (Wire::Frame::t frame, Integer room) -> bool
@@ -141,6 +155,7 @@ module Raiha::Next::QUIC
       def stop!: (Integer error_code) -> Integer
       def reset!: (Integer final_size) -> Integer
       def reset?: () -> bool
+      def finished?: () -> bool
       def abandoned?: () -> bool
       def discard: () -> Integer
       def stop_due: () -> Integer?
@@ -193,6 +208,7 @@ module Raiha::Next::QUIC
       def reset_due: () -> Integer?
       def reset_sent: () -> void
       def reset_acked: () -> void
+      def reset_acked?: () -> bool
       def reset_lost: () -> void
       def buffered: () -> Integer
       def all_acked?: () -> bool

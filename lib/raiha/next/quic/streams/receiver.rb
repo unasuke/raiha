@@ -157,6 +157,9 @@ module Raiha::Next::QUIC
 
       def reset? = @reset
 
+      # Whether the stream is over here: read to its final size, or reset.
+      def finished? = @final_size == @read_offset
+
       # Whether the stream keeps no data any more.
       def abandoned? = @stopped || @reset
 

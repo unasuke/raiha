@@ -171,6 +171,9 @@ module Raiha::Next::QUIC
         @reset_acked = true
       end
 
+      # Whether RESET_STREAM was acknowledged (Reset Recvd).
+      def reset_acked? = @reset_acked
+
       # RESET_STREAM was lost: it goes again until acknowledged.
       def reset_lost
         @reset_due = true unless @reset_acked

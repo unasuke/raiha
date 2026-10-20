@@ -46,6 +46,14 @@ module Raiha::Next::QUIC
   # What a stream abandoned on either end held goes back to the
   # connection's window at once, and its receiving part gets no more
   # credit.
+  #
+  # A stream whose parts are both over, read to the end or reset, and
+  # acknowledged to the end or reset and acknowledged, is let go: frames
+  # for it are ignored and a read gives its end. One of the peer's makes
+  # room for another, so that the peer can keep as many open at once as
+  # the limit first given; MAX_STREAMS tells it when the room not told
+  # yet is an eighth of that limit, at least one (flow control's design,
+  # "Stream Limits").
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
@@ -57,6 +65,10 @@ module Raiha::Next::QUIC
     # The longest a limit takes as a varint: a credit frame is put together
     # only where it fits with that, as its value is fixed as it goes.
     MAX_VARINT_SIZE = 8
+    # The share of the streams the peer may have open at once that, not
+    # told yet, makes MAX_STREAMS due.
+    STREAM_CREDIT_SHARE = 8
+    DIRECTIONS = %i[bidi uni].freeze
 
     # The connection's receive window.
     attr_reader :window
@@ -90,6 +102,13 @@ module Raiha::Next::QUIC
       @data_blocked_due = false
       @streams_blocked_at = { bidi: nil, uni: nil } #: Hash[:bidi | :uni, Integer?]
       @streams_blocked_due = { bidi: false, uni: false }
+      # How many streams of each direction the peer may open, as last told;
+      # how many of its streams are over; and whether MAX_STREAMS goes
+      # again, or at once for STREAMS_BLOCKED.
+      @local_max_streams = { bidi: config.initial_max_streams_bidi, uni: config.initial_max_streams_uni }
+      @ended = { bidi: 0, uni: 0 }
+      @max_streams_resend = { bidi: false, uni: false }
+      @max_streams_asked = { bidi: false, uni: false }
     end
 
     # The peer's transport parameters, which set the limits of what this
@@ -142,18 +161,23 @@ module Raiha::Next::QUIC
 
     # The application resets `stream_id` with `error_code`.
     def reset(stream_id, error_code)
-      sender = @senders[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
+      sender = @senders[stream_id]
+      return if sender.nil? && over?(stream_id) && sends?(stream_id)
+      sender or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
       abandon_sending(sender, error_code)
     end
 
     # The application stops reading `stream_id`, asking the peer with
     # `error_code` to stop sending.
     def stop_sending(stream_id, error_code)
-      receiver = @receivers[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to read"
+      receiver = @receivers[stream_id]
+      return if receiver.nil? && over?(stream_id) && receives?(stream_id)
+      receiver or raise Error::StreamError, "stream #{stream_id} has nothing to read"
       gaps = receiver.gaps
       consumed = receiver.stop!(error_code)
       @gaps -= gaps - receiver.gaps
       @window.consume(consumed)
+      retire(stream_id)
     end
 
     # The peer reset a stream: checked as the end of data is, and the
@@ -168,6 +192,14 @@ module Raiha::Next::QUIC
       @window.consume(receiver.reset!(frame.final_size))
       @gaps -= gaps
       @events << Event::StreamReset.new(stream_id: frame.stream_id, error_code: frame.error_code, final_size: frame.final_size)
+      retire(frame.stream_id)
+    end
+
+    # The peer cannot open a stream past the limit told: MAX_STREAMS goes
+    # at once if there is room not told yet.
+    def receive_streams_blocked(frame)
+      direction = frame.bidirectional ? :bidi : :uni #: :bidi | :uni
+      @max_streams_asked[direction] = true
     end
 
     # The peer asks this end to stop sending a stream: it is reset with
@@ -198,7 +230,11 @@ module Raiha::Next::QUIC
       nil
     end
 
-    def reset_stream_acked(duty) = @senders[duty.stream_id]&.reset_acked
+    def reset_stream_acked(duty)
+      sender = @senders[duty.stream_id] or return
+      sender.reset_acked
+      retire(duty.stream_id)
+    end
 
     def reset_stream_lost(duty) = @senders[duty.stream_id]&.reset_lost
 
@@ -302,6 +338,7 @@ module Raiha::Next::QUIC
       sender = @senders[duty.stream_id] or return
       @buffered -= sender.acked(duty.offset, duty.length, duty.fin)
       writable_again
+      retire(duty.stream_id)
     end
 
     # Data sent was lost: it goes again.
@@ -318,7 +355,10 @@ module Raiha::Next::QUIC
       length = frame.data.bytesize
       grown = receiver.admit(frame.offset + length, fin: frame.fin, frame_type: type)
       @window.receive(@window.received + grown, frame_type: type)
-      return @window.consume(receiver.discard) if receiver.abandoned?
+      if receiver.abandoned?
+        @window.consume(receiver.discard)
+        return retire(frame.stream_id)
+      end
       gaps = @gaps - receiver.gaps + receiver.gaps_with(frame.offset, length)
       if gaps > MAX_RECV_GAPS
         raise Violation.new("data received in more than #{MAX_RECV_GAPS} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
@@ -332,9 +372,12 @@ module Raiha::Next::QUIC
     # Up to `max_bytes` of `stream_id`, as Receiver#read gives them,
     # consumed in the connection's window as in the stream's.
     def read(stream_id, max_bytes)
-      receiver = @receivers[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to read"
+      receiver = @receivers[stream_id]
+      return nil if receiver.nil? && over?(stream_id) && receives?(stream_id)
+      receiver or raise Error::StreamError, "stream #{stream_id} has nothing to read"
       data = receiver.read(max_bytes)
       @window.consume(data.bytesize) if data
+      retire(stream_id)
       data
     end
 
@@ -343,8 +386,8 @@ module Raiha::Next::QUIC
       @receivers.filter_map { |stream_id, receiver| stream_id if receiver.readable? }
     end
 
-    # The next MAX_DATA or MAX_STREAM_DATA frame due and its duty, in no
-    # more than `room` bytes; nil when none is. `rtt` is the smoothed RTT,
+    # The next MAX_DATA, MAX_STREAMS or MAX_STREAM_DATA frame due and its
+    # duty, in no more than `room` bytes; nil when none is. `rtt` is the smoothed RTT,
     # nil before the first sample. A stream whose final size is known needs
     # no more credit.
     def next_credit(room, now:, rtt:)
@@ -352,6 +395,15 @@ module Raiha::Next::QUIC
         return nil if room < 1 + MAX_VARINT_SIZE
         maximum = @window.advance(now:, rtt:)
         return [Wire::Frame::MaxData.new(maximum:), Recovery::Duty::MaxData.new(maximum:)]
+      end
+      DIRECTIONS.each do |direction|
+        next unless max_streams_due?(direction)
+        return nil if room < 1 + MAX_VARINT_SIZE
+        maximum = @local_max_streams[direction] = streams_allowed(direction)
+        @max_streams_resend[direction] = false
+        @max_streams_asked[direction] = false
+        bidirectional = direction == :bidi
+        return [Wire::Frame::MaxStreams.new(bidirectional:, maximum:), Recovery::Duty::MaxStreams.new(bidirectional:, maximum:)]
       end
       @receivers.each do |stream_id, receiver|
         window = receiver.window
@@ -368,6 +420,52 @@ module Raiha::Next::QUIC
     def max_data_lost(duty) = @window.lost(duty.maximum)
 
     def max_stream_data_lost(duty) = @receivers[duty.stream_id]&.window&.lost(duty.maximum)
+
+    # A lost MAX_STREAMS goes again while it is the latest.
+    def max_streams_lost(duty)
+      direction = duty.bidirectional ? :bidi : :uni #: :bidi | :uni
+      @max_streams_resend[direction] = true if duty.maximum == @local_max_streams.fetch(direction)
+    end
+
+    # How many streams of `direction` the peer may open by now: as many
+    # as are over, and as many again as the limit first given, short of
+    # 2^60.
+    private def streams_allowed(direction)
+      initial = direction == :bidi ? @config.initial_max_streams_bidi : @config.initial_max_streams_uni
+      [@ended.fetch(direction) + initial, Wire::Frame::MAX_STREAM_COUNT].min
+    end
+
+    private def max_streams_due?(direction)
+      return true if @max_streams_resend.fetch(direction)
+      room = streams_allowed(direction) - @local_max_streams.fetch(direction)
+      return false unless room.positive?
+      initial = direction == :bidi ? @config.initial_max_streams_bidi : @config.initial_max_streams_uni
+      @max_streams_asked.fetch(direction) || room >= [initial / STREAM_CREDIT_SHARE, 1].max
+    end
+
+    # `stream_id` is let go once both its parts are over; one of the
+    # peer's makes room for another.
+    private def retire(stream_id)
+      receiver = @receivers[stream_id]
+      sender = @senders[stream_id]
+      return if receiver && !receiver.finished?
+      return if sender && !(sender.all_acked? || sender.reset_acked?)
+      @receivers.delete(stream_id)
+      @senders.delete(stream_id)
+      @send_queue.delete(stream_id)
+      @wanting.delete(stream_id)
+      @ended[stream_id & UNIDIRECTIONAL == 0 ? :bidi : :uni] += 1 unless local?(stream_id)
+    end
+
+    # Whether `stream_id` has been opened, and so, when it is not held,
+    # is over.
+    private def over?(stream_id) = stream_id >> 2 < @opened.fetch(stream_id & 0x3)
+
+    # Whether `stream_id` has a receiving part on this end, or a sending
+    # part.
+    private def receives?(stream_id) = !(local?(stream_id) && stream_id & UNIDIRECTIONAL != 0)
+
+    private def sends?(stream_id) = !(!local?(stream_id) && stream_id & UNIDIRECTIONAL != 0)
 
     # The connection's credit cut a write short.
     private def data_blocked
@@ -458,7 +556,7 @@ module Raiha::Next::QUIC
       type = stream_id & 0x3
       index = stream_id >> 2
       return if index < @opened.fetch(type)
-      limit = type & UNIDIRECTIONAL == 0 ? @config.initial_max_streams_bidi : @config.initial_max_streams_uni
+      limit = @local_max_streams.fetch(type & UNIDIRECTIONAL == 0 ? :bidi : :uni)
       if index >= limit
         raise Violation.new("stream #{stream_id} past the limit of #{limit}", code: ErrorCode::STREAM_LIMIT_ERROR, frame_type:)
       end

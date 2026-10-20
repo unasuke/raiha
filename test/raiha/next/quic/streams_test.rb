@@ -170,4 +170,49 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     s.stop_sending_lost(stop)
     assert_nil s.next_abandon(100)
   end
+
+  # A server's Streams that the client's unidirectional streams `ids` came
+  # on, each with one byte and FIN, read to the end.
+  def finished_uni(*ids, **config)
+    s = streams(role: :server, **config)
+    ids.each do |stream_id|
+      s.receive_stream(stream(stream_id, 0, "a", fin: true), now: 0.0)
+      s.read(stream_id, 10)
+    end
+    s
+  end
+
+  # A stream of the client that is over makes room for another: MAX_STREAMS
+  # once an eighth of the limit, here two, is not told yet.
+  def test_room_for_streams_comes_back
+    s = finished_uni(2, initial_max_streams_uni: 16)
+    assert_nil s.next_credit(100, now: 0.0, rtt: nil)
+    s.receive_stream(stream(6, 0, "a", fin: true), now: 0.0)
+    s.read(6, 10)
+    assert_equal QUIC::Wire::Frame::MaxStreams.new(bidirectional: false, maximum: 18), s.next_credit(100, now: 0.0, rtt: nil)&.first
+    s.receive_stream(stream(17 << 2 | 2, 0, "a"), now: 0.0)
+    assert_violation(QUIC::ErrorCode::STREAM_LIMIT_ERROR) { s.receive_stream(stream(18 << 2 | 2, 0, "a"), now: 0.0) }
+  end
+
+  # STREAMS_BLOCKED brings what room there is at once; a lost MAX_STREAMS
+  # goes again while it is the latest.
+  def test_streams_blocked_brings_room
+    s = finished_uni(2, initial_max_streams_uni: 16)
+    s.receive_streams_blocked(QUIC::Wire::Frame::StreamsBlocked.new(bidirectional: false, maximum: 16))
+    frame, duty = s.next_credit(100, now: 0.0, rtt: nil)
+    assert_equal QUIC::Wire::Frame::MaxStreams.new(bidirectional: false, maximum: 17), frame
+    assert_nil s.next_credit(100, now: 0.0, rtt: nil)
+    s.max_streams_lost(duty)
+    assert_equal frame, s.next_credit(100, now: 0.0, rtt: nil)&.first
+  end
+
+  # A stream that is over is let go: what comes for it is ignored, and a
+  # read gives its end.
+  def test_a_stream_over_is_let_go
+    s = finished_uni(2)
+    assert_empty s.instance_variable_get(:@receivers)
+    s.receive_stream(stream(2, 0, "a", fin: true), now: 0.0)
+    assert_nil s.read(2, 10)
+    s.stop_sending(2, 0)
+  end
 end
