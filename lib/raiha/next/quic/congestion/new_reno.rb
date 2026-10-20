@@ -5,8 +5,9 @@ module Raiha::Next::QUIC
     # NewReno as RFC 9002 "Congestion Control" and its appendix B describe
     # it. The window grows by the bytes acknowledged in slow start and by
     # one datagram a window in congestion avoidance; a loss or an ECN-CE
-    # halves it once a round trip, and persistent congestion takes it to the
-    # minimum, back into slow start.
+    # halves it once a round trip, or an ECN-CE alone multiplies it by the
+    # Config's beta_ecn when there is one, and persistent congestion takes
+    # it to the minimum, back into slow start.
     #
     # Loss recovery calls it once an ACK frame, not once a packet: the
     # recovery period ends with the first ACK whose largest acknowledged
@@ -28,6 +29,7 @@ module Raiha::Next::QUIC
       def initialize(max_datagram_size:, initial_window:, config:, tracer: nil)
         @max_datagram_size = max_datagram_size
         @initial_window = initial_window
+        @beta_ecn = config.beta_ecn
         @window = initial_window.call(max_datagram_size)
         @ssthresh = nil #: Integer?
         @recovery_start = nil #: Float?
@@ -67,7 +69,7 @@ module Raiha::Next::QUIC
       end
 
       def on_ecn_ce(largest_acked_sent_at:, now:)
-        congestion_event(largest_acked_sent_at, now)
+        congestion_event(largest_acked_sent_at, now, beta: @beta_ecn)
         update_state(now)
       end
 
@@ -98,14 +100,15 @@ module Raiha::Next::QUIC
       end
 
       # RFC 9002 appendix B "On New Congestion Event": nothing for a packet
-      # sent before the current recovery period began.
-      private def congestion_event(sent_at, now)
+      # sent before the current recovery period began. The window is halved,
+      # or multiplied by `beta` when there is one.
+      private def congestion_event(sent_at, now, beta: nil)
         start = @recovery_start
         return if start && sent_at <= start
         @recovery_start = now
         @in_recovery = true
         @initial = false
-        ssthresh = @ssthresh = @window / LOSS_REDUCTION_DIVISOR
+        ssthresh = @ssthresh = beta ? (@window * beta).to_i : @window / LOSS_REDUCTION_DIVISOR
         @window = [ssthresh, minimum_window].max
       end
 

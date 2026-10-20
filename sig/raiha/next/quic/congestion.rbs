@@ -41,6 +41,7 @@ module Raiha::Next::QUIC
 
       @max_datagram_size: Integer
       @initial_window: _InitialWindow
+      @beta_ecn: Float?
       @window: Integer
       @ssthresh: Integer?
       @recovery_start: Float?
@@ -67,7 +68,7 @@ module Raiha::Next::QUIC
       def metrics: () -> Hash[Symbol, Integer]
 
       private def slow_start?: () -> bool
-      private def congestion_event: (Float sent_at, Float now) -> void
+      private def congestion_event: (Float sent_at, Float now, ?beta: Float?) -> void
       private def update_state: (Float now) -> void
     end
   end

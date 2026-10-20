@@ -17,7 +17,9 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
     def congestion_state_updated(old:, new:, now:) = @states << [old, new]
   end
 
-  def new_reno(tracer: nil) = NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::Next::QUIC::Config.new, tracer:)
+  def new_reno(tracer: nil, **config)
+    NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::Next::QUIC::Config.new(**config), tracer:)
+  end
 
   def ack(cc, bytes, sent_at:, now:, app_limited: false)
     cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, app_limited:, now:)
@@ -88,6 +90,18 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
     assert_equal [6000, :recovery], [cc.window, cc.state]
     cc.on_ecn_ce(largest_acked_sent_at: 1.9, now: 2.1)
     assert_equal 6000, cc.window
+  end
+
+  # With beta_ecn, an ECN-CE alone shrinks the window by it; a loss still
+  # halves it.
+  def test_ecn_ce_with_beta_ecn
+    cc = new_reno(beta_ecn: 0.8)
+    cc.on_ecn_ce(largest_acked_sent_at: 1.0, now: 2.0)
+    assert_equal 9600, cc.window
+    assert_equal 9600, cc.metrics[:ssthresh]
+    lost = new_reno(beta_ecn: 0.8)
+    lose(lost, sent_at: 1.0, now: 2.0)
+    assert_equal 6000, lost.window
   end
 
   # RFC 9002 "Underutilizing the Congestion Window".
