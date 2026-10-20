@@ -18,8 +18,8 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <port>\n", os.Args[0])
+	if len(os.Args) != 2 && len(os.Args) != 4 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <port> [<cert.pem> <key.pem>]\n", os.Args[0])
 		os.Exit(1)
 	}
 	port, err := strconv.Atoi(os.Args[1])
@@ -28,7 +28,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// A self-signed certificate of its own, or the chain and key given.
 	tlsConfig := generateTLSConfig()
+	if len(os.Args) == 4 {
+		cert, err := tls.LoadX509KeyPair(os.Args[2], os.Args[3])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Certificate error: %v\n", err)
+			os.Exit(1)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
 	quicConfig := &quic.Config{}
 
 	listener, err := quic.ListenAddr(fmt.Sprintf("127.0.0.1:%d", port), tlsConfig, quicConfig)

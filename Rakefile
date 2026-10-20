@@ -75,6 +75,7 @@ namespace :test do
       NEXT_INTEROP_SPEC = {
         openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl },
         picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls },
+        quicgo: { file: "test/interop/next/quic/quicgo_test.rb", build: :quicgo },
         # A gem in the bundle: nothing to build.
         tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
       }.freeze
