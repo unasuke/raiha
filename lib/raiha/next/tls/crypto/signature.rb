@@ -14,9 +14,12 @@ module Raiha::Next::TLS
       CURVES = { "prime256v1" => :secp256r1, "secp384r1" => :secp384r1, "secp521r1" => :secp521r1 }.freeze #: Hash[String, Symbol]
 
       # A private key from DER (PKCS #8 or the traditional forms), or nil.
+      # An Ed25519 key comes as a plain OpenSSL::PKey::PKey, which does not
+      # tell whether it is private; one is when its raw private key reads.
       def self.private_key(der)
         key = OpenSSL::PKey.read(der)
-        key.private? ? key : nil
+        private = key.respond_to?(:private?) ? key.private? : !key.raw_private_key.nil? # steep:ignore
+        private ? key : nil
       rescue OpenSSL::PKey::PKeyError, ArgumentError
         nil
       end

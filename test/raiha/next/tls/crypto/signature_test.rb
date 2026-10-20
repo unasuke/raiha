@@ -29,6 +29,16 @@ class RaihaNextTLSCryptoSignatureTest < Minitest::Test
     end
   end
 
+  # A private key reads from its DER whatever its kind, Ed25519 among
+  # them; a public key or bytes that are no key are nil.
+  def test_private_key
+    keys.each do |name, key|
+      assert_equal key.public_to_der, Signature.private_key(key.private_to_der)&.public_to_der, name
+      assert_nil Signature.private_key(key.public_to_der), name
+    end
+    assert_nil Signature.private_key("garbage".b)
+  end
+
   # A peer's signature that is garbage, or of the wrong kind for the key,
   # is false, never an exception.
   def test_verify_never_raises
