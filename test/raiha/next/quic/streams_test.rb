@@ -7,7 +7,7 @@ require "raiha/next/quic"
 class RaihaNextQUICStreamsTest < Minitest::Test
   QUIC = Raiha::Next::QUIC
 
-  def streams(role: :client, **config) = QUIC::Streams.new(role:, config: QUIC::Config.new(**config), now: 0.0)
+  def streams(role: :client, events: [], **config) = QUIC::Streams.new(role:, config: QUIC::Config.new(**config), events:, now: 0.0)
 
   def stream(stream_id, offset, data, fin: false) = QUIC::Wire::Frame::Stream.new(stream_id:, offset:, data: data.b, fin:)
 

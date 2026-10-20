@@ -6,6 +6,7 @@ module Raiha::Next::QUIC
 
     @role: :client | :server
     @config: Config
+    @events: Array[Event::t]
     @window: ReceiveWindow
     @receivers: Hash[Integer, Receiver]
     @senders: Hash[Integer, Sender]
@@ -15,9 +16,11 @@ module Raiha::Next::QUIC
 
     attr_reader window: ReceiveWindow
 
-    def initialize: (role: :client | :server, config: Config, now: Float) -> void
+    def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float) -> void
     def peer_parameters=: (TransportParameters parameters) -> TransportParameters
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
+    def read: (Integer stream_id, Integer max_bytes) -> String?
+    def readable: () -> Array[Integer]
     def local?: (Integer stream_id) -> bool
 
     private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?

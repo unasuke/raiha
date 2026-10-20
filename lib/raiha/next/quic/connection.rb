@@ -90,6 +90,7 @@ module Raiha::Next::QUIC
       @path = Path.new(config:, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
+      @streams = Streams.new(role:, config:, events: @events, now:)
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
       @stateless_reset_token = stateless_reset_token
@@ -159,6 +160,14 @@ module Raiha::Next::QUIC
 
     # Why the connection closed, nil while it is open.
     def close_reason = @close_error
+
+    # Up to `max_bytes` received on `stream_id`, read by the application:
+    # "" when nothing is there yet, nil once the stream has ended, as
+    # IO#read gives. What is read goes back to the peer as credit.
+    def stream_read(stream_id, max_bytes) = @streams.read(stream_id, max_bytes)
+
+    # The streams a read would give something on.
+    def readable_streams = @streams.readable.each
 
     # Closes the connection with `error_code`, an application's unless
     # `application` is false: a CONNECTION_CLOSE frame goes out, and the
@@ -282,6 +291,7 @@ module Raiha::Next::QUIC
       @reset_tokens << token if token
       @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
       @peer_parameters = parameters
+      @streams.peer_parameters = parameters
       @recovery.peer_max_ack_delay = parameters.max_ack_delay
       restart_idle(@now)
     end
@@ -510,6 +520,7 @@ module Raiha::Next::QUIC
       when Wire::Frame::HandshakeDone
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
+      when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
       end
     end
 

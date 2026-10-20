@@ -21,6 +21,10 @@ module Raiha::Next::QUIC
   # gaps (CVE-2026-75804). The holes of all the streams together are at
   # most MAX_RECV_GAPS, past which the connection closes with
   # INTERNAL_ERROR rather than dropping data an ACK has already covered.
+  #
+  # A stream that had nothing to read and has now tells the application
+  # with Event::StreamReadable, once, as the application reads it until it
+  # gives "" or nil.
   class Streams
     # The holes the data received may have, all the streams together.
     MAX_RECV_GAPS = 1000
@@ -31,9 +35,11 @@ module Raiha::Next::QUIC
     # The connection's receive window.
     attr_reader :window
 
-    def initialize(role:, config:, now:)
+    # Events go to `events`.
+    def initialize(role:, config:, events:, now:)
       @role = role
       @config = config
+      @events = events
       @window = ReceiveWindow.new(size: config.initial_max_data, max: config.max_receive_window, now:)
       @receivers = {} #: Hash[Integer, Receiver]
       @senders = {} #: Hash[Integer, Sender]
@@ -61,7 +67,23 @@ module Raiha::Next::QUIC
         raise Violation.new("data received in more than #{MAX_RECV_GAPS} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
       end
       @gaps = gaps
+      readable = receiver.readable?
       receiver.insert(frame.offset, frame.data)
+      @events << Event::StreamReadable.new(stream_id: frame.stream_id) if !readable && receiver.readable?
+    end
+
+    # Up to `max_bytes` of `stream_id`, as Receiver#read gives them,
+    # consumed in the connection's window as in the stream's.
+    def read(stream_id, max_bytes)
+      receiver = @receivers[stream_id] or raise Error::StreamError, "stream #{stream_id} has nothing to read"
+      data = receiver.read(max_bytes)
+      @window.consume(data.bytesize) if data
+      data
+    end
+
+    # The streams a read would give something on.
+    def readable
+      @receivers.filter_map { |stream_id, receiver| stream_id if receiver.readable? }
     end
 
     # Whether `stream_id` was opened by this end.
