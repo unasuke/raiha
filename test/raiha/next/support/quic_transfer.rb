@@ -43,9 +43,10 @@ module NextQUICTransfer
   # application's step: the client's is given the client Connection, the
   # server's the Test::Server. Gives [network, client, server].
   def transfer_network(seed: 1, model: nil, forward: model, reverse: model, client_config: QUIC::Config.new,
-    server_config: QUIC::Config.new, server_tracer: nil, client_wake: nil, server_wake: nil, client_step:, server_step:)
+    server_config: QUIC::Config.new, client_tracer: nil, server_tracer: nil, client_wake: nil, server_wake: nil, client_step:,
+    server_step:)
     net = Test::Network.new(seed:)
-    client = client_connection(config: client_config)
+    client = client_connection(config: client_config, tracer: client_tracer)
     tls_config = server_config_for_transfer
     keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(2))
     endpoint = QUIC::Endpoint.server(config: server_config, random: Random.new(seed), time: NOW, now: 0.0)
