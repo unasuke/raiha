@@ -1,0 +1,85 @@
+require "raiha/next/test_helper"
+require "raiha/next/support/quic_pair"
+require "objspace"
+
+# What other implementations of QUIC were broken by over streams, each
+# tried on this one: frames that make the peer hold memory or spend CPU it
+# decides the amount of. The limit of retired connection IDs waiting for
+# their acknowledgment is tested with PeerConnectionIDs, and DATAGRAMs
+# the application does not take with the Connection.
+class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
+  include NextQUICPair
+
+  # A server done with the handshake, and its connection ID.
+  def connected_server
+    @keylog = Keylog.new
+    client = client_connection(keylog: @keylog)
+    server = server_connection
+    first = client.transmits(now: 0.0).first.payload
+    server.receive(first, from: CLIENT, now: 0.0)
+    reply = server.transmits(now: 0.0)
+    @server_id = QUIC::Wire::Packet.parse(reply.first.payload, dcid_length: 8).header.scid
+    reply.each { client.receive(_1.payload, from: SERVER, now: 0.0) }
+    handshake(client, server)
+    @number = 1000
+    server
+  end
+
+  # The client's 1-RTT packet of `frames`, given to `server`.
+  def send_frames(server, *frames)
+    payload = QUIC::Wire::Frame.encode(frames, ack_delay_exponent: 3)
+    server.receive(client_one_rtt(@keylog, dcid: @server_id, payload:, packet_number: @number += 1), from: CLIENT, now: 0.1)
+  end
+
+  def stream(stream_id, offset, data) = QUIC::Wire::Frame::Stream.new(stream_id:, offset:, data: data.b, fin: false)
+
+  # Streams that never send their first bytes count to the connection's
+  # limit as far as they go: of streams each sent a byte at the end of its
+  # window, the second passes MAX_DATA (CVE-2026-75804).
+  def test_streams_with_nothing_before
+    server = connected_server
+    window = QUIC::Config.new.initial_max_stream_data_bidi_remote
+    send_frames(server, stream(0, window - 1, "x"))
+    refute server.closing?
+    send_frames(server, stream(4, window - 1, "x"))
+    assert_equal QUIC::ErrorCode::FLOW_CONTROL_ERROR, server.close_reason&.code
+  end
+
+  # STREAM data that runs to the end of its packet, which a substring of
+  # the packet would keep whole, is kept in a String of its own
+  # (CVE-2026-54873).
+  def test_stream_data_does_not_keep_the_packet
+    server = connected_server
+    send_frames(server, stream(0, 1, "x" * 1000))
+    kept = server.instance_variable_get(:@streams).instance_variable_get(:@receivers).fetch(0).instance_variable_get(:@ranges)
+    assert_equal ["x" * 1000], kept.map(&:data)
+    refute ObjectSpace.dump(kept.first.data).include?('"shared":true'), "the STREAM data is shared"
+  end
+
+  # Counts how often a piece of data received is looked at.
+  module Looks
+    class << self
+      attr_accessor :count
+    end
+
+    def offset
+      Looks.count = (Looks.count || 0) + 1
+      super
+    end
+  end
+
+  # STREAM frames in no order, each with a hole on both sides: each finds
+  # its place among those before in a number of looks that grows with the
+  # logarithm of their number, not with the number (CVE-2026-42772).
+  def test_data_out_of_order
+    QUIC::Streams::Receiver::Chunk.prepend(Looks)
+    streams = QUIC::Streams.new(role: :client, config: QUIC::Config.new, events: [], now: 0.0)
+    pieces = 4000
+    most = (0...pieces).to_a.shuffle(random: Random.new(1)).map do |piece|
+      Looks.count = 0
+      streams.receive_stream(stream(1, 2 * piece + 1, "x"), now: 0.0)
+      Looks.count || 0
+    end.max
+    assert_operator most, :<=, 6 * Math.log2(pieces)
+  end
+end
