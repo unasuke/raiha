@@ -846,7 +846,10 @@ module Raiha::Next::QUIC
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
     # RESET_STREAM and STOP_SENDING, RETIRE_CONNECTION_ID, BLOCKED frames,
     # DATAGRAM frames, stream data, and a PING for a probe with nothing
-    # else.
+    # else. A 1-RTT packet that would carry an ACK alone carries a PING too
+    # once a round trip, so that the peer acknowledges the ACKs and what they
+    # acknowledge can be let go (RFC 9000 "Limiting Ranges by Tracking ACK
+    # Frames"); the ranges of Initial and Handshake go with their keys.
     private def frames_for(level, room, eliciting, now)
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
@@ -895,6 +898,11 @@ module Raiha::Next::QUIC
         room -= Wire::Frame.encode([data], ack_delay_exponent: 0).bytesize
       end
       if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
+        frames << Wire::Frame::Ping.new
+        room -= 1
+      end
+      if ack && eliciting && level == :one_rtt && frames.none?(&:ack_eliciting?) && room.positive? &&
+          @recovery.ack_due?(space, now:) && @recovery.ping_with_ack?(space, now:)
         frames << Wire::Frame::Ping.new
         room -= 1
       end
