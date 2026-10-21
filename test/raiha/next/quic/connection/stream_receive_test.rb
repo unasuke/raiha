@@ -52,7 +52,9 @@ class RaihaNextQUICConnectionStreamReceiveTest < Minitest::Test
     assert_empty server.readable_streams.to_a
     send_frames(server, stream(6, "world", fin: true))
     assert_equal "world", server.stream_read(0, 100)
+    assert_equal [0], server.readable_streams.to_a
     assert_nil server.stream_read(0, 100)
+    assert_empty server.readable_streams.to_a
   end
 
   # Once when there comes something to read; again after the application

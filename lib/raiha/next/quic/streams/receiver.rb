@@ -43,6 +43,8 @@ module Raiha::Next::QUIC
         @final_size = nil #: Integer?
         @stopped = false
         @reset = false
+        # Whether a read gave the end.
+        @end_read = false
         # The error code of the STOP_SENDING the application asked for, and
         # whether it is due.
         @stop_code = nil #: Integer?
@@ -131,7 +133,10 @@ module Raiha::Next::QUIC
           @window.consume(chunk.bytesize)
           return chunk
         end
-        return nil if @final_size == @read_offset
+        if @final_size == @read_offset
+          @end_read = true
+          return nil
+        end
         "".b
       end
 
@@ -181,10 +186,10 @@ module Raiha::Next::QUIC
         @stop_due = true unless @reset || (@final_size && @window.received == @final_size)
       end
 
-      # Whether a read gives anything: data, or the end.
+      # Whether a read gives anything: data, or the end not read yet.
       def readable?
         head = @ranges.first
-        (head && head.offset == @read_offset) || @final_size == @read_offset
+        (head && head.offset == @read_offset) || (@final_size == @read_offset && !@end_read)
       end
 
       # The data up to `offset` is consumed, and none is kept: the bytes

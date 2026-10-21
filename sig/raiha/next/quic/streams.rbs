@@ -150,6 +150,7 @@ module Raiha::Next::QUIC
       @reset: bool
       @stop_code: Integer?
       @stop_due: bool
+      @end_read: bool
 
       attr_reader window: ReceiveWindow
       attr_reader final_size: Integer?
