@@ -4,9 +4,10 @@ require "objspace"
 
 # What other implementations of QUIC were broken by over streams, each
 # tried on this one: frames that make the peer hold memory or spend CPU it
-# decides the amount of. The limit of retired connection IDs waiting for
-# their acknowledgment is tested with PeerConnectionIDs, and DATAGRAMs
-# the application does not take with the Connection.
+# decides the amount of, and events the application does not take. The
+# limit of retired connection IDs waiting for their acknowledgment is
+# tested with PeerConnectionIDs, and DATAGRAMs the application does not
+# take with the Connection.
 class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
   include NextQUICPair
 
@@ -81,5 +82,33 @@ class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
       Looks.count || 0
     end.max
     assert_operator most, :<=, 6 * Math.log2(pieces)
+  end
+
+  # A client opens unidirectional streams and resets them at once, given
+  # room for more as they end: a server whose application takes its events
+  # stays, and one whose application never does closes with INTERNAL_ERROR
+  # once more than MAX_EVENTS wait.
+  def test_events_not_taken
+    [true, false].each do |taking|
+      client = client_connection
+      server = server_connection(config: QUIC::Config.new(initial_max_streams_uni: 100))
+      now = handshake(client, server)
+      server.each_event { nil }
+      resets = 0
+      60.times do
+        break if client.draining?
+        while (stream_id = client.open_stream(direction: :uni))
+          client.stream_reset(stream_id, error_code: 1)
+          resets += 1
+        end
+        client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+        server.each_event { nil } if taking
+        server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+        client.each_event { nil }
+        now += 0.01
+      end
+      assert_operator resets, :>, QUIC::Connection::MAX_EVENTS
+      assert_equal (taking ? :open : QUIC::ErrorCode::INTERNAL_ERROR), server.close_reason&.code || :open
+    end
   end
 end

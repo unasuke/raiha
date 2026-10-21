@@ -14,6 +14,7 @@ module Raiha::Next::QUIC
     MAX_REASON_LENGTH: Integer
     CLOSE_LEVELS: Array[PacketProtection::level]
     AMPLIFICATION_FACTOR: Integer
+    MAX_EVENTS: Integer
 
     class Pending < Data
       attr_reader level: PacketProtection::level

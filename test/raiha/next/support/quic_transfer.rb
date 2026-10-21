@@ -41,7 +41,8 @@ module NextQUICTransfer
   # A network with a client of `client_config` and a server's Endpoint of
   # `server_config`, linked by `model` both ways, each wrapped with its
   # application's step: the client's is given the client Connection, the
-  # server's the Test::Server. Gives [network, client, server].
+  # server's the Test::Server. After its step, each application takes its
+  # connections' events, as it has to. Gives [network, client, server].
   def transfer_network(seed: 1, model: nil, forward: model, reverse: model, client_config: QUIC::Config.new,
     server_config: QUIC::Config.new, client_tracer: nil, server_tracer: nil, client_wake: nil, server_wake: nil, client_step:,
     server_step:)
@@ -51,8 +52,14 @@ module NextQUICTransfer
     keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(2))
     endpoint = QUIC::Endpoint.server(config: server_config, random: Random.new(seed), time: NOW, now: 0.0)
     server = Test::Server.new(endpoint, tls_config:, keyring:, tracer: server_tracer)
-    client_node = net.add(App.new(client, wake: client_wake) { |now| client_step.call(client, now) }, address: CLIENT)
-    server_node = net.add(App.new(server, wake: server_wake) { |now| server_step.call(server, now) }, address: SERVER)
+    client_node = net.add(App.new(client, wake: client_wake) { |now|
+      client_step.call(client, now)
+      client.each_event { nil }
+    }, address: CLIENT)
+    server_node = net.add(App.new(server, wake: server_wake) { |now|
+      server_step.call(server, now)
+      server.connections.each { |connection| connection.each_event { nil } }
+    }, address: SERVER)
     net.link(client_node, server_node, forward:, reverse:)
     [net, client, server]
   end

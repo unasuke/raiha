@@ -41,6 +41,12 @@ module Raiha::Next::QUIC
     # address, a server sends at most this many times what it received.
     AMPLIFICATION_FACTOR = 3
 
+    # The most events the application may leave untaken: past it, the peer
+    # makes the connection hold what nobody takes, and it closes with
+    # INTERNAL_ERROR. DATAGRAMs received past their own limit are dropped
+    # before they get here.
+    MAX_EVENTS = 4096
+
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
 
@@ -300,6 +306,9 @@ module Raiha::Next::QUIC
         break unless @state == :open
       end
       take_stateless_reset(datagram, now:) unless processed
+      if @state == :open && @events.size > MAX_EVENTS
+        raise Violation.new("more than #{MAX_EVENTS} events not taken", code: ErrorCode::INTERNAL_ERROR)
+      end
     rescue Violation => error
       # What a packet that opened breaks closes the connection; only an
       # authenticated peer gets here, or one past the integrity limit (250
