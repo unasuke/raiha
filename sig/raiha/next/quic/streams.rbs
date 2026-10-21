@@ -33,7 +33,6 @@ module Raiha::Next::QUIC
     @local_max_streams: Hash[:bidi | :uni, Integer]
     @ended: Hash[:bidi | :uni, Integer]
     @max_streams_resend: Hash[:bidi | :uni, bool]
-    @max_streams_asked: Hash[:bidi | :uni, bool]
     @blocked_sent: Integer
     @blocked_received: Integer
 

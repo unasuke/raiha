@@ -59,7 +59,9 @@ module Raiha::Next::QUIC
   # room for another, so that the peer can keep as many open at once as
   # the limit first given; MAX_STREAMS tells it when the room not told
   # yet is an eighth of that limit, at least one (flow control's design,
-  # "Stream Limits").
+  # "Stream Limits"). STREAMS_BLOCKED does not hurry it, as a peer always
+  # at the limit would otherwise get MAX_STREAMS for every stream or two
+  # that ends, as quinn and quic-go do not.
   class Streams
     # The low bits of a stream ID: who opened it, and which way it goes.
     SERVER_INITIATED = 0x01
@@ -118,11 +120,10 @@ module Raiha::Next::QUIC
       @streams_blocked_due = { bidi: false, uni: false }
       # How many streams of each direction the peer may open, as last told;
       # how many of its streams are over; and whether MAX_STREAMS goes
-      # again, or at once for STREAMS_BLOCKED.
+      # again.
       @local_max_streams = { bidi: config.initial_max_streams_bidi, uni: config.initial_max_streams_uni }
       @ended = { bidi: 0, uni: 0 }
       @max_streams_resend = { bidi: false, uni: false }
-      @max_streams_asked = { bidi: false, uni: false }
       @blocked_sent = 0
       @blocked_received = 0
       # Whether the peer's credit blocks the connection, and the streams it
@@ -215,12 +216,10 @@ module Raiha::Next::QUIC
       retire(frame.stream_id)
     end
 
-    # The peer cannot open a stream past the limit told: MAX_STREAMS goes
-    # at once if there is room not told yet.
+    # The peer cannot open a stream past the limit told; MAX_STREAMS keeps
+    # to its threshold all the same.
     def receive_streams_blocked(frame)
       @blocked_received += 1
-      direction = frame.bidirectional ? :bidi : :uni #: :bidi | :uni
-      @max_streams_asked[direction] = true
     end
 
     # The peer asks this end to stop sending a stream: it is reset with
@@ -434,7 +433,6 @@ module Raiha::Next::QUIC
         return nil if room < 1 + MAX_VARINT_SIZE
         maximum = @local_max_streams[direction] = streams_allowed(direction)
         @max_streams_resend[direction] = false
-        @max_streams_asked[direction] = false
         bidirectional = direction == :bidi
         return [Wire::Frame::MaxStreams.new(bidirectional:, maximum:), Recovery::Duty::MaxStreams.new(bidirectional:, maximum:)]
       end
@@ -473,7 +471,7 @@ module Raiha::Next::QUIC
       room = streams_allowed(direction) - @local_max_streams.fetch(direction)
       return false unless room.positive?
       initial = direction == :bidi ? @config.initial_max_streams_bidi : @config.initial_max_streams_uni
-      @max_streams_asked.fetch(direction) || room >= [initial / STREAM_CREDIT_SHARE, 1].max
+      room >= [initial / STREAM_CREDIT_SHARE, 1].max
     end
 
     # `stream_id` is let go once both its parts are over; one of the

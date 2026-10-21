@@ -198,13 +198,16 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     assert_violation(QUIC::ErrorCode::STREAM_LIMIT_ERROR) { s.receive_stream(stream(18 << 2 | 2, 0, "a"), now: 0.0) }
   end
 
-  # STREAMS_BLOCKED brings what room there is at once; a lost MAX_STREAMS
-  # goes again while it is the latest.
-  def test_streams_blocked_brings_room
+  # STREAMS_BLOCKED brings no room before the threshold; a lost
+  # MAX_STREAMS goes again while it is the latest.
+  def test_streams_blocked_and_a_lost_max_streams
     s = finished_uni(2, initial_max_streams_uni: 16)
     s.receive_streams_blocked(QUIC::Wire::Frame::StreamsBlocked.new(bidirectional: false, maximum: 16))
+    assert_nil s.next_credit(100, now: 0.0, rtt: nil)
+    s.receive_stream(stream(6, 0, "a", fin: true), now: 0.0)
+    s.read(6, 10)
     frame, duty = s.next_credit(100, now: 0.0, rtt: nil)
-    assert_equal QUIC::Wire::Frame::MaxStreams.new(bidirectional: false, maximum: 17), frame
+    assert_equal QUIC::Wire::Frame::MaxStreams.new(bidirectional: false, maximum: 18), frame
     assert_nil s.next_credit(100, now: 0.0, rtt: nil)
     s.max_streams_lost(duty)
     assert_equal frame, s.next_credit(100, now: 0.0, rtt: nil)&.first
