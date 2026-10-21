@@ -9,13 +9,23 @@ from aioquic.quic.events import HandshakeCompleted, StreamDataReceived
 
 
 class ServerProtocol(QuicConnectionProtocol):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.received_data = {}
+
     def quic_event_received(self, event):
         if isinstance(event, HandshakeCompleted):
             print("HANDSHAKE_COMPLETE", flush=True)
         elif isinstance(event, StreamDataReceived):
-            print(f"STREAM_DATA:{event.data.hex()}", flush=True)
+            # The echo goes once the stream has ended, whatever number of
+            # pieces its data came in.
+            data = self.received_data.get(event.stream_id, b"") + event.data
+            self.received_data[event.stream_id] = data
+            if not event.end_stream:
+                return
+            print(f"STREAM_DATA:{data.hex()}", flush=True)
             self._quic.send_stream_data(
-                event.stream_id, b"ECHO:" + event.data, end_stream=True
+                event.stream_id, b"ECHO:" + data, end_stream=True
             )
             self.transmit()
 
