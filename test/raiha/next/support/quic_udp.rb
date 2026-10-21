@@ -13,6 +13,70 @@ module NextQUICUDP
   TMP = File.expand_path("../../../../tmp", __dir__)
   TICK = 0.05
 
+  # A client's application that, once the handshake is confirmed, sends
+  # `payload` on a stream of its own and ends it, and reads what comes back
+  # to its end.
+  class EchoClient
+    attr_reader :received
+
+    def initialize(connection, payload)
+      @connection = connection
+      @payload = payload
+      @written = 0
+      @received = "".b
+      @ended = false
+    end
+
+    # A turn of the application: whether what came back has ended, or the
+    # connection with it.
+    def step
+      @connection.each_event { nil }
+      return true if @ended || @connection.closing? || @connection.draining? || @connection.closed?
+      return false unless @connection.handshake_confirmed?
+      stream_id = (@stream_id ||= @connection.open_stream) or return false
+      if @written < @payload.bytesize
+        @written += @connection.stream_write(stream_id, @payload.byteslice(@written..) || "".b, fin: true)
+      end
+      while (chunk = @connection.stream_read(stream_id, 65_536))
+        return false if chunk.empty?
+        @received << chunk
+      end
+      @ended = true
+    end
+  end
+
+  # A server's application that answers each stream a client opens with
+  # "ECHO:" and what came on it, once it has ended.
+  class EchoServer
+    def initialize(server)
+      @server = server
+      @streams = {}
+    end
+
+    # A turn of the application.
+    def step
+      @server.connections.each do |connection|
+        connection.each_event { nil }
+        next unless connection.handshake_complete? && !connection.closing? && !connection.draining? && !connection.closed?
+        connection.readable_streams.to_a.each { |stream_id| take(connection, stream_id) }
+        @streams.each do |(owner, stream_id), stream|
+          next unless owner.equal?(connection) && stream[:reply] && !stream[:reply].empty?
+          taken = connection.stream_write(stream_id, stream[:reply], fin: true)
+          stream[:reply] = stream[:reply].byteslice(taken..) || "".b
+        end
+      end
+    end
+
+    private def take(connection, stream_id)
+      stream = @streams[[connection, stream_id]] ||= { data: "".b, reply: nil }
+      while (chunk = connection.stream_read(stream_id, 65_536))
+        return if chunk.empty?
+        stream[:data] << chunk
+      end
+      stream[:reply] = "ECHO:".b + stream[:data]
+    end
+  end
+
   module_function
 
   def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
