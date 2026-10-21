@@ -94,11 +94,16 @@ class RaihaNextQUICRecoveryAckSendingTest < Minitest::Test
   end
 
   # RFC 9000 "Limiting Ranges by Tracking ACK Frames": with only ACKs going
-  # for a round trip, a PING goes along.
+  # one after another for a round trip, a PING goes along; not with the
+  # first after an ack-eliciting packet.
   def test_a_ping_with_acks
     recovery = recovery()
+    refute recovery.ping_with_ack?(:application_data, now: 0.0)
+    send_packet(recovery, :one_rtt, now: 0.0, ack_eliciting: false, in_flight: false)
     assert recovery.ping_with_ack?(:application_data, now: 0.0)
     send_packet(recovery, :one_rtt, now: 1.0)
+    refute recovery.ping_with_ack?(:application_data, now: 1.34)
+    send_packet(recovery, :one_rtt, now: 1.1, ack_eliciting: false, in_flight: false)
     refute recovery.ping_with_ack?(:application_data, now: 1.2)
     assert recovery.ping_with_ack?(:application_data, now: 1.34)
   end

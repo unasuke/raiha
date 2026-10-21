@@ -212,6 +212,10 @@ module Raiha::Next::QUIC
       # Whether a skip is to come or has yet to be shown.
       def skipping? = !@skip_after.nil? || !@skipped.nil?
 
+      # Whether a packet of only an ACK has gone since the last ack-eliciting
+      # one.
+      def acks_alone? = !@ack_only_tail.empty?
+
       # Leaves a packet number out after `packets` more packets.
       def skip_after(packets)
         raise ArgumentError, "a skip is pending already" if skipping?

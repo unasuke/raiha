@@ -306,6 +306,7 @@ module Raiha::Next::QUIC
       def initialize: (space name) -> void
       def next_packet_number: () -> Integer
       def skipping?: () -> bool
+      def acks_alone?: () -> bool
       def skip_after: (Integer packets) -> void
       def add: (SentPacket packet) -> void
       attr_reader ack_steps: Integer

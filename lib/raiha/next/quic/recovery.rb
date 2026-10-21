@@ -317,11 +317,16 @@ module Raiha::Next::QUIC
     end
 
     # Whether a packet of only an ACK of `space` should carry a PING too:
-    # with nothing ack-eliciting sent for a round trip, the peer would never
-    # acknowledge the ACKs and what they acknowledge would never be let go
-    # (RFC 9000 "Limiting Ranges by Tracking ACK Frames").
+    # with packets of only ACKs going one after another and nothing
+    # ack-eliciting sent for a round trip, the peer would never acknowledge
+    # the ACKs and what they acknowledge would never be let go (RFC 9000
+    # "Limiting Ranges by Tracking ACK Frames"). The first after an
+    # ack-eliciting packet goes alone, or two ends with nothing else to send
+    # would answer each other's PING with one of their own.
     def ping_with_ack?(space, now:)
-      sent_at = @spaces.fetch(space).time_of_last_ack_eliciting_packet
+      space = @spaces.fetch(space)
+      return false unless space.acks_alone?
+      sent_at = space.time_of_last_ack_eliciting_packet
       sent_at.nil? || now - sent_at >= @path.rtt.smoothed_rtt
     end
 
