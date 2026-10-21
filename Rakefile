@@ -77,6 +77,7 @@ namespace :test do
         picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls },
         quicgo: { file: "test/interop/next/quic/quicgo_test.rb", build: :quicgo },
         aioquic: { file: "test/interop/next/quic/aioquic_test.rb", build: :aioquic },
+        quic_gem: { file: "test/interop/next/quic/quic_gem_test.rb", build: :quic_gem },
         # A gem in the bundle: nothing to build.
         tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
       }.freeze

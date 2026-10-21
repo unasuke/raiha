@@ -181,6 +181,19 @@ jobs:
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: bundle exec rake test:next:interop:aioquic
 
+  next-interop-quic-gem:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config build-essential
+      - run: bundle exec rake test:next:interop:quic_gem
+
   interop-runner:
     runs-on: ubuntu-latest
     steps:
