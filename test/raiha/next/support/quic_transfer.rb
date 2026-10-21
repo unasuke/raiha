@@ -58,6 +58,42 @@ module NextQUICTransfer
 
   def server_config_for_transfer = server_config
 
+  # The client asks for `size` bytes on its first stream once the handshake
+  # is confirmed, and reads them as they come; the server writes them as
+  # fast as the stream takes them. `network` is as transfer_network takes
+  # it. Gives the network, the client, the server and the client's reads, as
+  # [time, bytes read so far].
+  def download(size, **network)
+    reads = []
+    request = nil
+    asked = false
+    sent = 0
+    client_step = lambda do |client, now|
+      if client.handshake_confirmed? && request.nil?
+        request = client.open_stream
+        client.stream_write(request || raise, "GET", fin: true)
+      end
+      next unless request
+      data, = drain(client, request)
+      reads << [now, (reads.last&.last || 0) + data.bytesize] unless data.empty?
+    end
+    server_step = lambda do |server, _now|
+      server.connections.each do |connection|
+        next unless connection.handshake_complete? && !connection.closing? && !connection.draining? && !connection.closed?
+        asked ||= connection.readable_streams.include?(0) && !drain(connection, 0).nil?
+        next unless asked
+        while sent < size
+          chunk = [size - sent, 65_536].min
+          taken = connection.stream_write(0, "x".b * chunk, fin: sent + chunk == size)
+          sent += taken
+          break if taken < chunk
+        end
+      end
+    end
+    net, client, server = transfer_network(client_step:, server_step:, **network)
+    [net, client, server, reads]
+  end
+
   # All `stream_id` has to read now, and whether it has ended.
   def drain(connection, stream_id)
     data = "".b
