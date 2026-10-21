@@ -95,16 +95,23 @@ class RaihaNextQUICTestFlowControlScenariosTest < Minitest::Test
   end
 
   # 3 % of datagrams lost and 10 % reordered: credit lost on the way goes
-  # again, and the transfer ends whole.
+  # again, and the transfer ends whole. The holes in what the client has
+  # received stay far from their limit.
   def test_credit_lost_on_the_way
     body = Random.new(5).bytes(1_000_000)
     got = "".b
-    reader = ->(client, stream_id, _now) { got << drain(client, stream_id).first }
+    holes = 0
+    reader = lambda do |client, stream_id, _now|
+      holes = [holes, client.instance_variable_get(:@streams).instance_variable_get(:@gaps)].max
+      got << drain(client, stream_id).first
+    end
     path = [Test::RandomLoss.new(rate: 0.03), Test::Reorder.new(rate: 0.1), Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 200_000)]
-    net, = serve(body, model: path, reader:, server_config: QUIC::Config.new(initial_max_stream_data_bidi_remote: 64 * 1024,
+    net, client, = serve(body, model: path, reader:, server_config: QUIC::Config.new(initial_max_stream_data_bidi_remote: 64 * 1024,
       initial_max_data: 96 * 1024))
     assert net.run_until(within: 60.0) { got.bytesize == body.bytesize }
     assert_equal Digest::SHA256.digest(body), Digest::SHA256.digest(got)
+    assert_operator holes, :>, 0
+    assert_operator holes, :<, client.instance_variable_get(:@streams).max_gaps
   end
 
   # A thousand requests with a hundred streams open at once, answered one
