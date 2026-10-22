@@ -7,8 +7,9 @@ module RaihaInterop
   # The client of hq-interop on the next release of raiha: one connection
   # to the server of the first of REQUESTS, a stream for each of them,
   # "GET /path\r\n" on it, and what comes back saved under DOWNLOADS by the
-  # name of the path. The chacha20 testcase offers ChaCha20-Poly1305 alone;
-  # versionnegotiation only elicits a Version Negotiation packet.
+  # name of the path. The chacha20 testcase offers ChaCha20-Poly1305 alone,
+  # without GREASE; versionnegotiation only elicits a Version Negotiation
+  # packet.
   class NextClient
     include NextQUIC
 
@@ -66,9 +67,13 @@ module RaihaInterop
       1
     end
 
+    # For chacha20, the runner reads the first cipher suite of the
+    # ClientHello as Wireshark gives it, which a GREASE value would be: the
+    # ClientHello goes without GREASE then.
     private def connect(server_name, remote)
-      cipher_suites = @testcase == "chacha20" ? %i[TLS_CHACHA20_POLY1305_SHA256] : TLS::Config::DEFAULT_CIPHER_SUITES
-      tls_config = TLS::Config.client(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY, cipher_suites:,
+      chacha20 = @testcase == "chacha20"
+      cipher_suites = chacha20 ? %i[TLS_CHACHA20_POLY1305_SHA256] : TLS::Config::DEFAULT_CIPHER_SUITES
+      tls_config = TLS::Config.client(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY, cipher_suites:, grease: !chacha20,
         trust_anchors: certificates_der(File.join(certs_dir, "ca.pem")))
       QUIC::Connection.client(config: QUIC::Config.new, tls_config:, keyring: TLS::Keyring.client(config: tls_config), server_name:,
         remote:, time: Time.now, now: mono, tracer: qlog(:client), keylog:)

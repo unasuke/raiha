@@ -214,7 +214,7 @@ PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
 |----------|--------|--------|
 | `handshake`, `transfer`, `multiplexing` | a stream for each request | the file of each path under `WWW` |
 | `retry` | follows the Retry | sends a Retry to each client whose address is not validated |
-| `chacha20` | offers `TLS_CHACHA20_POLY1305_SHA256` alone | as for `handshake` |
+| `chacha20` | offers `TLS_CHACHA20_POLY1305_SHA256` alone, without GREASE | as for `handshake` |
 | `keyupdate` | updates keys after the first hundred packets, as it always does | as for `transfer` |
 | `versionnegotiation` | elicits a Version Negotiation packet with an Initial of draft-29, which Wireshark reads the long header of, unlike a version reserved for negotiation | answers a version it does not take with a Version Negotiation packet |
 
