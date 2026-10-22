@@ -253,13 +253,10 @@ jobs:
       - run: |
           python -m pip install --upgrade pip
           pip install -r tmp/quic-interop-runner/requirements.txt
-      # raiha-next joins the implementations, and versionnegotiation, which
-      # the runner defines without listing it, the testcases.
       - run: |
           python - <<'PY'
           import json, pathlib
-          root = pathlib.Path("tmp/quic-interop-runner")
-          p = root / "implementations_quic.json"
+          p = pathlib.Path("tmp/quic-interop-runner/implementations_quic.json")
           impls = json.loads(p.read_text())
           impls["raiha-next"] = {
               "image": "localhost/raiha-next-interop:latest",
@@ -267,16 +264,13 @@ jobs:
               "role": "both",
           }
           p.write_text(json.dumps(impls, indent=2))
-          t = root / "testcases_quic.py"
-          source = t.read_text()
-          if "    TestCaseVersionNegotiation,\n" not in source:
-              source = source.replace("TESTCASES_QUIC = [\n", "TESTCASES_QUIC = [\n    TestCaseVersionNegotiation,\n", 1)
-          t.write_text(source)
           PY
       - run: docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+      # versionnegotiation is left out: the runner does not list it among
+      # its testcases, and its check fails on every trace (interop/README.md).
       - run: >-
           interop/run_interop_runner.sh -c raiha-next -s raiha-next
-          -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,versionnegotiation
+          -t handshake,transfer,multiplexing,retry,chacha20,keyupdate
           --log-dir logs -j result.json -d
       # The runner skips a pair that is not compliant and fails nothing for a
       # testcase left unsupported: each has to have succeeded.

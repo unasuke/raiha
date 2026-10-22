@@ -203,12 +203,21 @@ docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest 
 #     "url": "https://github.com/unasuke/raiha",
 #     "role": "both"
 #   }
-# versionnegotiation also has to be listed in TESTCASES_QUIC of
-# testcases_quic.py, which defines it without listing it.
 PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
   interop/run_interop_runner.sh -c raiha-next -s raiha-next \
-  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,versionnegotiation -d
+  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate -d
 ```
+
+The CI job `next-interop-runner` runs these six. versionnegotiation is
+implemented on both sides but left out, as the runner cannot run it
+yet: `testcases_quic.py` defines `TestCaseVersionNegotiation` but
+leaves it out of `TESTCASES_QUIC`, so `-t` does not take it, and its
+check reads `p.scid` off each packet `get_vnp` gives, which is a whole
+packet rather than its QUIC layer, so it raises `AttributeError` and
+ends the run. Listed and read as `p.quic.scid`, it succeeds between
+raiha-next and itself (checked 2026-10-22, runner at `1d6f655`). Before
+adding it back to the job, check the runner upstream for a fix or an
+issue on this.
 
 | testcase | client | server |
 |----------|--------|--------|
