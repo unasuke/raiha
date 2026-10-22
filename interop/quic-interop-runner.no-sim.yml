@@ -17,6 +17,11 @@
 # picks the captures up. SSLKEYLOGFILE / QLOGDIR also share the
 # volume — their per-role filenames don't collide.
 #
+# The upstream compose raises memlock to 64 MiB for implementations that
+# lock memory; raiha locks none, and rootless podman refuses to raise it
+# (setrlimit fails and the container never starts), so this one leaves
+# it as it is.
+#
 # interop/run_interop_runner.sh copies this into the runner's clone and
 # runs the runner on it, with its network made afresh for each run.
 
@@ -52,8 +57,6 @@ services:
       - REQUESTS=$REQUESTS_SERVER
       - PROTOCOLS=$PROTOCOLS_SERVER
     privileged: true
-    ulimits:
-      memlock: 67108864
     networks:
       interopnet:
         ipv4_address: 193.167.100.100
@@ -83,8 +86,6 @@ services:
       - REQUESTS=$REQUESTS_CLIENT
       - PROTOCOLS=$PROTOCOLS_CLIENT
     privileged: true
-    ulimits:
-      memlock: 67108864
     depends_on:
       - server
     networks:
