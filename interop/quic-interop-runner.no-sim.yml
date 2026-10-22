@@ -17,7 +17,8 @@
 # picks the captures up. SSLKEYLOGFILE / QLOGDIR also share the
 # volume — their per-role filenames don't collide.
 #
-# Use with: COMPOSE_FILE=docker-compose.no-sim.yml docker compose ...
+# interop/run_interop_runner.sh copies this into the runner's clone and
+# runs the runner on it, with its network made afresh for each run.
 
 services:
   sim:

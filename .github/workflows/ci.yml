@@ -226,14 +226,10 @@ jobs:
           }
           p.write_text(json.dumps(impls, indent=2))
           PY
-      - run: cp interop/quic-interop-runner.no-sim.yml tmp/quic-interop-runner/docker-compose.no-sim.yml
       - run: docker build -t localhost/raiha-interop:latest -f interop/Dockerfile .
-      - working-directory: tmp/quic-interop-runner
-        env:
-          COMPOSE_FILE: docker-compose.no-sim.yml
-        # --log-dir avoids the default `logs_%Y-%m-%dT%H:%M:%S` name;
-        # upload-artifact rejects paths containing colons.
-        run: python run.py -c raiha -s raiha -t handshake,retry,http3,transfer,resumption --log-dir logs -d
+      # --log-dir avoids the default `logs_%Y-%m-%dT%H:%M:%S` name;
+      # upload-artifact rejects paths containing colons.
+      - run: interop/run_interop_runner.sh -c raiha -s raiha -t handshake,retry,http3,transfer,resumption --log-dir logs -d
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -277,13 +273,9 @@ jobs:
               source = source.replace("TESTCASES_QUIC = [\n", "TESTCASES_QUIC = [\n    TestCaseVersionNegotiation,\n", 1)
           t.write_text(source)
           PY
-      - run: cp interop/quic-interop-runner.no-sim.yml tmp/quic-interop-runner/docker-compose.no-sim.yml
       - run: docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
-      - working-directory: tmp/quic-interop-runner
-        env:
-          COMPOSE_FILE: docker-compose.no-sim.yml
-        run: >-
-          python run.py -c raiha-next -s raiha-next
+      - run: >-
+          interop/run_interop_runner.sh -c raiha-next -s raiha-next
           -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,versionnegotiation
           --log-dir logs -j result.json -d
       # The runner skips a pair that is not compliant and fails nothing for a

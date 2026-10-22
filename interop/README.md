@@ -113,17 +113,25 @@ avoid:
   podman the sim container starts and `dumpcap` runs, but no packets
   appear to traverse the ns-3 datapath, so handshake testcases time
   out. The repo ships a sim-less compose override at
-  `interop/quic-interop-runner.no-sim.yml`; copy it into the runner's
-  clone and point compose at it, so client and server share a plain
-  bridge network and h3 traffic flows directly:
+  `interop/quic-interop-runner.no-sim.yml`, so client and server share
+  a plain bridge network and h3 traffic flows directly.
+  `interop/run_interop_runner.sh` copies it into the runner's clone and
+  runs `run.py` on it with the arguments given:
 
   ```sh
-  cp interop/quic-interop-runner.no-sim.yml \
-     tmp/quic-interop-runner/docker-compose.no-sim.yml
-  cd tmp/quic-interop-runner && . .venv/bin/activate
-  COMPOSE_FILE=docker-compose.no-sim.yml \
-    python run.py -c raiha -s raiha -t handshake -d
+  PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
+    interop/run_interop_runner.sh -c raiha -s raiha -t handshake -d
   ```
+
+  The runner never takes the compose down, so a network it made
+  outlives it, and one on the same addresses (193.167.x.x, which
+  `trace.py` fixes) stops the next run from making its own, whichever
+  checkout or compose left it. The script makes the network afresh:
+  before the run it removes the networks on 193.167.x.x with the
+  stopped containers on them and those named `sim`, `client` and
+  `server`, and after the run it removes its own the same way. A
+  container still running is left alone, and the run does not start.
+  `RUNNER_DIR` points it at another clone of the runner.
 
   Under this layout the handshake actually completes (`client exited
   with code 0`, file downloaded), but…
@@ -195,8 +203,10 @@ docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest 
 #     "url": "https://github.com/unasuke/raiha",
 #     "role": "both"
 #   }
-COMPOSE_FILE=docker-compose.no-sim.yml \
-  python run.py -c raiha-next -s raiha-next \
+# versionnegotiation also has to be listed in TESTCASES_QUIC of
+# testcases_quic.py, which defines it without listing it.
+PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
+  interop/run_interop_runner.sh -c raiha-next -s raiha-next \
   -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,versionnegotiation -d
 ```
 
