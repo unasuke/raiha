@@ -180,6 +180,36 @@ Anything else returns exit status 127 and the runner reports it as
 "not implemented", which keeps the matrix honest while we expand
 coverage.
 
+## The next release of raiha
+
+Built with `--build-arg RAIHA_IMPL=next`, the image runs the next
+release of raiha (`Raiha::Next::QUIC`) with hq-interop (HTTP/0.9 over
+QUIC) instead: `interop/lib/raiha_interop/next_runner.rb` hands the
+role to `NextServer` or `NextClient`.
+
+```sh
+docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+# Add it to implementations_quic.json as "raiha-next":
+#   "raiha-next": {
+#     "image": "localhost/raiha-next-interop:latest",
+#     "url": "https://github.com/unasuke/raiha",
+#     "role": "both"
+#   }
+COMPOSE_FILE=docker-compose.no-sim.yml \
+  python run.py -c raiha-next -s raiha-next \
+  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,versionnegotiation -d
+```
+
+| testcase | client | server |
+|----------|--------|--------|
+| `handshake`, `transfer`, `multiplexing` | a stream for each request | the file of each path under `WWW` |
+| `retry` | follows the Retry | sends a Retry to each client whose address is not validated |
+| `chacha20` | offers `TLS_CHACHA20_POLY1305_SHA256` alone | as for `handshake` |
+| `keyupdate` | updates keys after the first hundred packets, as it always does | as for `transfer` |
+| `versionnegotiation` | elicits a Version Negotiation packet with an Initial of draft-29, which Wireshark reads the long header of, unlike a version reserved for negotiation | answers a version it does not take with a Version Negotiation packet |
+
+Everything else returns exit status 127.
+
 ## Environment variables
 
 | variable | purpose |

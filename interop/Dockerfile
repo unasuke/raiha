@@ -5,6 +5,9 @@
 # WAITFORSERVER / WWW / DOWNLOADS / QLOGDIR / SSLKEYLOGFILE come in
 # as environment variables; raiha-interop reads them and either
 # binds a UDP server or runs a one-shot client.
+#
+# Built with --build-arg RAIHA_IMPL=next, the image runs the next
+# release of raiha with hq-interop instead.
 
 FROM ruby:4.0-slim AS builder
 ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
@@ -20,7 +23,8 @@ RUN bundle config set --local without 'development test' \
  && bundle install
 
 FROM ruby:4.0-slim
-ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
+ARG RAIHA_IMPL=current
+ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle RAIHA_IMPL=$RAIHA_IMPL
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libssl3 ca-certificates iproute2 tcpdump \
