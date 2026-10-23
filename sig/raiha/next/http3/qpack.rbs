@@ -88,6 +88,33 @@ module Raiha::Next::HTTP3::QPACK
     def self.find_name: (String name) -> Integer?
   end
 
+  class DynamicTable
+    ENTRY_OVERHEAD: Integer
+    INITIAL_SLOTS: Integer
+
+    attr_reader capacity: Integer
+    attr_reader size: Integer
+    attr_reader insert_count: Integer
+
+    @max_capacity: Integer
+    @evicted: Integer
+    @ring: Array[[String, String]?]
+
+    def initialize: (Integer max_capacity) -> void
+
+    def max_entries: () -> Integer
+
+    def resize: (Integer capacity) -> void
+
+    def insert: (String name, String value) -> void
+
+    def entry: (Integer index) -> [String, String]?
+
+    private def evict_down_to: (Integer limit) -> void
+
+    private def grow: () -> void
+  end
+
   class Field < Data
     attr_reader name: String
     attr_reader value: String
