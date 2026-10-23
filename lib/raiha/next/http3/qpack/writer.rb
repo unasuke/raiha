@@ -26,6 +26,19 @@ module Raiha::Next::HTTP3::QPACK
       tap { @buffer << value }
     end
 
+    # RFC 9204 "String Literals" with a `prefix`-bit prefix, under `flags`:
+    # in the Huffman code when that is shorter, as it is otherwise.
+    def string(value, prefix, flags = 0)
+      huffman_length = Huffman.encoded_length(value)
+      if huffman_length < value.bytesize
+        integer(huffman_length, prefix - 1, flags | (1 << (prefix - 1)))
+        tap { @buffer << Huffman.encode(value) }
+      else
+        integer(value.bytesize, prefix - 1, flags)
+        tap { @buffer.append_as_bytes(value) }
+      end
+    end
+
     def to_s = @buffer
   end
 end

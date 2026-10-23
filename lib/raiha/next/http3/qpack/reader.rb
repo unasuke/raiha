@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "error"
+require_relative "huffman"
 
 module Raiha::Next::HTTP3::QPACK
   # Reads the primitives of RFC 9204 "Primitives" from `bytes` between
@@ -40,9 +41,38 @@ module Raiha::Next::HTTP3::QPACK
       raise IntegerOverflow, "an integer of more than #{MAX_CONTINUATIONS} continuation bytes"
     end
 
-    private def u8
+    # RFC 9204 "String Literals" with a `prefix`-bit prefix: the H bit, the
+    # length as a (prefix - 1)-bit integer, then the octets, which come out
+    # decoded when H says Huffman, frozen and binary. A string sure to be
+    # longer than `max` octets raises TooLong before its octets are taken;
+    # for a Huffman one that is when even 30-bit codes would decode to more.
+    def string(prefix, max = nil)
+      huffman = peek[prefix - 1] == 1
+      length = integer(prefix - 1)
+      if max
+        shortest = huffman ? (length * 8 - 7) / 30 : length
+        raise TooLong, "a string of at least #{shortest} octets, #{max} allowed" if shortest > max
+      end
+      octets = take(length)
+      decoded = huffman ? Huffman.decode(octets) : octets.force_encoding(Encoding::BINARY)
+      raise TooLong, "a string of #{decoded.bytesize} octets, #{max} allowed" if max && decoded.bytesize > max
+      decoded.freeze
+    end
+
+    private def peek
       raise Truncated, "a byte wanted, none left" if eof?
-      byte = @bytes.getbyte(@offset) #: Integer
+      @bytes.getbyte(@offset) #: Integer
+    end
+
+    private def take(length)
+      raise Truncated, "#{length} bytes wanted, #{@limit - @offset} left" if length > @limit - @offset
+      octets = @bytes.byteslice(@offset, length) #: String
+      @offset += length
+      octets
+    end
+
+    private def u8
+      byte = peek
       @offset += 1
       byte
     end

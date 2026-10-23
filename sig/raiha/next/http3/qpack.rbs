@@ -14,6 +14,9 @@ module Raiha::Next::HTTP3::QPACK
   class IntegerOverflow < Malformed
   end
 
+  class TooLong < StandardError
+  end
+
   class Reader
     MAX_INTEGER: Integer
     MAX_CONTINUATIONS: Integer
@@ -26,6 +29,12 @@ module Raiha::Next::HTTP3::QPACK
 
     def integer: (Integer prefix) -> Integer
 
+    def string: (Integer prefix, ?Integer? max) -> String
+
+    private def peek: () -> Integer
+
+    private def take: (Integer length) -> String
+
     private def u8: () -> Integer
   end
 
@@ -33,6 +42,8 @@ module Raiha::Next::HTTP3::QPACK
     def initialize: () -> void
 
     def integer: (Integer value, Integer prefix, ?Integer flags) -> self
+
+    def string: (String value, Integer prefix, ?Integer flags) -> self
 
     def to_s: () -> String
   end
