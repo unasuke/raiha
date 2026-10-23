@@ -1,0 +1,7 @@
+module Raiha::Next::HTTP3::QPACK
+  module ErrorCode
+    DECOMPRESSION_FAILED: Integer
+    ENCODER_STREAM_ERROR: Integer
+    DECODER_STREAM_ERROR: Integer
+  end
+end

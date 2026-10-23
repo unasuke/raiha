@@ -22,8 +22,16 @@ class RaihaNextLoadIsolationTest < Minitest::Test
     "raiha/next/quic" => %i[HTTP3 Runtime],
     "raiha/next/quic/test" => %i[HTTP3 Runtime],
     "raiha/next/http3" => %i[TLS QUIC Runtime],
+    "raiha/next/http3/qpack" => %i[TLS QUIC Runtime],
     "raiha/next/runtime" => %i[],
     "raiha/next" => %i[]
+  }.freeze
+
+  # Entry point => constants of its own layer it must leave undefined. QPACK
+  # is checked alone against a decoder's corpus, before any frame of HTTP/3
+  # is written, so it must not need them.
+  FORBIDDEN_CONSTANTS = {
+    "raiha/next/http3/qpack" => %w[Raiha::Next::HTTP3::Frame]
   }.freeze
 
   # `Raiha::VERSION` is the only old constant the next release may refer to,
@@ -33,25 +41,29 @@ class RaihaNextLoadIsolationTest < Minitest::Test
 
   FORBIDDEN_LAYERS.each do |entry, forbidden|
     define_method(:"test_require_#{entry.tr("/", "_")}_in_isolation") do
-      raiha_constants, defined_layers = require_in_fresh_process(entry)
+      constants = FORBIDDEN_CONSTANTS.fetch(entry, [])
+      raiha_constants, defined_layers, defined_constants = require_in_fresh_process(entry, constants)
 
       assert_empty defined_layers & forbidden,
         "require #{entry.inspect} must not define Raiha::Next::{#{forbidden.join(",")}}"
+      assert_empty defined_constants,
+        "require #{entry.inspect} must not define #{constants.join(", ")}"
       assert_empty raiha_constants - ALLOWED_UNDER_RAIHA,
         "require #{entry.inspect} must not load the old implementation"
     end
   end
 
-  private def require_in_fresh_process(entry)
+  private def require_in_fresh_process(entry, constants)
     script = <<~RUBY
       require #{entry.dump}
       puts Raiha.constants(false).sort.join(" ")
       puts #{LAYERS.inspect}.select { |name| Raiha::Next.const_defined?(name, false) }.join(" ")
+      puts #{constants.inspect}.select { |name| Object.const_get(name) rescue false }.join(" ")
     RUBY
     stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-I", LIB, "-e", script)
     assert status.success?, "require #{entry.inspect} failed:\n#{stderr}"
 
-    raiha_line, layers_line = stdout.lines
-    [raiha_line.split.map(&:to_sym), layers_line.split.map(&:to_sym)]
+    raiha_line, layers_line, constants_line = stdout.lines
+    [raiha_line.split.map(&:to_sym), layers_line.split.map(&:to_sym), constants_line.split]
   end
 end
