@@ -14,3 +14,6 @@ module Raiha::Next::HTTP3::QPACK
 end
 
 require_relative "qpack/error_code"
+require_relative "qpack/error"
+require_relative "qpack/reader"
+require_relative "qpack/writer"

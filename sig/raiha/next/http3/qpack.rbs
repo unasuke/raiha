@@ -4,4 +4,36 @@ module Raiha::Next::HTTP3::QPACK
     ENCODER_STREAM_ERROR: Integer
     DECODER_STREAM_ERROR: Integer
   end
+
+  class Malformed < StandardError
+  end
+
+  class Truncated < Malformed
+  end
+
+  class IntegerOverflow < Malformed
+  end
+
+  class Reader
+    MAX_INTEGER: Integer
+    MAX_CONTINUATIONS: Integer
+
+    attr_reader offset: Integer
+
+    def initialize: (String bytes, ?Integer offset, ?Integer limit) -> void
+
+    def eof?: () -> bool
+
+    def integer: (Integer prefix) -> Integer
+
+    private def u8: () -> Integer
+  end
+
+  class Writer
+    def initialize: () -> void
+
+    def integer: (Integer value, Integer prefix, ?Integer flags) -> self
+
+    def to_s: () -> String
+  end
 end
