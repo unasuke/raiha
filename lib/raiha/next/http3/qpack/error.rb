@@ -8,7 +8,17 @@ module Raiha::Next::HTTP3::QPACK
 
   # The bytes ran out before a field did. On the encoder and decoder
   # streams the rest is yet to come; a field section is always whole.
-  class Truncated < Malformed; end
+  # `needed` is how far the bytes must reach, at least, for the field to
+  # be read, so that a long instruction arriving a byte at a time is not
+  # read over again for each byte.
+  class Truncated < Malformed
+    attr_reader :needed
+
+    def initialize(message = nil, needed: 0)
+      super(message)
+      @needed = needed
+    end
+  end
 
   # An integer larger than QPACK has to decode (RFC 9204 "Implementation
   # Limits"): a stream error on a request stream, unlike the rest.

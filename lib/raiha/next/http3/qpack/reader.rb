@@ -27,7 +27,7 @@ module Raiha::Next::HTTP3::QPACK
     # The next byte, left unread: the first byte of an instruction or a
     # representation tells which one it is.
     def peek
-      raise Truncated, "a byte wanted, none left" if eof?
+      raise Truncated.new("a byte wanted, none left", needed: @offset + 1) if eof?
       @bytes.getbyte(@offset) #: Integer
     end
 
@@ -67,7 +67,7 @@ module Raiha::Next::HTTP3::QPACK
     end
 
     private def take(length)
-      raise Truncated, "#{length} bytes wanted, #{@limit - @offset} left" if length > @limit - @offset
+      raise Truncated.new("#{length} bytes wanted, #{@limit - @offset} left", needed: @offset + length) if length > @limit - @offset
       octets = @bytes.byteslice(@offset, length) #: String
       @offset += length
       octets

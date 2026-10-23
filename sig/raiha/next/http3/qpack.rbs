@@ -9,6 +9,9 @@ module Raiha::Next::HTTP3::QPACK
   end
 
   class Truncated < Malformed
+    attr_reader needed: Integer
+
+    def initialize: (?String? message, ?needed: Integer) -> void
   end
 
   class IntegerOverflow < Malformed
@@ -126,6 +129,29 @@ module Raiha::Next::HTTP3::QPACK
     def initialize: (name: String, value: String, ?never_indexed: bool) -> void
   end
 
+  class Decoded < Data
+    attr_reader stream_id: Integer
+    attr_reader fields: Array[Field]
+    attr_reader size: Integer
+
+    def self.new: (stream_id: Integer, fields: Array[Field], size: Integer) -> instance
+                | (Integer stream_id, Array[Field] fields, Integer size) -> instance
+  end
+
+  class Blocked < Data
+    attr_reader stream_id: Integer
+
+    def self.new: (stream_id: Integer) -> instance
+                | (Integer stream_id) -> instance
+  end
+
+  class Oversized < Data
+    attr_reader stream_id: Integer
+
+    def self.new: (stream_id: Integer) -> instance
+                | (Integer stream_id) -> instance
+  end
+
   class Failure < Data
     attr_reader code: Integer
     attr_reader reason: String
@@ -158,5 +184,27 @@ module Raiha::Next::HTTP3::QPACK
     private def follow: (Reader reader) -> void
 
     private def represent: (Writer writer, Field field) -> Writer
+  end
+  class Decoder
+    DEFAULT_MAX_FIELD_SECTION_SIZE: Integer
+
+    @table: DynamicTable
+    @max_blocked_streams: Integer
+    @max_field_section_size: Integer
+    @pending: String
+    @needed: Integer
+    @failure: Failure?
+
+    def initialize: (?max_table_capacity: Integer, ?max_blocked_streams: Integer, ?max_field_section_size: Integer) -> void
+
+    def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized] | Failure)
+
+    private def follow: (Reader reader) -> void
+
+    private def room: () -> Integer
+
+    private def static_name: (Integer index) -> String
+
+    private def relative_entry: (Integer index) -> [String, String]
   end
 end
