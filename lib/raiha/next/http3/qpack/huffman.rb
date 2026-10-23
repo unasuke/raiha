@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "error"
+
 module Raiha::Next::HTTP3::QPACK
   # The static Huffman code of RFC 7541 Appendix B, which QPACK uses
   # unmodified for string literals (RFC 9204 "String Literals").
@@ -285,6 +287,111 @@ module Raiha::Next::HTTP3::QPACK
       bits = 0
       string.each_byte { |byte| bits += LENGTHS.fetch(byte) }
       (bits + 7) / 8
+    end
+
+    EOS = 256
+
+    # The tree of the code: the two children of each inner node, the root
+    # first. A child is the index of an inner node, or ~symbol for a leaf.
+    # No node points back to the root, so 0 marks a child not yet made.
+    def self.tree_of(codes)
+      tree = [[0, 0]]
+      codes.each_with_index do |(code, length), symbol|
+        node = 0
+        (length - 1).downto(1) do |shift|
+          bit = (code >> shift) & 1
+          child = tree.fetch(node).fetch(bit)
+          if child.zero?
+            child = tree.size
+            tree << [0, 0]
+            tree.fetch(node)[bit] = child
+          end
+          node = child
+        end
+        tree.fetch(node)[code & 1] = ~symbol
+      end
+      tree
+    end
+
+    # The decoder reads a byte at a time: Ruby's cost follows the
+    # instructions it runs, not the bits, so a byte's transition looked up
+    # at once beats walking the tree a bit at a time by an order of
+    # magnitude. The states are the 256 inner nodes and POISON, which EOS
+    # leads to and never leaves; each of the 257 × 256 transitions has the
+    # state it leads to and the octets it emits, so the loop has no branch.
+    POISON = 256
+
+    # The state after each [state, byte] at `(state << 8) | byte`, the
+    # octets emitted on the way, and the states a string may end in: the
+    # root and the first seven nodes of the all-ones path, which padding
+    # of up to seven bits of EOS leads to (RFC 7541 "String Literal
+    # Representation"). A byte's transition is two of a nibble's, which
+    # take a sixteenth of the walking to make.
+    def self.decoder_of(tree)
+      nibble_states, nibble_emits = nibble_steps_of(tree)
+      next_states = Array.new((POISON + 1) << 8, POISON)
+      emits = Array.new((POISON + 1) << 8, "")
+      POISON.times do |state|
+        256.times do |byte|
+          high = (state << 4) | (byte >> 4)
+          middle = nibble_states.fetch(high)
+          next if middle == POISON
+          low = (middle << 4) | (byte & 0x0f)
+          next_states[(state << 8) | byte] = nibble_states.fetch(low)
+          emits[(state << 8) | byte] = -(nibble_emits.fetch(high) + nibble_emits.fetch(low))
+        end
+      end
+      accepting = Array.new(POISON + 1, false)
+      node = 0
+      8.times do
+        accepting[node] = true
+        node = tree.fetch(node).fetch(1)
+      end
+      [next_states, emits, accepting]
+    end
+
+    # The state after each [state, nibble] at `(state << 4) | nibble`, and
+    # the octets emitted on the way.
+    def self.nibble_steps_of(tree)
+      states = Array.new(POISON << 4, POISON)
+      emits = Array.new(POISON << 4, "")
+      POISON.times do |state|
+        16.times do |nibble|
+          node = state
+          emitted = String.new(encoding: Encoding::BINARY)
+          3.downto(0) do |shift|
+            child = tree.fetch(node).fetch((nibble >> shift) & 1)
+            if child.positive?
+              node = child
+            elsif child == ~EOS
+              node = POISON
+              break
+            else
+              emitted << ~child
+              node = 0
+            end
+          end
+          states[(state << 4) | nibble] = node
+          emits[(state << 4) | nibble] = emitted
+        end
+      end
+      [states, emits]
+    end
+
+    NEXT_STATES, EMITS, ACCEPTING = Ractor.make_shareable(decoder_of(tree_of(CODES)))
+
+    # The octets `bytes` encode. Bits that end inside a code other than the
+    # padding, or EOS anywhere, raise Malformed.
+    def self.decode(bytes)
+      decoded = String.new(encoding: Encoding::BINARY, capacity: bytes.bytesize * 8 / 5)
+      state = 0
+      bytes.each_byte do |byte|
+        index = (state << 8) | byte
+        decoded << EMITS[index]
+        state = NEXT_STATES[index]
+      end
+      raise Malformed, "the Huffman code ends inside a code or holds EOS" unless ACCEPTING[state]
+      decoded
     end
   end
 end

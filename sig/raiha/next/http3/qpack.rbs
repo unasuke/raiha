@@ -45,5 +45,19 @@ module Raiha::Next::HTTP3::QPACK
     def self.encode: (String string) -> String
 
     def self.encoded_length: (String string) -> Integer
+
+    EOS: Integer
+    POISON: Integer
+    NEXT_STATES: Array[Integer]
+    EMITS: Array[String]
+    ACCEPTING: Array[bool]
+
+    def self.tree_of: (Array[[Integer, Integer]] codes) -> Array[Array[Integer]]
+
+    def self.decoder_of: (Array[Array[Integer]] tree) -> [Array[Integer], Array[String], Array[bool]]
+
+    def self.nibble_steps_of: (Array[Array[Integer]] tree) -> [Array[Integer], Array[String]]
+
+    def self.decode: (String bytes) -> String
   end
 end
