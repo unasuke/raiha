@@ -24,9 +24,16 @@ module Raiha::Next::HTTP3::QPACK
 
     def eof? = @offset >= @limit
 
+    # The next byte, left unread: the first byte of an instruction or a
+    # representation tells which one it is.
+    def peek
+      raise Truncated, "a byte wanted, none left" if eof?
+      @bytes.getbyte(@offset) #: Integer
+    end
+
     # RFC 7541 "Integer Representation" with a `prefix`-bit prefix. The bits
     # of the first byte above the prefix belong to the caller, which has
-    # read them already.
+    # peeked at them already.
     def integer(prefix)
       mask = (1 << prefix) - 1
       value = u8 & mask
@@ -57,11 +64,6 @@ module Raiha::Next::HTTP3::QPACK
       decoded = huffman ? Huffman.decode(octets) : octets.force_encoding(Encoding::BINARY)
       raise TooLong, "a string of #{decoded.bytesize} octets, #{max} allowed" if max && decoded.bytesize > max
       decoded.freeze
-    end
-
-    private def peek
-      raise Truncated, "a byte wanted, none left" if eof?
-      @bytes.getbyte(@offset) #: Integer
     end
 
     private def take(length)
