@@ -36,4 +36,14 @@ module Raiha::Next::HTTP3::QPACK
 
     def to_s: () -> String
   end
+
+  module Huffman
+    CODES: Array[[Integer, Integer]]
+    BITS: Array[String]
+    LENGTHS: Array[Integer]
+
+    def self.encode: (String string) -> String
+
+    def self.encoded_length: (String string) -> Integer
+  end
 end
