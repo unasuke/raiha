@@ -87,4 +87,27 @@ module Raiha::Next::HTTP3::QPACK
 
     def self.find_name: (String name) -> Integer?
   end
+
+  class Field < Data
+    attr_reader name: String
+    attr_reader value: String
+    attr_reader never_indexed: bool
+
+    def self.new: (name: String, value: String, ?never_indexed: bool) -> instance
+                | (String name, String value, ?bool never_indexed) -> instance
+
+    def initialize: (name: String, value: String, ?never_indexed: bool) -> void
+  end
+
+  class Encoder
+    INDEXED_STATIC: Integer
+    NAME_REFERENCE_STATIC: Integer
+    NAME_REFERENCE_NEVER_INDEXED: Integer
+    LITERAL_NAME: Integer
+    LITERAL_NAME_NEVER_INDEXED: Integer
+
+    def encode: (Integer stream_id, Array[Field] fields) -> String
+
+    private def represent: (Writer writer, Field field) -> Writer
+  end
 end
