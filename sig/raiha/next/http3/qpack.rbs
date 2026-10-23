@@ -60,4 +60,20 @@ module Raiha::Next::HTTP3::QPACK
 
     def self.decode: (String bytes) -> String
   end
+
+  module StaticTable
+    ENTRIES: Array[[String, String]]
+    INDEX: Hash[String, Hash[String, Integer]]
+    NAMES: Hash[String, Integer]
+
+    def self.index_of: (Array[[String, String]] entries) -> Hash[String, Hash[String, Integer]]
+
+    def self.names_of: (Array[[String, String]] entries) -> Hash[String, Integer]
+
+    def self.entry: (Integer index) -> [String, String]?
+
+    def self.find: (String name, String value) -> Integer?
+
+    def self.find_name: (String name) -> Integer?
+  end
 end
