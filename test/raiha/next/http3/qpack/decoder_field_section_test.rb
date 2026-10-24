@@ -93,12 +93,6 @@ class RaihaNextQPACKDecoderFieldSectionTest < Minitest::Test
     assert_failure QPACK::Decoder.new.decode(0, "\x00".b), /byte wanted/
   end
 
-  # Blocking comes in its own change; until then a section that refers to
-  # entries yet to come fails.
-  def test_a_reference_to_entries_yet_to_come
-    assert_failure with_entries.decode(0, prefix(1, 0)), /yet to come/
-  end
-
   # RFC 9204 "Implementation Limits": an integer too large to decode is an
   # error of the stream alone.
   def test_an_integer_past_62_bits_fails_the_stream_alone

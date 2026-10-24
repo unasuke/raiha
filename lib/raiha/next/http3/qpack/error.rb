@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 module Raiha::Next::HTTP3::QPACK
+  # Exceptions are for misuse of the API only. What the peer sends never
+  # raises; it comes back as a Failure.
+  module Error
+    # A call the API does not allow, as a field section for a stream that
+    # has one blocked.
+    class Usage < StandardError; end
+  end
+
   # Bytes from the peer that do not decode. Raised inside QPACK and turned
   # into a Failure where the bytes came in, whose error code depends on
   # the stream they came on; the caller never sees it.

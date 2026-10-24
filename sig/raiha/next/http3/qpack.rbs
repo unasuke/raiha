@@ -1,4 +1,9 @@
 module Raiha::Next::HTTP3::QPACK
+  module Error
+    class Usage < StandardError
+    end
+  end
+
   module ErrorCode
     DECOMPRESSION_FAILED: Integer
     ENCODER_STREAM_ERROR: Integer
@@ -193,13 +198,24 @@ module Raiha::Next::HTTP3::QPACK
     @max_field_section_size: Integer
     @pending: String
     @needed: Integer
+    @blocked: Hash[Integer, [Integer, Integer, Reader]]
     @failure: Failure?
 
     def initialize: (?max_table_capacity: Integer, ?max_blocked_streams: Integer, ?max_field_section_size: Integer) -> void
 
-    def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized] | Failure)
+    def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized | Failure] | Failure)
 
     def decode: (Integer stream_id, String bytes) -> (Decoded | Blocked | Oversized | Failure)
+
+    def cancel: (Integer stream_id) -> nil
+
+    private def follow_all: (String bytes) -> void
+
+    private def block: (Integer stream_id, Integer required, Integer base, String bytes, Integer offset) -> Blocked
+
+    private def unblock: () -> Array[Decoded | Oversized | Failure]
+
+    private def fields_of: (Integer stream_id, Reader reader, Integer required, Integer base) -> Decoded
 
     private def required_insert_count: (Integer encoded) -> Integer
 

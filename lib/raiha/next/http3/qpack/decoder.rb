@@ -26,6 +26,9 @@ module Raiha::Next::HTTP3::QPACK
       # how many of them it needs at least before it is worth reading again.
       @pending = String.new(encoding: Encoding::BINARY)
       @needed = 0
+      # [Required Insert Count, Base, the section read past its prefix] of
+      # each stream blocked, by stream ID in the order they blocked.
+      @blocked = {} #: Hash[Integer, [Integer, Integer, Reader]]
       @failure = nil
     end
 
@@ -33,10 +36,61 @@ module Raiha::Next::HTTP3::QPACK
     # "Encoder Instructions"), keeping an instruction cut short for the
     # bytes after it. A string that would not fit the dynamic table is
     # refused as soon as its length shows it, before its bytes come.
+    #
+    # Gives the field sections the new entries unblock, in the order they
+    # blocked: decoded, or failed when only their stream does. A section
+    # that does not decode fails the connection with
+    # QPACK_DECOMPRESSION_FAILED, the encoder stream's own errors with
+    # QPACK_ENCODER_STREAM_ERROR.
     def receive_encoder_stream(bytes)
       return @failure if @failure # steep:ignore
+      begin
+        follow_all(bytes)
+      rescue Malformed, TooLong => error
+        return @failure = Failure.new(code: ErrorCode::ENCODER_STREAM_ERROR, reason: error.message)
+      end
+      unblock
+    rescue Malformed => error
+      @failure = Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message)
+    end
+
+    # The field section `bytes` from the stream `stream_id` (RFC 9204
+    # "Field Line Representations"). Bytes that do not decode are a
+    # Failure of the connection, but an integer past 62 bits only of the
+    # stream (RFC 9204 "Implementation Limits").
+    #
+    # A section that refers to entries yet to come is kept, Blocked, until
+    # the encoder stream brings them (RFC 9204 "Blocked Decoding"): more
+    # blocked streams than `max_blocked_streams` fail the connection. A
+    # stream holds one section at a time, so another for a stream still
+    # blocked raises Error::Usage.
+    def decode(stream_id, bytes)
+      return @failure if @failure # steep:ignore
+      raise Error::Usage, "stream #{stream_id} has a field section blocked" if @blocked.key?(stream_id)
+      reader = Reader.new(bytes)
+      required = required_insert_count(reader.integer(8))
+      negative = reader.peek[7] == 1
+      delta = reader.integer(7)
+      raise Malformed, "a Base below 0" if negative && delta >= required
+      base = negative ? required - delta - 1 : required + delta
+      return block(stream_id, required, base, bytes, reader.offset) if required > @table.insert_count
+      fields_of(stream_id, reader, required, base)
+    rescue IntegerOverflow => error
+      Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message, stream_id:)
+    rescue Malformed => error
+      @failure = Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message)
+    end
+
+    # Forgets the stream `stream_id`, reset or no longer read, with the
+    # section it has blocked.
+    def cancel(stream_id)
+      @blocked.delete(stream_id)
+      nil
+    end
+
+    private def follow_all(bytes)
       @pending.append_as_bytes(bytes)
-      return [] if @pending.bytesize < @needed
+      return if @pending.bytesize < @needed
       reader = Reader.new(@pending)
       until reader.eof?
         start = reader.offset
@@ -47,31 +101,41 @@ module Raiha::Next::HTTP3::QPACK
             @pending = @pending.byteslice(start..) #: String
           end
           @needed = truncated.needed - start
-          return []
+          return
         end
       end
       @pending = String.new(encoding: Encoding::BINARY)
       @needed = 0
-      []
-    rescue Malformed, TooLong => error
-      @failure = Failure.new(code: ErrorCode::ENCODER_STREAM_ERROR, reason: error.message)
     end
 
-    # The field section `bytes` from the stream `stream_id` (RFC 9204
-    # "Field Line Representations"). Bytes that do not decode are a
-    # Failure of the connection, but an integer past 62 bits only of the
-    # stream (RFC 9204 "Implementation Limits").
-    def decode(stream_id, bytes)
-      return @failure if @failure # steep:ignore
-      reader = Reader.new(bytes)
-      required = required_insert_count(reader.integer(8))
-      negative = reader.peek[7] == 1
-      delta = reader.integer(7)
-      raise Malformed, "a Base below 0" if negative && delta >= required
-      base = negative ? required - delta - 1 : required + delta
-      if required > @table.insert_count
-        raise Malformed, "a field section refers to entry #{required - 1}, which is yet to come"
+    # Keeps the section, its bytes from `offset` on copied unless frozen,
+    # since the caller's buffer may change before they are read.
+    private def block(stream_id, required, base, bytes, offset)
+      if @blocked.size >= @max_blocked_streams
+        raise Malformed, "a field section blocks a stream past the #{@max_blocked_streams} allowed"
       end
+      @blocked[stream_id] = [required, base, Reader.new(bytes.frozen? ? bytes : bytes.dup.freeze, offset)]
+      Blocked.new(stream_id:)
+    end
+
+    private def unblock
+      results = [] #: Array[Decoded | Oversized | Failure]
+      return results if @blocked.empty?
+      @blocked.each do |stream_id, (required, base, reader)|
+        next if required > @table.insert_count
+        @blocked.delete(stream_id)
+        results << begin
+          fields_of(stream_id, reader, required, base)
+        rescue IntegerOverflow => error
+          Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message, stream_id:)
+        end
+      end
+      results
+    end
+
+    # The field lines from `reader` on, below the Required Insert Count
+    # `required` and against the Base `base`.
+    private def fields_of(stream_id, reader, required, base)
       fields = [] #: Array[Field]
       size = 0
       until reader.eof?
@@ -80,10 +144,6 @@ module Raiha::Next::HTTP3::QPACK
         size += field.name.bytesize + field.value.bytesize + DynamicTable::ENTRY_OVERHEAD
       end
       Decoded.new(stream_id:, fields: fields.freeze, size:)
-    rescue IntegerOverflow => error
-      Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message, stream_id:)
-    rescue Malformed => error
-      @failure = Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message)
     end
 
     # RFC 9204 "Required Insert Count": the encoded value is the count
