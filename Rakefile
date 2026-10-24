@@ -94,10 +94,10 @@ namespace :test do
     end
 
     Rake::TestTask.new(:qifs) do |t|
-      t.description = "Run the QPACK decoder of the next release of raiha against the qifs corpus (fetches it into tmp/qifs)"
+      t.description = "Run QPACK of the next release of raiha against the qifs corpus (fetches it into tmp/qifs)"
       t.libs << "test"
       t.libs << "lib"
-      t.test_files = ["test/interop/next/http3/qifs_test.rb"]
+      t.test_files = FileList["test/interop/next/http3/qifs*_test.rb"]
     end
     task qifs: "interop:build:qifs"
   end

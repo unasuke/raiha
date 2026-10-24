@@ -34,6 +34,17 @@ module NextQPACKOfflineInterop
 
   private def block(stream_id, octets) = [stream_id, octets.bytesize].pack("Q>N") + octets
 
+  # An encoded file of the header lists `lists`, the nth on stream n, as
+  # the encoder writes them, with what it writes on the encoder stream.
+  private def encode_file(lists)
+    encoder = QPACK::Encoder.new
+    lists.each_with_index.map do |fields, index|
+      section = block(index + 1, encoder.encode(index + 1, fields))
+      instructions = encoder.take_instructions
+      instructions.empty? ? section : block(0, instructions) + section
+    end.join.b
+  end
+
   # The header lists an encoded file decodes to, by stream ID, or the
   # first result that is not Decoded. The files came before RFC 9204 made
   # the dynamic table's first capacity 0, and many insert without setting
