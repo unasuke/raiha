@@ -195,13 +195,14 @@ module Raiha::Next::HTTP3::QPACK
     SECTION_ACKNOWLEDGMENT: Integer
     STREAM_CANCELLATION: Integer
     INSERT_COUNT_INCREMENT: Integer
+    EXPANSION_BOUND: Integer
 
     @table: DynamicTable
     @max_blocked_streams: Integer
     @max_field_section_size: Integer
     @pending: String
     @needed: Integer
-    @blocked: Hash[Integer, [Integer, Integer, Reader]]
+    @blocked: Hash[Integer, [Integer, Integer, Reader, Integer]]
     @instructions: Writer
     @known_received_count: Integer
     @failure: Failure?
@@ -210,7 +211,7 @@ module Raiha::Next::HTTP3::QPACK
 
     def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized | Failure] | Failure)
 
-    def decode: (Integer stream_id, String bytes) -> (Decoded | Blocked | Oversized | Failure)
+    def decode: (Integer stream_id, String bytes, ?limit: Integer) -> (Decoded | Blocked | Oversized | Failure)
 
     def cancel: (Integer stream_id) -> nil
 
@@ -220,15 +221,17 @@ module Raiha::Next::HTTP3::QPACK
 
     private def follow_all: (String bytes) -> void
 
-    private def block: (Integer stream_id, Integer required, Integer base, String bytes, Integer offset) -> Blocked
+    private def block: (Integer stream_id, Integer required, Integer base, String bytes, Integer offset, Integer limit) -> (Blocked | Oversized)
 
     private def unblock: () -> Array[Decoded | Oversized | Failure]
 
-    private def fields_of: (Integer stream_id, Reader reader, Integer required, Integer base) -> Decoded
+    private def fields_of: (Integer stream_id, Reader reader, Integer required, Integer base, Integer limit) -> (Decoded | Oversized)
+
+    private def oversize: (Integer stream_id, Integer required) -> Oversized
 
     private def required_insert_count: (Integer encoded) -> Integer
 
-    private def represent: (Reader reader, Integer required, Integer base) -> Field
+    private def represent: (Reader reader, Integer required, Integer base, Integer room) -> Field
 
     private def field_entry: (Integer absolute, Integer required) -> [String, String]
 

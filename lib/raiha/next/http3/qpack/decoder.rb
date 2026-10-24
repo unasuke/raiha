@@ -21,6 +21,10 @@ module Raiha::Next::HTTP3::QPACK
     STREAM_CANCELLATION = 0b0100_0000
     INSERT_COUNT_INCREMENT = 0b0000_0000
 
+    # How many times its size against the budget a field line can take on
+    # the wire, at most.
+    EXPANSION_BOUND = 4
+
     # `max_table_capacity` and `max_blocked_streams` are what this end
     # sends as SETTINGS_QPACK_MAX_TABLE_CAPACITY and
     # SETTINGS_QPACK_BLOCKED_STREAMS; both default to 0, as in RFC 9204
@@ -33,9 +37,10 @@ module Raiha::Next::HTTP3::QPACK
       # how many of them it needs at least before it is worth reading again.
       @pending = String.new(encoding: Encoding::BINARY)
       @needed = 0
-      # [Required Insert Count, Base, the section read past its prefix] of
-      # each stream blocked, by stream ID in the order they blocked.
-      @blocked = {} #: Hash[Integer, [Integer, Integer, Reader]]
+      # [Required Insert Count, Base, the section read past its prefix,
+      # limit] of each stream blocked, by stream ID in the order they
+      # blocked.
+      @blocked = {} #: Hash[Integer, [Integer, Integer, Reader, Integer]]
       # The decoder stream's instructions yet to be taken, and the Known
       # Received Count as the encoder will have it once they reach it (RFC
       # 9204 "Known Received Count").
@@ -71,22 +76,30 @@ module Raiha::Next::HTTP3::QPACK
     # Failure of the connection, but an integer past 62 bits only of the
     # stream (RFC 9204 "Implementation Limits").
     #
+    # The fields are counted against `limit` as they come out, each its
+    # name and value and 32 more (RFC 9114 "Header Size Constraints"): the
+    # decoder stops at the line that passes it, or at a string sure to, and
+    # gives Oversized, not expanding the rest. The limit is the budget of
+    # the whole message, so the HTTP/3 layer passes what is left of it for
+    # trailers.
+    #
     # A section that refers to entries yet to come is kept, Blocked, until
     # the encoder stream brings them (RFC 9204 "Blocked Decoding"): more
     # blocked streams than `max_blocked_streams` fail the connection. A
     # stream holds one section at a time, so another for a stream still
     # blocked raises Error::Usage.
-    def decode(stream_id, bytes)
+    def decode(stream_id, bytes, limit: @max_field_section_size)
       return @failure if @failure # steep:ignore
       raise Error::Usage, "stream #{stream_id} has a field section blocked" if @blocked.key?(stream_id)
+      raise ArgumentError, "a limit is not negative, not #{limit}" if limit.negative?
       reader = Reader.new(bytes)
       required = required_insert_count(reader.integer(8))
       negative = reader.peek[7] == 1
       delta = reader.integer(7)
       raise Malformed, "a Base below 0" if negative && delta >= required
       base = negative ? required - delta - 1 : required + delta
-      return block(stream_id, required, base, bytes, reader.offset) if required > @table.insert_count
-      fields_of(stream_id, reader, required, base)
+      return block(stream_id, required, base, bytes, reader.offset, limit) if required > @table.insert_count
+      fields_of(stream_id, reader, required, base, limit)
     rescue IntegerOverflow => error
       Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message, stream_id:)
     rescue Malformed => error
@@ -138,23 +151,30 @@ module Raiha::Next::HTTP3::QPACK
     end
 
     # Keeps the section, its bytes from `offset` on copied unless frozen,
-    # since the caller's buffer may change before they are read.
-    private def block(stream_id, required, base, bytes, offset)
+    # since the caller's buffer may change before they are read. A line
+    # takes at most four times as many octets on the wire as it counts
+    # against the budget (32 and a string decoded from 30-bit codes at
+    # worst, against its integers and the string's octets), so a section
+    # longer than four times the limit cannot fit it, whatever the entries
+    # it waits for: it is Oversized at once, which bounds what the blocked
+    # sections hold to the blocked streams allowed times that.
+    private def block(stream_id, required, base, bytes, offset, limit)
+      return oversize(stream_id, required) if bytes.bytesize - offset > EXPANSION_BOUND * limit
       if @blocked.size >= @max_blocked_streams
         raise Malformed, "a field section blocks a stream past the #{@max_blocked_streams} allowed"
       end
-      @blocked[stream_id] = [required, base, Reader.new(bytes.frozen? ? bytes : bytes.dup.freeze, offset)]
+      @blocked[stream_id] = [required, base, Reader.new(bytes.frozen? ? bytes : bytes.dup.freeze, offset), limit]
       Blocked.new(stream_id:)
     end
 
     private def unblock
       results = [] #: Array[Decoded | Oversized | Failure]
       return results if @blocked.empty?
-      @blocked.each do |stream_id, (required, base, reader)|
+      @blocked.each do |stream_id, (required, base, reader, limit)|
         next if required > @table.insert_count
         @blocked.delete(stream_id)
         results << begin
-          fields_of(stream_id, reader, required, base)
+          fields_of(stream_id, reader, required, base, limit)
         rescue IntegerOverflow => error
           Failure.new(code: ErrorCode::DECOMPRESSION_FAILED, reason: error.message, stream_id:)
         end
@@ -163,17 +183,27 @@ module Raiha::Next::HTTP3::QPACK
     end
 
     # The field lines from `reader` on, below the Required Insert Count
-    # `required` and against the Base `base`.
-    private def fields_of(stream_id, reader, required, base)
+    # `required` and against the Base `base`, until they pass `limit`.
+    private def fields_of(stream_id, reader, required, base, limit)
       fields = [] #: Array[Field]
       size = 0
       until reader.eof?
-        field = represent(reader, required, base)
-        fields << field
+        field = represent(reader, required, base, limit - size - DynamicTable::ENTRY_OVERHEAD)
         size += field.name.bytesize + field.value.bytesize + DynamicTable::ENTRY_OVERHEAD
+        return oversize(stream_id, required) if size > limit
+        fields << field
       end
       acknowledge(stream_id, required) if required.positive?
       Decoded.new(stream_id:, fields: fields.freeze, size:)
+    rescue TooLong
+      oversize(stream_id, required)
+    end
+
+    # A section left undecoded keeps its references, so one that refers to
+    # the dynamic table is cancelled (RFC 9204 "Abandonment of a Stream").
+    private def oversize(stream_id, required)
+      @instructions.integer(stream_id, 6, STREAM_CANCELLATION) if required.positive?
+      Oversized.new(stream_id:)
     end
 
     # RFC 9204 "Section Acknowledgment", which tells the encoder of every
@@ -200,10 +230,11 @@ module Raiha::Next::HTTP3::QPACK
       required
     end
 
-    # One field line, its representation told by the first byte. A
-    # reference to the dynamic table must be below the Required Insert
-    # Count (RFC 9204 "Invalid References").
-    private def represent(reader, required, base)
+    # One field line, its representation told by the first byte, whose
+    # strings take `room` octets at most or raise TooLong. A reference to
+    # the dynamic table must be below the Required Insert Count (RFC 9204
+    # "Invalid References").
+    private def represent(reader, required, base, room)
       first = reader.peek
       if first >= 0b1000_0000 # Indexed Field Line
         static = first[6] == 1
@@ -215,17 +246,18 @@ module Raiha::Next::HTTP3::QPACK
         static = first[4] == 1
         index = reader.integer(4)
         name = (static ? static_entry(index) : field_entry(base - 1 - index, required)).first
-        Field.new(name:, value: reader.string(8), never_indexed:)
+        Field.new(name:, value: reader.string(8, room - name.bytesize), never_indexed:)
       elsif first >= 0b0010_0000 # Literal Field Line with Literal Name
         never_indexed = first[4] == 1
-        Field.new(name: reader.string(4), value: reader.string(8), never_indexed:)
+        name = reader.string(4, room)
+        Field.new(name:, value: reader.string(8, room - name.bytesize), never_indexed:)
       elsif first >= 0b0001_0000 # Indexed Field Line with Post-Base Index
         name, value = field_entry(base + reader.integer(4), required)
         Field.new(name:, value:)
       else # Literal Field Line with Post-Base Name Reference
         never_indexed = first[3] == 1
         name = field_entry(base + reader.integer(3), required).first
-        Field.new(name:, value: reader.string(8), never_indexed:)
+        Field.new(name:, value: reader.string(8, room - name.bytesize), never_indexed:)
       end
     end
 
