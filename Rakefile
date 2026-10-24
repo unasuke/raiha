@@ -92,6 +92,14 @@ namespace :test do
         task name => "interop:build:#{spec[:build]}" if spec[:build]
       end
     end
+
+    Rake::TestTask.new(:qifs) do |t|
+      t.description = "Run the QPACK decoder of the next release of raiha against the qifs corpus (fetches it into tmp/qifs)"
+      t.libs << "test"
+      t.libs << "lib"
+      t.test_files = ["test/interop/next/http3/qifs_test.rb"]
+    end
+    task qifs: "interop:build:qifs"
   end
 end
 
@@ -139,6 +147,22 @@ namespace :interop do
     desc "Verify system openssl is available"
     task :openssl do
       sh "openssl version"
+    end
+
+    # The latest commit of qpackers/qifs, from 2021.
+    QIFS_COMMIT = "da52cd936b3e34dac7ac12aa8066fc57676af106"
+
+    desc "Fetch the qifs corpus (qpackers/qifs) at a fixed commit into tmp/qifs"
+    task :qifs do
+      unless Dir.exist?("tmp/qifs/.git")
+        mkdir_p "tmp/qifs"
+        sh "git -C tmp/qifs init -q"
+        sh "git -C tmp/qifs remote add origin https://github.com/qpackers/qifs.git"
+      end
+      unless `git -C tmp/qifs rev-parse HEAD 2>/dev/null`.strip == QIFS_COMMIT
+        sh "git -C tmp/qifs fetch -q --depth 1 origin #{QIFS_COMMIT}"
+        sh "git -C tmp/qifs checkout -q FETCH_HEAD"
+      end
     end
 
     desc "Install the quic gem (github: unasuke/quic-ruby) into the interop bundle group"
