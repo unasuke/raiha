@@ -6,6 +6,7 @@ require_relative "field"
 require_relative "reader"
 require_relative "result"
 require_relative "static_table"
+require_relative "writer"
 
 module Raiha::Next::HTTP3::QPACK
   # The decoder of one connection: it follows the encoder stream into its
@@ -13,6 +14,12 @@ module Raiha::Next::HTTP3::QPACK
   # sends never raises; it comes back as a Failure.
   class Decoder
     DEFAULT_MAX_FIELD_SECTION_SIZE = 65_536
+
+    # The decoder instructions of RFC 9204 "Decoder Instructions", as the
+    # bits above their prefixes.
+    SECTION_ACKNOWLEDGMENT = 0b1000_0000
+    STREAM_CANCELLATION = 0b0100_0000
+    INSERT_COUNT_INCREMENT = 0b0000_0000
 
     # `max_table_capacity` and `max_blocked_streams` are what this end
     # sends as SETTINGS_QPACK_MAX_TABLE_CAPACITY and
@@ -29,6 +36,11 @@ module Raiha::Next::HTTP3::QPACK
       # [Required Insert Count, Base, the section read past its prefix] of
       # each stream blocked, by stream ID in the order they blocked.
       @blocked = {} #: Hash[Integer, [Integer, Integer, Reader]]
+      # The decoder stream's instructions yet to be taken, and the Known
+      # Received Count as the encoder will have it once they reach it (RFC
+      # 9204 "Known Received Count").
+      @instructions = Writer.new
+      @known_received_count = 0
       @failure = nil
     end
 
@@ -82,10 +94,27 @@ module Raiha::Next::HTTP3::QPACK
     end
 
     # Forgets the stream `stream_id`, reset or no longer read, with the
-    # section it has blocked.
+    # section it has blocked, and tells the encoder with a Stream
+    # Cancellation (RFC 9204 "Abandonment of a Stream"). A table too small
+    # for any entry has no reference to cancel, and sends none.
     def cancel(stream_id)
       @blocked.delete(stream_id)
+      @instructions.integer(stream_id, 6, STREAM_CANCELLATION) if @table.max_entries.positive?
       nil
+    end
+
+    # The bytes to write on the decoder stream: a Section Acknowledgment
+    # for each section decoded that refers to the dynamic table, the Stream
+    # Cancellations, and one Insert Count Increment for the entries
+    # inserted since the encoder last learnt of them.
+    def take_instructions
+      if @table.insert_count > @known_received_count
+        @instructions.integer(@table.insert_count - @known_received_count, 6, INSERT_COUNT_INCREMENT)
+        @known_received_count = @table.insert_count
+      end
+      bytes = @instructions.to_s
+      @instructions = Writer.new
+      bytes
     end
 
     private def follow_all(bytes)
@@ -143,7 +172,15 @@ module Raiha::Next::HTTP3::QPACK
         fields << field
         size += field.name.bytesize + field.value.bytesize + DynamicTable::ENTRY_OVERHEAD
       end
+      acknowledge(stream_id, required) if required.positive?
       Decoded.new(stream_id:, fields: fields.freeze, size:)
+    end
+
+    # RFC 9204 "Section Acknowledgment", which tells the encoder of every
+    # entry below the section's Required Insert Count.
+    private def acknowledge(stream_id, required)
+      @instructions.integer(stream_id, 7, SECTION_ACKNOWLEDGMENT)
+      @known_received_count = required if required > @known_received_count
     end
 
     # RFC 9204 "Required Insert Count": the encoded value is the count

@@ -192,6 +192,9 @@ module Raiha::Next::HTTP3::QPACK
   end
   class Decoder
     DEFAULT_MAX_FIELD_SECTION_SIZE: Integer
+    SECTION_ACKNOWLEDGMENT: Integer
+    STREAM_CANCELLATION: Integer
+    INSERT_COUNT_INCREMENT: Integer
 
     @table: DynamicTable
     @max_blocked_streams: Integer
@@ -199,6 +202,8 @@ module Raiha::Next::HTTP3::QPACK
     @pending: String
     @needed: Integer
     @blocked: Hash[Integer, [Integer, Integer, Reader]]
+    @instructions: Writer
+    @known_received_count: Integer
     @failure: Failure?
 
     def initialize: (?max_table_capacity: Integer, ?max_blocked_streams: Integer, ?max_field_section_size: Integer) -> void
@@ -208,6 +213,10 @@ module Raiha::Next::HTTP3::QPACK
     def decode: (Integer stream_id, String bytes) -> (Decoded | Blocked | Oversized | Failure)
 
     def cancel: (Integer stream_id) -> nil
+
+    def take_instructions: () -> String
+
+    private def acknowledge: (Integer stream_id, Integer required) -> void
 
     private def follow_all: (String bytes) -> void
 
