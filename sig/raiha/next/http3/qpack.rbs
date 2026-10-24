@@ -199,11 +199,19 @@ module Raiha::Next::HTTP3::QPACK
 
     def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized] | Failure)
 
+    def decode: (Integer stream_id, String bytes) -> (Decoded | Blocked | Oversized | Failure)
+
+    private def required_insert_count: (Integer encoded) -> Integer
+
+    private def represent: (Reader reader, Integer required, Integer base) -> Field
+
+    private def field_entry: (Integer absolute, Integer required) -> [String, String]
+
     private def follow: (Reader reader) -> void
 
     private def room: () -> Integer
 
-    private def static_name: (Integer index) -> String
+    private def static_entry: (Integer index) -> [String, String]
 
     private def relative_entry: (Integer index) -> [String, String]
   end
