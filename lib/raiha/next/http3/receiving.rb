@@ -8,6 +8,8 @@ module Raiha::Next::HTTP3
   # on the QPACK encoder stream.
   class Receiving
     attr_reader :reader, :waiting
+    # The bytes of DATA among what waits.
+    attr_accessor :waiting_bytes
     # :headers until the field section has come, :blocked while it waits
     # on QPACK, :body after it.
     attr_accessor :phase
@@ -18,6 +20,7 @@ module Raiha::Next::HTTP3
       @reader = FrameReader.new(max_payload:)
       @phase = :headers #: :headers | :blocked | :body
       @waiting = [] #: Array[FrameReader::item]
+      @waiting_bytes = 0
       @fin_waiting = false
     end
 

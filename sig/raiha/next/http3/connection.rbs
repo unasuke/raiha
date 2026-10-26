@@ -78,10 +78,12 @@ module Raiha::Next::HTTP3
     @reader: FrameReader
     @phase: :headers | :blocked | :body
     @waiting: Array[FrameReader::item]
+    @waiting_bytes: Integer
     @fin_waiting: bool
 
     attr_reader reader: FrameReader
     attr_reader waiting: Array[FrameReader::item]
+    attr_accessor waiting_bytes: Integer
     attr_accessor phase: :headers | :blocked | :body
     attr_accessor fin_waiting: bool
 
@@ -118,6 +120,7 @@ module Raiha::Next::HTTP3
     NOT_ON_CONTROL: Array[Integer]
     FROM_CLIENTS: Array[Integer]
     NOT_ON_REQUEST: Array[Integer]
+    MAX_WAITING: Integer
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -167,6 +170,7 @@ module Raiha::Next::HTTP3
     private def close_with: (Integer code, String reason) -> void
     private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def request_item: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
+    private def wait: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
     private def section_decoded: (Integer stream_id, Receiving receiving, QPACK::Decoded | QPACK::Blocked | QPACK::Oversized | QPACK::Failure result) -> void
     private def unblocked: (QPACK::Decoded | QPACK::Oversized | QPACK::Failure result) -> void
     private def request_ended: (Integer stream_id, Receiving receiving) -> void

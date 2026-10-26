@@ -46,6 +46,11 @@ module Raiha::Next::HTTP3
     # Layer"), and those only a client sends on one.
     NOT_ON_CONTROL = [Frame::DATA, Frame::HEADERS, Frame::PUSH_PROMISE, *Frame::HTTP2_TYPES].freeze
     FROM_CLIENTS = [Frame::MAX_PUSH_ID, Frame::PRIORITY_UPDATE, Frame::PRIORITY_UPDATE_PUSH].freeze
+    # The most frames, and pieces of DATA, a request stream holds while its
+    # field section waits on QPACK; the bytes of DATA are held to the
+    # longest a field section may be. The transport's flow control does not
+    # bound them, as what is read here gives the peer credit.
+    MAX_WAITING = 1024
     # The frames this layer knows that never go on a request stream (RFC
     # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
     # server.
@@ -282,7 +287,7 @@ module Raiha::Next::HTTP3
     # waits on QPACK, what follows it waits too.
     private def request_item(stream_id, receiving, item)
       return unless @receiving[stream_id].equal?(receiving)
-      return receiving.waiting << item if receiving.blocked?
+      return wait(stream_id, receiving, item) if receiving.blocked?
       case item
       when FrameReader::Started
         type = item.type
@@ -294,6 +299,15 @@ module Raiha::Next::HTTP3
           section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit: @field_section_limit))
         end
       end
+    end
+
+    # Holds `item` until the field section of `stream_id` is decoded, no more
+    # than MAX_WAITING of them and no more DATA than a field section may be
+    # long; past either, the stream stops with H3_EXCESSIVE_LOAD.
+    private def wait(stream_id, receiving, item)
+      receiving.waiting_bytes += item.data.bytesize if item.is_a?(Frame::Data)
+      return stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD) if receiving.waiting.size >= MAX_WAITING || receiving.waiting_bytes > @max_section
+      receiving.waiting << item
     end
 
     # The QPACK decoder's `result` for the field section of `stream_id`.

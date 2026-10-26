@@ -114,6 +114,24 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
     assert_empty actions(server)
   end
 
+  # While a field section waits, what follows it waits within bounds: DATA
+  # no longer than a field section may be, and no more than MAX_WAITING
+  # frames; past them the stream stops with H3_EXCESSIVE_LOAD.
+  def test_what_waits_on_qpack_is_bounded
+    code = HTTP3::ErrorCode::EXCESSIVE_LOAD
+    stopped = [HTTP3::Action::StopSending.new(stream_id: 0, error_code: code), HTTP3::Action::Reset.new(stream_id: 0, error_code: code)]
+    section = Frame.encode(Frame::Headers.new(field_section: "\x02\x00\x80".b))
+    {
+      Frame.encode(Frame::Data.new(data: "x" * 400)) => false, Frame.encode(Frame::Data.new(data: "x" * 401)) => true,
+      "\x21\x00".b * HTTP3::Connection::MAX_WAITING => false, "\x21\x00".b * (HTTP3::Connection::MAX_WAITING + 1) => true
+    }.each do |following, stops|
+      server = server(qpack_max_table_capacity: 4096, qpack_blocked_streams: 1, max_field_section_size: 100)
+      server.stream_data(0, section + following)
+      assert_equal(stops ? stopped : [], actions(server), following.bytesize)
+      refute server.closed?
+    end
+  end
+
   # An integer past 62 bits in a field section stops that stream only (RFC
   # 9204 "Implementation Limits").
   def test_a_field_section_qpack_fails_on_stops_the_stream
