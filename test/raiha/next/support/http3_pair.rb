@@ -23,5 +23,9 @@ module NextHTTP3Pair
     streams.to_h
   end
 
-  def actions(connection) = [].tap { |all| connection.each_action { all << _1 } }
+  # What `connection` asks of the transport; Action::Priority only when
+  # `priorities`, as most requests ask for one.
+  def actions(connection, priorities: false)
+    [].tap { |all| connection.each_action { all << _1 if priorities || !_1.is_a?(HTTP3::Action::Priority) } }
+  end
 end

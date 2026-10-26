@@ -11,7 +11,7 @@ class RaihaNextHTTP3ConnectionStartTest < Minitest::Test
     client.start(**CLIENT_STREAMS)
     settings = HTTP3::Frame.encode(HTTP3::Settings.new.to_frame)
     assert_equal({ 2 => ["\x00".b + settings, false], 6 => ["\x02".b, false], 10 => ["\x03".b, false] }, sent(client))
-    assert_equal [2, 6, 10].map { HTTP3::Action::Priority.new(stream_id: _1, urgency: 0, incremental: true) }, actions(client)
+    assert_equal [2, 6, 10].map { HTTP3::Action::Priority.new(stream_id: _1, urgency: 0, incremental: true) }, actions(client, priorities: true)
     assert_empty sent(client)
   end
 

@@ -52,6 +52,9 @@ module Raiha::Next::HTTP3
     # held to the longest a field section may be. The transport's flow control does not
     # bound them, as what is read here gives the peer credit.
     MAX_WAITING = 1024
+    # How many requests not opened yet a server keeps a PRIORITY_UPDATE for
+    # (RFC 9218 "The PRIORITY_UPDATE Frame" leaves the bound to it).
+    MAX_PENDING_PRIORITIES = 128
     # The frames this layer knows that never go on a request stream (RFC
     # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
     # server.
@@ -121,6 +124,8 @@ module Raiha::Next::HTTP3
       @goaway = nil #: Integer?
       @peer_goaway = nil #: Integer?
       @max_push_id = nil #: Integer?
+      # The PRIORITY_UPDATEs for requests not opened yet.
+      @pending_priorities = {} #: Hash[Integer, Priority]
       @field_section_limit = limit
       @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
     end
@@ -163,7 +168,7 @@ module Raiha::Next::HTTP3
       ready.each do |stream_id|
         output = @outputs.fetch(stream_id)
         ended = output.drain { |data, fin| yield(stream_id, data, fin) }
-        @outputs.delete(stream_id) if ended
+        forget_output(stream_id) if ended
         writable_again(stream_id, output)
       end
     end
@@ -186,6 +191,7 @@ module Raiha::Next::HTTP3
       receiving.no_content = headers.include?([":method", "HEAD"])
       sending = @sending[stream_id] = Sending.new
       sending.phase = :body
+      prioritize(stream_id, priority_in(headers))
       fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
       output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
       finish_sending(stream_id) if fin
@@ -203,6 +209,7 @@ module Raiha::Next::HTTP3
         interim = status < 200
         raise ArgumentError, "an interim response does not end the stream" if interim && fin
         sending.phase = :body unless interim
+        merge_priority(stream_id, headers) unless interim
       else
         checked { Message.trailers(headers) }
         fin = true
@@ -277,8 +284,21 @@ module Raiha::Next::HTTP3
       if @own_critical.include?(stream_id)
         return close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer stopped this end's stream #{stream_id}")
       end
-      @outputs.delete(stream_id)
+      forget_output(stream_id)
       @events << Event::Stopped.new(stream_id:, error_code:) if @sending.delete(stream_id)
+    end
+
+    # Gives the request on `stream_id` `urgency` and `incremental` (RFC
+    # 9218): a client tells the server with PRIORITY_UPDATE, and both send
+    # by it what they send on the stream.
+    def update_priority(stream_id, urgency:, incremental:)
+      priority = Priority.new(urgency:, incremental:)
+      raise Error::Usage, "stream #{stream_id} has no request" unless @receiving.key?(stream_id) || @sending.key?(stream_id) || @outputs.key?(stream_id)
+      if @role == :client
+        control = @own_critical.first or raise Error::Usage, "no control stream to send PRIORITY_UPDATE on yet"
+        output(control) << Frame.encode(Frame::PriorityUpdate.new(element_id: stream_id, priority: priority.to_field))
+      end
+      prioritize(stream_id, priority)
     end
 
     # Tells the peer this end goes away (RFC 9114 "Connection Shutdown"): a
@@ -308,7 +328,7 @@ module Raiha::Next::HTTP3
       return unless @receiving.key?(stream_id) || @sending.key?(stream_id) || @outputs.key?(stream_id)
       @receiving.delete(stream_id)
       @sending.delete(stream_id)
-      @outputs.delete(stream_id)
+      forget_output(stream_id)
       @decoder.cancel(stream_id)
       @actions << Action::StopSending.new(stream_id:, error_code:) << Action::Reset.new(stream_id:, error_code:)
     end
@@ -377,11 +397,30 @@ module Raiha::Next::HTTP3
       when Frame::GoAway then goaway_received(item.id)
       when Frame::CancelPush
         raise Violation.new("CANCEL_PUSH for push #{item.push_id}, with no push allowed or promised", code: ErrorCode::ID_ERROR)
+      when Frame::PriorityUpdate then priority_update_received(item)
       when Frame::MaxPushId
         if (allowed = @max_push_id) && item.push_id < allowed
           raise Violation.new("MAX_PUSH_ID down from #{allowed} to #{item.push_id}", code: ErrorCode::ID_ERROR)
         end
         @max_push_id = item.push_id
+      end
+    end
+
+    # A client's PRIORITY_UPDATE (RFC 9218): for a request, the latest
+    # signal, which a request not opened yet takes when it opens. A value
+    # that is not a Dictionary drops the frame, as a connection error over
+    # it is only a MAY.
+    private def priority_update_received(frame)
+      stream_id = frame.element_id
+      raise Violation.new("PRIORITY_UPDATE for push #{stream_id}, never promised", code: ErrorCode::ID_ERROR) if frame.push
+      raise Violation.new("PRIORITY_UPDATE for stream #{stream_id}, not a request's", code: ErrorCode::ID_ERROR) if stream_id & 0x3 != 0
+      urgency, incremental = Priority.parameters(frame.priority) || return
+      priority = Priority.new(urgency: urgency || Priority::DEFAULT_URGENCY, incremental: incremental || false)
+      if @receiving.key?(stream_id) || @sending.key?(stream_id)
+        prioritize(stream_id, priority)
+      elsif stream_id >= @next_request || @skipped.key?(stream_id)
+        return unless @pending_priorities.key?(stream_id) || @pending_priorities.size < MAX_PENDING_PRIORITIES
+        @pending_priorities[stream_id] = priority
       end
     end
 
@@ -559,6 +598,7 @@ module Raiha::Next::HTTP3
       # Responses") may say a Content-Length all the same.
       content_length = nil if receiving.no_content || status == 204 || status == 304
       @sending[stream_id] = Sending.new unless receiving.surfaced
+      prioritize(stream_id, @pending_priorities.delete(stream_id) || priority_in(headers)) if @role == :server
       receiving.surfaced = true
       receiving.phase = :body
       receiving.content_length = content_length
@@ -637,7 +677,7 @@ module Raiha::Next::HTTP3
     private def stream_error(stream_id, code)
       receiving = @receiving.delete(stream_id)
       @decoder.cancel(stream_id)
-      @outputs.delete(stream_id)
+      forget_output(stream_id)
       @sending.delete(stream_id)
       @actions << Action::StopSending.new(stream_id:, error_code: code) << Action::Reset.new(stream_id:, error_code: code)
       @events << Event::Reset.new(stream_id:, error_code: code) if receiving&.surfaced
@@ -697,7 +737,31 @@ module Raiha::Next::HTTP3
 
     private def output(stream_id) = @outputs[stream_id] ||= Output.new
 
+    # What waits for `stream_id` is gone, and its priority with it.
+    private def forget_output(stream_id)
+      @outputs.delete(stream_id)
+      @priorities.delete(stream_id)
+    end
+
+    # The priority the Priority header fields of `headers` ask for, the
+    # defaults if none (RFC 9218 "Priority Parameters").
+    private def priority_in(headers)
+      Priority.parse(headers.filter_map { |name, value| value if name == "priority" }.join(", "))
+    end
+
+    # A response's Priority overrides what it gives of the request's
+    # (RFC 9218 "Merging Client- and Server-Driven Priority Parameters").
+    private def merge_priority(stream_id, headers)
+      values = headers.filter_map { |name, value| value if name == "priority" }
+      return if values.empty?
+      urgency, incremental = Priority.parameters(values.join(", ")) || return
+      prioritize(stream_id, priority_of(stream_id).merge(urgency, incremental))
+    end
+
+    # Sends `stream_id` by `priority`, if this end still has something to
+    # send on it.
     private def prioritize(stream_id, priority)
+      return unless @outputs.key?(stream_id) || @sending.key?(stream_id)
       @priorities[stream_id] = priority
       @actions << Action::Priority.new(stream_id:, urgency: priority.urgency, incremental: priority.incremental)
     end
