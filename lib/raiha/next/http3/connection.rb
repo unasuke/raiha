@@ -10,6 +10,7 @@ require_relative "output"
 require_relative "priority"
 require_relative "qpack"
 require_relative "receiving"
+require_relative "sending"
 require_relative "settings"
 require_relative "varint"
 
@@ -110,6 +111,7 @@ module Raiha::Next::HTTP3
       # HEADERS frame may carry: one line takes no more on the wire than
       # four times what it counts for (RFC 9204's decoder holds no longer).
       @receiving = {} #: Hash[Integer, Receiving]
+      @sending = {} #: Hash[Integer, Sending]
       # The lowest ID of the peer's request streams not seen yet, and those
       # below it skipped, which may still come.
       @next_request = 0
@@ -157,7 +159,48 @@ module Raiha::Next::HTTP3
         output = @outputs.fetch(stream_id)
         ended = output.drain { |data, fin| yield(stream_id, data, fin) }
         @outputs.delete(stream_id) if ended
+        writable_again(stream_id, output)
       end
+    end
+
+    # Sends a field section on `stream_id`, ending the stream with `fin`:
+    # a response, or an interim response before it, on a request; and once
+    # the content has begun, the trailer section, which always ends it.
+    # One that would be malformed (RFC 9114 "Malformed Requests and
+    # Responses") is an ArgumentError.
+    def send_headers(stream_id, headers, fin: false)
+      sending = sending_for(stream_id)
+      if sending.phase == :headers
+        status = checked { Message.response(headers) }.first
+        interim = status < 200
+        raise ArgumentError, "an interim response does not end the stream" if interim && fin
+        sending.phase = :body unless interim
+      else
+        checked { Message.trailers(headers) }
+        fin = true
+      end
+      fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
+      output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
+      finish_sending(stream_id) if fin
+    end
+
+    # Sends `data` as content on `stream_id`, as much of it as the stream
+    # holds room for, max_send_buffer bytes waiting at most, and ends the
+    # stream with `fin` once all of it is taken: how many bytes were taken.
+    # Less than all of it, and Event::Writable tells when the stream takes
+    # more.
+    def send_data(stream_id, data, fin: false)
+      sending = sending_for(stream_id)
+      raise Error::Usage, "no content before the header section on stream #{stream_id}" unless sending.phase == :body
+      output = output(stream_id)
+      taken = [data.bytesize, [@max_send_buffer - output.buffered, 0].max].min
+      output << Frame.header(Frame::DATA, taken) << data.byteslice(0, taken).b if taken.positive? # steep:ignore
+      if taken < data.bytesize
+        sending.wants_writable = true
+      elsif fin
+        finish_sending(stream_id)
+      end
+      taken
     end
 
     # The transport can take more of `stream_id`.
@@ -397,6 +440,7 @@ module Raiha::Next::HTTP3
         return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
       end
       receiving.surfaced = true
+      @sending[stream_id] = Sending.new
       receiving.content_length = content_length
       receiving.budget = @field_section_limit - size
       @events << Event::Headers.new(stream_id:, headers:, fin: false)
@@ -471,8 +515,37 @@ module Raiha::Next::HTTP3
       receiving = @receiving.delete(stream_id)
       @decoder.cancel(stream_id)
       @outputs.delete(stream_id)
+      @sending.delete(stream_id)
       @actions << Action::StopSending.new(stream_id:, error_code: code) << Action::Reset.new(stream_id:, error_code: code)
       @events << Event::Reset.new(stream_id:, error_code: code) if receiving&.surfaced
+    end
+
+    # The sending side of `stream_id`, for the application to write to.
+    private def sending_for(stream_id)
+      raise Error::Usage, "stream #{stream_id} has nothing to send on, or has ended" unless (sending = @sending[stream_id])
+      sending
+    end
+
+    # `stream_id` ends after what waits for it.
+    private def finish_sending(stream_id)
+      @sending.delete(stream_id)
+      output(stream_id).finish
+    end
+
+    # A stream written less than asked hears, once, that it takes more.
+    private def writable_again(stream_id, output)
+      sending = @sending[stream_id]
+      return unless sending&.wants_writable && output.buffered < @max_send_buffer
+      sending.wants_writable = false
+      @events << Event::Writable.new(stream_id:)
+    end
+
+    # What `block` checks of a field section this end would send, misuse
+    # if it fails.
+    private def checked
+      yield
+    rescue Message::Malformed => malformed
+      raise ArgumentError, "a malformed field section: #{malformed.message}"
     end
 
     # QPACK's connection error, if `result` is one.

@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Trailers | Reset | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Writable | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -84,6 +84,13 @@ module Raiha::Next::HTTP3
                   | (Integer stream_id, Integer error_code) -> instance
     end
 
+    class Writable < ::Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
     class Blocked < ::Data
       attr_reader stream_id: Integer
 
@@ -116,6 +123,16 @@ module Raiha::Next::HTTP3
     attr_accessor budget: Integer
 
     def initialize: (max_payload: Integer) -> void
+  end
+
+  class Sending
+    @phase: :headers | :body
+    @wants_writable: bool
+
+    attr_accessor phase: :headers | :body
+    attr_accessor wants_writable: bool
+
+    def initialize: () -> void
   end
 
   class Output
@@ -171,6 +188,7 @@ module Raiha::Next::HTTP3
     @decoder: QPACK::Decoder
     @encoder: QPACK::Encoder
     @receiving: Hash[Integer, Receiving]
+    @sending: Hash[Integer, Sending]
     @next_request: Integer
     @skipped: Hash[Integer, true]
     @field_section_limit: Integer
@@ -188,6 +206,8 @@ module Raiha::Next::HTTP3
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
     def stream_writable: (Integer stream_id) -> void
+    def send_headers: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
+    def send_data: (Integer stream_id, String data, ?fin: bool) -> Integer
     def stream_data: (Integer stream_id, String data, ?fin: bool) -> void
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stopped: (Integer stream_id, error_code: Integer) -> void
@@ -210,6 +230,10 @@ module Raiha::Next::HTTP3
     private def request_ended: (Integer stream_id, Receiving receiving) -> void
     private def too_large: (Integer stream_id) -> void
     private def stream_error: (Integer stream_id, Integer code) -> void
+    private def sending_for: (Integer stream_id) -> Sending
+    private def finish_sending: (Integer stream_id) -> void
+    private def writable_again: (Integer stream_id, Output output) -> void
+    private def checked: [T] () { () -> T } -> T
     private def qpack_failed: (QPACK::Failure | Array[QPACK::Decoded | QPACK::Oversized | QPACK::Failure] | nil result) -> void
     private def take_qpack_instructions: () -> void
     private def output: (Integer stream_id) -> Output

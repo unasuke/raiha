@@ -33,6 +33,10 @@ module Raiha::Next::HTTP3
     # layer, after the application had heard of it.
     class Reset < ::Data.define(:stream_id, :error_code); end
 
+    # `send_data` takes content on `stream_id` again, after it took less
+    # than given.
+    class Writable < ::Data.define(:stream_id); end
+
     # The field section on `stream_id` waits for entries the QPACK encoder
     # stream has yet to bring (RFC 9204 "Blocked Decoding").
     class Blocked < ::Data.define(:stream_id); end
