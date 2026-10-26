@@ -22,8 +22,9 @@ module Raiha::Next::HTTP3
     # to a HEAD.
     attr_accessor :surfaced, :content_length, :received, :budget, :no_content
     # Whether the request has a use for HTTP Datagrams (RFC 9297): Extended
-    # CONNECT.
-    attr_accessor :datagrams
+    # CONNECT; whether, at a client, it asked for the Capsule Protocol; and
+    # the Capsules of the data stream once the Capsule Protocol is in use.
+    attr_accessor :datagrams, :capsules_asked, :capsule_reader
 
     def initialize(max_payload:)
       @reader = FrameReader.new(max_payload:)
@@ -38,6 +39,8 @@ module Raiha::Next::HTTP3
       @budget = 0
       @no_content = false
       @datagrams = false
+      @capsules_asked = false
+      @capsule_reader = nil #: CapsuleReader?
     end
   end
 end

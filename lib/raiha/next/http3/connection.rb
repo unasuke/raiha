@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "action"
+require_relative "capsule"
 require_relative "error"
 require_relative "event"
 require_relative "frame"
@@ -60,6 +61,8 @@ module Raiha::Next::HTTP3
     # Datagrams").
     MAX_DATAGRAMS = 32
     MAX_QUARTER_STREAM_ID = (1 << 60) - 1
+    # The longest Capsule value held; a longer one is passed over unread.
+    MAX_CAPSULE = 64 * 1024
     # The frames this layer knows that never go on a request stream (RFC
     # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
     # server.
@@ -201,6 +204,7 @@ module Raiha::Next::HTTP3
       sending = @sending[stream_id] = Sending.new
       sending.phase = :body
       sending.datagrams = receiving.datagrams = headers.any? { |name, _| name == ":protocol" }
+      sending.capsules = receiving.capsules_asked = sending.datagrams && checked { Message.capsule_protocol?(headers) }
       prioritize(stream_id, priority_in(headers))
       fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
       output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
@@ -283,6 +287,22 @@ module Raiha::Next::HTTP3
       data = Varint.encode(stream_id / 4) << payload.b
       return false if data.bytesize > max_size
       @datagrams << [data, priority_of(stream_id).urgency]
+      true
+    end
+
+    # Sends `capsule` whole on the data stream of the request on
+    # `stream_id`, which must carry Capsules: whether there was room for
+    # it. If not, Event::Writable tells when the stream takes more.
+    def send_capsule(stream_id, capsule)
+      sending = sending_for(stream_id)
+      raise Error::Usage, "stream #{stream_id} carries no Capsules" unless sending.capsules && sending.phase == :body
+      bytes = Capsule.encode(capsule)
+      output = output(stream_id)
+      if output.buffered + bytes.bytesize > @max_send_buffer
+        sending.wants_writable = true
+        return false
+      end
+      output << Frame.header(Frame::DATA, bytes.bytesize) << bytes
       true
     end
 
@@ -592,10 +612,23 @@ module Raiha::Next::HTTP3
     # Content of a request, counted against its Content-Length (RFC 9114
     # "Malformed Requests and Responses").
     private def request_data(stream_id, receiving, data)
+      if (capsules = receiving.capsule_reader)
+        return capsules.feed(data) { |capsule| capsule_received(stream_id, capsule) }
+      end
       receiving.received += data.bytesize
       length = receiving.content_length
       return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if length && receiving.received > length
       @events << Event::Data.new(stream_id:, data:, fin: false) unless data.empty?
+    end
+
+    # A DATAGRAM Capsule is an HTTP Datagram; any other goes as it is, for
+    # the layers above to read or drop (RFC 9297 "The Capsule Protocol").
+    private def capsule_received(stream_id, capsule)
+      if capsule.type == Capsule::DATAGRAM
+        @events << Event::Datagram.new(stream_id:, payload: capsule.value)
+      else
+        @events << Event::Capsule.new(stream_id:, capsule:)
+      end
     end
 
     # Holds `item` until the field section of `stream_id` is decoded, no more
@@ -644,8 +677,11 @@ module Raiha::Next::HTTP3
         if @role == :server
           content_length = Message.request(headers, extended_connect: @settings.enable_connect_protocol)
           datagrams = headers.any? { |name, _| name == ":protocol" }
+          capsules = datagrams && Message.capsule_protocol?(headers)
         else
           status, content_length = Message.response(headers)
+          capsules = receiving.capsules_asked && status.between?(200, 299)
+          Message.capsule_protocol?(headers, status:) if capsules
         end
       rescue Message::Malformed
         return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
@@ -659,7 +695,9 @@ module Raiha::Next::HTTP3
       unless receiving.surfaced
         sending = @sending[stream_id] = Sending.new
         sending.datagrams = receiving.datagrams = datagrams || false
+        sending.capsules = capsules || false
       end
+      receiving.capsule_reader = CapsuleReader.new(max_value: MAX_CAPSULE) if capsules
       prioritize(stream_id, @pending_priorities.delete(stream_id) || priority_in(headers)) if @role == :server
       receiving.surfaced = true
       receiving.phase = :body
@@ -710,6 +748,7 @@ module Raiha::Next::HTTP3
       end
       length = receiving.content_length
       return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if receiving.phase == :body && length && receiving.received != length
+      return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if receiving.capsule_reader&.mid_capsule?
       @receiving.delete(stream_id)
       return if receiving.phase == :trailers
       last = @events.last

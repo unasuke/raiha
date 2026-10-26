@@ -5,8 +5,9 @@ require "strscan"
 module Raiha::Next::HTTP3
   # Reads a Dictionary of Structured Field Values (RFC 8941), the form of
   # the Priority header field and of PRIORITY_UPDATE (RFC 9218 "Priority
-  # Parameters"). Every type of item is read, so that a field is known to
-  # be a Dictionary or not, but only its members' values come back:
+  # Parameters"), and an Item, the form of Capsule-Protocol (RFC 9297).
+  # Every type of item is read, so that a field is known to be of its form
+  # or not, but only the values come back:
   # Integers, Floats for Decimals, Strings for Strings and Byte Sequences,
   # Symbols for Tokens, true and false, and Arrays for Inner Lists. The
   # parameters of members are read and dropped.
@@ -43,6 +44,17 @@ module Raiha::Next::HTTP3
         return nil if scanner.eos?
       end
       members
+    end
+
+    # The bare item of the Item `text` is, its parameters dropped; nil when
+    # it is not one (RFC 8941 "Parsing an Item").
+    def self.item(text)
+      scanner = StringScanner.new(text.b)
+      scanner.skip(SP)
+      value = bare_item(scanner)
+      return nil if value.nil? || !parameters(scanner)
+      scanner.skip(SP)
+      scanner.eos? ? value : nil
     end
 
     # An Item or an Inner List, with its parameters; nil when there is

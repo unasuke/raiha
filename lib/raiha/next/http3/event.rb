@@ -43,7 +43,12 @@ module Raiha::Next::HTTP3
     # than given.
     class Writable < ::Data.define(:stream_id); end
 
-    # An HTTP Datagram for the request on `stream_id` came (RFC 9297).
+    # A Capsule other than DATAGRAM came on `stream_id` (RFC 9297 "The
+    # Capsule Protocol").
+    class Capsule < ::Data.define(:stream_id, :capsule); end
+
+    # An HTTP Datagram for the request on `stream_id` came (RFC 9297), in a
+    # DATAGRAM of the transport or a DATAGRAM Capsule.
     class Datagram < ::Data.define(:stream_id, :payload); end
 
     # The peer goes away (RFC 9114 "Connection Shutdown"): a server's

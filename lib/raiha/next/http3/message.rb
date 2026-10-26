@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "structured_field"
+
 module Raiha::Next::HTTP3
   # The checks of RFC 9114 "Malformed Requests and Responses" on the field
   # sections of a message: what fields and pseudo-header fields it holds,
@@ -49,6 +51,22 @@ module Raiha::Next::HTTP3
       status = pseudo_header_fields(headers, RESPONSE_PSEUDO, request: false)[":status"] or raise Malformed, "no :status"
       raise Malformed, ":status #{status.inspect}" unless STATUS.match?(status)
       [Integer(status, 10), content_length(headers)]
+    end
+
+    # Whether the message of `headers` says it uses the Capsule Protocol
+    # (RFC 9297 "The Capsule-Protocol Header Field"): one Capsule-Protocol
+    # field, an Item that is true; one of another type is as none. Such a
+    # message carries no Content-Length nor Content-Type, and a response
+    # using it, as `status` says, is none of 204, 205 and 206 ("The Capsule
+    # Protocol").
+    def self.capsule_protocol?(headers, status: nil)
+      values = headers.filter_map { |name, value| value if name == "capsule-protocol" }
+      return false unless values.size == 1 && StructuredField.item(values.first) == true
+      if headers.any? { |name, _| name == "content-length" || name == "content-type" }
+        raise Malformed, "the Capsule Protocol with content"
+      end
+      raise Malformed, "the Capsule Protocol on a #{status}" if [204, 205, 206].include?(status)
+      true
     end
 
     # Checks a trailer section, which has no pseudo-header field.

@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Datagram | GoAway | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Capsule | Datagram | GoAway | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -99,6 +99,14 @@ module Raiha::Next::HTTP3
                   | (Integer stream_id) -> instance
     end
 
+    class Capsule < ::Data
+      attr_reader stream_id: Integer
+      attr_reader capsule: Raiha::Next::HTTP3::Capsule
+
+      def self.new: (stream_id: Integer, capsule: Raiha::Next::HTTP3::Capsule) -> instance
+                  | (Integer stream_id, Raiha::Next::HTTP3::Capsule capsule) -> instance
+    end
+
     class Datagram < ::Data
       attr_reader stream_id: Integer
       attr_reader payload: String
@@ -135,6 +143,8 @@ module Raiha::Next::HTTP3
     @budget: Integer
     @no_content: bool
     @datagrams: bool
+    @capsules_asked: bool
+    @capsule_reader: CapsuleReader?
 
     attr_reader reader: FrameReader
     attr_reader waiting: Array[FrameReader::item]
@@ -148,6 +158,8 @@ module Raiha::Next::HTTP3
     attr_accessor budget: Integer
     attr_accessor no_content: bool
     attr_accessor datagrams: bool
+    attr_accessor capsules_asked: bool
+    attr_accessor capsule_reader: CapsuleReader?
 
     def initialize: (max_payload: Integer) -> void
   end
@@ -156,10 +168,12 @@ module Raiha::Next::HTTP3
     @phase: :headers | :body
     @wants_writable: bool
     @datagrams: bool
+    @capsules: bool
 
     attr_accessor phase: :headers | :body
     attr_accessor wants_writable: bool
     attr_accessor datagrams: bool
+    attr_accessor capsules: bool
 
     def initialize: () -> void
   end
@@ -197,6 +211,7 @@ module Raiha::Next::HTTP3
     MAX_PENDING_PRIORITIES: Integer
     MAX_DATAGRAMS: Integer
     MAX_QUARTER_STREAM_ID: Integer
+    MAX_CAPSULE: Integer
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -248,6 +263,7 @@ module Raiha::Next::HTTP3
     def datagram_received: (String data) -> void
     def datagram_send: (Integer stream_id, String payload) -> bool
     def each_datagram_send: () { (String data, Integer urgency) -> void } -> void
+    def send_capsule: (Integer stream_id, Raiha::Next::HTTP3::Capsule capsule) -> bool
     def stream_writable: (Integer stream_id) -> void
     def send_request: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
     def send_headers: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
@@ -271,6 +287,7 @@ module Raiha::Next::HTTP3
     private def request_item: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
     private def check_request_frame: (Receiving receiving, Integer type) -> void
     private def request_data: (Integer stream_id, Receiving receiving, String data) -> void
+    private def capsule_received: (Integer stream_id, Raiha::Next::HTTP3::Capsule capsule) -> void
     private def wait: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
     private def headers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers, Integer size) -> void
     private def trailers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers) -> void

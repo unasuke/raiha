@@ -12,6 +12,7 @@ module Raiha::Next::HTTP3
     SP: Regexp
 
     def self.dictionary: (String text) -> Hash[String, value]?
+    def self.item: (String text) -> value?
     def self.member_value: (StringScanner scanner) -> value?
     def self.inner_list: (StringScanner scanner) -> Array[value]?
     def self.parameters: (StringScanner scanner) -> bool
