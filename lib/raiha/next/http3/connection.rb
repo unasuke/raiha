@@ -55,6 +55,11 @@ module Raiha::Next::HTTP3
     # How many requests not opened yet a server keeps a PRIORITY_UPDATE for
     # (RFC 9218 "The PRIORITY_UPDATE Frame" leaves the bound to it).
     MAX_PENDING_PRIORITIES = 128
+    # The HTTP Datagrams that wait for the transport at most, as QUIC's
+    # DATAGRAM frames do; the largest Quarter Stream ID (RFC 9297 "HTTP/3
+    # Datagrams").
+    MAX_DATAGRAMS = 32
+    MAX_QUARTER_STREAM_ID = (1 << 60) - 1
     # The frames this layer knows that never go on a request stream (RFC
     # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
     # server.
@@ -126,6 +131,10 @@ module Raiha::Next::HTTP3
       @max_push_id = nil #: Integer?
       # The PRIORITY_UPDATEs for requests not opened yet.
       @pending_priorities = {} #: Hash[Integer, Priority]
+      # HTTP Datagrams: the most the transport carries in one, and those
+      # waiting to go with their urgency.
+      @datagram_max_size = nil #: Integer?
+      @datagrams = [] #: Array[[String, Integer]]
       @field_section_limit = limit
       @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
     end
@@ -191,6 +200,7 @@ module Raiha::Next::HTTP3
       receiving.no_content = headers.include?([":method", "HEAD"])
       sending = @sending[stream_id] = Sending.new
       sending.phase = :body
+      sending.datagrams = receiving.datagrams = headers.any? { |name, _| name == ":protocol" }
       prioritize(stream_id, priority_in(headers))
       fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
       output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
@@ -236,6 +246,54 @@ module Raiha::Next::HTTP3
         finish_sending(stream_id)
       end
       taken
+    end
+
+    # The most a DATAGRAM frame of the transport carries; nil while it
+    # carries none, which may be for good.
+    attr_writer :datagram_max_size
+
+    # The transport received a DATAGRAM, `data`, an HTTP Datagram (RFC 9297
+    # "HTTP/3 Datagrams"): a Quarter Stream ID, then the payload. One for a
+    # request not opened yet, or whose sending side has ended, is dropped,
+    # as are all when this end did not take them; one for a request that
+    # has no use for them stops it with H3_DATAGRAM_ERROR.
+    def datagram_received(data)
+      return if @closed || !@settings.h3_datagram
+      quarter, offset = Varint.decode(data)
+      raise Violation.new("a datagram with no Quarter Stream ID", code: ErrorCode::DATAGRAM_ERROR) unless quarter && offset
+      raise Violation.new("the Quarter Stream ID #{quarter}", code: ErrorCode::DATAGRAM_ERROR) if quarter > MAX_QUARTER_STREAM_ID
+      stream_id = quarter * 4
+      receiving = @receiving[stream_id] or return
+      return unless receiving.surfaced
+      return stream_error(stream_id, ErrorCode::DATAGRAM_ERROR) unless receiving.datagrams
+      @events << Event::Datagram.new(stream_id:, payload: data.byteslice(offset..).freeze) # steep:ignore
+    rescue Violation => violation
+      close_with(violation.code, violation.message)
+    end
+
+    # Sends `payload` as an HTTP Datagram for the request on `stream_id`:
+    # whether it was taken. Only when both ends took them (RFC 9297 "The
+    # SETTINGS_H3_DATAGRAM HTTP/3 Setting"), on a request that has a use for
+    # them, Extended CONNECT, while this end still sends on it, and when it
+    # fits in the transport's DATAGRAM frame; the stream's urgency goes
+    # with it for the transport to order it by.
+    def datagram_send(stream_id, payload)
+      return false if @closed || !@settings.h3_datagram || !@peer_settings&.h3_datagram
+      return false unless (max_size = @datagram_max_size) && @sending[stream_id]&.datagrams && @datagrams.size < MAX_DATAGRAMS
+      data = Varint.encode(stream_id / 4) << payload.b
+      return false if data.bytesize > max_size
+      @datagrams << [data, priority_of(stream_id).urgency]
+      true
+    end
+
+    # Gives the HTTP Datagrams waiting, each with its urgency, to go in the
+    # transport's DATAGRAM frames.
+    def each_datagram_send
+      return @datagrams.clear if @closed
+      until @datagrams.empty?
+        data, urgency = @datagrams.shift
+        yield data, urgency
+      end
     end
 
     # The transport can take more of `stream_id`.
@@ -585,6 +643,7 @@ module Raiha::Next::HTTP3
       begin
         if @role == :server
           content_length = Message.request(headers, extended_connect: @settings.enable_connect_protocol)
+          datagrams = headers.any? { |name, _| name == ":protocol" }
         else
           status, content_length = Message.response(headers)
         end
@@ -597,7 +656,10 @@ module Raiha::Next::HTTP3
       # A response that never has content (RFC 9114 "Malformed Requests and
       # Responses") may say a Content-Length all the same.
       content_length = nil if receiving.no_content || status == 204 || status == 304
-      @sending[stream_id] = Sending.new unless receiving.surfaced
+      unless receiving.surfaced
+        sending = @sending[stream_id] = Sending.new
+        sending.datagrams = receiving.datagrams = datagrams || false
+      end
       prioritize(stream_id, @pending_priorities.delete(stream_id) || priority_in(headers)) if @role == :server
       receiving.surfaced = true
       receiving.phase = :body

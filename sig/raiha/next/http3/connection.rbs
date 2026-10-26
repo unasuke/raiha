@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | GoAway | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Datagram | GoAway | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -99,6 +99,14 @@ module Raiha::Next::HTTP3
                   | (Integer stream_id) -> instance
     end
 
+    class Datagram < ::Data
+      attr_reader stream_id: Integer
+      attr_reader payload: String
+
+      def self.new: (stream_id: Integer, payload: String) -> instance
+                  | (Integer stream_id, String payload) -> instance
+    end
+
     class GoAway < ::Data
       attr_reader stream_id: Integer
 
@@ -126,6 +134,7 @@ module Raiha::Next::HTTP3
     @received: Integer
     @budget: Integer
     @no_content: bool
+    @datagrams: bool
 
     attr_reader reader: FrameReader
     attr_reader waiting: Array[FrameReader::item]
@@ -138,6 +147,7 @@ module Raiha::Next::HTTP3
     attr_accessor received: Integer
     attr_accessor budget: Integer
     attr_accessor no_content: bool
+    attr_accessor datagrams: bool
 
     def initialize: (max_payload: Integer) -> void
   end
@@ -145,9 +155,11 @@ module Raiha::Next::HTTP3
   class Sending
     @phase: :headers | :body
     @wants_writable: bool
+    @datagrams: bool
 
     attr_accessor phase: :headers | :body
     attr_accessor wants_writable: bool
+    attr_accessor datagrams: bool
 
     def initialize: () -> void
   end
@@ -183,6 +195,8 @@ module Raiha::Next::HTTP3
     NOT_ON_REQUEST: Array[Integer]
     MAX_WAITING: Integer
     MAX_PENDING_PRIORITIES: Integer
+    MAX_DATAGRAMS: Integer
+    MAX_QUARTER_STREAM_ID: Integer
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -213,6 +227,8 @@ module Raiha::Next::HTTP3
     @peer_goaway: Integer?
     @max_push_id: Integer?
     @pending_priorities: Hash[Integer, Priority]
+    @datagram_max_size: Integer?
+    @datagrams: Array[[String, Integer]]
     @field_section_limit: Integer
     @max_section: Integer
 
@@ -227,6 +243,11 @@ module Raiha::Next::HTTP3
     def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
+    attr_writer datagram_max_size: Integer?
+
+    def datagram_received: (String data) -> void
+    def datagram_send: (Integer stream_id, String payload) -> bool
+    def each_datagram_send: () { (String data, Integer urgency) -> void } -> void
     def stream_writable: (Integer stream_id) -> void
     def send_request: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
     def send_headers: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void

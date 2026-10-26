@@ -43,6 +43,9 @@ module Raiha::Next::HTTP3
     # than given.
     class Writable < ::Data.define(:stream_id); end
 
+    # An HTTP Datagram for the request on `stream_id` came (RFC 9297).
+    class Datagram < ::Data.define(:stream_id, :payload); end
+
     # The peer goes away (RFC 9114 "Connection Shutdown"): a server's
     # `stream_id`, from which on requests were not processed, or a
     # client's push ID.

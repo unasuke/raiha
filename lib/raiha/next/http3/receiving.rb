@@ -21,6 +21,9 @@ module Raiha::Next::HTTP3
     # sections; and whether the message never has content, as the response
     # to a HEAD.
     attr_accessor :surfaced, :content_length, :received, :budget, :no_content
+    # Whether the request has a use for HTTP Datagrams (RFC 9297): Extended
+    # CONNECT.
+    attr_accessor :datagrams
 
     def initialize(max_payload:)
       @reader = FrameReader.new(max_payload:)
@@ -34,6 +37,7 @@ module Raiha::Next::HTTP3
       @received = 0
       @budget = 0
       @no_content = false
+      @datagrams = false
     end
   end
 end
