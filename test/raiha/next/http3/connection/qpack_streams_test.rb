@@ -42,6 +42,16 @@ class RaihaNextHTTP3ConnectionQPACKStreamsTest < Minitest::Test
     assert_empty sent(server)
   end
 
+  # Once the connection is closed, what the decoder still owes goes
+  # nowhere.
+  def test_no_instructions_after_closing
+    server = server(qpack_max_table_capacity: 4096)
+    server.stream_data(6, "\x02".b + capacity(4096) + insert("x-name", "value"))
+    server.stream_data(10, "\x03\x80".b)
+    assert_equal QPACK::ErrorCode::DECODER_STREAM_ERROR, closed_with(server)
+    assert_empty sent(server)
+  end
+
   # This end's encoder inserts nothing: a Section Acknowledgment for it
   # is QPACK_DECODER_STREAM_ERROR, a Stream Cancellation is taken.
   def test_the_peers_decoder_stream_goes_to_the_encoder

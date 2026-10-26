@@ -125,6 +125,7 @@ module Raiha::Next::HTTP3
     # returns how many bytes it took. What it does not take waits, and so
     # does the stream, until `stream_writable`.
     def each_send(&)
+      return if @closed
       take_qpack_instructions
       ready = @outputs.select { |_, output| output.ready? }.keys
       ready.sort_by! { |stream_id| [priority_of(stream_id).urgency, stream_id] }
