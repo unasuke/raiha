@@ -47,8 +47,8 @@ module Raiha::Next::HTTP3
     NOT_ON_CONTROL = [Frame::DATA, Frame::HEADERS, Frame::PUSH_PROMISE, *Frame::HTTP2_TYPES].freeze
     FROM_CLIENTS = [Frame::MAX_PUSH_ID, Frame::PRIORITY_UPDATE, Frame::PRIORITY_UPDATE_PUSH].freeze
     # The most frames, and pieces of DATA, a request stream holds while its
-    # field section waits on QPACK; the bytes of DATA are held to the
-    # longest a field section may be. The transport's flow control does not
+    # field section waits on QPACK; the bytes of DATA and field sections are
+    # held to the longest a field section may be. The transport's flow control does not
     # bound them, as what is read here gives the peer credit.
     MAX_WAITING = 1024
     # The frames this layer knows that never go on a request stream (RFC
@@ -315,13 +315,14 @@ module Raiha::Next::HTTP3
     # waits on QPACK, what follows it waits too.
     private def request_item(stream_id, receiving, item)
       return unless @receiving[stream_id].equal?(receiving)
-      return wait(stream_id, receiving, item) if receiving.blocked?
-      case item
-      when FrameReader::Started
+      if item.is_a?(FrameReader::Started)
         type = item.type
         if NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE || (type == Frame::DATA && receiving.phase == :headers)
           raise Violation.new("a frame of type 0x#{type.to_s(16)} on a request stream", code: ErrorCode::FRAME_UNEXPECTED)
         end
+      end
+      return wait(stream_id, receiving, item) if receiving.blocked?
+      case item
       when Frame::Headers
         if receiving.phase == :headers
           section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit: @field_section_limit))
@@ -330,10 +331,16 @@ module Raiha::Next::HTTP3
     end
 
     # Holds `item` until the field section of `stream_id` is decoded, no more
-    # than MAX_WAITING of them and no more DATA than a field section may be
-    # long; past either, the stream stops with H3_EXCESSIVE_LOAD.
+    # than MAX_WAITING of them and no more bytes of DATA and field sections
+    # than a field section may be long; past either, the stream stops with
+    # H3_EXCESSIVE_LOAD. A frame a request stream does not carry has been
+    # refused before it got here.
     private def wait(stream_id, receiving, item)
-      receiving.waiting_bytes += item.data.bytesize if item.is_a?(Frame::Data)
+      receiving.waiting_bytes += case item
+        when Frame::Data then item.data.bytesize
+        when Frame::Headers then item.field_section.bytesize
+        else 0
+        end
       return stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD) if receiving.waiting.size >= MAX_WAITING || receiving.waiting_bytes > @max_section
       receiving.waiting << item
     end

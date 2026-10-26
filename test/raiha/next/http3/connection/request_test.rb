@@ -132,6 +132,22 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
     end
   end
 
+  # A frame a request stream does not carry is refused while the field
+  # section waits too, and the field sections that wait count with the
+  # DATA.
+  def test_what_waits_on_qpack_is_checked_and_counted
+    section = Frame.encode(Frame::Headers.new(field_section: "\x02\x00\x80".b))
+    server = server(qpack_max_table_capacity: 4096, qpack_blocked_streams: 1, max_field_section_size: 100)
+    server.stream_data(0, section + Frame.encode(Frame::GoAway.new(id: 0)))
+    assert_equal HTTP3::ErrorCode::FRAME_UNEXPECTED, closed_with(server)
+    server = server(qpack_max_table_capacity: 4096, qpack_blocked_streams: 1, max_field_section_size: 100)
+    trailers = Frame.encode(Frame::Headers.new(field_section: "\x00" * 150))
+    server.stream_data(0, section + trailers + trailers)
+    assert_empty actions(server)
+    server.stream_data(0, trailers)
+    assert_equal [HTTP3::Action::StopSending, HTTP3::Action::Reset], actions(server).map(&:class)
+  end
+
   # The bytes of a request stream that ended, or was stopped, which a
   # transport might still hand over, start no request.
   def test_late_bytes_of_a_stream_that_ended
