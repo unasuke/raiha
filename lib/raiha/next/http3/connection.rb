@@ -298,7 +298,11 @@ module Raiha::Next::HTTP3
     # transport's limit on the peer's streams.
     private def open_request(stream_id)
       if stream_id >= @next_request
-        @next_request.step(stream_id - 4, 4) { |skipped| @skipped[skipped] = true }
+        skipped = @next_request
+        while skipped < stream_id
+          @skipped[skipped] = true
+          skipped += 4
+        end
         @next_request = stream_id + 4
       else
         @skipped.delete(stream_id) or return nil
