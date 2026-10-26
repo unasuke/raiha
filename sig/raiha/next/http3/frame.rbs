@@ -1,0 +1,126 @@
+module Raiha::Next::HTTP3
+  module ErrorCode
+    NO_ERROR: Integer
+    GENERAL_PROTOCOL_ERROR: Integer
+    INTERNAL_ERROR: Integer
+    STREAM_CREATION_ERROR: Integer
+    CLOSED_CRITICAL_STREAM: Integer
+    FRAME_UNEXPECTED: Integer
+    FRAME_ERROR: Integer
+    EXCESSIVE_LOAD: Integer
+    ID_ERROR: Integer
+    SETTINGS_ERROR: Integer
+    MISSING_SETTINGS: Integer
+    REQUEST_REJECTED: Integer
+    REQUEST_CANCELLED: Integer
+    REQUEST_INCOMPLETE: Integer
+    MESSAGE_ERROR: Integer
+    CONNECT_ERROR: Integer
+    VERSION_FALLBACK: Integer
+    DATAGRAM_ERROR: Integer
+  end
+
+  module Varint
+    MAX: Integer
+
+    def self.size: (Integer value) -> Integer
+    def self.encode: (Integer value) -> String
+    def self.decode: (String bytes, ?Integer offset) -> [Integer, Integer]?
+  end
+
+  module Frame
+    type t = Data | Headers | CancelPush | Settings | PushPromise | GoAway | MaxPushId | PriorityUpdate
+
+    DATA: Integer
+    HEADERS: Integer
+    CANCEL_PUSH: Integer
+    SETTINGS: Integer
+    PUSH_PROMISE: Integer
+    GOAWAY: Integer
+    MAX_PUSH_ID: Integer
+    PRIORITY_UPDATE: Integer
+    PRIORITY_UPDATE_PUSH: Integer
+    HTTP2_TYPES: Array[Integer]
+
+    class Malformed < StandardError
+    end
+
+    def self.binary: (String string) -> String
+
+    class Data < ::Data
+      attr_reader data: String
+
+      def self.new: (data: String) -> instance
+                  | (String data) -> instance
+
+      def initialize: (data: String) -> void
+    end
+
+    class Headers < ::Data
+      attr_reader field_section: String
+
+      def self.new: (field_section: String) -> instance
+                  | (String field_section) -> instance
+
+      def initialize: (field_section: String) -> void
+    end
+
+    class CancelPush < ::Data
+      attr_reader push_id: Integer
+
+      def self.new: (push_id: Integer) -> instance
+                  | (Integer push_id) -> instance
+    end
+
+    class Settings < ::Data
+      attr_reader settings: Array[[Integer, Integer]]
+
+      def self.new: (settings: Array[[Integer, Integer]]) -> instance
+                  | (Array[[Integer, Integer]] settings) -> instance
+
+      def initialize: (settings: Array[[Integer, Integer]]) -> void
+    end
+
+    class PushPromise < ::Data
+      attr_reader push_id: Integer
+      attr_reader field_section: String
+
+      def self.new: (push_id: Integer, field_section: String) -> instance
+                  | (Integer push_id, String field_section) -> instance
+
+      def initialize: (push_id: Integer, field_section: String) -> void
+    end
+
+    class GoAway < ::Data
+      attr_reader id: Integer
+
+      def self.new: (id: Integer) -> instance
+                  | (Integer id) -> instance
+    end
+
+    class MaxPushId < ::Data
+      attr_reader push_id: Integer
+
+      def self.new: (push_id: Integer) -> instance
+                  | (Integer push_id) -> instance
+    end
+
+    class PriorityUpdate < ::Data
+      attr_reader element_id: Integer
+      attr_reader priority: String
+      attr_reader push: bool
+
+      def self.new: (element_id: Integer, priority: String, ?push: bool) -> instance
+                  | (Integer element_id, String priority, ?bool push) -> instance
+
+      def initialize: (element_id: Integer, priority: String, ?push: bool) -> void
+    end
+
+    def self.header: (Integer type, Integer length) -> String
+    def self.encode: (t frame) -> String
+    def self.decode: (Integer type, String payload) -> t
+    def self.varint: (String payload, Integer offset) -> [Integer, Integer]
+    def self.only_varint: (String payload) -> Integer
+    def self.pairs: (String payload) -> Array[[Integer, Integer]]
+  end
+end
