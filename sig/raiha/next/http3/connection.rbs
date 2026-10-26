@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | GoAway | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -93,6 +93,13 @@ module Raiha::Next::HTTP3
     end
 
     class Writable < ::Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
+    class GoAway < ::Data
       attr_reader stream_id: Integer
 
       def self.new: (stream_id: Integer) -> instance
@@ -201,6 +208,9 @@ module Raiha::Next::HTTP3
     @sending: Hash[Integer, Sending]
     @next_request: Integer
     @skipped: Hash[Integer, true]
+    @goaway: Integer?
+    @peer_goaway: Integer?
+    @max_push_id: Integer?
     @field_section_limit: Integer
     @max_section: Integer
 
@@ -223,11 +233,13 @@ module Raiha::Next::HTTP3
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stopped: (Integer stream_id, error_code: Integer) -> void
     def cancel: (Integer stream_id, ?error_code: Integer) -> void
+    def goaway: (?Integer? id) -> void
     def each_action: () { (Action::t action) -> void } -> void
     def each_event: () { (Event::t event) -> void } -> void
     private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_unidirectional: (Integer stream_id, Integer type) -> void
     private def control_item: (FrameReader::item item) -> void
+    private def goaway_received: (Integer id) -> void
     private def close_with: (Integer code, String reason) -> void
     private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_request: (Integer stream_id) -> Receiving?

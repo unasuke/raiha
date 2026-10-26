@@ -43,6 +43,11 @@ module Raiha::Next::HTTP3
     # than given.
     class Writable < ::Data.define(:stream_id); end
 
+    # The peer goes away (RFC 9114 "Connection Shutdown"): a server's
+    # `stream_id`, from which on requests were not processed, or a
+    # client's push ID.
+    class GoAway < ::Data.define(:stream_id); end
+
     # The field section on `stream_id` waits for entries the QPACK encoder
     # stream has yet to bring (RFC 9204 "Blocked Decoding").
     class Blocked < ::Data.define(:stream_id); end

@@ -116,6 +116,11 @@ module Raiha::Next::HTTP3
       # below it skipped, which may still come.
       @next_request = 0
       @skipped = {} #: Hash[Integer, true]
+      # The GOAWAY this end sent, the peer's, and the most push IDs a client
+      # allowed.
+      @goaway = nil #: Integer?
+      @peer_goaway = nil #: Integer?
+      @max_push_id = nil #: Integer?
       @field_section_limit = limit
       @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
     end
@@ -170,6 +175,7 @@ module Raiha::Next::HTTP3
     # ArgumentError; :protocol is for a server that took Extended CONNECT.
     def send_request(stream_id, headers, fin: false)
       raise Error::Usage, "a server sends no request" unless @role == :client
+      raise Error::Usage, "the server goes away; no more requests" if @peer_goaway
       unless stream_id.is_a?(Integer) && stream_id.between?(0, Varint::MAX) && stream_id & 0x3 == 0
         raise ArgumentError, "stream #{stream_id.inspect} is not a client's going both ways"
       end
@@ -275,6 +281,22 @@ module Raiha::Next::HTTP3
       @events << Event::Stopped.new(stream_id:, error_code:) if @sending.delete(stream_id)
     end
 
+    # Tells the peer this end goes away (RFC 9114 "Connection Shutdown"): a
+    # server's GOAWAY gives the lowest ID of a request it has not seen, by
+    # default, from which it rejects requests with H3_REQUEST_REJECTED; a
+    # client's gives a push ID, 0 by default, as it allows no push. A later
+    # GOAWAY may only give a lower one.
+    def goaway(id = nil)
+      raise Error::Usage, "no control stream to send GOAWAY on yet" unless (control = @own_critical.first)
+      id ||= @role == :server ? @next_request : 0
+      raise ArgumentError, "GOAWAY gives 0..2^62-1, not #{id.inspect}" unless id.is_a?(Integer) && id.between?(0, Varint::MAX)
+      raise ArgumentError, "a server's GOAWAY gives a request's stream ID, not #{id}" if @role == :server && id & 0x3 != 0
+      raise ArgumentError, "GOAWAY gave #{@goaway} already, not more" if (sent = @goaway) && id > sent
+      return if @closed
+      @goaway = id
+      output(control) << Frame.encode(Frame::GoAway.new(id:))
+    end
+
     # Stops a request on `stream_id` both ways, with `error_code`
     # (RFC 9114 "Request Cancellation and Rejection"): nothing more of it
     # is sent or taken. A stream with no request, or one over, is left as
@@ -352,6 +374,34 @@ module Raiha::Next::HTTP3
         settings = Settings.from_frame(item)
         @peer_settings = settings
         @events << Event::Settings.new(settings:)
+      when Frame::GoAway then goaway_received(item.id)
+      when Frame::CancelPush
+        raise Violation.new("CANCEL_PUSH for push #{item.push_id}, with no push allowed or promised", code: ErrorCode::ID_ERROR)
+      when Frame::MaxPushId
+        if (allowed = @max_push_id) && item.push_id < allowed
+          raise Violation.new("MAX_PUSH_ID down from #{allowed} to #{item.push_id}", code: ErrorCode::ID_ERROR)
+        end
+        @max_push_id = item.push_id
+      end
+    end
+
+    # The peer goes away (RFC 9114 "Connection Shutdown"): a server's `id`,
+    # a stream ID of a client's request, says the requests from it on were
+    # not processed, and a client's, a push ID, the pushes; neither may
+    # grow. A client makes no more requests, and those it made from `id`
+    # on are let go, each told with Event::Reset as H3_REQUEST_REJECTED.
+    private def goaway_received(id)
+      if @role == :client && id & 0x3 != 0
+        raise Violation.new("GOAWAY for stream #{id}, not a request's", code: ErrorCode::ID_ERROR)
+      end
+      previous = @peer_goaway
+      raise Violation.new("GOAWAY up from #{previous} to #{id}", code: ErrorCode::ID_ERROR) if previous && id > previous
+      @peer_goaway = id
+      @events << Event::GoAway.new(stream_id: id)
+      return unless @role == :client
+      (@receiving.keys | @sending.keys).select { |stream_id| stream_id >= id }.sort.each do |stream_id|
+        cancel(stream_id)
+        @events << Event::Reset.new(stream_id:, error_code: ErrorCode::REQUEST_REJECTED)
       end
     end
 
@@ -398,6 +448,10 @@ module Raiha::Next::HTTP3
         @next_request = stream_id + 4
       else
         @skipped.delete(stream_id) or return nil
+      end
+      if (goaway = @goaway) && stream_id >= goaway
+        stream_error(stream_id, ErrorCode::REQUEST_REJECTED)
+        return nil
       end
       @receiving[stream_id] = Receiving.new(max_payload: @max_section)
     end
