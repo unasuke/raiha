@@ -144,6 +144,8 @@ module Raiha::Next::HTTP3
     @decoder: QPACK::Decoder
     @encoder: QPACK::Encoder
     @receiving: Hash[Integer, Receiving]
+    @next_request: Integer
+    @skipped: Hash[Integer, true]
     @field_section_limit: Integer
     @max_section: Integer
 
@@ -169,6 +171,7 @@ module Raiha::Next::HTTP3
     private def control_item: (FrameReader::item item) -> void
     private def close_with: (Integer code, String reason) -> void
     private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
+    private def open_request: (Integer stream_id) -> Receiving?
     private def request_item: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
     private def wait: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
     private def section_decoded: (Integer stream_id, Receiving receiving, QPACK::Decoded | QPACK::Blocked | QPACK::Oversized | QPACK::Failure result) -> void

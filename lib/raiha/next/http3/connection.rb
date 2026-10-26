@@ -110,6 +110,10 @@ module Raiha::Next::HTTP3
       # HEADERS frame may carry: one line takes no more on the wire than
       # four times what it counts for (RFC 9204's decoder holds no longer).
       @receiving = {} #: Hash[Integer, Receiving]
+      # The lowest ID of the peer's request streams not seen yet, and those
+      # below it skipped, which may still come.
+      @next_request = 0
+      @skipped = {} #: Hash[Integer, true]
       @field_section_limit = limit
       @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
     end
@@ -178,6 +182,11 @@ module Raiha::Next::HTTP3
     # The peer reset `stream_id`, with `error_code`.
     def stream_reset(stream_id, error_code:)
       return if @closed
+      if stream_id & 0x2 == 0
+        @decoder.cancel(stream_id) if @receiving.delete(stream_id)
+        @skipped.delete(stream_id)
+        return
+      end
       type = @incoming.delete(stream_id)
       return unless type.is_a?(Integer) && CRITICAL_STREAMS.key?(type)
       close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer reset its #{CRITICAL_STREAMS.fetch(type)} stream")
@@ -277,9 +286,24 @@ module Raiha::Next::HTTP3
         raise Violation.new("a stream going both ways from a server", code: ErrorCode::STREAM_CREATION_ERROR) if stream_id & 0x1 != 0
         return
       end
-      receiving = @receiving[stream_id] ||= Receiving.new(max_payload: @max_section)
+      receiving = @receiving[stream_id] || open_request(stream_id) or return
       receiving.reader.feed(data) { |item| request_item(stream_id, receiving, item) }
       request_ended(stream_id, receiving) if fin && @receiving[stream_id].equal?(receiving)
+    end
+
+    # A request stream the peer opened: one past those seen so far, or one
+    # below them it skipped, as the IDs of a peer's streams come in order
+    # but their bytes need not; nil for one that ended or was stopped, whose
+    # late bytes are dropped. How many are skipped is bounded by the
+    # transport's limit on the peer's streams.
+    private def open_request(stream_id)
+      if stream_id >= @next_request
+        @next_request.step(stream_id - 4, 4) { |skipped| @skipped[skipped] = true }
+        @next_request = stream_id + 4
+      else
+        @skipped.delete(stream_id) or return nil
+      end
+      @receiving[stream_id] = Receiving.new(max_payload: @max_section)
     end
 
     # What a request stream holds: a field section before anything else,

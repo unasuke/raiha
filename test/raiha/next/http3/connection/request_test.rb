@@ -132,6 +132,43 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
     end
   end
 
+  # The bytes of a request stream that ended, or was stopped, which a
+  # transport might still hand over, start no request.
+  def test_late_bytes_of_a_stream_that_ended
+    server = server()
+    server.stream_data(0, headers_frame(GET), fin: true)
+    server.stream_data(4, headers_frame(GET + [["connection", "close"]], stream_id: 4))
+    events(server)
+    actions(server)
+    [0, 4].each { |stream_id| server.stream_data(stream_id, headers_frame(GET, stream_id:)) }
+    assert_empty events(server)
+    assert_empty actions(server)
+  end
+
+  # The IDs of the peer's streams come in order, but their bytes need not:
+  # one skipped is taken when it comes, unless it was reset first.
+  def test_streams_whose_bytes_come_out_of_order
+    server = server()
+    [8, 0].each { |stream_id| server.stream_data(stream_id, headers_frame(GET, stream_id:)) }
+    server.stream_reset(4, error_code: 0)
+    server.stream_data(4, headers_frame(GET, stream_id: 4))
+    assert_equal [8, 0], events(server).map(&:stream_id)
+    server.stream_data(12, headers_frame(GET, stream_id: 12))
+    assert_equal [12], events(server).map(&:stream_id)
+  end
+
+  # A request reset while its field section waits is let go by QPACK too.
+  def test_a_request_reset_while_waiting
+    server = server(qpack_max_table_capacity: 4096, qpack_blocked_streams: 1)
+    server.stream_data(0, Frame.encode(Frame::Headers.new(field_section: "\x02\x00\x80".b)))
+    events(server)
+    server.stream_reset(0, error_code: 0)
+    insert = QPACK::Writer.new.integer(4096, 5, 0x20).string("x-name", 6, 0x40).string("value", 8).to_s
+    server.stream_data(6, "\x02".b + insert)
+    assert_empty events(server)
+    assert_equal({ 11 => ["\x40\x01".b, false] }, sent(server))
+  end
+
   # An integer past 62 bits in a field section stops that stream only (RFC
   # 9204 "Implementation Limits").
   def test_a_field_section_qpack_fails_on_stops_the_stream
