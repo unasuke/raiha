@@ -1,0 +1,92 @@
+module Raiha::Next::HTTP3
+  module Action
+    type t = Reset | StopSending | Priority | Close
+
+    class Reset < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class StopSending < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class Priority < Data
+      attr_reader stream_id: Integer
+      attr_reader urgency: Integer
+      attr_reader incremental: bool
+
+      def self.new: (stream_id: Integer, urgency: Integer, incremental: bool) -> instance
+                  | (Integer stream_id, Integer urgency, bool incremental) -> instance
+    end
+
+    class Close < Data
+      attr_reader error_code: Integer
+      attr_reader reason: String
+
+      def self.new: (error_code: Integer, reason: String) -> instance
+                  | (Integer error_code, String reason) -> instance
+    end
+  end
+
+  class Output
+    @pieces: Array[String]
+    @buffered: Integer
+    @fin: bool
+    @blocked: bool
+
+    attr_reader buffered: Integer
+
+    def initialize: () -> void
+    def <<: (String bytes) -> self
+    def finish: () -> void
+    def ready?: () -> bool
+    def unblock: () -> void
+    def drain: () { (String data, bool fin) -> Integer } -> bool
+  end
+
+  class Connection
+    CONTROL_STREAM: Integer
+    PUSH_STREAM: Integer
+    ENCODER_STREAM: Integer
+    DECODER_STREAM: Integer
+    DEFAULT_MAX_SEND_BUFFER: Integer
+    CRITICAL: Priority
+    TRANSPORT_ORDERINGS: Array[transport_ordering]
+
+    type role = :client | :server
+    type transport_ordering = :per_stream | :global
+
+    @role: role
+    @settings: Settings
+    @transport_ordering: transport_ordering
+    @max_send_buffer: Integer
+    @outputs: Hash[Integer, Output]
+    @priorities: Hash[Integer, Priority]
+    @actions: Array[Action::t]
+    @started: bool
+
+    attr_reader role: role
+    attr_reader settings: Settings
+
+    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
+    def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
+
+    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer) -> void
+    def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
+    def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
+    def stream_writable: (Integer stream_id) -> void
+    def each_action: () { (Action::t action) -> void } -> void
+    private def output: (Integer stream_id) -> Output
+    private def prioritize: (Integer stream_id, Priority priority) -> void
+    private def priority_of: (Integer stream_id) -> Priority
+    private def local_unidirectional?: (Integer stream_id) -> bool
+  end
+end
