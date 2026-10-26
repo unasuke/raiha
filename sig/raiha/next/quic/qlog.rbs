@@ -13,11 +13,16 @@ module Raiha::Next::QUIC
       PACKET_TYPES: Hash[Wire::LongHeader::packet_type | :one_rtt, String]
       SPACE_PACKET_TYPES: Hash[space, String]
       TIMES: Array[Symbol]
+      DEFAULT_MAX_BYTES: Integer
+      STOP_ROOM: Integer
 
       @io: _Writer
+      @max_bytes: Integer
+      @written: Integer
+      @stopped: bool
       @now: Float
 
-      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?) -> void
+      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer) -> void
       def trace_frames?: () -> bool
       def packet_sent: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
       def packet_received: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
@@ -40,6 +45,7 @@ module Raiha::Next::QUIC
       private def values: (Hash[Symbol, untyped] fields) -> Hash[Symbol, json]
       private def event: (Float now, String name, Hash[Symbol, json] data) -> void
       private def write: (Hash[Symbol, json] record) -> void
+      private def record_size: (String json) -> Integer
       private def hex: (String bytes) -> String
     end
   end

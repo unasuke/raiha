@@ -17,6 +17,12 @@ module Raiha::Next::QUIC
     # Connection IDs and other bytes are hex; the bytes of data, only their
     # length. Events qlog has no name for go under "raiha:": a spurious loss,
     # and the TLS layer's traces as "raiha:tls_" and the name of the trace.
+    #
+    # The trace of one connection writes no more than `max_bytes`, however
+    # long the peer keeps it busy: the record that would go past it, less
+    # the room for one more, goes instead as "raiha:qlog_stopped", and
+    # nothing comes after it. How much all the traces together write is up
+    # to whoever gives each its `io`.
     class Tracer
       include Raiha::Next::QUIC::Tracer
 
@@ -26,10 +32,17 @@ module Raiha::Next::QUIC
       # The metrics and parameters that are times, in seconds here and
       # milliseconds in qlog.
       TIMES = %i[latest_rtt smoothed_rtt min_rtt rtt_variance max_idle_timeout max_ack_delay timer_granularity initial_rtt].freeze
+      DEFAULT_MAX_BYTES = 64 * 1024 * 1024
+      # The room kept for the record that says the trace stopped.
+      STOP_ROOM = 256
 
       # `vantage_point` is :client or :server.
-      def initialize(io, vantage_point:, title: nil)
+      def initialize(io, vantage_point:, title: nil, max_bytes: DEFAULT_MAX_BYTES)
+        raise ArgumentError, "max_bytes is a positive Integer, not #{max_bytes.inspect}" unless max_bytes.is_a?(Integer) && max_bytes.positive?
         @io = io
+        @max_bytes = max_bytes
+        @written = 0
+        @stopped = false
         @now = 0.0
         header = {
           file_schema: "urn:ietf:params:qlog:file:sequential", serialization_format: "application/qlog+json-seq",
@@ -43,7 +56,9 @@ module Raiha::Next::QUIC
         write(header)
       end
 
-      def trace_frames? = true
+      # Whether the connection lists the frames of each packet: not once the
+      # trace has stopped.
+      def trace_frames? = !@stopped
 
       def packet_sent(header:, frames:, raw_length:, now:) = packet("quic:packet_sent", header, frames, raw_length, now)
 
@@ -144,7 +159,21 @@ module Raiha::Next::QUIC
         write({ time: now * 1000, name:, data: })
       end
 
-      private def write(record) = @io.write(RECORD_SEPARATOR, JSON.generate(record), "\n")
+      private def write(record)
+        return if @stopped
+        json = JSON.generate(record)
+        if @written + record_size(json) + STOP_ROOM > @max_bytes
+          @stopped = true
+          json = JSON.generate({ time: @now * 1000, name: "raiha:qlog_stopped", data: { max_bytes: @max_bytes } })
+          return if @written + record_size(json) > @max_bytes
+        end
+        @written += record_size(json)
+        @io.write(RECORD_SEPARATOR, json, "\n")
+      end
+
+      # The bytes `json` takes in the sequence, with the separator before it
+      # and the line feed after.
+      private def record_size(json) = RECORD_SEPARATOR.bytesize + json.bytesize + 1
 
       private def hex(bytes) = bytes.unpack1("H*")
     end

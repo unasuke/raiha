@@ -73,4 +73,31 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert_equal [[1500.0, "client_1rtt_secret"], [1500.0, "server_1rtt_secret"]], updates.map { [_1["time"], _1.dig("data", "key_type")] }
     assert updates.none? { _1["data"].key?("old") || _1["data"].key?("new") }
   end
+
+  # A trace writes no more than max_bytes: it ends with a record saying it
+  # stopped, and the connection lists no more frames for it.
+  def test_a_trace_stops_at_max_bytes
+    io = StringIO.new
+    tracer = QUIC::Qlog::Tracer.new(io, vantage_point: :client, max_bytes: 4096)
+    client = client_connection(tracer:)
+    handshake(client, server_connection)
+    assert client.handshake_complete?
+    assert_operator io.string.bytesize, :<=, 4096
+    trace = records(io)
+    assert_equal "urn:ietf:params:qlog:file:sequential", trace.first["file_schema"]
+    assert_equal ["raiha:qlog_stopped", { "max_bytes" => 4096 }], [trace.last["name"], trace.last["data"]]
+    assert_equal 1, trace.count { _1["name"] == "raiha:qlog_stopped" }
+    refute tracer.trace_frames?
+    written = io.string.bytesize
+    tracer.key_updated(level: :one_rtt, now: 1.0)
+    assert_equal written, io.string.bytesize
+  end
+
+  def test_max_bytes_by_default
+    tracer = QUIC::Qlog::Tracer.new(StringIO.new, vantage_point: :client)
+    assert_equal 64 * 1024 * 1024, QUIC::Qlog::Tracer::DEFAULT_MAX_BYTES
+    assert tracer.trace_frames?
+    assert_raises(ArgumentError) { QUIC::Qlog::Tracer.new(StringIO.new, vantage_point: :client, max_bytes: 0) }
+    assert_raises(ArgumentError) { QUIC::Qlog::Tracer.new(StringIO.new, vantage_point: :client, max_bytes: "1") }
+  end
 end
