@@ -110,6 +110,18 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert_raises(ArgumentError) { QUIC::Qlog::Budget.new(max_bytes: 0) }
   end
 
+  # A layer above QUIC writes its events into the same trace, at the time
+  # of the event before them, and names its schema.
+  def test_events_of_a_layer_above
+    io = StringIO.new
+    tracer = QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: ["urn:ietf:params:qlog:events:http3-12"])
+    tracer.key_updated(level: :one_rtt, now: 2.0)
+    tracer.record("http3:frame_parsed", { stream_id: 0, frame: { frame_type: "data" } })
+    trace = records(io)
+    assert_equal ["urn:ietf:params:qlog:events:quic", "urn:ietf:params:qlog:events:http3-12"], trace.first.dig("trace", "event_schemas")
+    assert_equal [2000.0, "http3:frame_parsed", { "stream_id" => 0, "frame" => { "frame_type" => "data" } }], trace.last.values_at("time", "name", "data")
+  end
+
   def test_max_bytes_by_default
     tracer = QUIC::Qlog::Tracer.new(StringIO.new, vantage_point: :client)
     assert_equal 64 * 1024 * 1024, QUIC::Qlog::Tracer::DEFAULT_MAX_BYTES

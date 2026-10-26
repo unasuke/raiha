@@ -35,7 +35,8 @@ module Raiha::Next::QUIC
       @stopped: bool
       @now: Float
 
-      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer, ?budget: Budget?) -> void
+      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer, ?budget: Budget?, ?event_schemas: Array[String]) -> void
+      def record: (String name, Hash[Symbol, json] data) -> void
       def trace_frames?: () -> bool
       def packet_sent: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
       def packet_received: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void

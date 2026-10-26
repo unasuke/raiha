@@ -38,6 +38,8 @@ module Raiha::Next::QUIC
     # Connection IDs and other bytes are hex; the bytes of data, only their
     # length. Events qlog has no name for go under "raiha:": a spurious loss,
     # and the TLS layer's traces as "raiha:tls_" and the name of the trace.
+    # A layer above QUIC writes its own events with `record`, at the time of
+    # the event before them, and names its schema in `event_schemas`.
     #
     # The trace of one connection writes no more than `max_bytes`, however
     # long the peer keeps it busy, and the traces given one `budget` no
@@ -61,7 +63,7 @@ module Raiha::Next::QUIC
       STOP_ROOM = 256
 
       # `vantage_point` is :client or :server.
-      def initialize(io, vantage_point:, title: nil, max_bytes: DEFAULT_MAX_BYTES, budget: nil)
+      def initialize(io, vantage_point:, title: nil, max_bytes: DEFAULT_MAX_BYTES, budget: nil, event_schemas: [])
         raise ArgumentError, "max_bytes is a positive Integer, not #{max_bytes.inspect}" unless max_bytes.is_a?(Integer) && max_bytes.positive?
         @io = io
         @max_bytes = max_bytes
@@ -75,7 +77,7 @@ module Raiha::Next::QUIC
           trace: {
             vantage_point: { type: vantage_point.to_s },
             common_fields: { time_format: "relative_to_epoch", reference_time: { clock_type: "monotonic", epoch: "unknown" } },
-            event_schemas: ["urn:ietf:params:qlog:events:quic"]
+            event_schemas: ["urn:ietf:params:qlog:events:quic", *event_schemas]
           }
         }.compact #: Hash[Symbol, json]
         write(header)
@@ -132,6 +134,10 @@ module Raiha::Next::QUIC
       end
 
       # A trace of the TLS layer: a Data, whose name and fields it takes.
+      # An event of a layer above QUIC, `name` with `data`, already as qlog
+      # has it.
+      def record(name, data) = write({ time: @now * 1000, name:, data: })
+
       def tls_trace(value)
         name = value.class.name.to_s.split("::").last.to_s.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
         write({ time: @now * 1000, name: "raiha:tls_#{name}", data: values(value.to_h) })
