@@ -21,8 +21,8 @@ class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
   def datagrams(connection) = [].tap { |all| connection.each_datagram_send { |data, urgency| all << [data, urgency] } }
 
   # A server with Extended CONNECT on stream 0 and a GET on stream 4, the
-  # client's SETTINGS taken.
-  def server(settings: HTTP3::Settings.new(enable_connect_protocol: true), peer: HTTP3::Settings.new)
+  # client's SETTINGS taken; both ends take HTTP Datagrams.
+  def server(settings: HTTP3::Settings.new(enable_connect_protocol: true, h3_datagram: true), peer: HTTP3::Settings.new(h3_datagram: true))
     server = HTTP3::Connection.server(settings:)
     server.start(**SERVER_STREAMS)
     server.stream_data(2, "\x00".b + Frame.encode(peer.to_frame))
@@ -70,7 +70,7 @@ class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
   end
 
   def test_none_taken_when_this_end_said_so
-    server = server(settings: HTTP3::Settings.new(enable_connect_protocol: true, h3_datagram: false))
+    server = server(settings: HTTP3::Settings.new(enable_connect_protocol: true))
     server.datagram_received("\x00ping".b)
     assert_empty events(server)
     refute server.datagram_send(0, "pong")
@@ -79,7 +79,7 @@ class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
   # Sent only once the peer took them too, on a request with a use for
   # them, that fits, and while few enough wait.
   def test_what_goes
-    refute server(peer: HTTP3::Settings.new(h3_datagram: false)).datagram_send(0, "x")
+    refute server(peer: HTTP3::Settings.new).datagram_send(0, "x")
     server = server()
     refute server.datagram_send(4, "x")
     refute server.datagram_send(8, "x")

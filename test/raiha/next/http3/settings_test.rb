@@ -7,12 +7,14 @@ class RaihaNextHTTP3SettingsTest < Minitest::Test
 
   def frame(*pairs) = HTTP3::Frame::Settings.new(settings: pairs)
 
-  # This end's by default: no dynamic table, 64 KiB field sections, HTTP
-  # Datagrams taken; only what differs from the defaults of the RFCs goes.
+  # This end's by default: no dynamic table, 64 KiB field sections, no
+  # HTTP Datagrams, as QUIC takes no DATAGRAM frames by default; only what
+  # differs from the defaults of the RFCs goes.
   def test_this_ends_by_default
     settings = Settings.new
-    assert_equal [0, 0, 65_536, true, false], settings.to_h.values
-    assert_equal frame([0x06, 65_536], [0x33, 1]), settings.to_frame
+    assert_equal [0, 0, 65_536, false, false], settings.to_h.values
+    assert_equal frame([0x06, 65_536]), settings.to_frame
+    assert_equal frame([0x06, 65_536], [0x33, 1]), Settings.new(h3_datagram: true).to_frame
   end
 
   def test_every_setting_in_the_frame

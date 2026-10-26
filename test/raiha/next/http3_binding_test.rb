@@ -16,14 +16,16 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
   OK = [[":status", "200"]].freeze
 
   # A network of a client and a server, each with a Side made once it has
-  # a connection, the server's given `on_server_event`. Gives the network,
-  # the client's QUIC connection and the Sides by :client and :server.
-  def h3_network(on_server_event: nil, **options)
+  # a connection, of HTTP/3 `settings`, the server's given
+  # `on_server_event`. Gives the network, the client's QUIC connection and
+  # the Sides by :client and :server.
+  def h3_network(on_server_event: nil, settings: HTTP3::Settings.new, **options)
     sides = {}
-    client_step = ->(connection, now) { (sides[:client] ||= NextHTTP3Side.new(connection, HTTP3::Connection.client)).turn(now) }
+    client_step = ->(connection, now) { (sides[:client] ||= NextHTTP3Side.new(connection, HTTP3::Connection.client(settings:))).turn(now) }
     server_step = lambda do |endpoint, now|
       connection = endpoint.connections.first or next
-      (sides[:server] ||= NextHTTP3Side.new(connection, HTTP3::Connection.server)).turn(now, on_server_event)
+      sides[:server] ||= NextHTTP3Side.new(connection, HTTP3::Connection.server(settings: settings.with(enable_connect_protocol: true)))
+      sides[:server].turn(now, on_server_event)
     end
     net, client, = transfer_network(client_step:, server_step:, **options)
     [net, client, sides]
@@ -63,7 +65,8 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
   end
 
   # The HTTP Datagrams of an Extended CONNECT request go both ways in
-  # QUIC's DATAGRAM frames, the server echoing the client's.
+  # QUIC's DATAGRAM frames, the server echoing the client's, where both
+  # ends take them in QUIC and in HTTP/3.
   def test_http_datagrams
     config = QUIC::Config.new(max_datagram_frame_size: 1200)
     respond = lambda do |side, event|
@@ -72,7 +75,7 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
       when HTTP3::Event::Datagram then side.http3.datagram_send(event.stream_id, event.payload)
       end
     end
-    net, quic, sides = h3_network(on_server_event: respond, client_config: config, server_config: config)
+    net, quic, sides = h3_network(on_server_event: respond, settings: HTTP3::Settings.new(h3_datagram: true), client_config: config, server_config: config)
     assert net.run_until { sides[:client]&.http3&.peer_settings }
     client = sides.fetch(:client)
     client.http3.send_request(quic.open_stream, CONNECT)

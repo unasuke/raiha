@@ -41,10 +41,10 @@ class RaihaNextHTTP3QlogTest < Minitest::Test
     names = records.all.map(&:first)
     assert_equal %w[http3:parameters_set http3:stream_type_set http3:stream_type_set http3:stream_type_set http3:frame_created], names.first(5)
     assert_equal({ "initiator" => "local", "max_field_section_size" => 65_536, "max_table_capacity" => 0, "blocked_streams_count" => 0,
-                   "extended_connect" => 1, "h3_datagram" => 1 }, records.all.first.last)
+                   "extended_connect" => 1, "h3_datagram" => 0 }, records.all.first.last)
     assert_includes records.all, ["http3:stream_type_set", { "initiator" => "remote", "stream_id" => 2, "stream_type" => "control" }]
     assert_includes records.all, ["http3:parameters_set", { "initiator" => "remote", "max_field_section_size" => 65_536, "max_table_capacity" => 0,
-                                                              "blocked_streams_count" => 0, "extended_connect" => 0, "h3_datagram" => 1 }]
+                                                              "blocked_streams_count" => 0, "extended_connect" => 0, "h3_datagram" => 0 }]
     assert_includes records.all, ["http3:stream_type_set", { "initiator" => "remote", "stream_id" => 0, "stream_type" => "request" }]
     parsed = records.all.filter_map { |name, data| data["frame"] if name == "http3:frame_parsed" && data["stream_id"] == 0 }
     assert_equal [

@@ -23,10 +23,11 @@ module Raiha::Next::HTTP3
     FLAGS = [ENABLE_CONNECT_PROTOCOL, H3_DATAGRAM].freeze
 
     # This end's: QPACK with no dynamic table, a field section of 64 KiB at
-    # most, and HTTP Datagrams taken, so that taking them does not tell
-    # what the end serves (RFC 9297 "The SETTINGS_H3_DATAGRAM HTTP/3
-    # Setting").
-    def initialize(qpack_max_table_capacity: 0, qpack_blocked_streams: 0, max_field_section_size: 65_536, h3_datagram: true, enable_connect_protocol: false)
+    # most, and no HTTP Datagrams. An end takes them only over a transport
+    # that takes DATAGRAM frames, which QUIC does not by default; one that
+    # does is RECOMMENDED to take them whether it uses them or not, so as
+    # not to stand out (RFC 9297 "The SETTINGS_H3_DATAGRAM HTTP/3 Setting").
+    def initialize(qpack_max_table_capacity: 0, qpack_blocked_streams: 0, max_field_section_size: 65_536, h3_datagram: false, enable_connect_protocol: false)
       [qpack_max_table_capacity, qpack_blocked_streams, max_field_section_size].compact.each do |value|
         raise ArgumentError, "a setting is 0..2^62-1, not #{value.inspect}" unless value.is_a?(Integer) && value.between?(0, Varint::MAX)
       end

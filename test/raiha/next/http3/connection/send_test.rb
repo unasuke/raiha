@@ -26,7 +26,7 @@ class RaihaNextHTTP3ConnectionSendTest < Minitest::Test
 
   def test_what_the_transport_does_not_take_waits_until_writable
     client = started
-    assert_equal [[2, "\x00", false], [2, "\x04\x07", false], [6, "\x02", false], [10, "\x03", false]], given(client, 2)
+    assert_equal [[2, "\x00", false], [2, "\x04\x05", false], [6, "\x02", false], [10, "\x03", false]], given(client, 2)
     assert_empty given(client, 100)
     client.stream_writable(2)
     rest = given(client, 100)
