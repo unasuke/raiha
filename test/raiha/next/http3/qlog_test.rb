@@ -71,6 +71,18 @@ class RaihaNextHTTP3QlogTest < Minitest::Test
     assert_equal({ "name" => "x-bytes", "value_bytes" => "01ff" }, frame["headers"][5])
   end
 
+  # A Priority Field Value that is not text goes as hex, so that the trace
+  # stays JSON whatever the peer sends.
+  def test_a_priority_update_that_is_not_text
+    io = StringIO.new
+    quic = Raiha::Next::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA])
+    server = server(quic)
+    server.stream_data(2, "\x00".b + Frame.encode(HTTP3::Settings.new.to_frame) + Frame.encode(Frame::PriorityUpdate.new(element_id: 0, priority: "u=\xff\xfe".b)))
+    frame = io.string.split("\x1e").drop(1).map { JSON.parse(_1) }.last.dig("data", "frame")
+    assert_equal({ "frame_type" => "priority_update", "stream_id" => 0, "priority_field_value_bytes" => "753dfffe" }, frame)
+    refute server.closed?
+  end
+
   def test_settings_and_frames_not_known
     records = Records.new
     server = server(records)

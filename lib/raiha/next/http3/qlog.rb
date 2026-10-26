@@ -95,7 +95,7 @@ module Raiha::Next::HTTP3
         when Frame::CancelPush, Frame::MaxPushId, Frame::PushPromise then data[:push_id] = frame.push_id
         when Frame::PriorityUpdate
           data[frame.push ? :push_id : :stream_id] = frame.element_id
-          data[:priority_field_value] = text(frame.priority.byteslice(0, MAX_FIELD_BYTES) || "")
+          data.merge!(field("priority_field_value", frame.priority))
         end
         data[:raw] = { payload_length: length } if length
         data
@@ -109,8 +109,8 @@ module Raiha::Next::HTTP3
         result
       end
 
-      # A name or value as text, or hex when it is not, cut to
-      # MAX_FIELD_BYTES; its whole length when cut.
+      # A name, a value or a Priority Field Value as text, or hex when it is
+      # not, cut to MAX_FIELD_BYTES; its whole length when cut.
       private def field(key, bytes)
         cut = bytes.byteslice(0, MAX_FIELD_BYTES) || ""
         result = TEXT.match?(cut) ? { key.to_sym => text(cut) } : { :"#{key}_bytes" => cut.unpack1("H*") } #: Hash[Symbol, json]
@@ -131,6 +131,7 @@ module Raiha::Next::HTTP3
       # "Defined SETTINGS Parameters").
       private def reserved?(value) = value >= 0x21 && (value - 0x21) % 0x1f == 0
 
+      # Bytes TEXT matched, as a String JSON takes.
       private def text(bytes) = bytes.dup.force_encoding(Encoding::UTF_8)
     end
   end
