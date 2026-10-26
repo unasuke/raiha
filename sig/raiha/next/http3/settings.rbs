@@ -1,0 +1,24 @@
+module Raiha::Next::HTTP3
+  class Settings < Data
+    QPACK_MAX_TABLE_CAPACITY: Integer
+    MAX_FIELD_SECTION_SIZE: Integer
+    QPACK_BLOCKED_STREAMS: Integer
+    ENABLE_CONNECT_PROTOCOL: Integer
+    H3_DATAGRAM: Integer
+    HTTP2_IDENTIFIERS: Array[Integer]
+    FLAGS: Array[Integer]
+
+    attr_reader qpack_max_table_capacity: Integer
+    attr_reader qpack_blocked_streams: Integer
+    attr_reader max_field_section_size: Integer?
+    attr_reader h3_datagram: bool
+    attr_reader enable_connect_protocol: bool
+
+    def self.new: (?qpack_max_table_capacity: Integer, ?qpack_blocked_streams: Integer, ?max_field_section_size: Integer?, ?h3_datagram: bool, ?enable_connect_protocol: bool) -> instance
+
+    def initialize: (?qpack_max_table_capacity: Integer, ?qpack_blocked_streams: Integer, ?max_field_section_size: Integer?, ?h3_datagram: bool, ?enable_connect_protocol: bool) -> void
+
+    def self.from_frame: (Frame::Settings frame) -> Settings
+    def to_frame: () -> Frame::Settings
+  end
+end

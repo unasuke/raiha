@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "error"
 require_relative "varint"
 
 module Raiha::Next::HTTP3
@@ -24,9 +25,11 @@ module Raiha::Next::HTTP3
     HTTP2_TYPES = [0x02, 0x06, 0x08, 0x09].freeze
 
     # A payload that does not hold exactly the fields of its frame (RFC
-    # 9114 "Frame Layout"): H3_FRAME_ERROR, raised here and turned into the
-    # closing of the connection where the bytes came in.
-    class Malformed < StandardError; end
+    # 9114 "Frame Layout"), which closes the connection with
+    # H3_FRAME_ERROR.
+    class Malformed < Violation
+      def initialize(message = nil) = super(message, code: ErrorCode::FRAME_ERROR)
+    end
 
     # The Strings of a frame are frozen and binary, copied first when the
     # caller's are not.

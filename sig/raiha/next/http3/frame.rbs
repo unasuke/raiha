@@ -20,6 +20,17 @@ module Raiha::Next::HTTP3
     DATAGRAM_ERROR: Integer
   end
 
+  module Error
+    class Usage < StandardError
+    end
+  end
+
+  class Violation < StandardError
+    attr_reader code: Integer
+
+    def initialize: (?String? message, code: Integer) -> void
+  end
+
   module Varint
     MAX: Integer
 
@@ -42,7 +53,8 @@ module Raiha::Next::HTTP3
     PRIORITY_UPDATE_PUSH: Integer
     HTTP2_TYPES: Array[Integer]
 
-    class Malformed < StandardError
+    class Malformed < Violation
+      def initialize: (?String? message) -> void
     end
 
     def self.binary: (String string) -> String
