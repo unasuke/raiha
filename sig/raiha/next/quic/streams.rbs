@@ -58,6 +58,7 @@ module Raiha::Next::QUIC
     def stream_data_acked: (Recovery::Duty::Stream duty) -> void
     def stream_data_lost: (Recovery::Duty::Stream duty) -> void
     def reset: (Integer stream_id, Integer error_code) -> void
+    def prioritize: (Integer stream_id, urgency: Integer, incremental: bool) -> void
     def stop_sending: (Integer stream_id, Integer error_code) -> void
     def receive_reset_stream: (Wire::Frame::ResetStream frame, now: Float) -> void
     def receive_stop_sending: (Wire::Frame::StopSending frame, now: Float) -> void

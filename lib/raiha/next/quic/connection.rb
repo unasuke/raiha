@@ -255,6 +255,18 @@ module Raiha::Next::QUIC
       @streams.stop_sending(stream_id, error_code)
     end
 
+    # Sends `stream_id` with `urgency` (0 to 7, as RFC 9218 counts it) and
+    # as `incremental` or not: the streams of a lower urgency go first, and
+    # of one urgency, the incremental streams take turns with the one not
+    # incremental of the lowest ID. A stream given none is of urgency 3 and
+    # incremental.
+    def stream_priority(stream_id, urgency:, incremental:)
+      open!
+      raise ArgumentError, "urgency is 0 to 7, not #{urgency.inspect}" unless urgency.is_a?(Integer) && urgency.between?(0, 7)
+      raise ArgumentError, "incremental is true or false, not #{incremental.inspect}" unless incremental == true || incremental == false
+      @streams.prioritize(stream_id, urgency:, incremental:)
+    end
+
     # The streams a write would take something on.
     def writable_streams = @streams.writable.each
 

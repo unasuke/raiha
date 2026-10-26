@@ -103,6 +103,7 @@ module Raiha::Next::QUIC
     def datagram_max_size: () -> Integer?
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stop_sending: (Integer stream_id, error_code: Integer) -> void
+    def stream_priority: (Integer stream_id, urgency: Integer, incremental: bool) -> void
     def writable_streams: () -> Enumerator[Integer, Array[Integer]]
     def close: (?error_code: Integer, ?reason: String, ?application: bool, now: Float) -> void
     def next_event: () -> Event::t?

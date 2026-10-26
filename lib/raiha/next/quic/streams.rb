@@ -188,6 +188,15 @@ module Raiha::Next::QUIC
       abandon_sending(sender, error_code)
     end
 
+    # The application sends `stream_id` with `urgency` and as `incremental`
+    # (RFC 9218), as the Scheduler orders the streams.
+    def prioritize(stream_id, urgency:, incremental:)
+      sender = @senders[stream_id]
+      return if sender.nil? && over?(stream_id) && sends?(stream_id)
+      sender or raise Error::StreamError, "stream #{stream_id} has nothing to write to"
+      @scheduler.prioritize(stream_id, urgency:, incremental:)
+    end
+
     # The application stops reading `stream_id`, asking the peer with
     # `error_code` to stop sending.
     def stop_sending(stream_id, error_code)
@@ -354,7 +363,7 @@ module Raiha::Next::QUIC
       while (stream_id = @scheduler.current)
         sender = @senders[stream_id]
         unless sender&.pending?
-          @scheduler.forget(stream_id)
+          @scheduler.idle(stream_id)
           next
         end
         pair = sender.next_frame(room) or return nil
