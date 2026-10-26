@@ -85,6 +85,24 @@ class RaihaNextHTTP3ConnectionRequestBodyTest < Minitest::Test
     assert_stopped server, HTTP3::ErrorCode::MESSAGE_ERROR, events(server)
   end
 
+  # More than MAX_EVENTS events left untaken close the connection with
+  # H3_INTERNAL_ERROR; taken as they come, none do.
+  def test_events_left_untaken
+    pieces = data("x") * (HTTP3::Connection::MAX_EVENTS + 1)
+    server = server()
+    server.stream_data(0, headers(POST))
+    events(server)
+    server.stream_data(0, pieces)
+    assert_equal HTTP3::ErrorCode::INTERNAL_ERROR, closed_with(server)
+    server = server()
+    server.stream_data(0, headers(POST))
+    pieces.bytes.each_slice(1000) do |slice|
+      server.stream_data(0, slice.pack("C*"))
+      events(server)
+    end
+    assert_nil closed_with(server)
+  end
+
   # The trailers take what the header section left of the limit, as QPACK
   # counts it, and the stream stops with H3_EXCESSIVE_LOAD past it; a
   # HEADERS frame past four times the limit stops it unread.

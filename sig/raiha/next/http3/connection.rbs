@@ -212,6 +212,7 @@ module Raiha::Next::HTTP3
     MAX_DATAGRAMS: Integer
     MAX_QUARTER_STREAM_ID: Integer
     MAX_CAPSULE: Integer
+    MAX_EVENTS: Integer
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -282,6 +283,7 @@ module Raiha::Next::HTTP3
     private def control_item: (FrameReader::item item) -> void
     private def goaway_received: (Integer id) -> void
     private def priority_update_received: (Frame::PriorityUpdate frame) -> void
+    private def events_bounded: () -> void
     private def close_with: (Integer code, String reason) -> void
     private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_request: (Integer stream_id) -> Receiving?

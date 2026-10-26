@@ -64,6 +64,9 @@ module Raiha::Next::HTTP3
     MAX_QUARTER_STREAM_ID = (1 << 60) - 1
     # The longest Capsule value held; a longer one is passed over unread.
     MAX_CAPSULE = 64 * 1024
+    # The most events the application may leave untaken; past them the
+    # connection closes with H3_INTERNAL_ERROR, as QUIC's does.
+    MAX_EVENTS = 4096
     # The frames this layer knows that never go on a request stream (RFC
     # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
     # server.
@@ -193,6 +196,7 @@ module Raiha::Next::HTTP3
         forget_output(stream_id) if ended
         writable_again(stream_id, output)
       end
+      events_bounded
     end
 
     # Sends a request on `stream_id`, a stream going both ways the transport
@@ -283,6 +287,7 @@ module Raiha::Next::HTTP3
       return unless receiving.surfaced
       return stream_error(stream_id, ErrorCode::DATAGRAM_ERROR) unless receiving.datagrams
       @events << Event::Datagram.new(stream_id:, payload: data.byteslice(offset..).freeze) # steep:ignore
+      events_bounded
     rescue Violation => violation
       close_with(violation.code, violation.message)
     end
@@ -344,6 +349,7 @@ module Raiha::Next::HTTP3
       else
         bidirectional_data(stream_id, data, fin)
       end
+      events_bounded
     rescue Violation => violation
       close_with(violation.code, violation.message)
     end
@@ -359,7 +365,7 @@ module Raiha::Next::HTTP3
         receiving = @receiving.delete(stream_id) or return
         @decoder.cancel(stream_id)
         @events << Event::Reset.new(stream_id:, error_code:) if receiving.surfaced
-        return
+        return events_bounded
       end
       type = @incoming.delete(stream_id)
       return unless type.is_a?(Integer) && CRITICAL_STREAMS.key?(type)
@@ -377,6 +383,7 @@ module Raiha::Next::HTTP3
       end
       forget_output(stream_id)
       @events << Event::Stopped.new(stream_id:, error_code:) if @sending.delete(stream_id)
+      events_bounded
     end
 
     # Gives the request on `stream_id` `urgency` and `incremental` (RFC
@@ -847,6 +854,12 @@ module Raiha::Next::HTTP3
       { encoder => @encoder.take_instructions, decoder => @decoder.take_instructions }.each do |stream_id, instructions|
         output(stream_id) << instructions unless instructions.empty?
       end
+    end
+
+    # Closes the connection with H3_INTERNAL_ERROR when the application has
+    # left more than MAX_EVENTS events untaken.
+    private def events_bounded
+      close_with(ErrorCode::INTERNAL_ERROR, "#{@events.size} events not taken") if !@closed && @events.size > MAX_EVENTS
     end
 
     # Closes the connection with `code` for `reason`: nothing waits to be
