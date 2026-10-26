@@ -60,6 +60,7 @@ module Raiha::Next::HTTP3
     DEFAULT_MAX_SEND_BUFFER: Integer
     CRITICAL: Priority
     TRANSPORT_ORDERINGS: Array[transport_ordering]
+    CRITICAL_STREAMS: Hash[Integer, String]
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -72,6 +73,10 @@ module Raiha::Next::HTTP3
     @priorities: Hash[Integer, Priority]
     @actions: Array[Action::t]
     @started: bool
+    @own_critical: Array[Integer]
+    @incoming: Hash[Integer, Integer | String]
+    @critical: Hash[Integer, Integer]
+    @closed: bool
 
     attr_reader role: role
     attr_reader settings: Settings
@@ -82,8 +87,15 @@ module Raiha::Next::HTTP3
     def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer) -> void
     def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
+    def closed?: () -> bool
     def stream_writable: (Integer stream_id) -> void
+    def stream_data: (Integer stream_id, String data, ?fin: bool) -> void
+    def stream_reset: (Integer stream_id, error_code: Integer) -> void
+    def stream_stopped: (Integer stream_id, error_code: Integer) -> void
     def each_action: () { (Action::t action) -> void } -> void
+    private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void
+    private def open_unidirectional: (Integer stream_id, Integer type) -> void
+    private def close_with: (Integer code, String reason) -> void
     private def output: (Integer stream_id) -> Output
     private def prioritize: (Integer stream_id, Priority priority) -> void
     private def priority_of: (Integer stream_id) -> Priority

@@ -32,6 +32,8 @@ module Raiha::Next::HTTP3
     # wait behind it.
     CRITICAL = Priority.new(urgency: 0, incremental: true)
     TRANSPORT_ORDERINGS = %i[per_stream global].freeze
+    # The types of the streams each end opens one of, and must never close.
+    CRITICAL_STREAMS = { CONTROL_STREAM => "control", ENCODER_STREAM => "QPACK encoder", DECODER_STREAM => "QPACK decoder" }.freeze
 
     attr_reader :role, :settings
 
@@ -60,7 +62,18 @@ module Raiha::Next::HTTP3
       @priorities = {} #: Hash[Integer, Priority]
       @actions = [] #: Array[Action::t]
       @started = false
+      # This end's control and QPACK streams; the peer's going one way, by
+      # ID, with their type or the bytes of it so far; and the peer's
+      # control and QPACK streams, by type.
+      @own_critical = [] #: Array[Integer]
+      @incoming = {} #: Hash[Integer, Integer | String]
+      @critical = {} #: Hash[Integer, Integer]
+      @closed = false
     end
+
+    # Whether this layer has closed the connection, after which it takes
+    # nothing more.
+    def closed? = @closed
 
     # The transport opened `control`, `encoder` and `decoder`, streams of
     # this end going one way, for the control stream and the QPACK
@@ -73,6 +86,7 @@ module Raiha::Next::HTTP3
       end
       raise ArgumentError, "three streams, not one twice" unless streams.uniq.size == 3
       @started = true
+      @own_critical = streams
       output(control) << Varint.encode(CONTROL_STREAM) << Frame.encode(@settings.to_frame)
       output(encoder) << Varint.encode(ENCODER_STREAM)
       output(decoder) << Varint.encode(DECODER_STREAM)
@@ -98,10 +112,81 @@ module Raiha::Next::HTTP3
       @outputs[stream_id]&.unblock
     end
 
+    # The transport received `data` on `stream_id`, and the end of the
+    # stream with `fin`.
+    def stream_data(stream_id, data, fin: false)
+      raise ArgumentError, "stream #{stream_id} is this end's and goes one way" if local_unidirectional?(stream_id)
+      return if @closed
+      unidirectional_data(stream_id, data, fin) if stream_id & 0x2 != 0
+    rescue Violation => violation
+      close_with(violation.code, violation.message)
+    end
+
+    # The peer reset `stream_id`, with `error_code`.
+    def stream_reset(stream_id, error_code:)
+      return if @closed
+      type = @incoming.delete(stream_id)
+      return unless type.is_a?(Integer) && CRITICAL_STREAMS.key?(type)
+      close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer reset its #{CRITICAL_STREAMS.fetch(type)} stream")
+    end
+
+    # The peer asked this end to stop sending on `stream_id`, with
+    # `error_code`, and the transport reset it.
+    def stream_stopped(stream_id, error_code:)
+      return if @closed
+      return unless @own_critical.include?(stream_id)
+      close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer stopped this end's stream #{stream_id}")
+    end
+
     # Gives what this layer asks of the transport, Action values, in the
     # order asked.
     def each_action
       yield @actions.shift until @actions.empty?
+    end
+
+    # Bytes on a stream of the peer going one way: first its type (RFC 9114
+    # "Unidirectional Streams"), then what the type says. A stream may end
+    # before its type comes.
+    private def unidirectional_data(stream_id, data, fin)
+      type = @incoming[stream_id]
+      unless type.is_a?(Integer)
+        bytes = type ? type + data : data
+        type, offset = Varint.decode(bytes)
+        unless type && offset
+          fin ? @incoming.delete(stream_id) : @incoming[stream_id] = bytes
+          return
+        end
+        open_unidirectional(stream_id, type)
+        @incoming[stream_id] = type
+      end
+      unless CRITICAL_STREAMS.key?(type)
+        @incoming.delete(stream_id) if fin
+        return
+      end
+      raise Violation.new("the peer closed its #{CRITICAL_STREAMS.fetch(type)} stream", code: ErrorCode::CLOSED_CRITICAL_STREAM) if fin
+    end
+
+    # The peer opened `stream_id`, of `type`: one each of the control and
+    # QPACK streams, no push stream, as this end allows no push, and a type
+    # not known passed over (RFC 9114 "Unidirectional Streams").
+    private def open_unidirectional(stream_id, type)
+      if CRITICAL_STREAMS.key?(type)
+        raise Violation.new("a second #{CRITICAL_STREAMS.fetch(type)} stream", code: ErrorCode::STREAM_CREATION_ERROR) if @critical.key?(type)
+        @critical[type] = stream_id
+      elsif type == PUSH_STREAM
+        raise Violation.new("a push stream from a client", code: ErrorCode::STREAM_CREATION_ERROR) if @role == :server
+        raise Violation.new("a push stream, with no push allowed", code: ErrorCode::ID_ERROR)
+      else
+        @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::STREAM_CREATION_ERROR)
+      end
+    end
+
+    # Closes the connection with `code` for `reason`: nothing waits to be
+    # sent any more, and nothing is taken.
+    private def close_with(code, reason)
+      @closed = true
+      @outputs.clear
+      @actions << Action::Close.new(error_code: code, reason:)
     end
 
     private def output(stream_id) = @outputs[stream_id] ||= Output.new
