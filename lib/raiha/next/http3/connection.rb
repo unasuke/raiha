@@ -13,6 +13,7 @@ require_relative "qpack"
 require_relative "receiving"
 require_relative "sending"
 require_relative "settings"
+require_relative "tracer"
 require_relative "varint"
 
 module Raiha::Next::HTTP3
@@ -77,20 +78,21 @@ module Raiha::Next::HTTP3
     # whether the transport orders the bytes of different streams, :global,
     # or not, :per_stream as QUIC does, and `max_send_buffer` the bytes of
     # data a stream holds for the transport at most.
-    def self.client(settings: Settings.new, transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER)
-      new(role: :client, settings:, transport_ordering:, max_send_buffer:)
+    def self.client(settings: Settings.new, transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER, tracer: nil)
+      new(role: :client, settings:, transport_ordering:, max_send_buffer:, tracer:)
     end
 
     # A server's, which takes Extended CONNECT by default (RFC 9220).
-    def self.server(settings: Settings.new(enable_connect_protocol: true), transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER)
-      new(role: :server, settings:, transport_ordering:, max_send_buffer:)
+    def self.server(settings: Settings.new(enable_connect_protocol: true), transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER, tracer: nil)
+      new(role: :server, settings:, transport_ordering:, max_send_buffer:, tracer:)
     end
 
-    def initialize(role:, settings:, transport_ordering:, max_send_buffer:)
+    def initialize(role:, settings:, transport_ordering:, max_send_buffer:, tracer: nil)
       limit = settings.max_field_section_size or raise ArgumentError, "a field section needs a limit, not nil"
       raise ArgumentError, "transport_ordering is :per_stream or :global, not #{transport_ordering.inspect}" unless TRANSPORT_ORDERINGS.include?(transport_ordering)
       raise ArgumentError, "max_send_buffer is a positive Integer, not #{max_send_buffer.inspect}" unless max_send_buffer.is_a?(Integer) && max_send_buffer.positive?
       @role = role
+      @tracer = tracer
       @settings = settings
       @transport_ordering = transport_ordering
       @max_send_buffer = max_send_buffer
@@ -162,10 +164,18 @@ module Raiha::Next::HTTP3
       @started = true
       @own_critical = streams
       @own_qpack_streams = [encoder, decoder]
-      output(control) << Varint.encode(CONTROL_STREAM) << Frame.encode(@settings.to_frame)
+      settings = @settings.to_frame
+      output(control) << Varint.encode(CONTROL_STREAM) << Frame.encode(settings)
       output(encoder) << Varint.encode(ENCODER_STREAM)
       output(decoder) << Varint.encode(DECODER_STREAM)
       streams.each { |stream_id| prioritize(stream_id, CRITICAL) }
+      if (tracer = @tracer)
+        tracer.parameters_set(initiator: :local, settings: @settings)
+        { control => CONTROL_STREAM, encoder => ENCODER_STREAM, decoder => DECODER_STREAM }.each do |stream_id, type|
+          tracer.stream_type_set(initiator: :local, stream_id:, type:)
+        end
+        tracer.frame_created(stream_id: control, type: Frame::SETTINGS, frame: settings)
+      end
     end
 
     # Gives the bytes waiting for each stream, the most urgent stream first:
@@ -205,9 +215,9 @@ module Raiha::Next::HTTP3
       sending.phase = :body
       sending.datagrams = receiving.datagrams = headers.any? { |name, _| name == ":protocol" }
       sending.capsules = receiving.capsules_asked = sending.datagrams && checked { Message.capsule_protocol?(headers) }
+      @tracer&.stream_type_set(initiator: :local, stream_id:, type: :request)
       prioritize(stream_id, priority_in(headers))
-      fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
-      output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
+      write_headers(stream_id, headers)
       finish_sending(stream_id) if fin
     end
 
@@ -228,8 +238,7 @@ module Raiha::Next::HTTP3
         checked { Message.trailers(headers) }
         fin = true
       end
-      fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
-      output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
+      write_headers(stream_id, headers)
       finish_sending(stream_id) if fin
     end
 
@@ -243,7 +252,10 @@ module Raiha::Next::HTTP3
       raise Error::Usage, "no content before the header section on stream #{stream_id}" unless sending.phase == :body
       output = output(stream_id)
       taken = [data.bytesize, [@max_send_buffer - output.buffered, 0].max].min
-      output << Frame.header(Frame::DATA, taken) << data.byteslice(0, taken).b if taken.positive? # steep:ignore
+      if taken.positive?
+        output << Frame.header(Frame::DATA, taken) << data.byteslice(0, taken).b # steep:ignore
+        @tracer&.frame_created(stream_id:, type: Frame::DATA, length: taken)
+      end
       if taken < data.bytesize
         sending.wants_writable = true
       elsif fin
@@ -303,6 +315,7 @@ module Raiha::Next::HTTP3
         return false
       end
       output << Frame.header(Frame::DATA, bytes.bytesize) << bytes
+      @tracer&.frame_created(stream_id:, type: Frame::DATA, length: bytes.bytesize)
       true
     end
 
@@ -374,7 +387,9 @@ module Raiha::Next::HTTP3
       raise Error::Usage, "stream #{stream_id} has no request" unless @receiving.key?(stream_id) || @sending.key?(stream_id) || @outputs.key?(stream_id)
       if @role == :client
         control = @own_critical.first or raise Error::Usage, "no control stream to send PRIORITY_UPDATE on yet"
-        output(control) << Frame.encode(Frame::PriorityUpdate.new(element_id: stream_id, priority: priority.to_field))
+        frame = Frame::PriorityUpdate.new(element_id: stream_id, priority: priority.to_field)
+        output(control) << Frame.encode(frame)
+        @tracer&.frame_created(stream_id: control, type: Frame::PRIORITY_UPDATE, frame:)
       end
       prioritize(stream_id, priority)
     end
@@ -392,7 +407,9 @@ module Raiha::Next::HTTP3
       raise ArgumentError, "GOAWAY gave #{@goaway} already, not more" if (sent = @goaway) && id > sent
       return if @closed
       @goaway = id
-      output(control) << Frame.encode(Frame::GoAway.new(id:))
+      frame = Frame::GoAway.new(id:)
+      output(control) << Frame.encode(frame)
+      @tracer&.frame_created(stream_id: control, type: Frame::GOAWAY, frame:)
     end
 
     # Stops a request on `stream_id` both ways, with `error_code`
@@ -435,6 +452,7 @@ module Raiha::Next::HTTP3
           return
         end
         open_unidirectional(stream_id, type)
+        @tracer&.stream_type_set(initiator: :remote, stream_id:, type:)
         @incoming[stream_id] = type
         data = bytes.byteslice(offset..) #: String
       end
@@ -457,6 +475,7 @@ module Raiha::Next::HTTP3
     # and only the frames a control stream carries (RFC 9114 "Control
     # Streams", "HTTP Framing Layer").
     private def control_item(item)
+      trace_parsed(@critical.fetch(CONTROL_STREAM), item)
       case item
       when FrameReader::Started
         type = item.type
@@ -470,6 +489,7 @@ module Raiha::Next::HTTP3
         raise Violation.new("a frame of #{item.length} bytes on the control stream", code: ErrorCode::EXCESSIVE_LOAD)
       when Frame::Settings
         settings = Settings.from_frame(item)
+        @tracer&.parameters_set(initiator: :remote, settings:)
         @peer_settings = settings
         @events << Event::Settings.new(settings:)
       when Frame::GoAway then goaway_received(item.id)
@@ -570,6 +590,7 @@ module Raiha::Next::HTTP3
         stream_error(stream_id, ErrorCode::REQUEST_REJECTED)
         return nil
       end
+      @tracer&.stream_type_set(initiator: :remote, stream_id:, type: :request)
       @receiving[stream_id] = Receiving.new(max_payload: @max_section)
     end
 
@@ -580,7 +601,10 @@ module Raiha::Next::HTTP3
     # all the same.
     private def request_item(stream_id, receiving, item)
       return unless @receiving[stream_id].equal?(receiving)
-      check_request_frame(receiving, item.type) if item.is_a?(FrameReader::Started)
+      if item.is_a?(FrameReader::Started)
+        check_request_frame(receiving, item.type)
+        trace_parsed(stream_id, item) unless item.type == Frame::HEADERS
+      end
       return wait(stream_id, receiving, item) if receiving.blocked
       case item
       when FrameReader::TooLong
@@ -654,6 +678,7 @@ module Raiha::Next::HTTP3
       case result
       when QPACK::Decoded
         headers = result.fields.map { |field| [field.name, field.value] } #: Array[[String, String]]
+        @tracer&.frame_parsed(stream_id:, type: Frame::HEADERS, headers:)
         if receiving.phase == :headers
           headers_decoded(stream_id, receiving, headers, result.size)
         else
@@ -765,10 +790,8 @@ module Raiha::Next::HTTP3
     # Rejection").
     private def too_large(stream_id)
       @receiving.delete(stream_id)
-      status = [QPACK::Field.new(name: ":status", value: "431")]
-      output = output(stream_id)
-      output << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, status)))
-      output.finish
+      write_headers(stream_id, [[":status", "431"]])
+      output(stream_id).finish
       @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::NO_ERROR)
     end
 
@@ -865,6 +888,32 @@ module Raiha::Next::HTTP3
       return unless @outputs.key?(stream_id) || @sending.key?(stream_id)
       @priorities[stream_id] = priority
       @actions << Action::Priority.new(stream_id:, urgency: priority.urgency, incremental: priority.incremental)
+      @tracer&.priority_updated(stream_id:, priority:) unless @own_critical.include?(stream_id)
+    end
+
+    # Encodes `headers` with QPACK and sends them in a HEADERS frame on
+    # `stream_id`.
+    private def write_headers(stream_id, headers)
+      fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
+      output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
+      @tracer&.frame_created(stream_id:, type: Frame::HEADERS, headers:)
+    end
+
+    # Tells the tracer of a frame read on `stream_id`: one this layer holds
+    # whole, when it is; any other as it begins. A HEADERS frame is told
+    # once its field section is decoded.
+    private def trace_parsed(stream_id, item)
+      return unless (tracer = @tracer)
+      case item
+      when FrameReader::Started
+        tracer.frame_parsed(stream_id:, type: item.type, length: item.length) unless FrameReader::HELD.include?(item.type)
+      when Frame::Settings then tracer.frame_parsed(stream_id:, type: Frame::SETTINGS, frame: item)
+      when Frame::GoAway then tracer.frame_parsed(stream_id:, type: Frame::GOAWAY, frame: item)
+      when Frame::CancelPush then tracer.frame_parsed(stream_id:, type: Frame::CANCEL_PUSH, frame: item)
+      when Frame::MaxPushId then tracer.frame_parsed(stream_id:, type: Frame::MAX_PUSH_ID, frame: item)
+      when Frame::PriorityUpdate
+        tracer.frame_parsed(stream_id:, type: item.push ? Frame::PRIORITY_UPDATE_PUSH : Frame::PRIORITY_UPDATE, frame: item)
+      end
     end
 
     private def priority_of(stream_id) = @priorities.fetch(stream_id) { Priority.new }

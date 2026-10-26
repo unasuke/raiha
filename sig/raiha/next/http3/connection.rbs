@@ -217,6 +217,7 @@ module Raiha::Next::HTTP3
     type transport_ordering = :per_stream | :global
 
     @role: role
+    @tracer: _Tracer?
     @settings: Settings
     @transport_ordering: transport_ordering
     @max_send_buffer: Integer
@@ -251,10 +252,10 @@ module Raiha::Next::HTTP3
     attr_reader settings: Settings
     attr_reader peer_settings: Settings?
 
-    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
-    def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
+    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?) -> Connection
+    def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?) -> Connection
 
-    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer) -> void
+    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer, ?tracer: _Tracer?) -> void
     def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
@@ -303,6 +304,8 @@ module Raiha::Next::HTTP3
     private def qpack_failed: (QPACK::Failure | Array[QPACK::Decoded | QPACK::Oversized | QPACK::Failure] | nil result) -> void
     private def take_qpack_instructions: () -> void
     private def output: (Integer stream_id) -> Output
+    private def write_headers: (Integer stream_id, Array[[String, String]] headers) -> void
+    private def trace_parsed: (Integer stream_id, FrameReader::item item) -> void
     private def forget_output: (Integer stream_id) -> void
     private def priority_in: (Array[[String, String]] headers) -> Priority
     private def merge_priority: (Integer stream_id, Array[[String, String]] headers) -> void

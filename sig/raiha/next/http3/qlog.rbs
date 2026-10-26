@@ -1,0 +1,53 @@
+module Raiha::Next::HTTP3
+  interface _Tracer
+    def parameters_set: (initiator: :local | :remote, settings: Settings) -> void
+    def stream_type_set: (initiator: :local | :remote, stream_id: Integer, type: Integer | :request) -> void
+    def frame_created: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+    def frame_parsed: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+    def priority_updated: (stream_id: Integer, priority: Priority) -> void
+  end
+
+  module Tracer
+    def parameters_set: (initiator: :local | :remote, settings: Settings) -> void
+    def stream_type_set: (initiator: :local | :remote, stream_id: Integer, type: Integer | :request) -> void
+    def frame_created: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+    def frame_parsed: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+    def priority_updated: (stream_id: Integer, priority: Priority) -> void
+  end
+
+  module Qlog
+    type json = String | Integer | Float | bool | nil | Array[json] | Hash[Symbol, json]
+
+    interface _Writer
+      def record: (String name, Hash[Symbol, json] data) -> void
+    end
+
+    EVENT_SCHEMA: String
+
+    class Tracer
+      include Raiha::Next::HTTP3::Tracer
+
+      MAX_FIELD_BYTES: Integer
+      MAX_FIELDS: Integer
+      TEXT: Regexp
+      STREAM_TYPES: Hash[Integer, String]
+      SETTING_NAMES: Hash[Integer, String]
+      FRAME_TYPES: Hash[Integer, String]
+
+      @writer: _Writer
+
+      def initialize: (_Writer writer) -> void
+      def parameters_set: (initiator: :local | :remote, settings: Settings) -> void
+      def stream_type_set: (initiator: :local | :remote, stream_id: Integer, type: Integer | :request) -> void
+      def frame_created: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+      def frame_parsed: (stream_id: Integer, type: Integer, ?length: Integer?, ?frame: Frame::t?, ?headers: Array[[String, String]]?) -> void
+      def priority_updated: (stream_id: Integer, priority: Priority) -> void
+      private def frame_data: (Integer type, Integer? length, Frame::t? frame, Array[[String, String]]? headers) -> Hash[Symbol, json]
+      private def fields: (Array[[String, String]] headers) -> Hash[Symbol, json]
+      private def field: (String key, String bytes) -> Hash[Symbol, json]
+      private def setting: (Integer identifier, Integer value) -> Hash[Symbol, json]
+      private def reserved?: (Integer value) -> bool
+      private def text: (String bytes) -> String
+    end
+  end
+end
