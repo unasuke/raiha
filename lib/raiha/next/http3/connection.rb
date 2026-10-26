@@ -323,6 +323,11 @@ module Raiha::Next::HTTP3
       end
       return wait(stream_id, receiving, item) if receiving.blocked?
       case item
+      when FrameReader::TooLong
+        if receiving.phase == :headers
+          @decoder.cancel(stream_id)
+          too_large(stream_id)
+        end
       when Frame::Headers
         if receiving.phase == :headers
           section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit: @field_section_limit))
@@ -360,6 +365,8 @@ module Raiha::Next::HTTP3
       when QPACK::Blocked
         receiving.phase = :blocked
         @events << Event::Blocked.new(stream_id:)
+      when QPACK::Oversized
+        too_large(stream_id)
       when QPACK::Failure
         raise Violation.new(result.reason, code: result.code) unless result.stream_id
         stream_error(stream_id, result.code)
@@ -396,6 +403,19 @@ module Raiha::Next::HTTP3
       else
         @events << Event::Data.new(stream_id:, data: "", fin: true)
       end
+    end
+
+    # A request whose field section is past this end's limit, which the
+    # application never sees: a 431 answers it, and the rest of it is not
+    # read (RFC 9114 "Header Size Constraints", "Request Cancellation and
+    # Rejection").
+    private def too_large(stream_id)
+      @receiving.delete(stream_id)
+      status = [QPACK::Field.new(name: ":status", value: "431")]
+      output = output(stream_id)
+      output << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, status)))
+      output.finish
+      @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::NO_ERROR)
     end
 
     # Stops `stream_id` both ways with `code` (RFC 9114 "Request

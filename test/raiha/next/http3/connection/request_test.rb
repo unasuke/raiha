@@ -148,6 +148,32 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
     assert_equal [HTTP3::Action::StopSending, HTTP3::Action::Reset], actions(server).map(&:class)
   end
 
+  # The field section of what `connection` sent on `stream_id`, decoded,
+  # and whether the stream ended.
+  def response_on(connection, stream_id)
+    bytes, fin = sent(connection).fetch(stream_id)
+    reader = HTTP3::FrameReader.new(max_payload: 1000)
+    frames = [].tap { |all| reader.feed(bytes) { all << _1 unless _1.is_a?(HTTP3::FrameReader::Started) } }
+    decoded = QPACK::Decoder.new.decode(stream_id, frames.first.field_section)
+    [decoded.fields.map { [_1.name, _1.value] }, fin]
+  end
+
+  # RFC 9114 "Header Size Constraints": a field section past this end's
+  # limit, as QPACK counts it, or a HEADERS frame longer than four times
+  # it, gets a 431, and the rest of the request is not read; the
+  # application never sees it.
+  def test_a_field_section_too_large
+    [headers_frame(GET + [["x-large", "x" * 100]]), Frame.encode(Frame::Headers.new(field_section: "\x00" * 401))].each do |frame|
+      server = server(max_field_section_size: 100)
+      server.stream_data(0, frame)
+      assert_equal [[[":status", "431"]], true], response_on(server, 0)
+      assert_equal [HTTP3::Action::StopSending.new(stream_id: 0, error_code: HTTP3::ErrorCode::NO_ERROR)], actions(server)
+      assert_empty events(server)
+      server.stream_data(0, Frame.encode(Frame::Data.new(data: "late")))
+      assert_empty actions(server)
+    end
+  end
+
   # The bytes of a request stream that ended, or was stopped, which a
   # transport might still hand over, start no request.
   def test_late_bytes_of_a_stream_that_ended

@@ -177,6 +177,7 @@ module Raiha::Next::HTTP3
     private def section_decoded: (Integer stream_id, Receiving receiving, QPACK::Decoded | QPACK::Blocked | QPACK::Oversized | QPACK::Failure result) -> void
     private def unblocked: (QPACK::Decoded | QPACK::Oversized | QPACK::Failure result) -> void
     private def request_ended: (Integer stream_id, Receiving receiving) -> void
+    private def too_large: (Integer stream_id) -> void
     private def stream_error: (Integer stream_id, Integer code) -> void
     private def qpack_failed: (QPACK::Failure | Array[QPACK::Decoded | QPACK::Oversized | QPACK::Failure] | nil result) -> void
     private def take_qpack_instructions: () -> void
