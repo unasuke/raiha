@@ -7,6 +7,7 @@ require_relative "frame"
 require_relative "frame_reader"
 require_relative "output"
 require_relative "priority"
+require_relative "qpack"
 require_relative "settings"
 require_relative "varint"
 
@@ -75,6 +76,7 @@ module Raiha::Next::HTTP3
       # ID, with their type or the bytes of it so far; and the peer's
       # control and QPACK streams, by type.
       @own_critical = [] #: Array[Integer]
+      @own_qpack_streams = nil #: [Integer, Integer]?
       @incoming = {} #: Hash[Integer, Integer | String]
       @critical = {} #: Hash[Integer, Integer]
       @closed = false
@@ -82,6 +84,14 @@ module Raiha::Next::HTTP3
       @control_reader = FrameReader.new(max_payload: MAX_CONTROL_FRAME)
       @peer_settings = nil #: Settings?
       @events = [] #: Array[Event::t]
+      # QPACK: this end's decoder takes the peer's encoder stream and field
+      # sections, by this end's settings; its encoder writes field sections
+      # and takes the peer's decoder stream.
+      @decoder = QPACK::Decoder.new(
+        max_table_capacity: settings.qpack_max_table_capacity, max_blocked_streams: settings.qpack_blocked_streams,
+        max_field_section_size: settings.max_field_section_size
+      )
+      @encoder = QPACK::Encoder.new
     end
 
     # The peer's settings; nil until its SETTINGS frame has come.
@@ -103,6 +113,7 @@ module Raiha::Next::HTTP3
       raise ArgumentError, "three streams, not one twice" unless streams.uniq.size == 3
       @started = true
       @own_critical = streams
+      @own_qpack_streams = [encoder, decoder]
       output(control) << Varint.encode(CONTROL_STREAM) << Frame.encode(@settings.to_frame)
       output(encoder) << Varint.encode(ENCODER_STREAM)
       output(decoder) << Varint.encode(DECODER_STREAM)
@@ -114,6 +125,7 @@ module Raiha::Next::HTTP3
     # returns how many bytes it took. What it does not take waits, and so
     # does the stream, until `stream_writable`.
     def each_send(&)
+      take_qpack_instructions
       ready = @outputs.select { |_, output| output.ready? }.keys
       ready.sort_by! { |stream_id| [priority_of(stream_id).urgency, stream_id] }
       ready.each do |stream_id|
@@ -185,7 +197,11 @@ module Raiha::Next::HTTP3
         @incoming.delete(stream_id) if fin
         return
       end
-      @control_reader.feed(data) { |item| control_item(item) } if type == CONTROL_STREAM
+      case type
+      when CONTROL_STREAM then @control_reader.feed(data) { |item| control_item(item) }
+      when ENCODER_STREAM then qpack_failed(@decoder.receive_encoder_stream(data))
+      when DECODER_STREAM then qpack_failed(@encoder.receive_decoder_stream(data))
+      end
       raise Violation.new("the peer closed its #{CRITICAL_STREAMS.fetch(type)} stream", code: ErrorCode::CLOSED_CRITICAL_STREAM) if fin
     end
 
@@ -223,6 +239,20 @@ module Raiha::Next::HTTP3
         raise Violation.new("a push stream, with no push allowed", code: ErrorCode::ID_ERROR)
       else
         @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::STREAM_CREATION_ERROR)
+      end
+    end
+
+    # QPACK's connection error, if `result` is one.
+    private def qpack_failed(result)
+      raise Violation.new(result.reason, code: result.code) if result.is_a?(QPACK::Failure)
+    end
+
+    # What this end's QPACK encoder and decoder have to write go on their
+    # streams, once the transport has given them.
+    private def take_qpack_instructions
+      encoder, decoder = @own_qpack_streams || return
+      { encoder => @encoder.take_instructions, decoder => @decoder.take_instructions }.each do |stream_id, instructions|
+        output(stream_id) << instructions unless instructions.empty?
       end
     end
 

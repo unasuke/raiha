@@ -88,12 +88,15 @@ module Raiha::Next::HTTP3
     @actions: Array[Action::t]
     @started: bool
     @own_critical: Array[Integer]
+    @own_qpack_streams: [Integer, Integer]?
     @incoming: Hash[Integer, Integer | String]
     @critical: Hash[Integer, Integer]
     @closed: bool
     @control_reader: FrameReader
     @peer_settings: Settings?
     @events: Array[Event::t]
+    @decoder: QPACK::Decoder
+    @encoder: QPACK::Encoder
 
     attr_reader role: role
     attr_reader settings: Settings
@@ -116,6 +119,8 @@ module Raiha::Next::HTTP3
     private def open_unidirectional: (Integer stream_id, Integer type) -> void
     private def control_item: (FrameReader::item item) -> void
     private def close_with: (Integer code, String reason) -> void
+    private def qpack_failed: (QPACK::Failure | Array[QPACK::Decoded | QPACK::Oversized | QPACK::Failure] | nil result) -> void
+    private def take_qpack_instructions: () -> void
     private def output: (Integer stream_id) -> Output
     private def prioritize: (Integer stream_id, Priority priority) -> void
     private def priority_of: (Integer stream_id) -> Priority
