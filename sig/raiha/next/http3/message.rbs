@@ -1,0 +1,21 @@
+module Raiha::Next::HTTP3
+  module Message
+    class Malformed < StandardError
+    end
+
+    REQUEST_PSEUDO: Array[String]
+    RESPONSE_PSEUDO: Array[String]
+    CONNECTION_SPECIFIC: Array[String]
+    NAME: Regexp
+    NOT_IN_VALUE: Regexp
+    SCHEMES_WITH_AUTHORITY: Array[String]
+    STATUS: Regexp
+
+    def self.request: (Array[[String, String]] headers, extended_connect: bool) -> Integer?
+    def self.response: (Array[[String, String]] headers) -> [Integer, Integer?]
+    def self.trailers: (Array[[String, String]] headers) -> nil
+    def self.pseudo_header_fields: (Array[[String, String]] headers, Array[String] allowed, request: bool) -> Hash[String, String]
+    def self.authority: (Array[[String, String]] headers, Hash[String, String] pseudo) -> void
+    def self.content_length: (Array[[String, String]] headers) -> Integer?
+  end
+end

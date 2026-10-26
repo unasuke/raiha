@@ -5,6 +5,7 @@ require_relative "error"
 require_relative "event"
 require_relative "frame"
 require_relative "frame_reader"
+require_relative "message"
 require_relative "output"
 require_relative "priority"
 require_relative "qpack"
@@ -299,8 +300,14 @@ module Raiha::Next::HTTP3
     private def section_decoded(stream_id, receiving, result)
       case result
       when QPACK::Decoded
+        headers = result.fields.map { |field| [field.name, field.value] } #: Array[[String, String]]
+        begin
+          Message.request(headers, extended_connect: @settings.enable_connect_protocol)
+        rescue Message::Malformed
+          return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
+        end
         receiving.phase = :body
-        @events << Event::Headers.new(stream_id:, headers: result.fields.map { |field| [field.name, field.value] }, fin: false)
+        @events << Event::Headers.new(stream_id:, headers:, fin: false)
       when QPACK::Blocked
         receiving.phase = :blocked
         @events << Event::Blocked.new(stream_id:)

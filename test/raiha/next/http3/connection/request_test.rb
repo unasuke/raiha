@@ -101,13 +101,16 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
   def test_a_field_section_waits_on_qpack
     server = server(qpack_max_table_capacity: 4096, qpack_blocked_streams: 1)
     # Required Insert Count 1 (as encoded with 128 entries at most), Base
-    # 1, and the entry of relative index 0.
-    section = Frame.encode(Frame::Headers.new(field_section: "\x02\x00\x80".b))
+    # 1; the static entries 17 (:method GET), 23 (:scheme https) and 1
+    # (:path /), :authority by the name of static entry 0, and the dynamic
+    # entry of relative index 0.
+    section = Frame.encode(Frame::Headers.new(field_section: "\x02\x00\xd1\xd7\xc1\x50\x01a\x80".b))
     server.stream_data(0, section + "\x21\x00".b, fin: true)
     assert_equal [HTTP3::Event::Blocked.new(stream_id: 0)], events(server)
     insert = QPACK::Writer.new.integer(4096, 5, 0x20).string("x-name", 6, 0x40).string("value", 8).to_s
     server.stream_data(6, "\x02".b + insert)
-    assert_equal [HTTP3::Event::Headers.new(stream_id: 0, headers: [["x-name", "value"]], fin: true)], events(server)
+    headers = [[":method", "GET"], [":scheme", "https"], [":path", "/"], [":authority", "a"], ["x-name", "value"]]
+    assert_equal [HTTP3::Event::Headers.new(stream_id: 0, headers:, fin: true)], events(server)
     assert_empty actions(server)
   end
 
@@ -118,6 +121,17 @@ class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
     server.stream_data(0, Frame.encode(Frame::Headers.new(field_section: "\xff".b * 12)))
     code = QPACK::ErrorCode::DECOMPRESSION_FAILED
     assert_equal [HTTP3::Action::StopSending.new(stream_id: 0, error_code: code), HTTP3::Action::Reset.new(stream_id: 0, error_code: code)], actions(server)
+    refute server.closed?
+  end
+
+  # RFC 9114 "Malformed Requests and Responses": a stream error of type
+  # H3_MESSAGE_ERROR, and the application never sees the request.
+  def test_a_malformed_request
+    server = server()
+    server.stream_data(0, headers_frame(GET + [["connection", "close"]]))
+    code = HTTP3::ErrorCode::MESSAGE_ERROR
+    assert_equal [HTTP3::Action::StopSending.new(stream_id: 0, error_code: code), HTTP3::Action::Reset.new(stream_id: 0, error_code: code)], actions(server)
+    assert_empty events(server)
     refute server.closed?
   end
 
