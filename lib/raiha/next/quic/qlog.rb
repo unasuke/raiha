@@ -5,6 +5,27 @@ require "json"
 module Raiha::Next::QUIC
   # qlog (draft-ietf-quic-qlog-main-schema-13 and quic-events-12).
   module Qlog
+    # The bytes the traces given it may write together. What they write is
+    # spent and never comes back: once it is gone, they all stop, and a
+    # trace begun after writes nothing. A Ractor does not share it, so
+    # each worker has its own.
+    class Budget
+      attr_reader :max_bytes, :spent
+
+      def initialize(max_bytes:)
+        raise ArgumentError, "max_bytes is a positive Integer, not #{max_bytes.inspect}" unless max_bytes.is_a?(Integer) && max_bytes.positive?
+        @max_bytes = max_bytes
+        @spent = 0
+      end
+
+      def left = @max_bytes - @spent
+
+      # A trace wrote `bytes`, which it has made sure are left.
+      def spend(bytes)
+        @spent += bytes
+      end
+    end
+
     # A Tracer that writes the qlog of one connection as a JSON Text
     # Sequence (RFC 7464) to `io`, a record as each event happens, so that
     # the trace of a connection that dies keeps what came before it. The
@@ -19,10 +40,13 @@ module Raiha::Next::QUIC
     # and the TLS layer's traces as "raiha:tls_" and the name of the trace.
     #
     # The trace of one connection writes no more than `max_bytes`, however
-    # long the peer keeps it busy: the record that would go past it, less
-    # the room for one more, goes instead as "raiha:qlog_stopped", and
-    # nothing comes after it. How much all the traces together write is up
-    # to whoever gives each its `io`.
+    # long the peer keeps it busy, and the traces given one `budget` no
+    # more than it together, however many connections a peer opens: the
+    # record that would go past either, less the room for one more, goes
+    # instead as "raiha:qlog_stopped" with the limit, and nothing comes
+    # after it; a trace whose header does not fit writes nothing. Keeping
+    # the files apart, and taking the old ones away, is up to whoever
+    # gives each trace its `io`.
     class Tracer
       include Raiha::Next::QUIC::Tracer
 
@@ -37,10 +61,11 @@ module Raiha::Next::QUIC
       STOP_ROOM = 256
 
       # `vantage_point` is :client or :server.
-      def initialize(io, vantage_point:, title: nil, max_bytes: DEFAULT_MAX_BYTES)
+      def initialize(io, vantage_point:, title: nil, max_bytes: DEFAULT_MAX_BYTES, budget: nil)
         raise ArgumentError, "max_bytes is a positive Integer, not #{max_bytes.inspect}" unless max_bytes.is_a?(Integer) && max_bytes.positive?
         @io = io
         @max_bytes = max_bytes
+        @budget = budget
         @written = 0
         @stopped = false
         @now = 0.0
@@ -162,14 +187,25 @@ module Raiha::Next::QUIC
       private def write(record)
         return if @stopped
         json = JSON.generate(record)
-        if @written + record_size(json) + STOP_ROOM > @max_bytes
+        unless room_for?(record_size(json) + STOP_ROOM)
           @stopped = true
-          json = JSON.generate({ time: @now * 1000, name: "raiha:qlog_stopped", data: { max_bytes: @max_bytes } })
-          return if @written + record_size(json) > @max_bytes
+          return if @written.zero?
+          json = JSON.generate({ time: @now * 1000, name: "raiha:qlog_stopped", data: stop_reason(record_size(json) + STOP_ROOM) })
+          return unless room_for?(record_size(json))
         end
         @written += record_size(json)
+        @budget&.spend(record_size(json))
         @io.write(RECORD_SEPARATOR, json, "\n")
       end
+
+      # Which limit `bytes` more would go past, and how large it is.
+      private def stop_reason(bytes)
+        return { reason: "max_bytes", max_bytes: @max_bytes } if @budget.nil? || @written + bytes > @max_bytes
+        { reason: "budget", max_bytes: @budget.max_bytes } # steep:ignore
+      end
+
+      # Whether this trace and its budget both have `bytes` left.
+      private def room_for?(bytes) = @written + bytes <= @max_bytes && (@budget.nil? || bytes <= @budget.left) # steep:ignore
 
       # The bytes `json` takes in the sequence, with the separator before it
       # and the line feed after.

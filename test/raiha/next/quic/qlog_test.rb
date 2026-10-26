@@ -85,12 +85,29 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert_operator io.string.bytesize, :<=, 4096
     trace = records(io)
     assert_equal "urn:ietf:params:qlog:file:sequential", trace.first["file_schema"]
-    assert_equal ["raiha:qlog_stopped", { "max_bytes" => 4096 }], [trace.last["name"], trace.last["data"]]
+    assert_equal ["raiha:qlog_stopped", { "reason" => "max_bytes", "max_bytes" => 4096 }], [trace.last["name"], trace.last["data"]]
     assert_equal 1, trace.count { _1["name"] == "raiha:qlog_stopped" }
     refute tracer.trace_frames?
     written = io.string.bytesize
     tracer.key_updated(level: :one_rtt, now: 1.0)
     assert_equal written, io.string.bytesize
+  end
+
+  # The traces given one budget write no more than it together; one begun
+  # once it is spent writes nothing.
+  def test_traces_share_a_budget
+    budget = QUIC::Qlog::Budget.new(max_bytes: 6000)
+    ios = Array.new(2) { StringIO.new }
+    clients = ios.map { |io| client_connection(tracer: QUIC::Qlog::Tracer.new(io, vantage_point: :client, budget:)) }
+    clients.each { |client| handshake(client, server_connection) }
+    assert_equal ios.sum { _1.string.bytesize }, budget.spent
+    assert_operator budget.spent, :<=, 6000
+    stopped = records(ios.last).last
+    assert_equal ["raiha:qlog_stopped", { "reason" => "budget", "max_bytes" => 6000 }], [stopped["name"], stopped["data"]]
+    late = StringIO.new
+    refute QUIC::Qlog::Tracer.new(late, vantage_point: :client, budget:).trace_frames?
+    assert_empty late.string
+    assert_raises(ArgumentError) { QUIC::Qlog::Budget.new(max_bytes: 0) }
   end
 
   def test_max_bytes_by_default

@@ -6,6 +6,18 @@ module Raiha::Next::QUIC
       def write: (*String) -> untyped
     end
 
+    class Budget
+      @max_bytes: Integer
+      @spent: Integer
+
+      attr_reader max_bytes: Integer
+      attr_reader spent: Integer
+
+      def initialize: (max_bytes: Integer) -> void
+      def left: () -> Integer
+      def spend: (Integer bytes) -> void
+    end
+
     class Tracer
       include Raiha::Next::QUIC::Tracer
 
@@ -18,11 +30,12 @@ module Raiha::Next::QUIC
 
       @io: _Writer
       @max_bytes: Integer
+      @budget: Budget?
       @written: Integer
       @stopped: bool
       @now: Float
 
-      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer) -> void
+      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer, ?budget: Budget?) -> void
       def trace_frames?: () -> bool
       def packet_sent: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
       def packet_received: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
@@ -46,6 +59,8 @@ module Raiha::Next::QUIC
       private def event: (Float now, String name, Hash[Symbol, json] data) -> void
       private def write: (Hash[Symbol, json] record) -> void
       private def record_size: (String json) -> Integer
+      private def room_for?: (Integer bytes) -> bool
+      private def stop_reason: (Integer bytes) -> Hash[Symbol, json]
       private def hex: (String bytes) -> String
     end
   end
