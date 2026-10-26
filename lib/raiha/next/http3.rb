@@ -9,3 +9,4 @@ end
 require_relative "http3/error_code"
 require_relative "http3/varint"
 require_relative "http3/frame"
+require_relative "http3/frame_reader"
