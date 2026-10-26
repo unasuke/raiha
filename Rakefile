@@ -80,6 +80,7 @@ namespace :test do
         quic_gem: { file: "test/interop/next/quic/quic_gem_test.rb", build: :quic_gem },
         h3i: { file: "test/interop/next/http3/h3i_test.rb", build: :h3i },
         quiche_http3_client: { file: "test/interop/next/http3/quiche_client_test.rb", build: :quiche },
+        quiche_http3_server: { file: "test/interop/next/http3/quiche_server_test.rb", build: :quiche },
         # A gem in the bundle: nothing to build.
         tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
       }.freeze

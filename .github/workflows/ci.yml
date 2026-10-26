@@ -224,7 +224,7 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: tmp/quiche
-      - run: bundle exec rake test:next:interop:quiche_http3_client
+      - run: bundle exec rake test:next:interop:quiche_http3_client test:next:interop:quiche_http3_server
 
   next-qifs:
     runs-on: ubuntu-latest

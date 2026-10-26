@@ -54,4 +54,45 @@ module NextHTTP3UDP
       rest.empty? ? @left.delete([side, stream_id]) : @left[[side, stream_id]] = rest
     end
   end
+
+  # A client's application: a GET of each of `paths` on `authority` goes
+  # once QUIC has connected, and what comes back is kept by path, as
+  # [status, body], once whole.
+  class Client
+    attr_reader :responses
+
+    def initialize(connection, authority:, paths:)
+      @connection = connection
+      @side = NextHTTP3Side.new(connection, HTTP3::Connection.client)
+      @authority = authority
+      @paths = paths
+      @streams = {}
+      @statuses = {}
+      @bodies = Hash.new { |bodies, stream_id| bodies[stream_id] = "".b }
+      @responses = {}
+    end
+
+    # A turn of the application: whether every response has come whole.
+    def step(now)
+      @side.turn(now, ->(_, event) { take(event) }) do
+        @paths.drop(@streams.size).each { |path| request(path) } if @connection.handshake_complete?
+      end
+      @responses.size == @paths.size
+    end
+
+    private def request(path)
+      stream_id = @connection.open_stream or return
+      @streams[stream_id] = path
+      @side.http3.send_request(stream_id, [[":method", "GET"], [":scheme", "https"], [":authority", @authority], [":path", path]], fin: true)
+    end
+
+    private def take(event)
+      case event
+      when HTTP3::Event::Headers then @statuses[event.stream_id] = event.headers.to_h.fetch(":status")
+      when HTTP3::Event::Data then @bodies[event.stream_id] << event.data
+      else return
+      end
+      @responses[@streams.fetch(event.stream_id)] = [@statuses[event.stream_id], @bodies[event.stream_id]] if event.fin
+    end
+  end
 end
