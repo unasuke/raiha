@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Trailers | Reset | Writable | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -77,6 +77,14 @@ module Raiha::Next::HTTP3
     end
 
     class Reset < ::Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class Stopped < ::Data
       attr_reader stream_id: Integer
       attr_reader error_code: Integer
 
@@ -214,6 +222,7 @@ module Raiha::Next::HTTP3
     def stream_data: (Integer stream_id, String data, ?fin: bool) -> void
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stopped: (Integer stream_id, error_code: Integer) -> void
+    def cancel: (Integer stream_id, ?error_code: Integer) -> void
     def each_action: () { (Action::t action) -> void } -> void
     def each_event: () { (Event::t event) -> void } -> void
     private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void

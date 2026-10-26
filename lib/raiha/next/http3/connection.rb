@@ -244,12 +244,17 @@ module Raiha::Next::HTTP3
       close_with(violation.code, violation.message)
     end
 
-    # The peer reset `stream_id`, with `error_code`.
+    # The peer reset `stream_id`, with `error_code`: on a request stream,
+    # what it sends ends there, and the application hears so with
+    # Event::Reset if it knows of the request; what this end sends on it
+    # may still go.
     def stream_reset(stream_id, error_code:)
       return if @closed
       if stream_id & 0x2 == 0
-        @decoder.cancel(stream_id) if @receiving.delete(stream_id)
         @skipped.delete(stream_id)
+        receiving = @receiving.delete(stream_id) or return
+        @decoder.cancel(stream_id)
+        @events << Event::Reset.new(stream_id:, error_code:) if receiving.surfaced
         return
       end
       type = @incoming.delete(stream_id)
@@ -258,11 +263,32 @@ module Raiha::Next::HTTP3
     end
 
     # The peer asked this end to stop sending on `stream_id`, with
-    # `error_code`, and the transport reset it.
+    # `error_code`, and the transport reset it: on a request stream,
+    # nothing more goes, and the application, if it was writing, hears so
+    # with Event::Stopped; what the peer sends on it may still come.
     def stream_stopped(stream_id, error_code:)
       return if @closed
-      return unless @own_critical.include?(stream_id)
-      close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer stopped this end's stream #{stream_id}")
+      if @own_critical.include?(stream_id)
+        return close_with(ErrorCode::CLOSED_CRITICAL_STREAM, "the peer stopped this end's stream #{stream_id}")
+      end
+      @outputs.delete(stream_id)
+      @events << Event::Stopped.new(stream_id:, error_code:) if @sending.delete(stream_id)
+    end
+
+    # Stops a request on `stream_id` both ways, with `error_code`
+    # (RFC 9114 "Request Cancellation and Rejection"): nothing more of it
+    # is sent or taken. A stream with no request, or one over, is left as
+    # it is.
+    def cancel(stream_id, error_code: ErrorCode::REQUEST_CANCELLED)
+      raise ArgumentError, "an error code is 0..2^62-1, not #{error_code.inspect}" unless error_code.is_a?(Integer) && error_code.between?(0, Varint::MAX)
+      raise ArgumentError, "stream #{stream_id} is not a request stream" unless stream_id.is_a?(Integer) && stream_id & 0x2 == 0
+      return if @closed
+      return unless @receiving.key?(stream_id) || @sending.key?(stream_id) || @outputs.key?(stream_id)
+      @receiving.delete(stream_id)
+      @sending.delete(stream_id)
+      @outputs.delete(stream_id)
+      @decoder.cancel(stream_id)
+      @actions << Action::StopSending.new(stream_id:, error_code:) << Action::Reset.new(stream_id:, error_code:)
     end
 
     # Gives what this layer asks of the transport, Action values, in the
@@ -610,6 +636,8 @@ module Raiha::Next::HTTP3
     private def close_with(code, reason)
       @closed = true
       @outputs.clear
+      @sending.clear
+      @receiving.clear
       @actions << Action::Close.new(error_code: code, reason:)
     end
 

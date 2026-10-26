@@ -29,9 +29,15 @@ module Raiha::Next::HTTP3
       end
     end
 
-    # `stream_id` was stopped with `error_code`, by the peer or by this
-    # layer, after the application had heard of it.
+    # What the peer sends on `stream_id` ended with `error_code`, the peer
+    # having reset it, or this layer having stopped the stream, after the
+    # application had heard of it.
     class Reset < ::Data.define(:stream_id, :error_code); end
+
+    # The peer asked this end to stop sending on `stream_id`, with
+    # `error_code`; nothing more goes on it, though the peer's side may
+    # still come.
+    class Stopped < ::Data.define(:stream_id, :error_code); end
 
     # `send_data` takes content on `stream_id` again, after it took less
     # than given.
