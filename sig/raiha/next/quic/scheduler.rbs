@@ -28,11 +28,9 @@ module Raiha::Next::QUIC
     def idle: (Integer stream_id) -> void
     def forget: (Integer stream_id) -> void
     def current: () -> Integer?
+    def urgency: () -> Integer?
     def advance: () -> void
-
-    private
-
-    def level: () -> Level?
-    def priority_of: (Integer stream_id) -> [Integer, bool]
+    private def level: () -> Level?
+    private def priority_of: (Integer stream_id) -> [Integer, bool]
   end
 end

@@ -43,11 +43,18 @@ module Raiha::Next::QUIC
       true
     end
 
+    # The urgency of the DATAGRAM to go next, nil when none waits; those
+    # expired at `now` are dropped.
+    def urgency(now:)
+      drop_expired(now)
+      @queue.first&.urgency
+    end
+
     # The next DATAGRAM frame to send in no more than `room` bytes, nil when
     # none waits or the next does not fit; those expired at `now` are
     # dropped.
     def next_frame(room, now:)
-      @queue.shift while (head = @queue.first) && (expires_at = head.expires_at) && expires_at <= now
+      drop_expired(now)
       head = @queue.first or return nil
       frame = Wire::Frame::Datagram.new(data: head.data)
       return nil if Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize > room
@@ -71,6 +78,10 @@ module Raiha::Next::QUIC
       return unless event.is_a?(Event::DatagramReceived)
       @received -= 1
       @received_bytes -= event.data.bytesize
+    end
+
+    private def drop_expired(now)
+      @queue.shift while (head = @queue.first) && (expires_at = head.expires_at) && expires_at <= now
     end
   end
 end

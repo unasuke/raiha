@@ -55,6 +55,7 @@ module Raiha::Next::QUIC
     def writable_bytes: (Integer stream_id) -> Integer
     def writable: () -> Array[Integer]
     def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+    def urgency: () -> Integer?
     def stream_data_acked: (Recovery::Duty::Stream duty) -> void
     def stream_data_lost: (Recovery::Duty::Stream duty) -> void
     def reset: (Integer stream_id, Integer error_code) -> void
@@ -84,6 +85,7 @@ module Raiha::Next::QUIC
     private def streams_allowed: (:bidi | :uni direction) -> Integer
     private def max_streams_due?: (:bidi | :uni direction) -> bool
     private def retire: (Integer stream_id) -> void
+    private def current_sender: () -> Sender?
     private def over?: (Integer stream_id) -> bool
     private def receives?: (Integer stream_id) -> bool
     private def sends?: (Integer stream_id) -> bool

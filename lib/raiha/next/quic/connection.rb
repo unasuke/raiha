@@ -866,8 +866,8 @@ module Raiha::Next::QUIC
     # ACK when one is owed and the packet goes anyway, or is due, then, when
     # frames that elicit an ACK may go, HANDSHAKE_DONE and CRYPTO, credit,
     # RESET_STREAM and STOP_SENDING, RETIRE_CONNECTION_ID, BLOCKED frames,
-    # DATAGRAM frames, stream data, and a PING for a probe with nothing
-    # else. A 1-RTT packet that would carry an ACK alone carries a PING too
+    # DATAGRAM frames and stream data in order of urgency, and a PING for a
+    # probe with nothing else. A 1-RTT packet that would carry an ACK alone carries a PING too
     # once a round trip, so that the peer acknowledges the ACKs and what they
     # acknowledge can be let go (RFC 9000 "Limiting Ranges by Tracking ACK
     # Frames"); the ranges of Initial and Handshake go with their keys.
@@ -909,13 +909,9 @@ module Raiha::Next::QUIC
         duties << blocked_duty
         room -= Wire::Frame.encode([blocked], ack_delay_exponent: 0).bytesize
       end
-      while eliciting && level == :one_rtt && (datagram = @datagrams.next_frame(room, now:))
-        frames << datagram
-        room -= Wire::Frame.encode([datagram], ack_delay_exponent: 0).bytesize
-      end
-      while eliciting && level == :one_rtt && room.positive? && (data, data_duty = @streams.next_stream_frame(room))
+      while eliciting && level == :one_rtt && room.positive? && (data, data_duty = next_application_frame(room, now))
         frames << data
-        duties << data_duty
+        duties << data_duty if data_duty
         room -= Wire::Frame.encode([data], ack_delay_exponent: 0).bytesize
       end
       if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
@@ -933,6 +929,25 @@ module Raiha::Next::QUIC
         @recovery.on_ack_sent(space, now:)
       end
       [frames, duties]
+    end
+
+    # The next DATAGRAM frame or STREAM frame in no more than `room` bytes,
+    # and the duty of a STREAM frame. A DATAGRAM goes before the streams of
+    # its urgency and those less urgent, as RFC 9218 counts urgency; what
+    # goes second takes the room the first does not fit in.
+    private def next_application_frame(room, now)
+      urgency = @streams.urgency
+      datagram_urgency = @datagrams.urgency(now:)
+      if datagram_urgency && (urgency.nil? || datagram_urgency <= urgency)
+        next_datagram_frame(room, now) || @streams.next_stream_frame(room)
+      else
+        @streams.next_stream_frame(room) || next_datagram_frame(room, now)
+      end
+    end
+
+    private def next_datagram_frame(room, now)
+      frame = @datagrams.next_frame(room, now:) or return nil
+      [frame, nil]
     end
 
     # Protects the packets of a datagram and records them as sent. The

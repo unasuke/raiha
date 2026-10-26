@@ -145,6 +145,8 @@ module Raiha::Next::QUIC
     private def closing_datagram: (Float now) -> String?
     private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
+    private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
+    private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
     private def seal: (Array[Pending] pending, Float now) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String

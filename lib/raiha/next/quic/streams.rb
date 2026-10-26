@@ -360,17 +360,16 @@ module Raiha::Next::QUIC
     # the next stream in turn with something to send; nil when none has,
     # or the frame does not fit.
     def next_stream_frame(room)
-      while (stream_id = @scheduler.current)
-        sender = @senders[stream_id]
-        unless sender&.pending?
-          @scheduler.idle(stream_id)
-          next
-        end
-        pair = sender.next_frame(room) or return nil
-        @scheduler.advance
-        return pair
-      end
-      nil
+      sender = current_sender or return nil
+      pair = sender.next_frame(room) or return nil
+      @scheduler.advance
+      pair
+    end
+
+    # The urgency of the next stream in turn with something to send; nil
+    # when none has.
+    def urgency
+      @scheduler.urgency if current_sender
     end
 
     # Data sent was acknowledged: the bytes let go leave room in the send
@@ -572,6 +571,17 @@ module Raiha::Next::QUIC
     # What the stream's credit, the connection's and the send buffer all
     # leave room for.
     private def room_for(sender) = [sender.credit, @peer_max_data - @written, @config.max_send_buffer - @buffered].min
+
+    # The sending part of the stream whose turn it is, those with nothing
+    # to send let go idle on the way; nil when none has something.
+    private def current_sender
+      while (stream_id = @scheduler.current)
+        sender = @senders[stream_id]
+        return sender if sender&.pending?
+        @scheduler.idle(stream_id)
+      end
+      nil
+    end
 
     # The streams written less than asked that can take some now hear so;
     # one that has ended since is let go.

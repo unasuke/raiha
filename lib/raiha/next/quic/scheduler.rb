@@ -93,8 +93,11 @@ module Raiha::Next::QUIC
       @priorities.delete(stream_id)
     end
 
-    # The stream whose turn it is; nil when none has a turn.
+    # The stream whose turn it is, and its urgency; nil when none has a
+    # turn.
     def current = level&.current
+
+    def urgency = @levels.index { |level| !level.empty? }
 
     # The stream whose turn it was took it: the next one's comes.
     def advance

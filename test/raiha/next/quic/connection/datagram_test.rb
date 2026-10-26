@@ -80,6 +80,39 @@ class RaihaNextQUICConnectionDatagramTest < Minitest::Test
     assert_equal %w[high middle low], datagrams(server)
   end
 
+  # The datagrams and the streams `server` has after each datagram the
+  # client sends at `now`.
+  def one_by_one(client, server, now)
+    client.transmits(now:).map do |transmit|
+      server.receive(transmit.payload, from: CLIENT, now:)
+      [datagrams(server), server.readable_streams.to_a]
+    end
+  end
+
+  # A DATAGRAM goes before the streams of its urgency, stream data filling
+  # the rest of the packet.
+  def test_a_datagram_goes_before_streams_of_its_urgency
+    client, server, now = connected
+    stream_id = client.open_stream
+    client.stream_write(stream_id, "x" * 5000)
+    client.datagram_send("now")
+    assert_equal [["now"], [stream_id]], one_by_one(client, server, now).first
+  end
+
+  # A more urgent stream goes before a DATAGRAM, which goes once the
+  # stream has nothing more to send.
+  def test_a_more_urgent_stream_goes_before_a_datagram
+    client, server, now = connected
+    stream_id = client.open_stream
+    client.stream_write(stream_id, "x" * 5000)
+    client.stream_priority(stream_id, urgency: 1, incremental: false)
+    client.datagram_send("later", urgency: 3)
+    received = one_by_one(client, server, now).map(&:first)
+    assert_equal [], received.first
+    assert_equal ["later"], received.flatten
+    assert_operator received.index(["later"]), :>=, 4
+  end
+
   # The application is told no when MAX_SEND_QUEUE wait, and nothing
   # waiting is dropped.
   def test_the_send_queue
