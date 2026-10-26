@@ -163,6 +163,28 @@ module Raiha::Next::HTTP3
       end
     end
 
+    # Sends a request on `stream_id`, a stream going both ways the transport
+    # opened for it, ending the stream with `fin`; its content follows with
+    # `send_data`, and its response comes as events. One that would be
+    # malformed (RFC 9114 "Malformed Requests and Responses") is an
+    # ArgumentError; :protocol is for a server that took Extended CONNECT.
+    def send_request(stream_id, headers, fin: false)
+      raise Error::Usage, "a server sends no request" unless @role == :client
+      unless stream_id.is_a?(Integer) && stream_id.between?(0, Varint::MAX) && stream_id & 0x3 == 0
+        raise ArgumentError, "stream #{stream_id.inspect} is not a client's going both ways"
+      end
+      raise Error::Usage, "stream #{stream_id} has a request already" if @receiving.key?(stream_id) || @sending.key?(stream_id)
+      checked { Message.request(headers, extended_connect: @peer_settings&.enable_connect_protocol || false) }
+      receiving = @receiving[stream_id] = Receiving.new(max_payload: @max_section)
+      receiving.surfaced = true
+      receiving.no_content = headers.include?([":method", "HEAD"])
+      sending = @sending[stream_id] = Sending.new
+      sending.phase = :body
+      fields = headers.map { |name, value| QPACK::Field.new(name:, value:) }
+      output(stream_id) << Frame.encode(Frame::Headers.new(field_section: @encoder.encode(stream_id, fields)))
+      finish_sending(stream_id) if fin
+    end
+
     # Sends a field section on `stream_id`, ending the stream with `fin`:
     # a response, or an interim response before it, on a request; and once
     # the content has begun, the trailer section, which always ends it.
@@ -327,9 +349,10 @@ module Raiha::Next::HTTP3
     private def bidirectional_data(stream_id, data, fin)
       if @role == :client
         raise Violation.new("a stream going both ways from a server", code: ErrorCode::STREAM_CREATION_ERROR) if stream_id & 0x1 != 0
-        return
+        receiving = @receiving[stream_id] or return
+      else
+        receiving = @receiving[stream_id] || open_request(stream_id) or return
       end
-      receiving = @receiving[stream_id] || open_request(stream_id) or return
       receiving.reader.feed(data) { |item| request_item(stream_id, receiving, item) }
       request_ended(stream_id, receiving) if fin && @receiving[stream_id].equal?(receiving)
     end
@@ -365,11 +388,9 @@ module Raiha::Next::HTTP3
       case item
       when FrameReader::TooLong
         @decoder.cancel(stream_id)
-        receiving.phase == :headers ? too_large(stream_id) : stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD)
+        receiving.surfaced ? stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD) : too_large(stream_id)
       when Frame::Headers
-        trailers = receiving.phase == :body
-        receiving.phase = trailers ? :trailers : :body
-        limit = trailers ? receiving.budget : @field_section_limit
+        limit = receiving.phase == :body ? receiving.budget : @field_section_limit
         section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit:))
       when Frame::Data
         request_data(stream_id, receiving, item.data)
@@ -378,10 +399,16 @@ module Raiha::Next::HTTP3
 
     # A frame of `type` that begins on a request stream: H3_FRAME_UNEXPECTED
     # for one that goes elsewhere, DATA before the header section, and
-    # anything but frames not known after the trailer section.
+    # anything but frames not known after the trailer section; these last
+    # two are checked once the frames before have been decoded, if one
+    # waits on QPACK. A PUSH_PROMISE goes only to a client, which allows
+    # no push (RFC 9114 "PUSH_PROMISE").
     private def check_request_frame(receiving, type)
-      return unless NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE ||
-        (type == Frame::DATA && receiving.phase != :body) || (type == Frame::HEADERS && receiving.phase == :trailers)
+      if type == Frame::PUSH_PROMISE && @role == :client
+        raise Violation.new("a push promised, with no push allowed", code: ErrorCode::ID_ERROR)
+      end
+      out_of_order = !receiving.blocked && ((type == Frame::DATA && receiving.phase != :body) || (type == Frame::HEADERS && receiving.phase == :trailers))
+      return unless NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE || out_of_order
       raise Violation.new("a frame of type 0x#{type.to_s(16)} on a request stream, after the #{receiving.phase}", code: ErrorCode::FRAME_UNEXPECTED)
     end
 
@@ -417,10 +444,10 @@ module Raiha::Next::HTTP3
       case result
       when QPACK::Decoded
         headers = result.fields.map { |field| [field.name, field.value] } #: Array[[String, String]]
-        if receiving.surfaced
-          trailers_decoded(stream_id, receiving, headers)
-        else
+        if receiving.phase == :headers
           headers_decoded(stream_id, receiving, headers, result.size)
+        else
+          trailers_decoded(stream_id, receiving, headers)
         end
       when QPACK::Blocked
         receiving.blocked = true
@@ -433,14 +460,27 @@ module Raiha::Next::HTTP3
       end
     end
 
+    # A header section: a request's at a server; at a client, a response's,
+    # or an interim response's, which the response follows.
     private def headers_decoded(stream_id, receiving, headers, size)
       begin
-        content_length = Message.request(headers, extended_connect: @settings.enable_connect_protocol)
+        if @role == :server
+          content_length = Message.request(headers, extended_connect: @settings.enable_connect_protocol)
+        else
+          status, content_length = Message.response(headers)
+        end
       rescue Message::Malformed
         return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
       end
+      if status && status < 200
+        return @events << Event::Headers.new(stream_id:, headers:, fin: false)
+      end
+      # A response that never has content (RFC 9114 "Malformed Requests and
+      # Responses") may say a Content-Length all the same.
+      content_length = nil if receiving.no_content || status == 204 || status == 304
+      @sending[stream_id] = Sending.new unless receiving.surfaced
       receiving.surfaced = true
-      @sending[stream_id] = Sending.new
+      receiving.phase = :body
       receiving.content_length = content_length
       receiving.budget = @field_section_limit - size
       @events << Event::Headers.new(stream_id:, headers:, fin: false)
@@ -456,6 +496,7 @@ module Raiha::Next::HTTP3
       end
       length = receiving.content_length
       return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if length && receiving.received != length
+      receiving.phase = :trailers
       @events << Event::Trailers.new(stream_id:, headers:)
     end
 
@@ -482,7 +523,9 @@ module Raiha::Next::HTTP3
     private def request_ended(stream_id, receiving)
       return receiving.fin_waiting = true if receiving.blocked
       raise Violation.new("the stream ended within a frame", code: ErrorCode::FRAME_ERROR) if receiving.reader.mid_frame?
-      return stream_error(stream_id, ErrorCode::REQUEST_INCOMPLETE) if receiving.phase == :headers
+      if receiving.phase == :headers
+        return stream_error(stream_id, @role == :server ? ErrorCode::REQUEST_INCOMPLETE : ErrorCode::MESSAGE_ERROR)
+      end
       length = receiving.content_length
       return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if receiving.phase == :body && length && receiving.received != length
       @receiving.delete(stream_id)

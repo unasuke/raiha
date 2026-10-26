@@ -110,6 +110,7 @@ module Raiha::Next::HTTP3
     @content_length: Integer?
     @received: Integer
     @budget: Integer
+    @no_content: bool
 
     attr_reader reader: FrameReader
     attr_reader waiting: Array[FrameReader::item]
@@ -121,6 +122,7 @@ module Raiha::Next::HTTP3
     attr_accessor content_length: Integer?
     attr_accessor received: Integer
     attr_accessor budget: Integer
+    attr_accessor no_content: bool
 
     def initialize: (max_payload: Integer) -> void
   end
@@ -206,6 +208,7 @@ module Raiha::Next::HTTP3
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
     def stream_writable: (Integer stream_id) -> void
+    def send_request: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
     def send_headers: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
     def send_data: (Integer stream_id, String data, ?fin: bool) -> Integer
     def stream_data: (Integer stream_id, String data, ?fin: bool) -> void
