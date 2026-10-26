@@ -310,36 +310,51 @@ module Raiha::Next::HTTP3
       @receiving[stream_id] = Receiving.new(max_payload: @max_section)
     end
 
-    # What a request stream holds: a field section before anything else,
-    # and none of the frames that go elsewhere. While the field section
-    # waits on QPACK, what follows it waits too.
+    # What a request stream holds (RFC 9114 "HTTP Message Framing"): a
+    # header section, DATA, and a trailer section at most, and none of the
+    # frames that go elsewhere. While a field section waits on QPACK, what
+    # follows it waits too; a frame the stream does not carry is refused
+    # all the same.
     private def request_item(stream_id, receiving, item)
       return unless @receiving[stream_id].equal?(receiving)
-      if item.is_a?(FrameReader::Started)
-        type = item.type
-        if NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE || (type == Frame::DATA && receiving.phase == :headers)
-          raise Violation.new("a frame of type 0x#{type.to_s(16)} on a request stream", code: ErrorCode::FRAME_UNEXPECTED)
-        end
-      end
-      return wait(stream_id, receiving, item) if receiving.blocked?
+      check_request_frame(receiving, item.type) if item.is_a?(FrameReader::Started)
+      return wait(stream_id, receiving, item) if receiving.blocked
       case item
       when FrameReader::TooLong
-        if receiving.phase == :headers
-          @decoder.cancel(stream_id)
-          too_large(stream_id)
-        end
+        @decoder.cancel(stream_id)
+        receiving.phase == :headers ? too_large(stream_id) : stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD)
       when Frame::Headers
-        if receiving.phase == :headers
-          section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit: @field_section_limit))
-        end
+        trailers = receiving.phase == :body
+        receiving.phase = trailers ? :trailers : :body
+        limit = trailers ? receiving.budget : @field_section_limit
+        section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit:))
+      when Frame::Data
+        request_data(stream_id, receiving, item.data)
       end
+    end
+
+    # A frame of `type` that begins on a request stream: H3_FRAME_UNEXPECTED
+    # for one that goes elsewhere, DATA before the header section, and
+    # anything but frames not known after the trailer section.
+    private def check_request_frame(receiving, type)
+      return unless NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE ||
+        (type == Frame::DATA && receiving.phase != :body) || (type == Frame::HEADERS && receiving.phase == :trailers)
+      raise Violation.new("a frame of type 0x#{type.to_s(16)} on a request stream, after the #{receiving.phase}", code: ErrorCode::FRAME_UNEXPECTED)
+    end
+
+    # Content of a request, counted against its Content-Length (RFC 9114
+    # "Malformed Requests and Responses").
+    private def request_data(stream_id, receiving, data)
+      receiving.received += data.bytesize
+      length = receiving.content_length
+      return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if length && receiving.received > length
+      @events << Event::Data.new(stream_id:, data:, fin: false) unless data.empty?
     end
 
     # Holds `item` until the field section of `stream_id` is decoded, no more
     # than MAX_WAITING of them and no more bytes of DATA and field sections
     # than a field section may be long; past either, the stream stops with
-    # H3_EXCESSIVE_LOAD. A frame a request stream does not carry has been
-    # refused before it got here.
+    # H3_EXCESSIVE_LOAD.
     private def wait(stream_id, receiving, item)
       receiving.waiting_bytes += case item
         when Frame::Data then item.data.bytesize
@@ -350,27 +365,54 @@ module Raiha::Next::HTTP3
       receiving.waiting << item
     end
 
-    # The QPACK decoder's `result` for the field section of `stream_id`.
+    # The QPACK decoder's `result` for a field section of `stream_id`: the
+    # header section until the application has it, the trailer section
+    # after. Past the limit, a header section gets a 431; a trailer
+    # section, which takes what the header section left of the limit,
+    # stops the stream with H3_EXCESSIVE_LOAD.
     private def section_decoded(stream_id, receiving, result)
       case result
       when QPACK::Decoded
         headers = result.fields.map { |field| [field.name, field.value] } #: Array[[String, String]]
-        begin
-          Message.request(headers, extended_connect: @settings.enable_connect_protocol)
-        rescue Message::Malformed
-          return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
+        if receiving.surfaced
+          trailers_decoded(stream_id, receiving, headers)
+        else
+          headers_decoded(stream_id, receiving, headers, result.size)
         end
-        receiving.phase = :body
-        @events << Event::Headers.new(stream_id:, headers:, fin: false)
       when QPACK::Blocked
-        receiving.phase = :blocked
+        receiving.blocked = true
         @events << Event::Blocked.new(stream_id:)
       when QPACK::Oversized
-        too_large(stream_id)
+        receiving.surfaced ? stream_error(stream_id, ErrorCode::EXCESSIVE_LOAD) : too_large(stream_id)
       when QPACK::Failure
         raise Violation.new(result.reason, code: result.code) unless result.stream_id
         stream_error(stream_id, result.code)
       end
+    end
+
+    private def headers_decoded(stream_id, receiving, headers, size)
+      begin
+        content_length = Message.request(headers, extended_connect: @settings.enable_connect_protocol)
+      rescue Message::Malformed
+        return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
+      end
+      receiving.surfaced = true
+      receiving.content_length = content_length
+      receiving.budget = @field_section_limit - size
+      @events << Event::Headers.new(stream_id:, headers:, fin: false)
+    end
+
+    # The trailer section ends the message: its content must have come
+    # whole by then.
+    private def trailers_decoded(stream_id, receiving, headers)
+      begin
+        Message.trailers(headers)
+      rescue Message::Malformed
+        return stream_error(stream_id, ErrorCode::MESSAGE_ERROR)
+      end
+      length = receiving.content_length
+      return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if length && receiving.received != length
+      @events << Event::Trailers.new(stream_id:, headers:)
     end
 
     # A field section that waited on QPACK is decoded: what waited behind
@@ -378,25 +420,29 @@ module Raiha::Next::HTTP3
     private def unblocked(result)
       stream_id = result.stream_id or return
       receiving = @receiving[stream_id] or return
-      receiving.phase = :headers
+      receiving.blocked = false
       section_decoded(stream_id, receiving, result)
-      return unless @receiving.key?(stream_id)
-      until receiving.waiting.empty? || receiving.blocked? || !@receiving.key?(stream_id)
+      until receiving.waiting.empty? || receiving.blocked || !@receiving[stream_id].equal?(receiving)
         item = receiving.waiting.shift or break
         request_item(stream_id, receiving, item)
       end
-      request_ended(stream_id, receiving) if receiving.fin_waiting && !receiving.blocked? && @receiving.key?(stream_id)
+      request_ended(stream_id, receiving) if receiving.fin_waiting && !receiving.blocked && @receiving[stream_id].equal?(receiving)
     end
 
     # The request on `stream_id` ended: within a frame, H3_FRAME_ERROR;
-    # before its field section, H3_REQUEST_INCOMPLETE (RFC 9114 "Frame
-    # Layout", "HTTP Message Framing"); else its last event, or an empty
-    # Event::Data, tells so.
+    # before its header section, H3_REQUEST_INCOMPLETE; short of its
+    # Content-Length, H3_MESSAGE_ERROR (RFC 9114 "Frame Layout", "HTTP
+    # Message Framing", "Malformed Requests and Responses"). Else its last
+    # event, or an empty Event::Data, tells so, unless a trailer section
+    # did already.
     private def request_ended(stream_id, receiving)
-      return receiving.fin_waiting = true if receiving.blocked?
+      return receiving.fin_waiting = true if receiving.blocked
       raise Violation.new("the stream ended within a frame", code: ErrorCode::FRAME_ERROR) if receiving.reader.mid_frame?
       return stream_error(stream_id, ErrorCode::REQUEST_INCOMPLETE) if receiving.phase == :headers
+      length = receiving.content_length
+      return stream_error(stream_id, ErrorCode::MESSAGE_ERROR) if receiving.phase == :body && length && receiving.received != length
       @receiving.delete(stream_id)
+      return if receiving.phase == :trailers
       last = @events.last
       if (last.is_a?(Event::Headers) || last.is_a?(Event::Data)) && last.stream_id == stream_id
         @events[-1] = last.with(fin: true)
@@ -419,12 +465,14 @@ module Raiha::Next::HTTP3
     end
 
     # Stops `stream_id` both ways with `code` (RFC 9114 "Request
-    # Cancellation and Rejection").
+    # Cancellation and Rejection"); the application hears of it if it has
+    # the request.
     private def stream_error(stream_id, code)
-      @receiving.delete(stream_id)
+      receiving = @receiving.delete(stream_id)
       @decoder.cancel(stream_id)
       @outputs.delete(stream_id)
       @actions << Action::StopSending.new(stream_id:, error_code: code) << Action::Reset.new(stream_id:, error_code: code)
+      @events << Event::Reset.new(stream_id:, error_code: code) if receiving&.surfaced
     end
 
     # QPACK's connection error, if `result` is one.

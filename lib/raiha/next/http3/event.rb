@@ -20,6 +20,19 @@ module Raiha::Next::HTTP3
     # with it, which may come with no content.
     class Data < ::Data.define(:stream_id, :data, :fin); end
 
+    # The trailer section of the message on `stream_id` came, which ends
+    # it.
+    class Trailers < ::Data.define(:stream_id, :headers)
+      def initialize(stream_id:, headers:)
+        headers = Ractor.make_shareable(headers.map(&:dup))
+        super
+      end
+    end
+
+    # `stream_id` was stopped with `error_code`, by the peer or by this
+    # layer, after the application had heard of it.
+    class Reset < ::Data.define(:stream_id, :error_code); end
+
     # The field section on `stream_id` waits for entries the QPACK encoder
     # stream has yet to bring (RFC 9204 "Blocked Decoding").
     class Blocked < ::Data.define(:stream_id); end

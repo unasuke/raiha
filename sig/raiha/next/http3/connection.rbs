@@ -37,7 +37,7 @@ module Raiha::Next::HTTP3
   end
 
   module Event
-    type t = Settings | Headers | Data | Blocked
+    type t = Settings | Headers | Data | Trailers | Reset | Blocked
 
     class Settings < ::Data
       attr_reader settings: Raiha::Next::HTTP3::Settings
@@ -66,6 +66,24 @@ module Raiha::Next::HTTP3
                   | (Integer stream_id, String data, bool fin) -> instance
     end
 
+    class Trailers < ::Data
+      attr_reader stream_id: Integer
+      attr_reader headers: Array[[String, String]]
+
+      def self.new: (stream_id: Integer, headers: Array[[String, String]]) -> instance
+                  | (Integer stream_id, Array[[String, String]] headers) -> instance
+
+      def initialize: (stream_id: Integer, headers: Array[[String, String]]) -> void
+    end
+
+    class Reset < ::Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
     class Blocked < ::Data
       attr_reader stream_id: Integer
 
@@ -76,19 +94,28 @@ module Raiha::Next::HTTP3
 
   class Receiving
     @reader: FrameReader
-    @phase: :headers | :blocked | :body
+    @phase: :headers | :body | :trailers
+    @blocked: bool
     @waiting: Array[FrameReader::item]
     @waiting_bytes: Integer
     @fin_waiting: bool
+    @surfaced: bool
+    @content_length: Integer?
+    @received: Integer
+    @budget: Integer
 
     attr_reader reader: FrameReader
     attr_reader waiting: Array[FrameReader::item]
+    attr_accessor phase: :headers | :body | :trailers
+    attr_accessor blocked: bool
     attr_accessor waiting_bytes: Integer
-    attr_accessor phase: :headers | :blocked | :body
     attr_accessor fin_waiting: bool
+    attr_accessor surfaced: bool
+    attr_accessor content_length: Integer?
+    attr_accessor received: Integer
+    attr_accessor budget: Integer
 
     def initialize: (max_payload: Integer) -> void
-    def blocked?: () -> bool
   end
 
   class Output
@@ -173,7 +200,11 @@ module Raiha::Next::HTTP3
     private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_request: (Integer stream_id) -> Receiving?
     private def request_item: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
+    private def check_request_frame: (Receiving receiving, Integer type) -> void
+    private def request_data: (Integer stream_id, Receiving receiving, String data) -> void
     private def wait: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
+    private def headers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers, Integer size) -> void
+    private def trailers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers) -> void
     private def section_decoded: (Integer stream_id, Receiving receiving, QPACK::Decoded | QPACK::Blocked | QPACK::Oversized | QPACK::Failure result) -> void
     private def unblocked: (QPACK::Decoded | QPACK::Oversized | QPACK::Failure result) -> void
     private def request_ended: (Integer stream_id, Receiving receiving) -> void
