@@ -36,6 +36,17 @@ module Raiha::Next::HTTP3
     end
   end
 
+  module Event
+    type t = Settings
+
+    class Settings < Data
+      attr_reader settings: Raiha::Next::HTTP3::Settings
+
+      def self.new: (settings: Raiha::Next::HTTP3::Settings) -> instance
+                  | (Raiha::Next::HTTP3::Settings settings) -> instance
+    end
+  end
+
   class Output
     @pieces: Array[String]
     @buffered: Integer
@@ -61,6 +72,9 @@ module Raiha::Next::HTTP3
     CRITICAL: Priority
     TRANSPORT_ORDERINGS: Array[transport_ordering]
     CRITICAL_STREAMS: Hash[Integer, String]
+    MAX_CONTROL_FRAME: Integer
+    NOT_ON_CONTROL: Array[Integer]
+    FROM_CLIENTS: Array[Integer]
 
     type role = :client | :server
     type transport_ordering = :per_stream | :global
@@ -77,9 +91,13 @@ module Raiha::Next::HTTP3
     @incoming: Hash[Integer, Integer | String]
     @critical: Hash[Integer, Integer]
     @closed: bool
+    @control_reader: FrameReader
+    @peer_settings: Settings?
+    @events: Array[Event::t]
 
     attr_reader role: role
     attr_reader settings: Settings
+    attr_reader peer_settings: Settings?
 
     def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
     def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer) -> Connection
@@ -93,8 +111,10 @@ module Raiha::Next::HTTP3
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stopped: (Integer stream_id, error_code: Integer) -> void
     def each_action: () { (Action::t action) -> void } -> void
+    def each_event: () { (Event::t event) -> void } -> void
     private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_unidirectional: (Integer stream_id, Integer type) -> void
+    private def control_item: (FrameReader::item item) -> void
     private def close_with: (Integer code, String reason) -> void
     private def output: (Integer stream_id) -> Output
     private def prioritize: (Integer stream_id, Priority priority) -> void

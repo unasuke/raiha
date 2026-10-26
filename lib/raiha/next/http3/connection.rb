@@ -2,7 +2,9 @@
 
 require_relative "action"
 require_relative "error"
+require_relative "event"
 require_relative "frame"
+require_relative "frame_reader"
 require_relative "output"
 require_relative "priority"
 require_relative "settings"
@@ -34,6 +36,13 @@ module Raiha::Next::HTTP3
     TRANSPORT_ORDERINGS = %i[per_stream global].freeze
     # The types of the streams each end opens one of, and must never close.
     CRITICAL_STREAMS = { CONTROL_STREAM => "control", ENCODER_STREAM => "QPACK encoder", DECODER_STREAM => "QPACK decoder" }.freeze
+    # The longest a frame on the control stream is held, its payload; a
+    # longer one is H3_EXCESSIVE_LOAD.
+    MAX_CONTROL_FRAME = 16 * 1024
+    # The frames that never go on a control stream (RFC 9114 "HTTP Framing
+    # Layer"), and those only a client sends on one.
+    NOT_ON_CONTROL = [Frame::DATA, Frame::HEADERS, Frame::PUSH_PROMISE, *Frame::HTTP2_TYPES].freeze
+    FROM_CLIENTS = [Frame::MAX_PUSH_ID, Frame::PRIORITY_UPDATE, Frame::PRIORITY_UPDATE_PUSH].freeze
 
     attr_reader :role, :settings
 
@@ -69,7 +78,14 @@ module Raiha::Next::HTTP3
       @incoming = {} #: Hash[Integer, Integer | String]
       @critical = {} #: Hash[Integer, Integer]
       @closed = false
+      # The frames of the peer's control stream, and the settings they gave.
+      @control_reader = FrameReader.new(max_payload: MAX_CONTROL_FRAME)
+      @peer_settings = nil #: Settings?
+      @events = [] #: Array[Event::t]
     end
+
+    # The peer's settings; nil until its SETTINGS frame has come.
+    attr_reader :peer_settings
 
     # Whether this layer has closed the connection, after which it takes
     # nothing more.
@@ -144,6 +160,11 @@ module Raiha::Next::HTTP3
       yield @actions.shift until @actions.empty?
     end
 
+    # Gives what happened, Event values, in the order it happened.
+    def each_event
+      yield @events.shift until @events.empty?
+    end
+
     # Bytes on a stream of the peer going one way: first its type (RFC 9114
     # "Unidirectional Streams"), then what the type says. A stream may end
     # before its type comes.
@@ -158,12 +179,36 @@ module Raiha::Next::HTTP3
         end
         open_unidirectional(stream_id, type)
         @incoming[stream_id] = type
+        data = bytes.byteslice(offset..) #: String
       end
       unless CRITICAL_STREAMS.key?(type)
         @incoming.delete(stream_id) if fin
         return
       end
+      @control_reader.feed(data) { |item| control_item(item) } if type == CONTROL_STREAM
       raise Violation.new("the peer closed its #{CRITICAL_STREAMS.fetch(type)} stream", code: ErrorCode::CLOSED_CRITICAL_STREAM) if fin
+    end
+
+    # What the peer's control stream holds: its SETTINGS first and once,
+    # and only the frames a control stream carries (RFC 9114 "Control
+    # Streams", "HTTP Framing Layer").
+    private def control_item(item)
+      case item
+      when FrameReader::Started
+        type = item.type
+        if @peer_settings.nil? && type != Frame::SETTINGS
+          raise Violation.new("a frame of type 0x#{type.to_s(16)} before SETTINGS", code: ErrorCode::MISSING_SETTINGS)
+        end
+        if (type == Frame::SETTINGS && @peer_settings) || NOT_ON_CONTROL.include?(type) || (@role == :client && FROM_CLIENTS.include?(type))
+          raise Violation.new("a frame of type 0x#{type.to_s(16)} on the control stream", code: ErrorCode::FRAME_UNEXPECTED)
+        end
+      when FrameReader::TooLong
+        raise Violation.new("a frame of #{item.length} bytes on the control stream", code: ErrorCode::EXCESSIVE_LOAD)
+      when Frame::Settings
+        settings = Settings.from_frame(item)
+        @peer_settings = settings
+        @events << Event::Settings.new(settings:)
+      end
     end
 
     # The peer opened `stream_id`, of `type`: one each of the control and
