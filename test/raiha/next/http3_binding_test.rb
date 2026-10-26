@@ -1,6 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_transfer"
-require "raiha/next/http3_binding"
+require "raiha/next/support/http3_side"
 
 # HTTP/3 over QUIC joined by Raiha::Next::HTTP3Binding: a request and its
 # response, HTTP Datagrams and a stream left unread on a Test::Network; a
@@ -15,45 +15,15 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
   CONNECT = [[":method", "CONNECT"], [":protocol", "echo"], [":scheme", "https"], [":authority", "localhost"], [":path", "/echo"]].freeze
   OK = [[":status", "200"]].freeze
 
-  # One end's application: its QUIC connection joined to an HTTP/3
-  # connection, and the events of each it was left with.
-  class Side
-    attr_reader :http3, :binding, :events, :quic_events
-
-    def initialize(connection, http3)
-      @connection = connection
-      @http3 = http3
-      @binding = Raiha::Next::HTTP3Binding.new(connection, http3)
-      @events = []
-      @quic_events = []
-    end
-
-    # The QUIC connection's events to the binding, the rest kept; HTTP/3's
-    # events kept and given to `on_event`; then the block; and what all of
-    # it wrote out.
-    def turn(now, on_event = nil)
-      @connection.each_event { |event| @binding.receive(event, now:) or @quic_events << event }
-      @binding.flush(now:)
-      @http3.each_event do |event|
-        @events << event
-        on_event&.call(self, event)
-      end
-      yield if block_given?
-      @binding.flush(now:)
-    end
-
-    def of(type) = @events.grep(type)
-  end
-
   # A network of a client and a server, each with a Side made once it has
   # a connection, the server's given `on_server_event`. Gives the network,
   # the client's QUIC connection and the Sides by :client and :server.
   def h3_network(on_server_event: nil, **options)
     sides = {}
-    client_step = ->(connection, now) { (sides[:client] ||= Side.new(connection, HTTP3::Connection.client)).turn(now) }
+    client_step = ->(connection, now) { (sides[:client] ||= NextHTTP3Side.new(connection, HTTP3::Connection.client)).turn(now) }
     server_step = lambda do |endpoint, now|
       connection = endpoint.connections.first or next
-      (sides[:server] ||= Side.new(connection, HTTP3::Connection.server)).turn(now, on_server_event)
+      (sides[:server] ||= NextHTTP3Side.new(connection, HTTP3::Connection.server)).turn(now, on_server_event)
     end
     net, client, = transfer_network(client_step:, server_step:, **options)
     [net, client, sides]
@@ -137,8 +107,8 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     client_quic = client_connection
     server_quic = server_connection
     now = handshake(client_quic, server_quic)
-    client = Side.new(client_quic, HTTP3::Connection.client)
-    server = Side.new(server_quic, HTTP3::Connection.server)
+    client = NextHTTP3Side.new(client_quic, HTTP3::Connection.client)
+    server = NextHTTP3Side.new(server_quic, HTTP3::Connection.server)
     stream_id = client_quic.open_stream
     client.turn(now) { client.http3.send_request(stream_id, POST) }
     deliver(client_quic, server_quic, now)
