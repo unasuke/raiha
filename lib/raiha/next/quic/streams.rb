@@ -43,8 +43,8 @@ module Raiha::Next::QUIC
   # STREAMS_BLOCKED with the limit, once for each value of it; one this
   # end's send buffer cuts short sends none. The tracer hears when the
   # peer's credit blocks the connection or a stream, and when it no longer
-  # does. Frames are taken from the
-  # streams with something to send in turn, one a time.
+  # does. Frames are taken from the streams with something to send in the
+  # order the Scheduler keeps, one a time.
   #
   # The application stops reading a stream with STOP_SENDING, or resets
   # one it writes with RESET_STREAM; a peer's STOP_SENDING resets the
@@ -110,7 +110,7 @@ module Raiha::Next::QUIC
       @peer_max_streams = { bidi: 0, uni: 0 }
       # The streams with something to send, in the order they take turns,
       # and those written less than asked.
-      @send_queue = [] #: Array[Integer]
+      @scheduler = Scheduler.new
       @wanting = [] #: Array[Integer]
       # The limits a DATA_BLOCKED and a STREAMS_BLOCKED of each direction
       # are due or went for, and which are due.
@@ -171,7 +171,7 @@ module Raiha::Next::QUIC
       sender.write(taken, fin: fin && whole)
       @written += accepted
       @buffered += accepted
-      @send_queue << stream_id unless @send_queue.include?(stream_id)
+      @scheduler.ready(stream_id)
       unless whole
         @wanting << stream_id unless @wanting.include?(stream_id)
         stream_blocked(stream_id, now) if sender.credit.zero?
@@ -351,14 +351,14 @@ module Raiha::Next::QUIC
     # the next stream in turn with something to send; nil when none has,
     # or the frame does not fit.
     def next_stream_frame(room)
-      while (stream_id = @send_queue.first)
+      while (stream_id = @scheduler.current)
         sender = @senders[stream_id]
         unless sender&.pending?
-          @send_queue.shift
+          @scheduler.forget(stream_id)
           next
         end
         pair = sender.next_frame(room) or return nil
-        @send_queue.rotate!
+        @scheduler.advance
         return pair
       end
       nil
@@ -377,7 +377,7 @@ module Raiha::Next::QUIC
     def stream_data_lost(duty)
       sender = @senders[duty.stream_id] or return
       sender.lost(duty.offset, duty.length, duty.fin)
-      @send_queue << duty.stream_id unless @send_queue.include?(duty.stream_id)
+      @scheduler.ready(duty.stream_id)
     end
 
     # Takes a STREAM frame: its data is kept, once every check passes.
@@ -483,7 +483,7 @@ module Raiha::Next::QUIC
       return if sender && !(sender.all_acked? || sender.reset_acked?)
       @receivers.delete(stream_id)
       @senders.delete(stream_id)
-      @send_queue.delete(stream_id)
+      @scheduler.forget(stream_id)
       @wanting.delete(stream_id)
       @flow_blocked.delete(stream_id)
       @ended[stream_id & UNIDIRECTIONAL == 0 ? :bidi : :uni] += 1 unless local?(stream_id)

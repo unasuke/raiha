@@ -1,0 +1,11 @@
+module Raiha::Next::QUIC
+  class Scheduler
+    @turns: Array[Integer]
+
+    def initialize: () -> void
+    def ready: (Integer stream_id) -> void
+    def forget: (Integer stream_id) -> void
+    def current: () -> Integer?
+    def advance: () -> void
+  end
+end

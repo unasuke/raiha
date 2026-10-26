@@ -24,7 +24,7 @@ module Raiha::Next::QUIC
     @written: Integer
     @buffered: Integer
     @peer_max_streams: Hash[:bidi | :uni, Integer]
-    @send_queue: Array[Integer]
+    @scheduler: Scheduler
     @wanting: Array[Integer]
     @data_blocked_at: Integer?
     @data_blocked_due: bool
