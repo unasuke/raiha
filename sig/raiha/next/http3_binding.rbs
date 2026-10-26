@@ -1,0 +1,21 @@
+module Raiha::Next
+  class HTTP3Binding
+    HTTP3_EVENTS: Array[singleton(QUIC::Event::StreamReadable) | singleton(QUIC::Event::StreamWritable) | singleton(QUIC::Event::StreamReset) | singleton(QUIC::Event::StopSending) | singleton(QUIC::Event::DatagramReceived)]
+    READ_SIZE: Integer
+
+    @connection: QUIC::Connection
+    @http3: HTTP3::Connection
+    @paused: Hash[Integer, true]
+    @closed: bool
+
+    def initialize: (QUIC::Connection connection, HTTP3::Connection http3) -> void
+    def receive: (QUIC::Event::t event, now: Float) -> bool
+    def flush: (now: Float) -> void
+    def pause: (Integer stream_id) -> void
+    def resume: (Integer stream_id) -> void
+
+    private def start: (Float now) -> void
+    private def read: (Integer stream_id) -> void
+    private def perform: (HTTP3::Action::t action, Float now) -> void
+  end
+end

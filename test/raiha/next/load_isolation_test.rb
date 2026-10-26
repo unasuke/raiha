@@ -23,6 +23,7 @@ class RaihaNextLoadIsolationTest < Minitest::Test
     "raiha/next/quic/test" => %i[HTTP3 Runtime],
     "raiha/next/http3" => %i[TLS QUIC Runtime],
     "raiha/next/http3/qpack" => %i[TLS QUIC Runtime],
+    "raiha/next/http3_binding" => %i[Runtime],
     "raiha/next/runtime" => %i[],
     "raiha/next" => %i[]
   }.freeze
