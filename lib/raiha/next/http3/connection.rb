@@ -8,6 +8,7 @@ require_relative "frame_reader"
 require_relative "output"
 require_relative "priority"
 require_relative "qpack"
+require_relative "receiving"
 require_relative "settings"
 require_relative "varint"
 
@@ -44,6 +45,13 @@ module Raiha::Next::HTTP3
     # Layer"), and those only a client sends on one.
     NOT_ON_CONTROL = [Frame::DATA, Frame::HEADERS, Frame::PUSH_PROMISE, *Frame::HTTP2_TYPES].freeze
     FROM_CLIENTS = [Frame::MAX_PUSH_ID, Frame::PRIORITY_UPDATE, Frame::PRIORITY_UPDATE_PUSH].freeze
+    # The frames this layer knows that never go on a request stream (RFC
+    # 9114 "HTTP Framing Layer"). PUSH_PROMISE goes on one only from a
+    # server.
+    NOT_ON_REQUEST = [
+      Frame::CANCEL_PUSH, Frame::SETTINGS, Frame::GOAWAY, Frame::MAX_PUSH_ID, Frame::PRIORITY_UPDATE, Frame::PRIORITY_UPDATE_PUSH,
+      *Frame::HTTP2_TYPES
+    ].freeze
 
     attr_reader :role, :settings
 
@@ -61,7 +69,7 @@ module Raiha::Next::HTTP3
     end
 
     def initialize(role:, settings:, transport_ordering:, max_send_buffer:)
-      raise ArgumentError, "a field section needs a limit, not #{settings.max_field_section_size.inspect}" if settings.max_field_section_size.nil?
+      limit = settings.max_field_section_size or raise ArgumentError, "a field section needs a limit, not nil"
       raise ArgumentError, "transport_ordering is :per_stream or :global, not #{transport_ordering.inspect}" unless TRANSPORT_ORDERINGS.include?(transport_ordering)
       raise ArgumentError, "max_send_buffer is a positive Integer, not #{max_send_buffer.inspect}" unless max_send_buffer.is_a?(Integer) && max_send_buffer.positive?
       @role = role
@@ -89,9 +97,15 @@ module Raiha::Next::HTTP3
       # and takes the peer's decoder stream.
       @decoder = QPACK::Decoder.new(
         max_table_capacity: settings.qpack_max_table_capacity, max_blocked_streams: settings.qpack_blocked_streams,
-        max_field_section_size: settings.max_field_section_size
+        max_field_section_size: limit
       )
       @encoder = QPACK::Encoder.new
+      # The request streams being received, and the longest field section a
+      # HEADERS frame may carry: one line takes no more on the wire than
+      # four times what it counts for (RFC 9204's decoder holds no longer).
+      @receiving = {} #: Hash[Integer, Receiving]
+      @field_section_limit = limit
+      @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
     end
 
     # The peer's settings; nil until its SETTINGS frame has come.
@@ -146,7 +160,11 @@ module Raiha::Next::HTTP3
     def stream_data(stream_id, data, fin: false)
       raise ArgumentError, "stream #{stream_id} is this end's and goes one way" if local_unidirectional?(stream_id)
       return if @closed
-      unidirectional_data(stream_id, data, fin) if stream_id & 0x2 != 0
+      if stream_id & 0x2 != 0
+        unidirectional_data(stream_id, data, fin)
+      else
+        bidirectional_data(stream_id, data, fin)
+      end
     rescue Violation => violation
       close_with(violation.code, violation.message)
     end
@@ -200,7 +218,10 @@ module Raiha::Next::HTTP3
       end
       case type
       when CONTROL_STREAM then @control_reader.feed(data) { |item| control_item(item) }
-      when ENCODER_STREAM then qpack_failed(@decoder.receive_encoder_stream(data))
+      when ENCODER_STREAM
+        results = @decoder.receive_encoder_stream(data)
+        qpack_failed(results)
+        results.each { |result| unblocked(result) } if results.is_a?(Array)
       when DECODER_STREAM then qpack_failed(@encoder.receive_decoder_stream(data))
       end
       raise Violation.new("the peer closed its #{CRITICAL_STREAMS.fetch(type)} stream", code: ErrorCode::CLOSED_CRITICAL_STREAM) if fin
@@ -241,6 +262,93 @@ module Raiha::Next::HTTP3
       else
         @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::STREAM_CREATION_ERROR)
       end
+    end
+
+    # Bytes on a stream going both ways: a server's are requests; a client
+    # takes none the server opens (RFC 9114 "Bidirectional Streams").
+    private def bidirectional_data(stream_id, data, fin)
+      if @role == :client
+        raise Violation.new("a stream going both ways from a server", code: ErrorCode::STREAM_CREATION_ERROR) if stream_id & 0x1 != 0
+        return
+      end
+      receiving = @receiving[stream_id] ||= Receiving.new(max_payload: @max_section)
+      receiving.reader.feed(data) { |item| request_item(stream_id, receiving, item) }
+      request_ended(stream_id, receiving) if fin && @receiving[stream_id].equal?(receiving)
+    end
+
+    # What a request stream holds: a field section before anything else,
+    # and none of the frames that go elsewhere. While the field section
+    # waits on QPACK, what follows it waits too.
+    private def request_item(stream_id, receiving, item)
+      return unless @receiving[stream_id].equal?(receiving)
+      return receiving.waiting << item if receiving.blocked?
+      case item
+      when FrameReader::Started
+        type = item.type
+        if NOT_ON_REQUEST.include?(type) || type == Frame::PUSH_PROMISE || (type == Frame::DATA && receiving.phase == :headers)
+          raise Violation.new("a frame of type 0x#{type.to_s(16)} on a request stream", code: ErrorCode::FRAME_UNEXPECTED)
+        end
+      when Frame::Headers
+        if receiving.phase == :headers
+          section_decoded(stream_id, receiving, @decoder.decode(stream_id, item.field_section, limit: @field_section_limit))
+        end
+      end
+    end
+
+    # The QPACK decoder's `result` for the field section of `stream_id`.
+    private def section_decoded(stream_id, receiving, result)
+      case result
+      when QPACK::Decoded
+        receiving.phase = :body
+        @events << Event::Headers.new(stream_id:, headers: result.fields.map { |field| [field.name, field.value] }, fin: false)
+      when QPACK::Blocked
+        receiving.phase = :blocked
+        @events << Event::Blocked.new(stream_id:)
+      when QPACK::Failure
+        raise Violation.new(result.reason, code: result.code) unless result.stream_id
+        stream_error(stream_id, result.code)
+      end
+    end
+
+    # A field section that waited on QPACK is decoded: what waited behind
+    # it follows.
+    private def unblocked(result)
+      stream_id = result.stream_id or return
+      receiving = @receiving[stream_id] or return
+      receiving.phase = :headers
+      section_decoded(stream_id, receiving, result)
+      return unless @receiving.key?(stream_id)
+      until receiving.waiting.empty? || receiving.blocked? || !@receiving.key?(stream_id)
+        item = receiving.waiting.shift or break
+        request_item(stream_id, receiving, item)
+      end
+      request_ended(stream_id, receiving) if receiving.fin_waiting && !receiving.blocked? && @receiving.key?(stream_id)
+    end
+
+    # The request on `stream_id` ended: within a frame, H3_FRAME_ERROR;
+    # before its field section, H3_REQUEST_INCOMPLETE (RFC 9114 "Frame
+    # Layout", "HTTP Message Framing"); else its last event, or an empty
+    # Event::Data, tells so.
+    private def request_ended(stream_id, receiving)
+      return receiving.fin_waiting = true if receiving.blocked?
+      raise Violation.new("the stream ended within a frame", code: ErrorCode::FRAME_ERROR) if receiving.reader.mid_frame?
+      return stream_error(stream_id, ErrorCode::REQUEST_INCOMPLETE) if receiving.phase == :headers
+      @receiving.delete(stream_id)
+      last = @events.last
+      if (last.is_a?(Event::Headers) || last.is_a?(Event::Data)) && last.stream_id == stream_id
+        @events[-1] = last.with(fin: true)
+      else
+        @events << Event::Data.new(stream_id:, data: "", fin: true)
+      end
+    end
+
+    # Stops `stream_id` both ways with `code` (RFC 9114 "Request
+    # Cancellation and Rejection").
+    private def stream_error(stream_id, code)
+      @receiving.delete(stream_id)
+      @decoder.cancel(stream_id)
+      @outputs.delete(stream_id)
+      @actions << Action::StopSending.new(stream_id:, error_code: code) << Action::Reset.new(stream_id:, error_code: code)
     end
 
     # QPACK's connection error, if `result` is one.
