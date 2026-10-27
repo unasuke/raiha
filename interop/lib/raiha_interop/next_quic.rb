@@ -25,6 +25,9 @@ module RaihaInterop
 
     def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
+    # The protocol offered and taken with ALPN.
+    def alpn = ALPN
+
     def udp_socket
       socket = UDPSocket.new
       socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, SOCKET_BUFFER)

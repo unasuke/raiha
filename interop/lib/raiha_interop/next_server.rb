@@ -28,7 +28,7 @@ module RaihaInterop
     end
 
     def run
-      @tls_config = TLS::Config.server(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+      @tls_config = TLS::Config.server(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
       @keyring = TLS::Keyring.server(config: @tls_config, identities: [identity])
       @keylog = keylog
       socket = udp_socket

@@ -73,7 +73,7 @@ module RaihaInterop
     private def connect(server_name, remote)
       chacha20 = @testcase == "chacha20"
       cipher_suites = chacha20 ? %i[TLS_CHACHA20_POLY1305_SHA256] : TLS::Config::DEFAULT_CIPHER_SUITES
-      tls_config = TLS::Config.client(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY, cipher_suites:, grease: !chacha20,
+      tls_config = TLS::Config.client(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, cipher_suites:, grease: !chacha20,
         trust_anchors: certificates_der(File.join(certs_dir, "ca.pem")))
       QUIC::Connection.client(config: QUIC::Config.new, tls_config:, keyring: TLS::Keyring.client(config: tls_config), server_name:,
         remote:, time: Time.now, now: mono, tracer: qlog(:client), keylog:)
@@ -104,6 +104,11 @@ module RaihaInterop
         body << chunk
       end
       @bodies.delete(stream_id)
+      save(path, body)
+    end
+
+    # Saves `body` under DOWNLOADS by the name of `path`.
+    private def save(path, body)
       dir = @env["DOWNLOADS"] || "/downloads"
       FileUtils.mkdir_p(dir)
       File.binwrite(File.join(dir, File.basename(path)), body)
