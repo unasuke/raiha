@@ -14,6 +14,10 @@ end
 group :test do
   gem "minitest"
   gem "simplecov", require: false
+  # A Fiber scheduler for the tests of the runtime of the next release, and
+  # Rack::Lint for its Rack adapter, which itself does not depend on rack.
+  gem "async"
+  gem "rack"
 end
 
 # Peer implementation for the quic gem interop test. It builds ngtcp2 +
