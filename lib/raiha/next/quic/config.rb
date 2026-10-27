@@ -8,7 +8,10 @@ module Raiha::Next::QUIC
   # random source and the tracer are not here, since they cannot be shared
   # between Ractors; the TLS settings are in the TLS layer's Config.
   #
-  # Times are Float seconds. max_datagram_frame_size nil (or 0) is no
+  # Times are Float seconds. initial_max_streams_uni is 100, as quic-go's
+  # and quiche's are: HTTP/3 needs three of the peer's streams going one
+  # way, and the peer's streams of reserved or unknown types are not to
+  # leave it short of them. max_datagram_frame_size nil (or 0) is no
   # DATAGRAM frames; RFC 9221 suggests 65535 to have them. max_udp_payload_size
   # is what this end can receive, and initial_max_datagram_size what it
   # sends before a path is probed: two things, however alike the names.
@@ -70,7 +73,7 @@ module Raiha::Next::QUIC
       max_idle_timeout: 30.0, max_udp_payload_size: 65_527,
       initial_max_data: 768 * 1024, initial_max_stream_data_bidi_local: 512 * 1024,
       initial_max_stream_data_bidi_remote: 512 * 1024, initial_max_stream_data_uni: 512 * 1024,
-      initial_max_streams_bidi: 100, initial_max_streams_uni: 3,
+      initial_max_streams_bidi: 100, initial_max_streams_uni: 100,
       max_ack_delay: 0.025, ack_delay_exponent: 3, active_connection_id_limit: 4, disable_active_migration: false,
       max_datagram_frame_size: nil,
       versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200,

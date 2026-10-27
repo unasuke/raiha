@@ -82,7 +82,7 @@ class RaihaNextQUICConnectionStreamViolationsTest < Minitest::Test
       Frame::StopSending.new(stream_id: 8, error_code: 0) => 0x05,
       reset_stream(14, 0) => 0x04,
     }.each do |frame, type|
-      server = server_with(initial_max_streams_bidi: 2)
+      server = server_with(initial_max_streams_bidi: 2, initial_max_streams_uni: 3)
       send_frames(server, stream(4, 0, "a"))
       refute server.closing?
       send_frames(server, frame)
