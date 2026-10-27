@@ -650,6 +650,10 @@ module Raiha::Next::QUIC
       when Wire::Frame::HandshakeDone
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
+      # Only a server sends NEW_TOKEN (RFC 9000 "NEW_TOKEN Frames"); a
+      # client keeps no token yet.
+      when Wire::Frame::NewToken
+        raise Violation.new("NEW_TOKEN from a client", frame_type: 0x07) if @role == :server
       when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
       when Wire::Frame::MaxData then @streams.receive_max_data(frame, now:)
       when Wire::Frame::MaxStreamData then @streams.receive_max_stream_data(frame, now:)

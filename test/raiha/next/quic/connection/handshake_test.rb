@@ -72,20 +72,23 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     assert client.handshake_confirmed?
   end
 
-  # A server does not take HANDSHAKE_DONE: PROTOCOL_VIOLATION.
-  def test_handshake_done_from_a_client
-    keylog = Keylog.new
-    client = client_connection(keylog:)
-    server = server_connection
-    first = client.transmits(now: 0.0).first.payload
-    server.receive(first, from: CLIENT, now: 0.0)
-    reply = server.transmits(now: 0.0)
-    server_id = QUIC::Wire::Packet.parse(reply.first.payload, dcid_length: 8).header.scid
-    reply.each { client.receive(_1.payload, from: SERVER, now: 0.0) }
-    handshake(client, server)
-    server.receive(client_one_rtt(keylog, dcid: server_id, payload: "\x1e".b), from: CLIENT, now: 1.0)
-    assert server.closing?
-    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, server.close_reason.code
+  # A server does not take HANDSHAKE_DONE or NEW_TOKEN, which only a
+  # server sends: PROTOCOL_VIOLATION.
+  def test_frames_only_a_server_sends_from_a_client
+    { "\x1e".b => 0x1e, QUIC::Wire::Frame.encode([QUIC::Wire::Frame::NewToken.new(token: "t".b)], ack_delay_exponent: 3) => 0x07 }.each do |payload, type|
+      keylog = Keylog.new
+      client = client_connection(keylog:)
+      server = server_connection
+      first = client.transmits(now: 0.0).first.payload
+      server.receive(first, from: CLIENT, now: 0.0)
+      reply = server.transmits(now: 0.0)
+      server_id = QUIC::Wire::Packet.parse(reply.first.payload, dcid_length: 8).header.scid
+      reply.each { client.receive(_1.payload, from: SERVER, now: 0.0) }
+      handshake(client, server)
+      server.receive(client_one_rtt(keylog, dcid: server_id, payload:), from: CLIENT, now: 1.0)
+      assert server.closing?
+      assert_equal [QUIC::ErrorCode::PROTOCOL_VIOLATION, type], [server.close_reason.code, server.close_reason.frame_type]
+    end
   end
 
   # Every datagram of a client with an Initial packet in it is 1200 bytes,
