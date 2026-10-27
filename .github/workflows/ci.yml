@@ -323,7 +323,7 @@ jobs:
       # its testcases, and its check fails on every trace (interop/README.md).
       - run: >-
           interop/run_interop_runner.sh -c raiha-next -s raiha-next
-          -t handshake,transfer,multiplexing,retry,chacha20,keyupdate
+          -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3
           --log-dir logs -j result.json -d
       # The runner skips a pair that is not compliant and fails nothing for a
       # testcase left unsupported: each has to have succeeded.

@@ -192,8 +192,10 @@ coverage.
 
 Built with `--build-arg RAIHA_IMPL=next`, the image runs the next
 release of raiha (`Raiha::Next::QUIC`) with hq-interop (HTTP/0.9 over
-QUIC) instead: `interop/lib/raiha_interop/next_runner.rb` hands the
-role to `NextServer` or `NextClient`.
+QUIC) instead, and HTTP/3 (`Raiha::Next::HTTP3`) for http3:
+`interop/lib/raiha_interop/next_runner.rb` hands the role to
+`NextServer` or `NextClient`, or to `NextHTTP3Server` or
+`NextHTTP3Client` for http3.
 
 ```sh
 docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
@@ -205,10 +207,10 @@ docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest 
 #   }
 PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
   interop/run_interop_runner.sh -c raiha-next -s raiha-next \
-  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate -d
+  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3 -d
 ```
 
-The CI job `next-interop-runner` runs these six. versionnegotiation is
+The CI job `next-interop-runner` runs these seven. versionnegotiation is
 implemented on both sides but left out, as the runner cannot run it
 yet: `testcases_quic.py` defines `TestCaseVersionNegotiation` but
 leaves it out of `TESTCASES_QUIC`, so `-t` does not take it, and its
@@ -226,6 +228,7 @@ issue on this.
 | `chacha20` | offers `TLS_CHACHA20_POLY1305_SHA256` alone, without GREASE | as for `handshake` |
 | `keyupdate` | updates keys after the first hundred packets, as it always does | as for `transfer` |
 | `versionnegotiation` | elicits a Version Negotiation packet with an Initial of draft-29, which Wireshark reads the long header of, unlike a version reserved for negotiation | answers a version it does not take with a Version Negotiation packet |
+| `http3` | a GET over HTTP/3 for each request, on a stream of its own | the file of each path under `WWW` with 200, over HTTP/3 |
 
 Everything else returns exit status 127.
 
