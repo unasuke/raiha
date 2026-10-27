@@ -75,6 +75,21 @@ class RaihaNextTLSProtocolViolationTest < Minitest::Test
     end
   end
 
+  # RFC 9001 "Key Update": a KeyUpdate is unexpected_message, which QUIC
+  # closes with as CRYPTO_ERROR, also when it is the handshake data left at
+  # the key change, after the client's Finished.
+  def test_a_key_update_left_at_the_key_change_under_quic
+    profile = TLS::Profile::QUIC
+    client = client(profile)
+    server = Pair.server(client.outputs.first.bytes, config: config(profile, :server), extensions: profile_extensions(profile))
+    server.outputs.grep(TLS::Output::Message).each { client.receive(_1.bytes, epoch: _1.epoch, now: NOW) }
+    finished = client.outputs.grep(TLS::Output::Message).find { _1.epoch == :handshake }
+    update = TLS::Handshake::KeyUpdate.new(request_update: TLS::Handshake::KeyUpdate::UPDATE_NOT_REQUESTED)
+    server.receive(finished.bytes + update.encode, epoch: :handshake, now: NOW)
+    assert_equal :unexpected_message, server.alert
+    refute_includes profile.protocol_violation_reasons, reason(server)
+  end
+
   # Over TCP the same failures that can happen there close with their
   # alert, and the TCP Profile maps none of them.
   def test_tcp_closes_with_the_alert

@@ -7,6 +7,7 @@ require_relative "../keylog"
 require_relative "../output"
 require_relative "../trace"
 require_relative "../transcript"
+require_relative "key_update"
 require_relative "reassembler"
 
 module Raiha::Next::TLS
@@ -165,14 +166,17 @@ module Raiha::Next::TLS
       # epoch with bytes of the old one still waiting means a handshake
       # message spans a key change: unexpected_message for RFC 9846, which
       # QUIC turns into PROTOCOL_VIOLATION (RFC 9001 "Sending and Receiving
-      # Handshake Messages"). Returns false then.
+      # Handshake Messages"). Returns false then. A KeyUpdate waiting there,
+      # where the Profile takes none, fails as one: RFC 9001 "Key Update"
+      # asks for unexpected_message for every KeyUpdate received.
       def change_epochs!(cipher_suite:, read: nil, write: nil, secrets: [])
         secrets.each do |epoch, direction, secret|
           @flight_secrets << Output::Secret.new(epoch:, direction:, secret:, cipher_suite:)
         end
         if read && read != @read_epoch
-          if @reassemblers[@read_epoch]&.pending?
-            fail!(:unexpected_message, :handshake_data_spans_key_change)
+          if (left = @reassemblers[@read_epoch])&.pending?
+            key_update = !@config.profile.allow_key_update_message && left.next_type == KeyUpdate::MSG_TYPE
+            fail!(:unexpected_message, key_update ? @side.unexpected_reason(@state, KeyUpdate::MSG_TYPE) : :handshake_data_spans_key_change)
             return false
           end
           @read_epoch = read
