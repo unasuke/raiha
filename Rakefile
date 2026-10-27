@@ -1,4 +1,5 @@
 require "bundler/gem_tasks"
+require "digest"
 require "rake/testtask"
 
 Rake::TestTask.new(:test) do |t|
@@ -81,6 +82,7 @@ namespace :test do
         h3i: { file: "test/interop/next/http3/h3i_test.rb", build: :h3i },
         quiche_http3_client: { file: "test/interop/next/http3/quiche_client_test.rb", build: :quiche },
         quiche_http3_server: { file: "test/interop/next/http3/quiche_server_test.rb", build: :quiche },
+        h3spec: { file: "test/interop/next/http3/h3spec_test.rb", build: :h3spec },
         # A gem in the bundle: nothing to build.
         tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
       }.freeze
@@ -166,6 +168,25 @@ namespace :interop do
         sh "git -C tmp/qifs fetch -q --depth 1 origin #{QIFS_COMMIT}"
         sh "git -C tmp/qifs checkout -q FETCH_HEAD"
       end
+    end
+
+    H3SPEC_VERSION = "v0.1.14"
+    # The binary of each platform the release has, and its SHA-256.
+    H3SPEC_BINARIES = {
+      "x86_64-linux" => ["h3spec-linux-x86_64", "7f2e3232715a3f6ff5212d408b2a3e74d6aa3ca06f96efca9a4e5dc55f3c6860"],
+      "arm64-darwin" => ["h3spec-mac-arm64", "1d76372c74b5fbc28256229e01135f7c878045b8b0a1dc578eaa866e10df140a"]
+    }.freeze
+
+    desc "Fetch h3spec (kazu-yamamoto/h3spec) of a fixed release into tmp/h3spec"
+    task :h3spec do
+      platform = "#{Gem::Platform.local.cpu}-#{Gem::Platform.local.os}"
+      asset, sha256 = H3SPEC_BINARIES.fetch(platform) { raise "h3spec #{H3SPEC_VERSION} has no binary for #{platform}" }
+      binary = "tmp/h3spec/h3spec"
+      next if File.exist?(binary) && Digest::SHA256.file(binary).hexdigest == sha256
+      mkdir_p "tmp/h3spec"
+      sh "curl", "-fsSL", "-o", binary, "https://github.com/kazu-yamamoto/h3spec/releases/download/#{H3SPEC_VERSION}/#{asset}"
+      raise "#{binary} is not the h3spec #{H3SPEC_VERSION} expected" unless Digest::SHA256.file(binary).hexdigest == sha256
+      chmod 0o755, binary
     end
 
     desc "Install the quic gem (github: unasuke/quic-ruby) into the interop bundle group"
