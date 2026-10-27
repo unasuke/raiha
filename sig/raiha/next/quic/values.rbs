@@ -30,6 +30,12 @@ module Raiha::Next::QUIC
                 | (Integer code, Integer? frame_type, String reason, bool application) -> instance
   end
 
+  class ClosedError < StandardError
+    attr_reader error: ConnectionError
+
+    def initialize: (ConnectionError error) -> void
+  end
+
   module ErrorCode
     NO_ERROR: Integer
     INTERNAL_ERROR: Integer

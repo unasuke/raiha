@@ -29,6 +29,19 @@ class RaihaNextQUICValuesTest < Minitest::Test
     refute_operator QUIC::Violation, :<, QUIC::Error::Base
   end
 
+  # A connection closed under a waiting call is no misuse, and the error it
+  # closed with comes along whole, as a Data cannot be an exception's cause.
+  def test_closed_errors
+    by_peer = QUIC::ConnectionError.new(code: QUIC::ErrorCode::PROTOCOL_VIOLATION, frame_type: 0x07, reason: "NEW_TOKEN from a client",
+      application: false)
+    closed = QUIC::ClosedError.new(by_peer)
+    assert_same by_peer, closed.error
+    assert_equal "closed with transport error 0xa: NEW_TOKEN from a client", closed.message
+    assert_equal "closed with application error 0x100",
+      QUIC::ClosedError.new(QUIC::ConnectionError.new(code: 0x100, frame_type: nil, reason: "", application: true)).message
+    refute_operator QUIC::ClosedError, :<, QUIC::Error::Base
+  end
+
   def test_values_are_shareable_once_frozen
     # Without certificates: an OpenSSL::X509::Certificate is never shareable.
     handshake = Ractor.make_shareable(TLS::Event::HandshakeComplete.new(server_name: "localhost", alpn: "h3",

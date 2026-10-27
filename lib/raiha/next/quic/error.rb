@@ -39,4 +39,18 @@ module Raiha::Next::QUIC
   # application error), and a reason phrase.
   class ConnectionError < Data.define(:code, :frame_type, :reason, :application)
   end
+
+  # The connection closed under a call that waited on it or came after, as
+  # an I/O layer that blocks for the application raises it; `error` is the
+  # ConnectionError it closed with. It is no misuse of the API: the peer
+  # or the network can close a connection at any time.
+  class ClosedError < StandardError
+    attr_reader :error
+
+    def initialize(error)
+      @error = error
+      kind = error.application ? "application" : "transport"
+      super(format("closed with %s error 0x%x%s", kind, error.code, error.reason.empty? ? "" : ": #{error.reason}"))
+    end
+  end
 end
