@@ -312,6 +312,8 @@ module Raiha::Next::Runtime
       def over!: () -> void
 
       def flush: () -> bool
+
+      private def open_locked: () -> File
     end
 
     attr_reader budget: Raiha::Next::QUIC::Qlog::Budget

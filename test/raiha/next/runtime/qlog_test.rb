@@ -83,6 +83,22 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
     end
   end
 
+  # A file another Qlog of the same directory is writing is not taken away,
+  # though the first counted it among the old ones.
+  def test_a_file_another_writer_holds_stays
+    Dir.mktmpdir do |dir|
+      other = Runtime::Qlog.new(dir)
+      _, live = other.trace(:server, "live")
+      live.write("x" * 100)
+      other.flush
+      qlog = Runtime::Qlog.new(dir, max_files: 1)
+      qlog.trace(:server, "mine")
+      assert File.exist?(live.path)
+      live.over!
+      other.flush
+    end
+  end
+
   # What a trace writes while its file is being written goes in the next
   # flush, and a file is closed once its connection is over.
   def test_pending_writes

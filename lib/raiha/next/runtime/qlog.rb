@@ -14,7 +14,10 @@ module Raiha::Next::Runtime
   # `max_files` (4,096) together, those of earlier runs included: before a
   # new trace begins, the oldest files not being written are taken away.
   # The directory is looked at once; after that, what the Qlog itself has
-  # closed is all it counts.
+  # closed is all it counts. A trace holds its file under an exclusive
+  # flock while it writes, and a file whose lock cannot be had, which
+  # another Qlog or process sharing the directory is writing, is neither
+  # taken away nor counted.
   class Qlog
     BUDGET = 1024 * 1024 * 1024
     MAX_FILES = 4096
@@ -55,11 +58,16 @@ module Raiha::Next::Runtime
         unless @data.empty?
           data = @data
           @data = "".b
-          (@file ||= File.open(@path, "ab")).write(data)
+          (@file ||= open_locked).write(data)
         end
         return false unless @over
         @file&.close
         true
+      end
+
+      # The file, held under an exclusive lock while the trace writes it.
+      private def open_locked
+        File.open(@path, "ab").tap { |file| file.flock(File::LOCK_EX | File::LOCK_NB) }
       end
     end
 
@@ -126,9 +134,12 @@ module Raiha::Next::Runtime
       end
     end
 
-    # Takes a file away; one that has gone already is gone.
+    # Takes a file away unless another writer holds its lock; one that has
+    # gone already is gone.
     private def delete(path)
-      File.delete(path)
+      File.open(path, "rb") do |file|
+        File.delete(path) if file.flock(File::LOCK_EX | File::LOCK_NB)
+      end
     rescue SystemCallError
       nil
     end
