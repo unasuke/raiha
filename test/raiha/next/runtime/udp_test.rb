@@ -87,6 +87,15 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     assert_empty receiver.receive
   end
 
+  # A peer that spoofs its source chooses where a response goes; one the OS
+  # will not send to is dropped, not raised.
+  def test_a_destination_the_os_refuses
+    sender = bind("::")
+    refute sender.send(transmit("x".b, ["::ffff:127.0.0.1", 0]))
+    refute sender.send(transmit("x".b, ["::ffff:255.255.255.255", 443]))
+    refute bind("127.0.0.1").send(transmit("x".b, ["127.0.0.1", 0], ecn: :ect0))
+  end
+
   # A datagram larger than UDP carries is dropped, not raised.
   def test_a_datagram_too_big
     receiver = bind("127.0.0.1")

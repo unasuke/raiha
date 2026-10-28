@@ -19,8 +19,13 @@ module Raiha::Next::Runtime
     # The low two bits of the traffic class, the ECN field (RFC 3168).
     ECN = { 0b00 => :not_ect, 0b01 => :ect1, 0b10 => :ect0, 0b11 => :ce }.freeze
     MARKS = { ect0: 0b10, ect1: 0b01 }.freeze
-    # A peer gone or a datagram too big for the path is no reason to stop.
-    DROPPED = [Errno::ECONNREFUSED, Errno::EMSGSIZE, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::EADDRNOTAVAIL].freeze
+    # A peer gone or a datagram too big for the path is no reason to stop,
+    # nor an address the OS will not send to, as port 0 (EINVAL) or a
+    # broadcast (EACCES): a peer that spoofs its source chooses where the
+    # responses of an Endpoint go. A firewall that refuses (EPERM) or a
+    # kernel short of buffers (ENOBUFS) loses one datagram.
+    DROPPED = [Errno::ECONNREFUSED, Errno::EMSGSIZE, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::EADDRNOTAVAIL,
+      Errno::EINVAL, Errno::EACCES, Errno::EPERM, Errno::ENOBUFS].freeze
 
     # A socket bound to `host` and `port` (0 for one the OS chooses).
     def self.bind(host, port)
