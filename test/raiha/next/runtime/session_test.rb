@@ -143,6 +143,41 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
     end
   end
 
+  # A stream the peer opens opens those of its type below it, which come
+  # first.
+  def test_a_stream_opens_those_below_it
+    connected do |client, server_owner|
+      streams = Array.new(3) { client.open_stream }
+      streams.last.write("third")
+      server = accepted(server_owner)
+      assert_equal [0, 4, 8], Array.new(3) { server.accept_stream.id }
+    end
+  end
+
+  # Streams opened and ended one after another leave nothing behind at
+  # either end, however many there were.
+  def test_streams_over_are_forgotten
+    connected do |client, server_owner|
+      Fiber.schedule do
+        accepted(server_owner).each_stream do |stream|
+          data = stream.read
+          stream << data
+          stream.close_write
+        end
+      end
+      200.times do |i|
+        stream = client.open_stream
+        stream << i.to_s
+        stream.close_write
+        assert_equal i.to_s, stream.read
+      end
+      server = accepted(server_owner)
+      sleep 0.01 until server.instance_variable_get(:@tracks).empty?
+      assert_empty client.instance_variable_get(:@tracks)
+      assert_equal [200, 0, 0, 0], server.instance_variable_get(:@peer_next)
+    end
+  end
+
   # A driver that stops wakes what waits on its sessions, with what failed
   # in it when something did.
   def test_the_driver_stops

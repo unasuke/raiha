@@ -102,6 +102,17 @@ module Raiha::Next::Runtime
   end
 
   class Session
+    class Track < Struct[Integer | bool | nil]
+      attr_accessor reset: Integer?
+      attr_accessor stop: Integer?
+      attr_accessor reading: bool
+      attr_accessor writing: bool
+
+      def self.new: (Integer? reset, Integer? stop, bool reading, bool writing) -> Track
+
+      def []=: (:reading | :writing part, bool value) -> bool
+    end
+
     attr_reader connection: Raiha::Next::QUIC::Connection
 
     @driver: Driver
@@ -109,10 +120,9 @@ module Raiha::Next::Runtime
     @lock: Thread::Mutex
     @changed: Thread::ConditionVariable
     @waiting: Integer
+    @tracks: Hash[Integer, Track]
     @incoming: Array[Integer]
-    @known: Hash[Integer, true]
-    @resets: Hash[Integer, Integer]
-    @stops: Hash[Integer, Integer]
+    @peer_next: Array[Integer]
     @aborted: StandardError?
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
@@ -139,7 +149,9 @@ module Raiha::Next::Runtime
 
     private def take: (Raiha::Next::QUIC::Event::t event) -> void
 
-    private def arrived: (Integer stream_id) -> Integer
+    private def arrived: (Integer stream_id) -> void
+
+    private def over: (Integer stream_id, :reading | :writing part) -> void
 
     private def local?: (Integer stream_id) -> bool
 

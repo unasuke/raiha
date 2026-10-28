@@ -22,8 +22,16 @@ module Raiha::Next::Runtime
   #
   # The events of the connection are taken before each wait is looked at
   # again, so that a stream the peer reset is not read to an end it never
-  # sent.
+  # sent. What the Session keeps of a stream goes once the application is
+  # done with both its parts, and of the streams the peer opened it keeps
+  # the next to come of each type, so a long connection keeps no more than
+  # the streams open on it.
   class Session
+    # What the application has yet to hear of a stream: how the peer reset
+    # its sending part or stopped ours, and whether each part is still in
+    # use.
+    Track = Struct.new(:reset, :stop, :reading, :writing)
+
     attr_reader :connection
 
     def initialize(connection, driver, role:)
@@ -33,19 +41,18 @@ module Raiha::Next::Runtime
       @lock = Thread::Mutex.new
       @changed = Thread::ConditionVariable.new
       @waiting = 0
-      # The streams the peer opened and the application has not taken.
+      @tracks = {} #: Hash[Integer, Track]
+      # The streams the peer opened and the application has not taken, and
+      # the index of the next to come of each type of stream ID.
       @incoming = [] #: Array[Integer]
-      @known = {} #: Hash[Integer, true]
-      # How the peer reset the sending part of a stream, or stopped ours.
-      @resets = {} #: Hash[Integer, Integer]
-      @stops = {} #: Hash[Integer, Integer]
+      @peer_next = [0, 0, 0, 0]
       @aborted = nil #: StandardError?
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.
     def open_stream(direction: :bidi)
       stream_id = wait { @connection.open_stream(direction:) }
-      @known[stream_id] = true
+      @tracks[stream_id] = Track.new(nil, nil, direction == :bidi, true)
       @driver.changed
       Stream.new(self, stream_id)
     end
@@ -90,25 +97,40 @@ module Raiha::Next::Runtime
       notify if @waiting.positive?
     end
 
-    # Up to `max_bytes` of `stream_id` once there are any, nil at its end.
+    # Up to `max_bytes` of `stream_id` once there are any, nil at its end,
+    # and after it.
     def read(stream_id, max_bytes)
+      track = @tracks[stream_id]
+      return nil unless track&.reading
       data = wait do
-        reset = @resets[stream_id] and raise StreamReset.new(stream_id, reset)
+        if (reset = track.reset)
+          over(stream_id, :reading)
+          raise StreamReset.new(stream_id, reset)
+        end
         @connection.stream_read(stream_id, max_bytes) || :end
       end
-      data unless data == :end
+      return data if data.is_a?(String)
+      over(stream_id, :reading)
+      nil
     end
 
     # Writes all of `data` to `stream_id`, waiting for room as it goes, and
     # ends it with `fin`.
     def write(stream_id, data, fin:)
+      track = @tracks[stream_id]
+      raise Raiha::Next::QUIC::Error::StreamError, "stream #{stream_id} has ended" unless track&.writing
       written = 0
       wait do
-        stopped = @stops[stream_id] and raise StreamReset.new(stream_id, stopped)
+        if (stopped = track.stop)
+          over(stream_id, :writing)
+          raise StreamReset.new(stream_id, stopped)
+        end
         written += @connection.stream_write(stream_id, data.byteslice(written..) || "".b, fin:)
         @driver.changed
         written if written == data.bytesize
       end
+      over(stream_id, :writing) if fin
+      written
     end
 
     private def take_events
@@ -118,18 +140,33 @@ module Raiha::Next::Runtime
     private def take(event)
       case event
       when Raiha::Next::QUIC::Event::StreamReadable then arrived(event.stream_id)
-      when Raiha::Next::QUIC::Event::StreamReset then @resets[arrived(event.stream_id)] = event.error_code
-      when Raiha::Next::QUIC::Event::StopSending then @stops[event.stream_id] = event.error_code
+      when Raiha::Next::QUIC::Event::StreamReset
+        arrived(event.stream_id)
+        @tracks[event.stream_id]&.reset = event.error_code
+      when Raiha::Next::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
       end
     end
 
-    # A stream the peer opened is known from its first event.
+    # A stream the peer opened comes to be known from its first event, and
+    # so do those of its type below it, which it opened with it (RFC 9000
+    # "Stream Concurrency").
     private def arrived(stream_id)
-      unless @known.key?(stream_id) || local?(stream_id)
-        @known[stream_id] = true
-        @incoming << stream_id
+      return if local?(stream_id)
+      type = stream_id & 0x3
+      while @peer_next.fetch(type) <= stream_id >> 2
+        opened = @peer_next.fetch(type) << 2 | type
+        @tracks[opened] = Track.new(nil, nil, true, opened.nobits?(0x2))
+        @incoming << opened
+        @peer_next[type] = @peer_next.fetch(type) + 1
       end
-      stream_id
+    end
+
+    # The application is done with a part of `stream_id`; once with both,
+    # the Session forgets it.
+    private def over(stream_id, part)
+      track = @tracks[stream_id] or return
+      track[part] = false
+      @tracks.delete(stream_id) unless track.reading || track.writing
     end
 
     private def local?(stream_id) = stream_id.anybits?(0x1) == (@role == :server)
