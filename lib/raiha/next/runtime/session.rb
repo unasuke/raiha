@@ -122,7 +122,7 @@ module Raiha::Next::Runtime
 
     # The next stream the peer opens; nil once the connection has closed.
     def accept_stream
-      Stream.new(self, wait { @incoming.shift })
+      Stream.new(self, wait(drain: true) { @incoming.shift })
     rescue Raiha::Next::QUIC::ClosedError
       nil
     end
@@ -174,7 +174,7 @@ module Raiha::Next::Runtime
     def read(stream_id, max_bytes)
       track = @tracks[stream_id]
       return nil unless track&.reading
-      data = wait do
+      data = wait(drain: true) do
         if (reset = track.reset)
           over(stream_id, :reading)
           raise StreamReset.new(stream_id, reset)
@@ -255,16 +255,20 @@ module Raiha::Next::Runtime
     # Calls the block until it gives something other than nil or "", waiting
     # for a change in between; what it gave, or nil once the clock is past
     # `deadline`. Once the connection has closed, raises QUIC::ClosedError, and
-    # once the driver has stopped, what `abort` was given.
-    private def wait(deadline: nil)
+    # once the driver has stopped, what `abort` was given; with `drain`, the
+    # block is called first all the same, so what came before the close is
+    # still given.
+    private def wait(deadline: nil, drain: false)
       @lock.synchronize do
         @waiting += 1
         loop do
-          aborted = @aborted and raise aborted
           take_events
-          reason = @connection.close_reason and raise Raiha::Next::QUIC::ClosedError.new(reason)
-          result = yield
+          result = yield if drain
           # T is within T | nil; steep loses it across the two signatures.
+          return result unless result.nil? || result == "" # steep:ignore
+          aborted = @aborted and raise aborted
+          reason = @connection.close_reason and raise Raiha::Next::QUIC::ClosedError.new(reason)
+          result = yield unless drain
           return result unless result.nil? || result == "" # steep:ignore
           left = deadline && deadline - Driver.clock
           return nil if left && left <= 0

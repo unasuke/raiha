@@ -163,6 +163,24 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
     end
   end
 
+  # What came before the peer closed is still read: a stream that arrived
+  # is still accepted, and its data still comes before its end.
+  def test_what_came_before_the_close
+    connected do |client, server_owner|
+      client.open_stream.write("hello")
+      server = accepted(server_owner)
+      Fiber.schedule do
+        (server.open_stream(direction: :uni) << "last words").close_write
+        server.wait_acknowledged(1)
+        server.close(error_code: 5)
+      end
+      sleep 0.01 until client.closed?
+      stream = client.accept_stream
+      assert_equal ["last words", nil], [stream.read(100), stream.read(100)]
+      assert_nil client.accept_stream
+    end
+  end
+
   # What waits when the peer closes raises the error it closed with, and
   # what comes after does too; the server's streams stop coming.
   def test_the_peer_closes

@@ -192,7 +192,7 @@ module Raiha::Next::Runtime
 
     private def notify: () -> void
 
-    private def wait: [T < Object] () { () -> T? } -> T
+    private def wait: [T < Object] (?drain: bool) { () -> T? } -> T
                     | [T < Object] (deadline: Float) { () -> T? } -> T?
   end
 
