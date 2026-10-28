@@ -265,6 +265,8 @@ module Raiha::Next::Runtime
 
     def local_address: () -> UDP::address?
 
+    def reconfigure: (tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring) -> nil
+
     def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
 
     def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void

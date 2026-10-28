@@ -112,6 +112,23 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # The connections to come take the TLS settings the server is given;
+  # one already taken keeps its own.
+  def test_reconfigure_for_the_connections_to_come
+    Sync do
+      serving(method(:echoes)) do |port, server|
+        connect(port) do |first|
+          other = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn: ["h3"], registry: REGISTRY)
+          server.reconfigure(tls_config: other, keyring: server_keyring(config: other))
+          error = assert_raises(Runtime::ConnectError) { connect(port) { flunk } }
+          assert_equal [QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:no_application_protocol))],
+            error.errors.map { |_, closed| closed.error.code }
+          assert_equal "ECHO:still", echo(first, "still")
+        end
+      end
+    end
+  end
+
   # A server asked to stop takes no new connection, tells each session it
   # is stopping, and returns from `run` once the sessions have ended their
   # connections.

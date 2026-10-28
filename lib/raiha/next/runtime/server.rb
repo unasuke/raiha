@@ -70,6 +70,16 @@ module Raiha::Next::Runtime
     # [address, port] the socket is bound to, once `run` has bound it.
     def local_address = @udp&.local_address
 
+    # Takes the connections to come with `tls_config` and `keyring`, a new
+    # certificate, say; those already taken keep theirs. The QUIC Config
+    # stays: its keys and the length of its connection IDs are what the
+    # Endpoint was made with.
+    def reconfigure(tls_config:, keyring:)
+      @tls_config = tls_config
+      @keyring = keyring
+      nil
+    end
+
     # Asks the server to stop, giving the sessions `timeout` seconds; the
     # first call is the one that counts. It takes no lock and writes to a
     # pipe without waiting, so a signal handler may call it.
