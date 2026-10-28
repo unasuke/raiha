@@ -24,8 +24,16 @@ module Raiha::Next::Runtime
   # the block a Session of the connection. There is no discovery of HTTP/3
   # (Alt-Svc, HTTPS records) and no fallback to TCP: the host and port are
   # taken to speak QUIC. The block's value is returned.
+  #
+  # Once the block is over, what the streams sent is given three PTOs to be
+  # acknowledged, so a response written last is not cut short, and the
+  # connection closes with the application's error 0. The closing period
+  # is not waited out: the CONNECTION_CLOSE goes, and the socket closes.
   class Client
     CONNECT_TIMEOUT = 5.0
+    # The peer's max_ack_delay when it says none (RFC 9000 "Transport
+    # Parameter Definitions"), for the PTO of a connection.
+    MAX_ACK_DELAY = 0.025
 
     def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, &)
       new(config:, tls_config:, keyring:, connect_timeout:).connect(host, port, server_name:, &)
@@ -60,7 +68,7 @@ module Raiha::Next::Runtime
         begin
           return yield session
         ensure
-          driver.stop
+          finish(driver, session)
         end
       end
       raise ConnectError.new(host, port, errors)
@@ -85,6 +93,21 @@ module Raiha::Next::Runtime
 
     def stopped(failure)
       @session&.abort(failure)
+    end
+
+    # Closes the connection once what was sent is acknowledged or three PTOs
+    # have gone, and stops the driver.
+    private def finish(driver, session)
+      unless session.closed?
+        stats = session.connection.stats
+        session.wait_acknowledged(3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY))
+        session.close
+        driver.flush
+      end
+    rescue Raiha::Next::QUIC::ClosedError
+      nil
+    ensure
+      driver.stop
     end
 
     # [address, port] of `host` for UDP, each once.

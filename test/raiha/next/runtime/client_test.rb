@@ -55,6 +55,30 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     end
   end
 
+  # What the block wrote last is acknowledged before the connection closes,
+  # and the connection closes with the application's error 0, not by
+  # running out of idle time.
+  def test_the_connection_closes_once_what_was_sent_is_acknowledged
+    payload = Random.new(2).bytes(500_000)
+    Sync do
+      server = server_owner
+      received = nil
+      Fiber.schedule { received = accepted(server).accept_stream.read }
+      Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", **options) do |session|
+        stream = session.open_stream
+        stream << payload
+        stream.close_write
+      end
+      sleep 0.01 until received
+      assert_equal payload, received
+      connection = accepted(server).connection
+      sleep 0.01 until connection.close_reason
+      assert_equal [0, true], [connection.close_reason.code, connection.close_reason.application]
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   def test_the_next_address_after_one_that_does_not_answer
     Sync do
       server = server_owner

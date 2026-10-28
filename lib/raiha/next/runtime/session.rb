@@ -57,6 +57,13 @@ module Raiha::Next::Runtime
       Stream.new(self, stream_id)
     end
 
+    # Waits, for `seconds` at most, until all the streams have sent has been
+    # acknowledged; whether it has. A connection closed meanwhile raises
+    # QUIC::ClosedError.
+    def wait_acknowledged(seconds)
+      wait(deadline: Driver.clock + seconds) { @connection.stats.send_buffer_bytes.zero? || nil } || false
+    end
+
     # Waits until the handshake has completed.
     def wait_handshake
       wait { @connection.handshake_complete? || nil }
@@ -180,10 +187,10 @@ module Raiha::Next::Runtime
     private def notify = @lock.synchronize { @changed.broadcast }
 
     # Calls the block until it gives something other than nil or "", waiting
-    # for a change in between; what it gave. Once the connection has closed,
-    # raises QUIC::ClosedError, and once the driver has stopped, what
-    # `abort` was given.
-    private def wait
+    # for a change in between; what it gave, or nil once the clock is past
+    # `deadline`. Once the connection has closed, raises QUIC::ClosedError, and
+    # once the driver has stopped, what `abort` was given.
+    private def wait(deadline: nil)
       @lock.synchronize do
         @waiting += 1
         loop do
@@ -191,8 +198,11 @@ module Raiha::Next::Runtime
           take_events
           reason = @connection.close_reason and raise Raiha::Next::QUIC::ClosedError.new(reason)
           result = yield
-          return result unless result.nil? || result == ""
-          @changed.wait(@lock)
+          # T is within T | nil; steep loses it across the two signatures.
+          return result unless result.nil? || result == "" # steep:ignore
+          left = deadline && deadline - Driver.clock
+          return nil if left && left <= 0
+          @changed.wait(@lock, left)
         end
       ensure
         @waiting -= 1

@@ -39,6 +39,8 @@ module Raiha::Next::Runtime
 
     def stopped?: () -> bool
 
+    def flush: () -> void
+
     def stop: () -> void
 
     private def read: () -> void
@@ -129,6 +131,8 @@ module Raiha::Next::Runtime
 
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
+    def wait_acknowledged: (Float | Integer seconds) -> bool
+
     def wait_handshake: () -> nil
 
     def accept_stream: () -> Stream?
@@ -160,6 +164,7 @@ module Raiha::Next::Runtime
     private def notify: () -> void
 
     private def wait: [T < Object] () { () -> T? } -> T
+                    | [T < Object] (deadline: Float) { () -> T? } -> T?
   end
 
   class Stream
@@ -190,6 +195,7 @@ module Raiha::Next::Runtime
 
   class Client
     CONNECT_TIMEOUT: Float
+    MAX_ACK_DELAY: Float
 
     @config: Raiha::Next::QUIC::Config
     @tls_config: Raiha::Next::TLS::Config
@@ -213,6 +219,8 @@ module Raiha::Next::Runtime
     def next_timeout: () -> Float?
 
     def stopped: (StandardError? failure) -> void
+
+    private def finish: (Driver driver, Session session) -> void
 
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 

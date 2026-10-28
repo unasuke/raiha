@@ -49,6 +49,14 @@ module Raiha::Next::Runtime
 
     def stopped? = @stopped
 
+    # Sends what there is to send now from the calling fiber, as the last
+    # datagrams of a connection closed before the driver stops.
+    def flush
+      transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
+      @endpoint.each_transmit(now: Driver.clock) { |transmit| transmits << transmit }
+      transmits.each { |transmit| @udp.send(transmit) }
+    end
+
     # Stops the reader and the runner and closes the socket; the owner is
     # told.
     def stop
