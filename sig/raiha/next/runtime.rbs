@@ -211,12 +211,15 @@ module Raiha::Next::Runtime
     @connect_timeout: Float | Integer
     @session: Session?
     @deadline: Float?
+    @qlog: Qlog?
+    @trace: Qlog::Pending?
 
     def self.connect: [T] (String host, Integer port, config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config,
-                           keyring: Raiha::Next::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer) { (Session session) -> T } -> T
+                           keyring: Raiha::Next::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer,
+                           ?qlog_dir: String?) { (Session session) -> T } -> T
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                     ?connect_timeout: Float | Integer) -> void
+                     ?connect_timeout: Float | Integer, ?qlog_dir: String?) -> void
 
     def connect: [T] (String host, Integer port, ?server_name: String) { (Session session) -> T } -> T
 
@@ -247,6 +250,8 @@ module Raiha::Next::Runtime
     @host: String
     @port: Integer
     @max_connections: Integer
+    @qlog: Qlog?
+    @traces: Hash[Session, Qlog::Pending]
     @sessions: Array[Session]
     @started: Hash[Session, true]
     @handler: (^(Session) -> void)?
@@ -259,7 +264,7 @@ module Raiha::Next::Runtime
     @wake: IO?
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                     ?host: String, ?port: Integer, ?max_connections: Integer) -> void
+                     ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?) -> void
 
     def run: () { (Session session) -> void } -> nil
 
@@ -284,5 +289,40 @@ module Raiha::Next::Runtime
     private def wake_on: (IO reader, Driver driver) -> void
 
     private def stopping: (Float now) -> void
+  end
+end
+
+module Raiha::Next::Runtime
+  class Qlog
+    BUDGET: Integer
+
+    class Pending
+      attr_reader path: String
+
+      @data: String
+      @file: File?
+      @over: bool
+
+      def initialize: (String path) -> void
+
+      def write: (*String strings) -> Integer
+
+      def over!: () -> void
+
+      def flush: () -> bool
+    end
+
+    attr_reader budget: Raiha::Next::QUIC::Qlog::Budget
+
+    @dir: String
+    @pending: Array[Pending]
+
+    def self.budget: () -> Raiha::Next::QUIC::Qlog::Budget
+
+    def initialize: (String dir, ?budget: Raiha::Next::QUIC::Qlog::Budget) -> void
+
+    def trace: (:client | :server vantage_point, String name) -> [Raiha::Next::QUIC::Qlog::Tracer, Pending]
+
+    def flush: () -> nil
   end
 end

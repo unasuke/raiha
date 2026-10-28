@@ -29,20 +29,25 @@ module Raiha::Next::Runtime
   # acknowledged, so a response written last is not cut short, and the
   # connection closes with the application's error 0. The closing period
   # is not waited out: the CONNECTION_CLOSE goes, and the socket closes.
+  #
+  # With `qlog_dir`, each connection tried has a qlog there, named by the
+  # time it began.
   class Client
     CONNECT_TIMEOUT = 5.0
 
-    def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, &)
-      new(config:, tls_config:, keyring:, connect_timeout:).connect(host, port, server_name:, &)
+    def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil, &)
+      new(config:, tls_config:, keyring:, connect_timeout:, qlog_dir:).connect(host, port, server_name:, &)
     end
 
-    def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT)
+    def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil)
       @config = config
       @tls_config = tls_config
       @keyring = keyring
       @connect_timeout = connect_timeout
       @session = nil #: Session?
       @deadline = nil #: Float?
+      @qlog = qlog_dir && Qlog.new(qlog_dir)
+      @trace = nil #: Qlog::Pending?
     end
 
     def connect(host, port, server_name: host)
@@ -78,6 +83,7 @@ module Raiha::Next::Runtime
     def turn(now)
       session = @session or return
       session.turn
+      @qlog&.flush
       deadline = @deadline or return
       return @deadline = nil if session.connection.handshake_complete?
       return if now < deadline
@@ -90,6 +96,8 @@ module Raiha::Next::Runtime
 
     def stopped(failure)
       @session&.abort(failure)
+      @trace&.over!
+      @qlog&.flush
     end
 
     # Closes the connection once what was sent is acknowledged or three PTOs
@@ -118,7 +126,8 @@ module Raiha::Next::Runtime
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
-      connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock)
+      tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"))
+      connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:)
       session = @session = Session.new(connection, driver, role: :client)
       @deadline = Driver.clock + @connect_timeout
       driver.start

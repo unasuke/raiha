@@ -21,17 +21,23 @@ module Raiha::Next::Runtime
   # sessions are given `timeout` seconds to end their connections and wait
   # out the closing period; those left are closed with the application's
   # `error_code`. `run` returns then.
+  #
+  # With `qlog_dir`, each connection has a qlog there, named by the
+  # Destination Connection ID the client first chose.
   class Server
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
 
-    def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS)
+    def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil)
       @config = config
       @tls_config = tls_config
       @keyring = keyring
       @host = host
       @port = port
       @max_connections = max_connections
+      @qlog = qlog_dir && Qlog.new(qlog_dir)
+      @traces = {} #: Hash[Session, Qlog::Pending]
+      @traces.compare_by_identity
       # The sessions of the connections taken, and those given to the block.
       @sessions = [] #: Array[Session]
       @started = {} #: Hash[Session, true]
@@ -102,8 +108,11 @@ module Raiha::Next::Runtime
         return endpoint.retry(route.handle, now:) if !route.address_validated && @sessions.size * 2 >= @max_connections
         hello = endpoint.admit(route.handle, now:) and route(hello, now)
       when Raiha::Next::QUIC::Route::ClientHello
-        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:)
-        @sessions << Session.new(connection, driver!, role: :server)
+        tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"))
+        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:)
+        session = Session.new(connection, driver!, role: :server)
+        @sessions << session
+        @traces[session] = pending if pending
       end
     end
 
@@ -115,15 +124,21 @@ module Raiha::Next::Runtime
         start(session) if !@stop && !@started.key?(session) && session.connection.handshake_complete?
       end
       over = @sessions.select { |session| session.connection.closed? }
-      over.each { |session| @started.delete(session) }
+      over.each do |session|
+        @started.delete(session)
+        @traces.delete(session)&.over!
+      end
       @sessions -= over
       stopping(now) if @stop
+      @qlog&.flush
     end
 
     def next_timeout = @stop_deadline
 
     def stopped(failure)
       @sessions.each { |session| session.abort(failure) }
+      @traces.each_value(&:over!)
+      @qlog&.flush
       @lock.synchronize { @stopped.broadcast }
     end
 
