@@ -92,3 +92,74 @@ module Raiha::Next::Runtime
     private def ecn: (Array[Socket::AncillaryData] controls) -> ecn
   end
 end
+
+module Raiha::Next::Runtime
+  class StreamReset < StandardError
+    attr_reader stream_id: Integer
+    attr_reader error_code: Integer
+
+    def initialize: (Integer stream_id, Integer error_code) -> void
+  end
+
+  class Session
+    attr_reader connection: Raiha::Next::QUIC::Connection
+
+    @driver: Driver
+    @role: :client | :server
+    @lock: Thread::Mutex
+    @changed: Thread::ConditionVariable
+    @waiting: Integer
+    @incoming: Array[Integer]
+    @known: Hash[Integer, true]
+    @resets: Hash[Integer, Integer]
+    @stops: Hash[Integer, Integer]
+
+    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
+
+    def open_stream: (?direction: :bidi | :uni) -> Stream
+
+    def accept_stream: () -> Stream?
+
+    def each_stream: () { (Stream stream) -> void } -> void
+
+    def close: (?error_code: Integer, ?reason: String) -> void
+
+    def closed?: () -> bool
+
+    def turn: () -> void
+
+    def read: (Integer stream_id, Integer max_bytes) -> String?
+
+    def write: (Integer stream_id, String data, fin: bool) -> Integer
+
+    private def take_events: () -> void
+
+    private def take: (Raiha::Next::QUIC::Event::t event) -> void
+
+    private def arrived: (Integer stream_id) -> Integer
+
+    private def local?: (Integer stream_id) -> bool
+
+    private def notify: () -> void
+
+    private def wait: [T < Object] () { () -> T? } -> T
+  end
+
+  class Stream
+    PIECE: Integer
+
+    attr_reader id: Integer
+
+    @session: Session
+
+    def initialize: (Session session, Integer id) -> void
+
+    def read: (?Integer? length) -> String?
+
+    def write: (String data) -> Integer
+
+    def <<: (String data) -> self
+
+    def close_write: () -> nil
+  end
+end
