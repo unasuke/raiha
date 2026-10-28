@@ -31,9 +31,6 @@ module Raiha::Next::Runtime
   # is not waited out: the CONNECTION_CLOSE goes, and the socket closes.
   class Client
     CONNECT_TIMEOUT = 5.0
-    # The peer's max_ack_delay when it says none (RFC 9000 "Transport
-    # Parameter Definitions"), for the PTO of a connection.
-    MAX_ACK_DELAY = 0.025
 
     def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, &)
       new(config:, tls_config:, keyring:, connect_timeout:).connect(host, port, server_name:, &)
@@ -99,9 +96,7 @@ module Raiha::Next::Runtime
     # have gone, and stops the driver.
     private def finish(driver, session)
       unless session.closed?
-        stats = session.connection.stats
-        session.wait_acknowledged(3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY))
-        session.close
+        session.close_when_acknowledged
         driver.flush
       end
     rescue Raiha::Next::QUIC::ClosedError

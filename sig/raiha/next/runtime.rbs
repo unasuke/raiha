@@ -115,6 +115,8 @@ module Raiha::Next::Runtime
       def []=: (:reading | :writing part, bool value) -> bool
     end
 
+    MAX_ACK_DELAY: Float
+
     attr_reader connection: Raiha::Next::QUIC::Connection
 
     @driver: Driver
@@ -132,6 +134,8 @@ module Raiha::Next::Runtime
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
     def wait_acknowledged: (Float | Integer seconds) -> bool
+
+    def close_when_acknowledged: (?error_code: Integer) -> void
 
     def wait_handshake: () -> nil
 
@@ -195,7 +199,6 @@ module Raiha::Next::Runtime
 
   class Client
     CONNECT_TIMEOUT: Float
-    MAX_ACK_DELAY: Float
 
     @config: Raiha::Next::QUIC::Config
     @tls_config: Raiha::Next::TLS::Config
@@ -225,5 +228,46 @@ module Raiha::Next::Runtime
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 
     private def attempt: (UDP::address address, String server_name) -> [Driver, Session]
+  end
+end
+
+module Raiha::Next::Runtime
+  class Server
+    MAX_CONNECTIONS: Integer
+
+    @config: Raiha::Next::QUIC::Config
+    @tls_config: Raiha::Next::TLS::Config
+    @keyring: Raiha::Next::TLS::Keyring
+    @host: String
+    @port: Integer
+    @max_connections: Integer
+    @sessions: Array[Session]
+    @started: Hash[Session, true]
+    @handler: (^(Session) -> void)?
+    @driver: Driver?
+    @udp: UDP?
+    @lock: Thread::Mutex
+    @stopped: Thread::ConditionVariable
+
+    def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+                     ?host: String, ?port: Integer, ?max_connections: Integer) -> void
+
+    def run: () { (Session session) -> void } -> nil
+
+    def local_address: () -> UDP::address?
+
+    def stop: () -> void
+
+    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void
+
+    def turn: (Float now) -> void
+
+    def next_timeout: () -> nil
+
+    def stopped: (StandardError? failure) -> void
+
+    private def driver!: () -> Driver
+
+    private def start: (Session session) -> void
   end
 end

@@ -1,0 +1,103 @@
+require "raiha/next/test_helper"
+require "raiha/next/support/runtime_owner"
+require "async"
+
+# The server of the runtime against clients of the runtime on the loopback
+# interface: a Session for the block in a fiber of each connection, the
+# connection closed when the block is over or raises, and no more
+# connections than it takes at a time.
+class RaihaNextRuntimeServerTest < Minitest::Test
+  include NextRuntimeOwner
+
+  def connect(port, &)
+    tls = client_config
+    Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
+      server_name: "localhost", &)
+  end
+
+  # What a stream of `session` answers to `data`.
+  def echo(session, data)
+    stream = session.open_stream
+    stream << data
+    stream.close_write
+    stream.read
+  end
+
+  def echoes(session) = session.each_stream { |stream| (stream << "ECHO:" << stream.read).close_write }
+
+  # A server of the runtime on a free port running `handler` for each
+  # session, for the block, and stopped after.
+  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS)
+    tls = server_config
+    server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
+      port: 0, max_connections:)
+    running = Fiber.schedule { server.run(&handler) }
+    sleep 0.01 until server.local_address
+    yield server.local_address.fetch(1)
+  ensure
+    server&.stop
+    sleep 0.01 while running&.alive?
+  end
+
+  def test_each_session_in_a_fiber_of_its_own
+    Sync do
+      serving(method(:echoes)) do |port|
+        replies = {}
+        clients = Array.new(3) { |i| Fiber.schedule { replies[i] = connect(port) { |session| echo(session, i.to_s) } } }
+        sleep 0.01 while clients.any?(&:alive?)
+        assert_equal({ 0 => "ECHO:0", 1 => "ECHO:1", 2 => "ECHO:2" }, replies)
+      end
+    end
+  end
+
+  # The block is over: what it sent comes whole, and the connection closes
+  # with the application's error 0.
+  def test_a_block_that_returns_closes_its_connection
+    Sync do
+      serving(->(session) { (session.open_stream(direction: :uni) << "bye").close_write }) do |port|
+        connect(port) do |session|
+          assert_equal "bye", session.accept_stream.read
+          sleep 0.01 until session.closed?
+          assert_equal [0, true], session.connection.close_reason.then { [_1.code, _1.application] }
+        end
+      end
+    end
+  end
+
+  # The block raises: its connection closes with INTERNAL_ERROR, and the
+  # server goes on serving.
+  def test_a_block_that_raises_closes_only_its_connection
+    level = Console.logger.level
+    Console.logger.off!
+    Sync do
+      calls = 0
+      serving(->(session) { (calls += 1) == 1 ? raise("a block that fails") : echoes(session) }) do |port|
+        connect(port) do |session|
+          sleep 0.01 until session.closed?
+          assert_equal [QUIC::ErrorCode::INTERNAL_ERROR, false], session.connection.close_reason.then { [_1.code, _1.application] }
+        end
+        assert_equal "ECHO:again", connect(port) { |session| echo(session, "again") }
+      end
+    end
+  ensure
+    Console.logger.level = level
+  end
+
+  def test_no_more_connections_than_it_takes
+    Sync do
+      serving(method(:echoes), max_connections: 1) do |port|
+        connect(port) do |first|
+          error = assert_raises(Runtime::ConnectError) { connect(port) { flunk } }
+          assert_equal [QUIC::ErrorCode::CONNECTION_REFUSED], error.errors.map { |_, closed| closed.error.code }
+          assert_equal "ECHO:still", echo(first, "still")
+        end
+      end
+    end
+  end
+
+  def test_a_scheduler_is_needed
+    tls = server_config
+    server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
+    assert_raises(Runtime::Error::Usage) { server.run { flunk } }
+  end
+end

@@ -31,6 +31,9 @@ module Raiha::Next::Runtime
     # its sending part or stopped ours, and whether each part is still in
     # use.
     Track = Struct.new(:reset, :stop, :reading, :writing)
+    # The peer's max_ack_delay when it says none (RFC 9000 "Transport
+    # Parameter Definitions"), for a PTO of the connection.
+    MAX_ACK_DELAY = 0.025
 
     attr_reader :connection
 
@@ -62,6 +65,16 @@ module Raiha::Next::Runtime
     # QUIC::ClosedError.
     def wait_acknowledged(seconds)
       wait(deadline: Driver.clock + seconds) { @connection.stats.send_buffer_bytes.zero? || nil } || false
+    end
+
+    # Closes the connection with the application's `error_code` once what the
+    # streams sent is acknowledged, or three PTOs have gone, unless it has
+    # closed already.
+    def close_when_acknowledged(error_code: 0)
+      return if closed?
+      stats = @connection.stats
+      wait_acknowledged(3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY))
+      close(error_code:)
     end
 
     # Waits until the handshake has completed.
