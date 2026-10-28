@@ -57,6 +57,12 @@ module Raiha::Next::Runtime
       Stream.new(self, stream_id)
     end
 
+    # Waits until the handshake has completed.
+    def wait_handshake
+      wait { @connection.handshake_complete? || nil }
+      nil
+    end
+
     # The next stream the peer opens; nil once the connection has closed.
     def accept_stream
       Stream.new(self, wait { @incoming.shift })

@@ -129,6 +129,8 @@ module Raiha::Next::Runtime
 
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
+    def wait_handshake: () -> nil
+
     def accept_stream: () -> Stream?
 
     def each_stream: () { (Stream stream) -> void } -> void
@@ -176,5 +178,44 @@ module Raiha::Next::Runtime
     def <<: (String data) -> self
 
     def close_write: () -> nil
+  end
+end
+
+module Raiha::Next::Runtime
+  class ConnectError < StandardError
+    attr_reader errors: Array[[UDP::address | String, StandardError]]
+
+    def initialize: (String host, Integer port, Array[[UDP::address | String, StandardError]] errors) -> void
+  end
+
+  class Client
+    CONNECT_TIMEOUT: Float
+
+    @config: Raiha::Next::QUIC::Config
+    @tls_config: Raiha::Next::TLS::Config
+    @keyring: Raiha::Next::TLS::Keyring
+    @connect_timeout: Float | Integer
+    @session: Session?
+    @deadline: Float?
+
+    def self.connect: [T] (String host, Integer port, config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config,
+                           keyring: Raiha::Next::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer) { (Session session) -> T } -> T
+
+    def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+                     ?connect_timeout: Float | Integer) -> void
+
+    def connect: [T] (String host, Integer port, ?server_name: String) { (Session session) -> T } -> T
+
+    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> nil
+
+    def turn: (Float now) -> void
+
+    def next_timeout: () -> Float?
+
+    def stopped: (StandardError? failure) -> void
+
+    private def resolve: (String host, Integer port) -> Array[UDP::address]
+
+    private def attempt: (UDP::address address, String server_name) -> [Driver, Session]
   end
 end
