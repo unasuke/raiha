@@ -1,0 +1,9 @@
+# Socket::AncillaryData.int takes the int it carries as its last argument,
+# which the bundled declaration types as a Symbol like the other three.
+# Added to it with `| ...`.
+class Socket
+  class AncillaryData
+    def self.int: (Symbol family, Symbol level, Symbol type, Integer value) -> instance
+                | ...
+  end
+end

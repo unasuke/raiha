@@ -11,6 +11,7 @@ target :next do
   check "lib/raiha/next"
   library "ipaddr"
   library "securerandom"
+  library "socket"
 end
 
 target :lib do

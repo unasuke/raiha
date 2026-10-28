@@ -1,2 +1,37 @@
 module Raiha::Next::Runtime
+  class UDP
+    type address = [String, Integer]
+
+    RECEIVE_BATCH: Integer
+    MAX_DATAGRAM: Integer
+    BUFFER: Integer
+    ECN: Hash[Integer, Symbol]
+    MARKS: Hash[Symbol, Integer]
+    DROPPED: Array[singleton(SystemCallError)]
+
+    @socket: UDPSocket
+    @family: Integer
+
+    def self.bind: (String host, Integer port) -> UDP
+
+    def initialize: (UDPSocket socket) -> void
+
+    def local_address: () -> address
+
+    def send: (Raiha::Next::QUIC::Transmit transmit) -> bool
+
+    def receive: () -> Array[[String, address, Symbol]]
+
+    def wait_readable: (?(Float | Integer)? timeout) -> bool
+
+    def close: () -> void
+
+    def closed?: () -> bool
+
+    private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]
+
+    private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?
+
+    private def ecn: (Array[Socket::AncillaryData] controls) -> Symbol
+  end
 end
