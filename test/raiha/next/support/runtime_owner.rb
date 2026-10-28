@@ -16,7 +16,7 @@ module NextRuntimeOwner
   class Owner
     QUIC = Raiha::Next::QUIC
 
-    attr_reader :sessions
+    attr_reader :sessions, :turns
     attr_accessor :driver
 
     def initialize(endpoint, role, tls_config: nil, keyring: nil)
@@ -25,6 +25,7 @@ module NextRuntimeOwner
       @tls_config = tls_config
       @keyring = keyring
       @sessions = []
+      @turns = 0
     end
 
     def add(connection) = @sessions << Runtime::Session.new(connection, driver, role: @role)
@@ -39,7 +40,10 @@ module NextRuntimeOwner
       end
     end
 
-    def turn(_now) = @sessions.each(&:turn)
+    def turn(_now)
+      @turns += 1
+      @sessions.each(&:turn)
+    end
 
     def next_timeout = nil
 

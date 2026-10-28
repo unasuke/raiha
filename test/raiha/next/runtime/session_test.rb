@@ -44,6 +44,22 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
     end
   end
 
+  # A write the peer's flow control holds back waits for room, and the
+  # driver goes round only as datagrams and timers come, not for each look
+  # the waiting write takes.
+  def test_a_write_held_back_does_not_spin
+    connected(server: QUIC::Config.new(initial_max_stream_data_bidi_remote: 1_000)) do |client, _server_owner|
+      stream = client.open_stream
+      Fiber.schedule { stream.write("x" * 100_000) }
+      driver = client.instance_variable_get(:@driver)
+      owner = driver.instance_variable_get(:@owner)
+      sleep 0.1
+      before = owner.turns
+      sleep 0.3
+      assert_operator owner.turns - before, :<, 30
+    end
+  end
+
   def test_a_stream_the_peer_resets
     connected do |client, server_owner|
       stream = client.open_stream

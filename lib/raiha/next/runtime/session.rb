@@ -197,8 +197,11 @@ module Raiha::Next::Runtime
           over(stream_id, :writing)
           raise StreamReset.new(stream_id, stopped)
         end
-        written += @connection.stream_write(stream_id, data.byteslice(written..) || "".b, fin:)
-        @driver.changed
+        taken = @connection.stream_write(stream_id, data.byteslice(written..) || "".b, fin:)
+        written += taken
+        # A write that took nothing has nothing to send; the runner woken
+        # for it would wake this fiber again, and round they would go.
+        @driver.changed if taken.positive? || data.empty?
         written if written == data.bytesize
       end
       over(stream_id, :writing) if fin
