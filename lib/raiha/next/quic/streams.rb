@@ -393,6 +393,9 @@ module Raiha::Next::QUIC
       type = Wire::Frame::Stream::TYPES.fetch(0)
       receiver = receiver_for(frame.stream_id, frame_type: type, now:) or return
       length = frame.data.bytesize
+      # Before the end is admitted: a FIN with no data makes the stream
+      # readable by the end alone.
+      readable = receiver.readable?
       grown = receiver.admit(frame.offset + length, fin: frame.fin, frame_type: type)
       @window.receive(@window.received + grown, frame_type: type)
       if receiver.abandoned?
@@ -404,7 +407,6 @@ module Raiha::Next::QUIC
         raise Violation.new("data received in more than #{@max_gaps} pieces", code: ErrorCode::INTERNAL_ERROR, frame_type: type)
       end
       @gaps = gaps
-      readable = receiver.readable?
       receiver.insert(frame.offset, frame.data)
       @events << Event::StreamReadable.new(stream_id: frame.stream_id) if !readable && receiver.readable?
     end

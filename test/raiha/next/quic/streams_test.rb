@@ -153,6 +153,21 @@ class RaihaNextQUICStreamsTest < Minitest::Test
     assert_equal [100, 100], [s.window.received, s.window.consumed]
   end
 
+  # A FIN with no data tells the application as data does: of a stream
+  # the peer opens with it, and of the end of one read to its last byte.
+  def test_a_fin_alone_makes_a_stream_readable
+    events = []
+    s = streams(events:)
+    s.receive_stream(stream(1, 0, ""), now: 0.0)
+    s.receive_stream(stream(1, 0, "", fin: true), now: 0.0)
+    s.receive_stream(stream(5, 0, "abc"), now: 0.0)
+    assert_equal "abc", s.read(5, 10)
+    s.receive_stream(stream(5, 3, "", fin: true), now: 0.0)
+    assert_equal [1, 5, 5], events.map(&:stream_id)
+    assert_nil s.read(1, 10)
+    assert_nil s.read(5, 10)
+  end
+
   # A lost RESET_STREAM goes again until acknowledged; a lost
   # STOP_SENDING, unless the peer has reset the stream since.
   def test_lost_resets_and_stops
