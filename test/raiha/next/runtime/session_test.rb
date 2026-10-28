@@ -1,6 +1,5 @@
 require "raiha/next/test_helper"
-require "raiha/next/runtime"
-require "raiha/next/support/quic_tls"
+require "raiha/next/support/runtime_owner"
 require "async"
 
 # A Session of the runtime between a client and a server on the loopback
@@ -8,72 +7,22 @@ require "async"
 # peer's flow control and stream limits, and what the peer resets, stops or
 # closes raised where the application waits.
 class RaihaNextRuntimeSessionTest < Minitest::Test
-  include NextQUICTLS
-
-  Runtime = Raiha::Next::Runtime
-
-  # What a client or a server of the runtime would be to its driver: each
-  # connection in a Session, which takes its turn with the driver's.
-  class Owner
-    QUIC = Raiha::Next::QUIC
-
-    attr_reader :sessions
-    attr_accessor :driver
-
-    def initialize(endpoint, role, tls_config: nil, keyring: nil)
-      @endpoint = endpoint
-      @role = role
-      @tls_config = tls_config
-      @keyring = keyring
-      @sessions = []
-    end
-
-    def add(connection) = @sessions << Runtime::Session.new(connection, driver, role: @role)
-
-    def route(route, now)
-      case route
-      when QUIC::Route::Incoming then (hello = @endpoint.admit(route.handle, now:)) && route(hello, now)
-      when QUIC::Route::ClientHello then add(@endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:))
-      end
-    end
-
-    def turn(_now) = @sessions.each(&:turn)
-
-    def next_timeout = nil
-
-    def stopped(failure) = @sessions.each { _1.abort(failure) }
-  end
-
-  def owner(role, config, **options)
-    endpoint = (role == :server ? QUIC::Endpoint.method(:server) : QUIC::Endpoint.method(:client))
-      .call(config:, random: SecureRandom, time: Time.now, now: Runtime::Driver.clock)
-    owner = Owner.new(endpoint, role, **options)
-    owner.driver = Runtime::Driver.new(endpoint, Runtime::UDP.bind("127.0.0.1", 0), owner)
-    [endpoint, owner]
-  end
+  include NextRuntimeOwner
 
   # A client's Session and the server's Owner, connected, for the block.
   def connected(server: QUIC::Config.new, client: QUIC::Config.new)
     Sync do
-      tls = server_config
-      _, server_owner = owner(:server, server, tls_config: tls, keyring: server_keyring(config: tls))
-      server_owner.driver.start
+      server_owner = server_owner(server)
       endpoint, client_owner = owner(:client, client)
       tls = client_config
       client_owner.add(endpoint.connect(tls_config: tls, keyring: client_keyring(config: tls), server_name: "localhost",
-        remote: ["127.0.0.1", server_owner.driver.instance_variable_get(:@udp).local_address[1]], now: Runtime::Driver.clock))
+        remote: ["127.0.0.1", server_owner.port], now: Runtime::Driver.clock))
       client_owner.driver.start
       yield client_owner.sessions.first, server_owner
     ensure
       client_owner&.driver&.stop
       server_owner&.driver&.stop
     end
-  end
-
-  # The first Session the server has, once it has one.
-  def accepted(owner)
-    sleep 0.01 until owner.sessions.first
-    owner.sessions.first
   end
 
   # Holds the reads of the server back to 16 KiB, so a write of a megabyte
