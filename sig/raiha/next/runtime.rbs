@@ -1,11 +1,68 @@
 module Raiha::Next::Runtime
+  module Error
+    class Base < StandardError
+    end
+
+    class Usage < Base
+    end
+  end
+
+  # What a client or a server of the runtime is to its Driver.
+  interface _Owner
+    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void
+
+    def turn: (Float now) -> void
+
+    def next_timeout: () -> Float?
+
+    def stopped: (StandardError? failure) -> void
+  end
+
+  class Driver
+    attr_reader endpoint: Raiha::Next::QUIC::Endpoint
+    attr_reader failure: StandardError?
+
+    @udp: UDP
+    @owner: _Owner
+    @lock: Thread::Mutex
+    @changed: Thread::ConditionVariable
+    @dirty: bool
+    @stopped: bool
+
+    def self.clock: () -> Float
+
+    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner) -> void
+
+    def start: () -> self
+
+    def changed: () -> void
+
+    def stopped?: () -> bool
+
+    def stop: () -> void
+
+    private def read: () -> void
+
+    private def take: (Array[[String, UDP::address, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
+
+    private def run: () -> void
+
+    private def turn: (Float now) -> Array[Raiha::Next::QUIC::Transmit]
+
+    private def timeout: () -> Float?
+
+    private def fail: (StandardError error) -> void
+  end
+
   class UDP
     type address = [String, Integer]
 
     RECEIVE_BATCH: Integer
     MAX_DATAGRAM: Integer
     BUFFER: Integer
-    ECN: Hash[Integer, Symbol]
+    type ecn = Raiha::Next::QUIC::ecn | :ce
+
+    ECN: Hash[Integer, ecn]
     MARKS: Hash[Symbol, Integer]
     DROPPED: Array[singleton(SystemCallError)]
 
@@ -20,7 +77,7 @@ module Raiha::Next::Runtime
 
     def send: (Raiha::Next::QUIC::Transmit transmit) -> bool
 
-    def receive: () -> Array[[String, address, Symbol]]
+    def receive: () -> Array[[String, address, ecn]]
 
     def wait_readable: (?(Float | Integer)? timeout) -> bool
 
@@ -32,6 +89,6 @@ module Raiha::Next::Runtime
 
     private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?
 
-    private def ecn: (Array[Socket::AncillaryData] controls) -> Symbol
+    private def ecn: (Array[Socket::AncillaryData] controls) -> ecn
   end
 end

@@ -66,7 +66,7 @@ module Raiha::Next::Runtime
     # The datagrams there now, RECEIVE_BATCH at most, each as [data,
     # [address, port], ecn]; none when there are none.
     def receive
-      received = [] #: Array[[String, [String, Integer], Symbol]]
+      received = [] #: Array[[String, address, ecn]]
       while received.size < RECEIVE_BATCH
         result = @socket.recvmsg_nonblock(MAX_DATAGRAM, 0, exception: false)
         break unless result.is_a?(Array)

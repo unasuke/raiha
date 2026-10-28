@@ -8,4 +8,6 @@ require_relative "http3"
 module Raiha::Next::Runtime
 end
 
+require_relative "runtime/error"
 require_relative "runtime/udp"
+require_relative "runtime/driver"
