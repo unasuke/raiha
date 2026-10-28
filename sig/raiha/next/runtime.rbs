@@ -186,6 +186,8 @@ module Raiha::Next::Runtime
 
     private def arrived: (Integer stream_id) -> void
 
+    private def forget_reset: (Integer stream_id) -> void
+
     private def over: (Integer stream_id, :reading | :writing part) -> void
 
     private def local?: (Integer stream_id) -> bool

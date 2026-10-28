@@ -222,6 +222,7 @@ module Raiha::Next::Runtime
       when Raiha::Next::QUIC::Event::StreamReset
         arrived(event.stream_id)
         @tracks[event.stream_id]&.reset = event.error_code
+        forget_reset(event.stream_id)
       when Raiha::Next::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
       end
     end
@@ -238,6 +239,15 @@ module Raiha::Next::Runtime
         @incoming << opened
         @peer_next[type] = @peer_next.fetch(type) + 1
       end
+    end
+
+    # A stream going one way the peer reset before the application took it
+    # has nothing for it: the core has let it go and lets the peer open
+    # another, so keeping it would let the peer grow what is kept without
+    # end.
+    private def forget_reset(stream_id)
+      return unless stream_id.anybits?(0x2) && @incoming.delete(stream_id)
+      @tracks.delete(stream_id)
     end
 
     # The application is done with a part of `stream_id`; once with both,

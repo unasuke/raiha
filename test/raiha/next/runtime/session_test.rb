@@ -181,6 +181,28 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
     end
   end
 
+  # Streams going one way that the peer resets before they are taken leave
+  # nothing behind, however many the peer opens.
+  def test_reset_streams_not_taken_are_forgotten
+    connected do |client, server_owner|
+      client.open_stream.write("hello")
+      server = accepted(server_owner)
+      done = false
+      Fiber.schedule do
+        300.times do
+          stream_id = server.open_stream_id(direction: :uni)
+          server.connection.stream_write(stream_id, "x")
+          server.connection.stream_reset(stream_id, error_code: 1)
+          server.changed
+        end
+        done = true
+      end
+      sleep 0.01 until done
+      sleep 0.1
+      assert_equal [{}, []], [client.instance_variable_get(:@tracks).reject { |id, _| id == 0 }, client.instance_variable_get(:@incoming)]
+    end
+  end
+
   # What waits when the peer closes raises the error it closed with, and
   # what comes after does too; the server's streams stop coming.
   def test_the_peer_closes
