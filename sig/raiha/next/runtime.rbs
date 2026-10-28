@@ -295,9 +295,11 @@ end
 module Raiha::Next::Runtime
   class Qlog
     BUDGET: Integer
+    MAX_FILES: Integer
 
     class Pending
       attr_reader path: String
+      attr_reader size: Integer
 
       @data: String
       @file: File?
@@ -315,14 +317,23 @@ module Raiha::Next::Runtime
     attr_reader budget: Raiha::Next::QUIC::Qlog::Budget
 
     @dir: String
+    @max_bytes: Integer
+    @max_files: Integer
     @pending: Array[Pending]
+    @closed: Array[[String, Integer]]
 
     def self.budget: () -> Raiha::Next::QUIC::Qlog::Budget
 
-    def initialize: (String dir, ?budget: Raiha::Next::QUIC::Qlog::Budget) -> void
+    def initialize: (String dir, ?budget: Raiha::Next::QUIC::Qlog::Budget, ?max_bytes: Integer, ?max_files: Integer) -> void
 
     def trace: (:client | :server vantage_point, String name) -> [Raiha::Next::QUIC::Qlog::Tracer, Pending]
 
     def flush: () -> nil
+
+    private def files_by_age: () -> Array[[String, Integer]]
+
+    private def rotate: () -> void
+
+    private def delete: (String path) -> void
   end
 end

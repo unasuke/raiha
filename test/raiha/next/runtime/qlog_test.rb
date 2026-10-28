@@ -55,6 +55,34 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
     end
   end
 
+  # Before a trace begins, the oldest files no trace writes to go, those of
+  # earlier runs first, until the new one fits in the count and the
+  # directory in its bytes.
+  def test_rotation
+    Dir.mktmpdir do |dir|
+      old = Array.new(5) do |i|
+        File.join(dir, "old#{i}_server.sqlog").tap do |path|
+          File.binwrite(path, "x" * 100)
+          File.utime(Time.at(1_000 + i), Time.at(1_000 + i), path)
+        end
+      end
+      File.binwrite(File.join(dir, "notes.txt"), "kept")
+      qlog = Runtime::Qlog.new(dir, max_bytes: 350, max_files: 4)
+      _, writing = qlog.trace(:server, "new")
+      assert_equal old.last(3), old.select { File.exist?(_1) }
+      writing.write("y" * 300)
+      qlog.flush
+      _, newer = qlog.trace(:server, "newer")
+      assert_equal [writing.path], (old + [writing.path]).select { File.exist?(_1) }
+      writing.over!
+      newer.write("z" * 100)
+      qlog.flush
+      qlog.trace(:server, "newest")
+      assert_equal [newer.path], [writing.path, newer.path].select { File.exist?(_1) }
+      assert File.exist?(File.join(dir, "notes.txt"))
+    end
+  end
+
   # What a trace writes while its file is being written goes in the next
   # flush, and a file is closed once its connection is over.
   def test_pending_writes
