@@ -158,6 +158,24 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # A session waiting for the next stream ends when the server stops, well
+  # before the timeout.
+  def test_stop_ends_each_stream
+    Sync do
+      serving(method(:echoes)) do |port, server, running|
+        connect(port) do |session|
+          assert_equal "ECHO:once", echo(session, "once")
+          started = Runtime::Driver.clock
+          server.stop(timeout: 5)
+          sleep 0.01 until session.closed?
+          assert_operator Runtime::Driver.clock - started, :<, 2
+          assert_equal [0, true], session.connection.close_reason.then { [_1.code, _1.application] }
+        end
+        sleep 0.01 while running.alive?
+      end
+    end
+  end
+
   # What a session has not ended by the timeout closes with the error code
   # `stop` was given.
   def test_stop_closes_what_is_left_at_the_timeout

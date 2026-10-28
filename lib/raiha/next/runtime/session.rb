@@ -120,15 +120,17 @@ module Raiha::Next::Runtime
       nil
     end
 
-    # The next stream the peer opens; nil once the connection has closed.
+    # The next stream the peer opens; nil once the connection has closed, or
+    # the server is stopping and none has come.
     def accept_stream
-      Stream.new(self, wait(drain: true) { @incoming.shift })
+      stream_id = wait(drain: true) { @incoming.shift || (:stopping if @stopping) }
+      Stream.new(self, stream_id) unless stream_id == :stopping
     rescue Raiha::Next::QUIC::ClosedError
       nil
     end
 
     # Each stream the peer opens, in a fiber of its own, until the
-    # connection closes.
+    # connection closes or the server stops.
     def each_stream
       while (stream = accept_stream)
         Fiber.schedule { yield stream }
@@ -148,9 +150,10 @@ module Raiha::Next::Runtime
     # connection soon.
     def stopping? = @stopping
 
-    # The server is stopping.
+    # The server is stopping: what waits for a stream to come wakes.
     def stopping!
       @stopping = true
+      notify
     end
 
     # The driver has stopped, after `failure` when something failed in it:
