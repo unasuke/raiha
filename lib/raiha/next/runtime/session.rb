@@ -50,6 +50,7 @@ module Raiha::Next::Runtime
       @incoming = [] #: Array[Integer]
       @peer_next = [0, 0, 0, 0]
       @aborted = nil #: StandardError?
+      @stopping = false
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.
@@ -106,6 +107,15 @@ module Raiha::Next::Runtime
     end
 
     def closed? = !(@aborted || @connection.close_reason).nil?
+
+    # Whether the server is stopping: the application is to end the
+    # connection soon.
+    def stopping? = @stopping
+
+    # The server is stopping.
+    def stopping!
+      @stopping = true
+    end
 
     # The driver has stopped, after `failure` when something failed in it:
     # nothing more comes or goes, and what waits wakes to raise it, or
