@@ -7,6 +7,9 @@ module Raiha::Next::Runtime
   # takes every client up to `max_connections` at a time, refusing more
   # with CONNECTION_REFUSED, and gives the block of `run` the Session of
   # each connection once its handshake completes, in a fiber of its own.
+  # Once half of them are taken, a client whose address no Retry has shown
+  # yet is sent one first, so that Initials from addresses spoofed by the
+  # thousand cannot take the rest.
   #
   # When the block is over, what the streams sent is given three PTOs to be
   # acknowledged and the connection closes with the application's error 0;
@@ -62,6 +65,7 @@ module Raiha::Next::Runtime
       case route
       when Raiha::Next::QUIC::Route::Incoming
         return endpoint.refuse(route.handle) if @sessions.size >= @max_connections
+        return endpoint.retry(route.handle, now:) if !route.address_validated && @sessions.size * 2 >= @max_connections
         hello = endpoint.admit(route.handle, now:) and route(hello, now)
       when Raiha::Next::QUIC::Route::ClientHello
         connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:)

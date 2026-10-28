@@ -95,6 +95,22 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # Half the connections taken, a client shows its address with a Retry
+  # before it is taken; before then, none is sent.
+  def test_a_retry_once_half_the_connections_are_taken
+    Sync do
+      serving(method(:echoes), max_connections: 2) do |port|
+        connect(port) do |first|
+          assert_nil first.connection.instance_variable_get(:@retry_source_connection_id)
+          connect(port) do |second|
+            refute_nil second.connection.instance_variable_get(:@retry_source_connection_id)
+            assert_equal "ECHO:second", echo(second, "second")
+          end
+        end
+      end
+    end
+  end
+
   def test_a_scheduler_is_needed
     tls = server_config
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
