@@ -304,6 +304,7 @@ module Raiha::Next::Runtime
       @data: String
       @file: File?
       @over: bool
+      @dropped: bool
 
       def initialize: (String path) -> void
 
@@ -313,7 +314,7 @@ module Raiha::Next::Runtime
 
       def flush: () -> bool
 
-      private def open_locked: () -> File
+      private def open_locked: () -> File?
     end
 
     attr_reader budget: Raiha::Next::QUIC::Qlog::Budget

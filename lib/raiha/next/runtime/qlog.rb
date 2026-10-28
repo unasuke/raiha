@@ -18,6 +18,12 @@ module Raiha::Next::Runtime
   # flock while it writes, and a file whose lock cannot be had, which
   # another Qlog or process sharing the directory is writing, is neither
   # taken away nor counted.
+  #
+  # A server's file is named by a connection ID the client chose, so
+  # whoever can write to the directory could put a FIFO or a symbolic link
+  # there under that name first. Files are opened without following links
+  # and without waiting, and used only when they are regular files; a trace
+  # whose file cannot be had so is dropped.
   class Qlog
     BUDGET = 1024 * 1024 * 1024
     MAX_FILES = 4096
@@ -36,6 +42,7 @@ module Raiha::Next::Runtime
         @file = nil #: File?
         @over = false
         @size = 0
+        @dropped = false
       end
 
       def write(*strings)
@@ -58,16 +65,27 @@ module Raiha::Next::Runtime
         unless @data.empty?
           data = @data
           @data = "".b
-          (@file ||= open_locked).write(data)
+          file = (@file ||= open_locked)
+          file&.write(data)
         end
         return false unless @over
         @file&.close
         true
       end
 
-      # The file, held under an exclusive lock while the trace writes it.
+      # The file, a regular one held under an exclusive lock while the trace
+      # writes it; nil, and the trace dropped, when it cannot be had so.
       private def open_locked
-        File.open(@path, "ab").tap { |file| file.flock(File::LOCK_EX | File::LOCK_NB) }
+        return nil if @dropped
+        flags = File::WRONLY | File::APPEND | File::CREAT | File::NOFOLLOW | File::NONBLOCK
+        file = File.open(@path, flags, 0o644)
+        return file if file.stat.file? && file.flock(File::LOCK_EX | File::LOCK_NB)
+        file.close
+        @dropped = true
+        nil
+      rescue SystemCallError
+        @dropped = true
+        nil
       end
     end
 
@@ -134,11 +152,11 @@ module Raiha::Next::Runtime
       end
     end
 
-    # Takes a file away unless another writer holds its lock; one that has
-    # gone already is gone.
+    # Takes a file away when it is a regular file no other writer holds the
+    # lock of; one that has gone already is gone.
     private def delete(path)
-      File.open(path, "rb") do |file|
-        File.delete(path) if file.flock(File::LOCK_EX | File::LOCK_NB)
+      File.open(path, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |file|
+        File.delete(path) if file.stat.file? && file.flock(File::LOCK_EX | File::LOCK_NB)
       end
     rescue SystemCallError
       nil

@@ -2,6 +2,7 @@ require "raiha/next/test_helper"
 require "raiha/next/support/runtime_owner"
 require "async"
 require "json"
+require "timeout"
 require "tmpdir"
 
 # The qlog of the runtime: a file for each connection of a client and a
@@ -96,6 +97,30 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
       assert File.exist?(live.path)
       live.over!
       other.flush
+    end
+  end
+
+  # A FIFO or a symbolic link in place of a file neither stops the Qlog nor
+  # takes what it writes: a trace that cannot have a regular file of its
+  # own is dropped, and an old file turned into something else stays.
+  def test_what_is_not_a_regular_file
+    Dir.mktmpdir do |dir|
+      old = File.join(dir, "old_server.sqlog")
+      File.binwrite(old, "x")
+      target = File.join(dir, "elsewhere")
+      File.binwrite(target, "kept")
+      File.mkfifo(File.join(dir, "fifo_server.sqlog"))
+      File.symlink(target, File.join(dir, "link_server.sqlog"))
+      qlog = Runtime::Qlog.new(dir, max_files: 1)
+      File.delete(old)
+      File.mkfifo(old)
+      Timeout.timeout(5) do
+        traces = %w[fifo link].map { qlog.trace(:server, _1).last }
+        traces.each { _1.write("written") && _1.over! }
+        qlog.flush
+      end
+      assert File.pipe?(old)
+      assert_equal "kept", File.binread(target)
     end
   end
 
