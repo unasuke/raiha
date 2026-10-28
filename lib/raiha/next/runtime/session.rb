@@ -26,6 +26,10 @@ module Raiha::Next::Runtime
   # done with both its parts, and of the streams the peer opened it keeps
   # the next to come of each type, so a long connection keeps no more than
   # the streams open on it.
+  #
+  # A protocol over the connection, HTTP/3, is attached to the Session: it
+  # takes each event first, keeping those of its own, and takes its turn
+  # after them, and the streams it opens are its own to keep.
   class Session
     # What the application has yet to hear of a stream: how the peer reset
     # its sending part or stopped ours, and whether each part is still in
@@ -51,6 +55,38 @@ module Raiha::Next::Runtime
       @peer_next = [0, 0, 0, 0]
       @aborted = nil #: StandardError?
       @stopping = false
+      @connected = nil #: Raiha::Next::QUIC::Event::Connected?
+      @protocol = nil #: _Protocol?
+    end
+
+    # What the handshake came to (TLS::Event::HandshakeComplete), once it
+    # has completed.
+    def handshake = @connected&.handshake
+
+    # Puts `protocol` over the connection. A handshake completed before is
+    # told it with the Connected event it missed.
+    def attach(protocol)
+      @protocol = protocol
+      connected = @connected and protocol.take(connected, Driver.clock)
+      changed
+    end
+
+    # Has what the protocol or the application changed go out.
+    def changed = @driver.changed
+
+    # A new stream of `direction` for a protocol, which keeps it itself: its
+    # ID, once the peer allows it.
+    def open_stream_id(direction: :bidi)
+      stream_id = wait { @connection.open_stream(direction:) }
+      changed
+      stream_id
+    end
+
+    # Calls the block until it gives something other than nil, waiting for
+    # a change in between, as `wait` does: for a protocol's waits.
+    # steep picks no overload of `wait` for a block that gives T?.
+    def wait_for # steep:ignore
+      wait { yield }
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.
@@ -170,11 +206,15 @@ module Raiha::Next::Runtime
     end
 
     private def take_events
-      @connection.each_event { |event| take(event) }
+      protocol = @protocol
+      now = Driver.clock
+      @connection.each_event { |event| take(event) unless protocol&.take(event, now) }
+      protocol&.turn(now)
     end
 
     private def take(event)
       case event
+      when Raiha::Next::QUIC::Event::Connected then @connected = event
       when Raiha::Next::QUIC::Event::StreamReadable then arrived(event.stream_id)
       when Raiha::Next::QUIC::Event::StreamReset
         arrived(event.stream_id)

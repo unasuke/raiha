@@ -7,6 +7,14 @@ module Raiha::Next::Runtime
     end
   end
 
+  # A protocol over a Session, HTTP/3: it takes each event of the
+  # connection first, whether it was its own alone, and turns after them.
+  interface _Protocol
+    def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+
+    def turn: (Float now) -> void
+  end
+
   # What a client or a server of the runtime is to its Driver.
   interface _Owner
     def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void
@@ -129,8 +137,20 @@ module Raiha::Next::Runtime
     @peer_next: Array[Integer]
     @aborted: StandardError?
     @stopping: bool
+    @connected: Raiha::Next::QUIC::Event::Connected?
+    @protocol: _Protocol?
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
+
+    def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
+
+    def attach: (_Protocol protocol) -> void
+
+    def changed: () -> void
+
+    def open_stream_id: (?direction: :bidi | :uni) -> Integer
+
+    def wait_for: [T < Object] () { () -> T? } -> T
 
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
@@ -338,5 +358,57 @@ module Raiha::Next::Runtime
     private def rotate: () -> void
 
     private def delete: (String path) -> void
+  end
+end
+
+module Raiha::Next::Runtime
+  module HTTP3
+    class StreamReset < Raiha::Next::Runtime::StreamReset
+    end
+
+    class Response < Data
+      attr_reader status: Integer
+      attr_reader headers: Array[[String, String]]
+      attr_reader body: String
+      attr_reader trailers: Array[[String, String]]
+
+      def self.new: (status: Integer, headers: Array[[String, String]], body: String, trailers: Array[[String, String]]) -> instance
+    end
+
+    class Exchange
+      attr_accessor status: Integer?
+      attr_accessor headers: Array[[String, String]]
+      attr_accessor trailers: Array[[String, String]]
+      attr_accessor reset: Integer?
+      attr_reader chunks: Array[String]
+
+      @ended: bool
+
+      def initialize: () -> void
+
+      def ended?: () -> bool
+
+      def end!: () -> void
+    end
+
+    class Client
+      @session: Session
+      @http3: Raiha::Next::HTTP3::Connection
+      @binding: Raiha::Next::HTTP3Binding
+      @exchanges: Hash[Integer, Exchange]
+      @authority: String
+
+      def initialize: (Session session, ?authority: String?, ?settings: Raiha::Next::HTTP3::Settings) -> void
+
+      def get: (String path, ?headers: Array[[String, String]]) -> Response
+
+      def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+
+      def turn: (Float now) -> void
+
+      private def start: (String method, String path, Array[[String, String]] headers, ?fin: bool) -> Integer
+
+      private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
+    end
   end
 end
