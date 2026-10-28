@@ -17,7 +17,8 @@ module Raiha::Next::Runtime
   # a read waits for data, a write for room, an open for a stream the peer
   # allows, each on the condition of the connection, which its Driver's
   # turns signal. A call made once the connection has closed, or waiting
-  # when it does, raises QUIC::ClosedError.
+  # when it does, raises QUIC::ClosedError, and so does one once the driver
+  # has stopped, or what failed in it.
   #
   # The events of the connection are taken before each wait is looked at
   # again, so that a stream the peer reset is not read to an end it never
@@ -38,6 +39,7 @@ module Raiha::Next::Runtime
       # How the peer reset the sending part of a stream, or stopped ours.
       @resets = {} #: Hash[Integer, Integer]
       @stops = {} #: Hash[Integer, Integer]
+      @aborted = nil #: StandardError?
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.
@@ -70,7 +72,16 @@ module Raiha::Next::Runtime
       notify
     end
 
-    def closed? = !@connection.close_reason.nil?
+    def closed? = !(@aborted || @connection.close_reason).nil?
+
+    # The driver has stopped, after `failure` when something failed in it:
+    # nothing more comes or goes, and what waits wakes to raise it, or
+    # QUIC::ClosedError.
+    def abort(failure = nil)
+      @aborted ||= failure || Raiha::Next::QUIC::ClosedError.new(Raiha::Next::QUIC::ConnectionError.new(
+        code: Raiha::Next::QUIC::ErrorCode::NO_ERROR, frame_type: nil, reason: "the runtime stopped", application: false))
+      notify
+    end
 
     # The runner's turn: the events are taken, and what waits looks again,
     # as a limit the peer raised comes with no event.
@@ -127,11 +138,13 @@ module Raiha::Next::Runtime
 
     # Calls the block until it gives something other than nil or "", waiting
     # for a change in between; what it gave. Once the connection has closed,
-    # raises QUIC::ClosedError.
+    # raises QUIC::ClosedError, and once the driver has stopped, what
+    # `abort` was given.
     private def wait
       @lock.synchronize do
         @waiting += 1
         loop do
+          aborted = @aborted and raise aborted
           take_events
           reason = @connection.close_reason and raise Raiha::Next::QUIC::ClosedError.new(reason)
           result = yield

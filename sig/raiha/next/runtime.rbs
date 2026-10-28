@@ -113,6 +113,7 @@ module Raiha::Next::Runtime
     @known: Hash[Integer, true]
     @resets: Hash[Integer, Integer]
     @stops: Hash[Integer, Integer]
+    @aborted: StandardError?
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
 
@@ -125,6 +126,8 @@ module Raiha::Next::Runtime
     def close: (?error_code: Integer, ?reason: String) -> void
 
     def closed?: () -> bool
+
+    def abort: (?StandardError? failure) -> void
 
     def turn: () -> void
 

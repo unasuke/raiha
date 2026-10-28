@@ -41,7 +41,7 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
 
     def next_timeout = nil
 
-    def stopped(_failure) = nil
+    def stopped(failure) = @sessions.each { _1.abort(failure) }
   end
 
   def owner(role, config, **options)
@@ -140,6 +140,26 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
       assert_equal "", first.read
       sleep 0.01 until opened
       assert_equal 4, opened.id
+    end
+  end
+
+  # A driver that stops wakes what waits on its sessions, with what failed
+  # in it when something did.
+  def test_the_driver_stops
+    connected do |client, server_owner|
+      stream = client.open_stream
+      stream.write("hello")
+      server = accepted(server_owner)
+      reading = Fiber.schedule do
+        assert_raises(RuntimeError, "a turn that fails") { server.accept_stream.read }
+      end
+      server_owner.driver.send(:fail, RuntimeError.new("a turn that fails"))
+      sleep 0.01 while reading.alive?
+      client_owner_driver = client.instance_variable_get(:@driver)
+      Fiber.schedule { client_owner_driver.stop }
+      error = assert_raises(Raiha::Next::QUIC::ClosedError) { stream.read }
+      assert_equal "the runtime stopped", error.error.reason
+      assert client.closed?
     end
   end
 
