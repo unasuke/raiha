@@ -94,9 +94,13 @@ module Raiha::Next::Runtime
     # had not yet given to the block rejected, and those it had cancelled
     # with H3_REQUEST_CANCELLED, their fibers interrupted where they wait,
     # before it closes.
+    #
+    # Extended CONNECT (RFC 9220) is not offered unless `settings` offers
+    # it: the runtime has no way yet to read or write the capsules of such a
+    # stream, and a body of capsules would never read as data.
     class Server
       def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
-        settings: Raiha::Next::HTTP3::Settings.new(enable_connect_protocol: true))
+        settings: Raiha::Next::HTTP3::Settings.new)
         @settings = settings
         @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:)
       end

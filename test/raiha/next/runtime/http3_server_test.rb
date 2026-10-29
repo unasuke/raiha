@@ -12,10 +12,10 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
   # A server of HTTP/3 on a free port with `handler` for each request, for
   # the block, which is given its port, the server and the fiber running
   # it; stopped after.
-  def serving(handler)
+  def serving(handler, settings: HTTP3::Settings.new)
     tls = h3_server_config
     server = Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
-      port: 0)
+      port: 0, settings:)
     running = Fiber.schedule { server.run(&handler) }
     sleep 0.01 until server.local_address
     yield server.local_address.fetch(1), server, running
@@ -136,10 +136,14 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     Console.logger.level = level
   end
 
-  # An Extended CONNECT the block does not answer is a 501.
+  # Extended CONNECT is offered only when the settings offer it, and one the
+  # block does not answer is a 501.
   def test_an_extended_connect_not_taken
     Sync do
       serving(->(_request) {}) do |port|
+        refute(h3_connect(port) { |session| ConnectRequest.new(session, protocol: "websocket").offered? })
+      end
+      serving(->(_request) {}, settings: HTTP3::Settings.new(enable_connect_protocol: true)) do |port|
         status = h3_connect(port) do |session|
           ConnectRequest.new(session, protocol: "websocket").status
         end
@@ -160,6 +164,11 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
       @protocol = protocol
       @status = nil
       session.attach(self)
+    end
+
+    # Whether the server offers Extended CONNECT, once its SETTINGS have come.
+    def offered?
+      @session.wait_for { @http3.peer_settings }.enable_connect_protocol
     end
 
     def status
