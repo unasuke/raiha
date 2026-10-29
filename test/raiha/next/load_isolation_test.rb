@@ -25,6 +25,7 @@ class RaihaNextLoadIsolationTest < Minitest::Test
     "raiha/next/http3/qpack" => %i[TLS QUIC Runtime],
     "raiha/next/http3_binding" => %i[Runtime],
     "raiha/next/runtime" => %i[],
+    "raiha/next/runtime/rack" => %i[],
     "raiha/next" => %i[]
   }.freeze
 
@@ -32,7 +33,9 @@ class RaihaNextLoadIsolationTest < Minitest::Test
   # is checked alone against a decoder's corpus, before any frame of HTTP/3
   # is written, so it must not need them.
   FORBIDDEN_CONSTANTS = {
-    "raiha/next/http3/qpack" => %w[Raiha::Next::HTTP3::Frame]
+    "raiha/next/http3/qpack" => %w[Raiha::Next::HTTP3::Frame],
+    # The Rack adapter is for Rack, and loads no rack gem.
+    "raiha/next/runtime/rack" => %w[::Rack]
   }.freeze
 
   # `Raiha::VERSION` is the only old constant the next release may refer to,

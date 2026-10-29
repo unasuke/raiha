@@ -440,6 +440,8 @@ module Raiha::Next::Runtime
 
       def initialize: (_ChunkSource client, Integer stream_id) -> void
 
+      def read_chunk: () -> String?
+
       def each: () { (String chunk) -> void } -> void
 
       def read: () -> String
@@ -609,5 +611,71 @@ module Raiha::Next::Runtime
 
       private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
     end
+  end
+end
+
+module Raiha::Next::Runtime
+  class Rack
+    type env_value = String | Input | IO | HTTP3::Request | Array[String]
+
+    # An application of Rack 3.
+    interface _App
+      def call: (Hash[String, env_value] env) -> [Integer, Hash[String, String | Array[String]], Object]
+    end
+
+    class Input
+      @body: HTTP3::Body
+      @buffer: String
+      @ended: bool
+
+      def initialize: (HTTP3::Body body) -> void
+
+      def read: (?Integer? length, ?String? outbuf) -> String?
+
+      def gets: () -> String?
+
+      def each: () { (String line) -> void } -> void
+
+      def close: () -> nil
+
+      private def fill: () -> void
+    end
+
+    class Stream
+      @input: Input
+      @output: HTTP3::ResponseBody
+      @read_closed: bool
+      @write_closed: bool
+
+      def initialize: (Input input, HTTP3::ResponseBody output) -> void
+
+      def read: (?Integer? length, ?String? outbuf) -> String?
+
+      def write: (String data) -> Integer
+
+      def <<: (String data) -> self
+
+      def flush: () -> self
+
+      def close_read: () -> nil
+
+      def close_write: () -> nil
+
+      def close: () -> nil
+
+      def closed?: () -> bool
+    end
+
+    @app: _App
+
+    def initialize: (_App app) -> void
+
+    def to_proc: () -> Proc
+
+    def call: (HTTP3::Request request) -> void
+
+    private def env: (HTTP3::Request request) -> Hash[String, env_value]
+
+    private def fields: (Hash[String, String | Array[String]] headers) -> Array[[String, String]]
   end
 end

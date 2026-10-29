@@ -95,9 +95,12 @@ module Raiha::Next::Runtime
         @stream_id = stream_id
       end
 
+      # The next chunk once there is one, nil at the end.
+      def read_chunk = @client.read_chunk(@stream_id)
+
       # Each chunk until the end, waiting for each.
       def each
-        while (chunk = @client.read_chunk(@stream_id))
+        while (chunk = read_chunk)
           yield chunk
         end
       end
