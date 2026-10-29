@@ -155,8 +155,8 @@ module Raiha::Next::Runtime
 
     def open_stream_id: (?direction: :bidi | :uni) -> Integer
 
-    def wait_for: [T < Object] () { () -> T? } -> T
-                | [T < Object] (deadline: Float) { () -> T? } -> T?
+    def wait_for: [T < Object] (?drain: bool) { () -> T? } -> T
+                | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
 
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
@@ -205,7 +205,7 @@ module Raiha::Next::Runtime
     private def notify: () -> void
 
     private def wait: [T < Object] (?drain: bool) { () -> T? } -> T
-                    | [T < Object] (deadline: Float) { () -> T? } -> T?
+                    | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
   end
 
   class Stream

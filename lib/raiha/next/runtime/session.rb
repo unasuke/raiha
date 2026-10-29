@@ -91,12 +91,13 @@ module Raiha::Next::Runtime
       stream_id
     end
 
-    # Calls the block until it gives something other than nil, waiting for
-    # a change in between, as `wait` does: for a protocol's waits. With
-    # `deadline`, nil once the clock is past it.
+    # Calls the block until it gives something other than nil or "",
+    # waiting for a change in between, as `wait` does: for a protocol's
+    # waits. With `deadline`, nil once the clock is past it; with `drain`, a
+    # read gives what came before the connection closed.
     # steep picks no overload of `wait` for a block that gives T?.
-    def wait_for(deadline: nil) # steep:ignore
-      deadline ? wait(deadline:) { yield } : wait { yield }
+    def wait_for(deadline: nil, drain: false) # steep:ignore
+      deadline ? wait(deadline:, drain:) { yield } : wait(drain:) { yield }
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.

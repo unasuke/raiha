@@ -166,7 +166,7 @@ module Raiha::Next::Runtime
       # at its end; for Body.
       def read_chunk(stream_id)
         exchange = @exchanges[stream_id] or return nil
-        chunk = @session.wait_for do
+        chunk = @session.wait_for(drain: true) do
           reset = exchange.reset and raise StreamReset.new(stream_id, reset)
           exchange.shift || (:end if exchange.ended?)
         end

@@ -5,7 +5,8 @@ require "raiha/next/support/runtime_owner"
 # Runtime::Server that answers each request whole with 200 and the body of
 # its path, or 404. "/early" is answered with a 103 first, "/trailers" with
 # trailer fields after its body, "/echo" with the request's body,
-# "/priority" with its priority field, and "/reset" is cancelled.
+# "/priority" with its priority field, "/reset" is cancelled, and the
+# connection closed at once after the answer to "/last".
 module NextRuntimeHTTP3
   include NextRuntimeOwner
 
@@ -17,6 +18,7 @@ module NextRuntimeHTTP3
     TRAILERS = [["x-checksum", "abc"]].freeze
 
     def initialize(session, bodies)
+      @session = session
       @bodies = bodies
       @http3 = HTTP3::Connection.server
       @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
@@ -71,6 +73,12 @@ module NextRuntimeHTTP3
       @http3.send_headers(stream_id, [[":status", "200"], ["content-length", body.bytesize.to_s]])
       @left[stream_id] = [body, path == "/trailers"]
       write(stream_id)
+      return unless path == "/last"
+      # The answer goes out first: a connection that closes sends only its
+      # CONNECTION_CLOSE after.
+      @binding.flush(now: Raiha::Next::Runtime::Driver.clock)
+      @session.instance_variable_get(:@driver).flush
+      @session.connection.close(error_code: HTTP3::ErrorCode::NO_ERROR, now: Raiha::Next::Runtime::Driver.clock)
     end
 
     private def write(stream_id)

@@ -11,7 +11,7 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
   include NextRuntimeHTTP3
 
   BODIES = {
-    "/hello" => "hello world".b, "/early" => "after a hint".b, "/trailers" => "checked".b,
+    "/hello" => "hello world".b, "/last" => "last words".b, "/early" => "after a hint".b, "/trailers" => "checked".b,
     "/large" => Random.new(3).bytes(300_000)
   }.freeze
 
@@ -128,6 +128,17 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
         h3_connect(port) { |session| Runtime::HTTP3::Client.new(session).get("/hello") }
         sleep 0.01 until sessions.first&.closed?
         assert_equal [HTTP3::ErrorCode::NO_ERROR, true], sessions.first.connection.close_reason.then { [_1.code, _1.application] }
+      end
+    end
+  end
+
+  # A response the server sent just before it closed is still read.
+  def test_a_response_that_comes_with_the_close
+    Sync do
+      answering(BODIES) do |port|
+        h3_connect(port) do |session|
+          assert_equal "last words", Runtime::HTTP3::Client.new(session).get("/last").body
+        end
       end
     end
   end
