@@ -421,11 +421,16 @@ module Raiha::Next::Runtime
       def cancel: () -> void
     end
 
+    # What a Body reads its chunks from: a Client, or a Serving.
+    interface _ChunkSource
+      def read_chunk: (Integer stream_id) -> String?
+    end
+
     class Body
-      @client: Client
+      @client: _ChunkSource
       @stream_id: Integer
 
-      def initialize: (Client client, Integer stream_id) -> void
+      def initialize: (_ChunkSource client, Integer stream_id) -> void
 
       def each: () { (String chunk) -> void } -> void
 
@@ -477,6 +482,86 @@ module Raiha::Next::Runtime
       private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
 
       private def pause: (Integer stream_id, Exchange exchange) -> void
+    end
+  end
+end
+
+module Raiha::Next::Runtime
+  module HTTP3
+    class Request
+      attr_reader stream_id: Integer
+      attr_reader method: String
+      attr_reader path: String
+      attr_reader authority: String?
+      attr_reader scheme: String?
+      attr_reader protocol: String?
+      attr_reader headers: Array[[String, String]]
+      attr_reader body: Body
+
+      @server: Serving
+      @exchange: Exchange
+      @responded: bool
+
+      def initialize: (Serving server, Integer stream_id, Exchange exchange, Array[[String, String]] headers) -> void
+
+      def trailers: () -> Array[[String, String]]
+
+      def early_data?: () -> bool
+
+      def responded?: () -> bool
+
+      def respond: (Integer status, ?Array[[String, String]] headers, ?String? body) -> void
+    end
+
+    class Server
+      @settings: Raiha::Next::HTTP3::Settings
+      @server: Raiha::Next::Runtime::Server
+
+      def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+                       ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?,
+                       ?settings: Raiha::Next::HTTP3::Settings) -> void
+
+      def run: () { (Request request) -> void } -> nil
+
+      def local_address: () -> UDP::address?
+
+      def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
+
+      def reconfigure: (tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring) -> nil
+    end
+
+    class Serving
+      @session: Session
+      @http3: Raiha::Next::HTTP3::Connection
+      @binding: Raiha::Next::HTTP3Binding
+      @exchanges: Hash[Integer, Exchange]
+      @arrived: Array[[Integer, Array[[String, String]]]]
+
+      def initialize: (Session session, Raiha::Next::HTTP3::Settings settings) -> void
+
+      def serve: () { (Request request) -> void } -> void
+
+      def read_chunk: (Integer stream_id) -> String?
+
+      def respond: (Integer stream_id, Exchange exchange, Integer status, Array[[String, String]] headers, String? body) -> void
+
+      def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+
+      def turn: (Float now) -> void
+
+      private def handle: (^(Request) -> void handler, Request request) -> void
+
+      private def write: (Integer stream_id, Exchange exchange, String data, fin: bool) -> void
+
+      private def writable: [T < Object] (Integer stream_id, Exchange exchange) { () -> T? } -> T
+
+      private def forget: (Request request) -> void
+
+      private def resume: (Integer stream_id, Exchange exchange) -> void
+
+      private def flush: () -> void
+
+      private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
     end
   end
 end

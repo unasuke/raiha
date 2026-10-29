@@ -1,0 +1,208 @@
+# frozen_string_literal: true
+
+require_relative "http3"
+
+module Raiha::Next::Runtime
+  module HTTP3
+    # A request to the server of HTTP/3, given to the block of Server#run in
+    # a fiber of its own: its pseudo-header fields, its header fields
+    # without them, its body as it comes, and its trailer fields once the
+    # body has been read. The block answers it with `respond`.
+    class Request
+      attr_reader :stream_id, :method, :path, :authority, :scheme, :protocol, :headers, :body
+
+      def initialize(server, stream_id, exchange, headers)
+        @server = server
+        @stream_id = stream_id
+        @exchange = exchange
+        pseudo = headers.select { |name, _| name.start_with?(":") }.to_h
+        @method = pseudo.fetch(":method", "")
+        @path = pseudo.fetch(":path", "")
+        @authority = pseudo[":authority"]
+        @scheme = pseudo[":scheme"]
+        @protocol = pseudo[":protocol"]
+        @headers = headers.reject { |name, _| name.start_with?(":") }
+        @body = Body.new(server, stream_id)
+        @responded = false
+      end
+
+      # The trailer fields, once the body has been read to its end.
+      def trailers = @exchange.trailers
+
+      # 0-RTT comes with resumption, which this release does not have yet.
+      def early_data? = false
+
+      def responded? = @responded
+
+      # Answers with `status`, `headers` and the whole of `body`, written as
+      # the stream takes it.
+      def respond(status, headers = [], body = nil)
+        raise Error::Usage, "the request on stream #{@stream_id} has its response already" if @responded
+        @responded = true
+        @server.respond(@stream_id, @exchange, status, headers, body)
+      end
+    end
+
+    # The server of HTTP/3 of the runtime: a Runtime::Server whose
+    # sessions each have HTTP/3 attached, and whose block is given each
+    # request in a fiber of its own. A block that leaves a request with no
+    # response has it answered with 500.
+    class Server
+      def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
+        settings: Raiha::Next::HTTP3::Settings.new(enable_connect_protocol: true))
+        @settings = settings
+        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:)
+      end
+
+      def run(&handler)
+        @server.run { |session| Serving.new(session, @settings).serve(&handler) }
+      end
+
+      def local_address = @server.local_address
+
+      def stop(...) = @server.stop(...)
+
+      def reconfigure(...) = @server.reconfigure(...)
+    end
+
+    # The HTTP/3 of one connection of a Server: the requests as they come,
+    # each to a fiber of its own.
+    class Serving
+      def initialize(session, settings)
+        @session = session
+        @http3 = Raiha::Next::HTTP3::Connection.server(settings:)
+        @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+        @exchanges = {} #: Hash[Integer, Exchange]
+        # The requests whose header sections have come, not yet given to a
+        # fiber, with their header fields.
+        @arrived = [] #: Array[[Integer, Array[[String, String]]]]
+        session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+      end
+
+      # Gives each request to the block in a fiber of its own until the
+      # connection closes.
+      def serve(&handler)
+        loop do
+          stream_id, headers = @session.wait_for { @arrived.shift }
+          exchange = @exchanges.fetch(stream_id)
+          Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+        end
+      rescue Raiha::Next::QUIC::ClosedError
+        nil
+      end
+
+      # The next chunk of the request on `stream_id` once there is one, nil
+      # at its end; for Body.
+      def read_chunk(stream_id)
+        exchange = @exchanges[stream_id] or return nil
+        chunk = @session.wait_for do
+          reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+          exchange.shift || (:end if exchange.ended?)
+        end
+        resume(stream_id, exchange) if exchange.paused && !exchange.full?
+        chunk if chunk.is_a?(String)
+      end
+
+      # Sends the response on `stream_id`; for Request.
+      def respond(stream_id, exchange, status, headers, body)
+        fields = [[":status", status.to_s], *headers] #: Array[[String, String]]
+        writable(stream_id, exchange) do
+          @http3.send_headers(stream_id, fields, fin: body.nil? || body.empty?)
+          true
+        end
+        flush
+        write(stream_id, exchange, body, fin: true) if body && !body.empty?
+      end
+
+      # The Session's protocol: the events of QUIC that are HTTP/3's.
+      def take(event, now) = @binding.receive(event, now:)
+
+      # The Session's protocol. The events of a turn are all looked at before
+      # what they ask is done, so a stream reset or stopped in it is written
+      # to no more.
+      def turn(now)
+        @binding.flush(now:)
+        events = [] #: Array[Raiha::Next::HTTP3::Event::t]
+        @http3.each_event { |event| events << event }
+        events.each { |event| take_http3(event) }
+        @binding.flush(now:)
+      end
+
+      private def handle(handler, request)
+        handler.call(request)
+        request.respond(500) unless request.responded?
+      rescue Raiha::Next::QUIC::ClosedError, StreamReset
+        nil
+      ensure
+        forget(request)
+      end
+
+      # Writes all of `data`, as the stream takes it.
+      private def write(stream_id, exchange, data, fin:)
+        written = 0
+        until written == data.bytesize
+          written += writable(stream_id, exchange) do
+            taken = @http3.send_data(stream_id, data.byteslice(written..) || "".b, fin:)
+            # Nothing taken, nothing to send: waking the driver would wake
+            # this fiber again at once.
+            next nil unless taken.positive?
+            flush
+            taken
+          end
+        end
+      end
+
+      # Calls the block until it gives something, waiting for room, unless
+      # the client has reset the request or stopped the response. steep
+      # picks no overload of `wait` for a block that gives T?.
+      private def writable(stream_id, exchange) # steep:ignore
+        @session.wait_for do
+          stopped = exchange.stopped and raise StreamReset.new(stream_id, stopped)
+          reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+          yield
+        end
+      end
+
+      private def forget(request)
+        stream_id = request.stream_id
+        @exchanges.delete(stream_id)
+        @binding.resume(stream_id)
+      end
+
+      private def resume(stream_id, exchange)
+        exchange.paused = false
+        @binding.resume(stream_id)
+        flush
+      end
+
+      private def flush
+        @binding.flush(now: Driver.clock)
+        @session.changed
+      end
+
+      private def take_http3(event)
+        case event
+        when Raiha::Next::HTTP3::Event::Headers
+          return if @exchanges.key?(event.stream_id)
+          exchange = @exchanges[event.stream_id] = Exchange.new
+          exchange.end! if event.fin
+          @arrived << [event.stream_id, event.headers]
+        when Raiha::Next::HTTP3::Event::Data
+          exchange = @exchanges[event.stream_id] or return
+          exchange << event.data unless event.data.empty?
+          exchange.end! if event.fin
+          if exchange.full? && !exchange.paused
+            exchange.paused = true
+            @binding.pause(event.stream_id)
+          end
+        when Raiha::Next::HTTP3::Event::Trailers
+          exchange = @exchanges[event.stream_id] or return
+          exchange.trailers = event.headers
+          exchange.end!
+        when Raiha::Next::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
+        when Raiha::Next::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
+        end
+      end
+    end
+  end
+end
