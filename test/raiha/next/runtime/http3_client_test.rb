@@ -121,6 +121,17 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
     end
   end
 
+  # A connection of HTTP/3 closes with H3_NO_ERROR once the block is over.
+  def test_the_connection_closes_with_h3_no_error
+    Sync do
+      answering(BODIES) do |port, sessions|
+        h3_connect(port) { |session| Runtime::HTTP3::Client.new(session).get("/hello") }
+        sleep 0.01 until sessions.first&.closed?
+        assert_equal [HTTP3::ErrorCode::NO_ERROR, true], sessions.first.connection.close_reason.then { [_1.code, _1.application] }
+      end
+    end
+  end
+
   def test_requests_in_fibers_of_their_own
     Sync do
       answering(BODIES) do |port|

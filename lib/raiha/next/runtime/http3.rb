@@ -125,7 +125,7 @@ module Raiha::Next::Runtime
         @http3 = Raiha::Next::HTTP3::Connection.client(settings:)
         @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
-        session.attach(self)
+        session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
         @authority = authority || session.handshake&.server_name || raise(Error::Usage, "no authority to request from")
       end
 

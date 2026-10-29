@@ -57,16 +57,21 @@ module Raiha::Next::Runtime
       @stopping = false
       @connected = nil #: Raiha::Next::QUIC::Event::Connected?
       @protocol = nil #: _Protocol?
+      # The application's error code a close with none given closes with.
+      @close_code = 0
     end
 
     # What the handshake came to (TLS::Event::HandshakeComplete), once it
     # has completed.
     def handshake = @connected&.handshake
 
-    # Puts `protocol` over the connection. A handshake completed before is
-    # told it with the Connected event it missed.
-    def attach(protocol)
+    # Puts `protocol` over the connection, which then closes with its
+    # `close_code` when no other is given: H3_NO_ERROR for HTTP/3, say. A
+    # handshake completed before is told it with the Connected event it
+    # missed.
+    def attach(protocol, close_code: @close_code)
       @protocol = protocol
+      @close_code = close_code
       connected = @connected and protocol.take(connected, Driver.clock)
       changed
     end
@@ -107,7 +112,7 @@ module Raiha::Next::Runtime
     # Closes the connection with the application's `error_code` once what the
     # streams sent is acknowledged, or three PTOs have gone, unless it has
     # closed already.
-    def close_when_acknowledged(error_code: 0)
+    def close_when_acknowledged(error_code: @close_code)
       return if closed?
       stats = @connection.stats
       wait_acknowledged(3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY))
@@ -138,7 +143,7 @@ module Raiha::Next::Runtime
     end
 
     # Closes the connection with the application's `error_code`.
-    def close(error_code: 0, reason: "")
+    def close(error_code: @close_code, reason: "")
       @connection.close(error_code:, reason:, application: true, now: Driver.clock)
       @driver.changed
       notify

@@ -139,12 +139,13 @@ module Raiha::Next::Runtime
     @stopping: bool
     @connected: Raiha::Next::QUIC::Event::Connected?
     @protocol: _Protocol?
+    @close_code: Integer
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
 
     def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
 
-    def attach: (_Protocol protocol) -> void
+    def attach: (_Protocol protocol, ?close_code: Integer) -> void
 
     def changed: () -> void
 

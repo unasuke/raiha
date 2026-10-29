@@ -86,19 +86,21 @@ module NextRuntimeHTTP3
   def h3_client_config = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY)
 
   # A Runtime::Server on a free port answering with `bodies`, for the block,
-  # which is given its port.
+  # which is given its port and the server's sessions as they come.
   def answering(bodies)
+    sessions = []
     tls = h3_server_config
     server = Raiha::Next::Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls),
       host: "127.0.0.1", port: 0)
     running = Fiber.schedule do
       server.run do |session|
+        sessions << session
         Answerer.new(session, bodies)
         sleep 0.01 until session.closed?
       end
     end
     sleep 0.01 until server.local_address
-    yield server.local_address.fetch(1)
+    yield server.local_address.fetch(1), sessions
   ensure
     server&.stop(timeout: 1)
     sleep 0.01 while running&.alive?

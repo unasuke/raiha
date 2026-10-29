@@ -27,8 +27,10 @@ module Raiha::Next::Runtime
   #
   # Once the block is over, what the streams sent is given three PTOs to be
   # acknowledged, so a response written last is not cut short, and the
-  # connection closes with the application's error 0. The closing period
-  # is not waited out: the CONNECTION_CLOSE goes, and the socket closes.
+  # connection closes with the application's error 0, or that of the
+  # protocol attached to the Session: H3_NO_ERROR for HTTP/3. The closing
+  # period is not waited out: the CONNECTION_CLOSE goes, and the socket
+  # closes.
   #
   # With `qlog_dir`, each connection tried has a qlog there, named by the
   # time it began.
