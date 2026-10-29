@@ -73,6 +73,20 @@ class RaihaNextHTTP3QlogTest < Minitest::Test
 
   # A Priority Field Value that is not text goes as hex, so that the trace
   # stays JSON whatever the peer sends.
+  # A value of a field that carries credentials goes as its length alone.
+  def test_credentials_are_left_out
+    records = Records.new
+    server = server(records)
+    server.stream_data(2, "\x00".b + Frame.encode(HTTP3::Settings.new.to_frame))
+    server.stream_data(0, headers(GET + [["authorization", "Bearer secret"], ["cookie", "session=1"], ["accept", "*/*"]]))
+    server.send_headers(0, [[":status", "200"], ["set-cookie", "session=2"]], fin: true)
+    fields = records.all.select { |name, _| name.start_with?("http3:frame_") }.flat_map { |_, data| data.dig("frame", "headers") || [] }
+    assert_equal [{ "name" => "authorization", "raiha:value_length" => 13 }, { "name" => "cookie", "raiha:value_length" => 9 },
+      { "name" => "accept", "value" => "*/*" }, { "name" => "set-cookie", "raiha:value_length" => 9 }],
+      fields.reject { |field| field["name"].start_with?(":") }
+    refute_match(/secret|session/, JSON.generate(records.all))
+  end
+
   def test_a_priority_update_that_is_not_text
     io = StringIO.new
     quic = Raiha::Next::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA])

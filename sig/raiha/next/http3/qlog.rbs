@@ -29,6 +29,7 @@ module Raiha::Next::HTTP3
 
       MAX_FIELD_BYTES: Integer
       MAX_FIELDS: Integer
+      SECRET_FIELDS: Array[String]
       TEXT: Regexp
       STREAM_TYPES: Hash[Integer, String]
       SETTING_NAMES: Hash[Integer, String]

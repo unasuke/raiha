@@ -24,6 +24,10 @@ module Raiha::Next::HTTP3
 
       MAX_FIELD_BYTES = 256
       MAX_FIELDS = 64
+      # The fields that carry credentials: their values go as their length
+      # alone, so that a trace given to someone to read gives them no one's
+      # session or password.
+      SECRET_FIELDS = %w[authorization proxy-authorization cookie set-cookie].freeze
       TEXT = /\A[\x20-\x7e\t]*\z/n
       STREAM_TYPES = {
         Connection::CONTROL_STREAM => "control", Connection::PUSH_STREAM => "push",
@@ -103,7 +107,10 @@ module Raiha::Next::HTTP3
 
       # The lines of a field section, MAX_FIELDS at most, the rest counted.
       private def fields(headers)
-        lines = headers.first(MAX_FIELDS).map { |name, value| field("name", name).merge(field("value", value)) }
+        lines = headers.first(MAX_FIELDS).map do |name, value|
+          next field("name", name).merge("raiha:value_length": value.bytesize) if SECRET_FIELDS.include?(name.downcase)
+          field("name", name).merge(field("value", value))
+        end
         result = { headers: lines } #: Hash[Symbol, json]
         result[:"raiha:headers_omitted"] = headers.size - MAX_FIELDS if headers.size > MAX_FIELDS
         result
