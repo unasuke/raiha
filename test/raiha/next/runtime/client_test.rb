@@ -122,6 +122,20 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     end
   end
 
+  # What makes the connection fail before it starts, a Keyring for another
+  # Config, leaves no socket behind.
+  def test_an_attempt_that_cannot_start
+    open = -> { ObjectSpace.each_object(UDPSocket).count { !_1.closed? } }
+    Sync do
+      before = open.call
+      tls = client_config
+      client = Addressed.new([["127.0.0.1", free_port]], config: QUIC::Config.new, tls_config: tls.with(alpn: ["h3"]),
+        keyring: client_keyring(config: tls))
+      assert_raises(ArgumentError) { client.connect("example.test", 443, server_name: "localhost") { flunk } }
+      assert_equal before, open.call
+    end
+  end
+
   def test_a_scheduler_is_needed
     assert_raises(Runtime::Error::Usage) { Runtime::Client.connect("127.0.0.1", free_port, **options) { flunk } }
   end

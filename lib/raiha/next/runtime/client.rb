@@ -130,6 +130,7 @@ module Raiha::Next::Runtime
     # A connection to `address` on a socket of its own, its handshake to
     # begin once the driver starts: [driver, session].
     private def attempt(address, server_name)
+      made = false
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
@@ -137,7 +138,12 @@ module Raiha::Next::Runtime
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:)
       session = @session = Session.new(connection, driver, role: :client)
       @deadline = Driver.clock + @connect_timeout
-      [driver, session]
+      made = true
+      [driver, session] #: [Driver, Session]
+    ensure
+      # A connection that cannot be made, a Keyring for another Config say,
+      # leaves no socket behind.
+      udp&.close unless made
     end
   end
 end
