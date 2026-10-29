@@ -274,6 +274,7 @@ module Raiha::Next::HTTP3
     def stream_reset: (Integer stream_id, error_code: Integer) -> void
     def stream_stopped: (Integer stream_id, error_code: Integer) -> void
     def cancel: (Integer stream_id, ?error_code: Integer) -> void
+    def stop_reading: (Integer stream_id) -> void
     def goaway: (?Integer? id) -> void
     def update_priority: (Integer stream_id, ?urgency: Integer?, ?incremental: bool?) -> void
     def each_action: () { (Action::t action) -> void } -> void

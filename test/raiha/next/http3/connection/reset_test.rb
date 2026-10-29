@@ -89,6 +89,32 @@ class RaihaNextHTTP3ConnectionResetTest < Minitest::Test
     assert_raises(ArgumentError) { server.cancel(0, error_code: -1) }
   end
 
+  # A server that needs no more of a request asks for no more, and
+  # answers it still.
+  def test_stopping_reading
+    server = with_request
+    server.stop_reading(0)
+    assert_equal [HTTP3::Action::StopSending.new(stream_id: 0, error_code: HTTP3::ErrorCode::NO_ERROR)], actions(server)
+    server.stream_data(0, data("late"), fin: true)
+    assert_empty events(server)
+    server.send_headers(0, [[":status", "200"]], fin: true)
+    assert sent(server).fetch(0).last
+    server.stop_reading(0)
+    server.stop_reading(4)
+    assert_empty actions(server)
+    assert_raises(ArgumentError) { server.stop_reading(2) }
+    assert_raises(HTTP3::Error::Usage) { HTTP3::Connection.client.stop_reading(0) }
+  end
+
+  # A request that has come whole has nothing more to stop.
+  def test_stopping_reading_a_request_that_ended
+    server = server()
+    server.stream_data(0, headers(POST) + data("body"), fin: true)
+    events(server)
+    server.stop_reading(0)
+    assert_empty actions(server)
+  end
+
   def test_a_client_cancels_its_request
     client = HTTP3::Connection.client
     client.send_request(0, POST)

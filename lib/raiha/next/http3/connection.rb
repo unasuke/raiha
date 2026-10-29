@@ -436,6 +436,20 @@ module Raiha::Next::HTTP3
       @actions << Action::StopSending.new(stream_id:, error_code:) << Action::Reset.new(stream_id:, error_code:)
     end
 
+    # Takes no more of the request on `stream_id`, which this server
+    # answers without the rest of it: the client is asked to stop sending
+    # with H3_NO_ERROR (RFC 9114 "HTTP Message Exchanges"), what of it
+    # still comes is dropped, and the response goes on. A stream whose
+    # request has ended, or has none, is left as it is.
+    def stop_reading(stream_id)
+      raise Error::Usage, "a client stops reading a response by cancelling its request" unless @role == :server
+      raise ArgumentError, "stream #{stream_id} is not a request stream" unless stream_id.is_a?(Integer) && stream_id & 0x2 == 0
+      return if @closed
+      @receiving.delete(stream_id) or return
+      @decoder.cancel(stream_id)
+      @actions << Action::StopSending.new(stream_id:, error_code: ErrorCode::NO_ERROR)
+    end
+
     # Gives what this layer asks of the transport, Action values, in the
     # order asked.
     def each_action
