@@ -130,8 +130,9 @@ module Raiha::Next::Runtime
         # The requests whose header sections have come, not yet given to a
         # fiber, with their header fields.
         @arrived = [] #: Array[[Integer, Array[[String, String]]]]
-        # The fibers of the requests given to the block and not over.
-        @fibers = {} #: Hash[Integer, Fiber]
+        # The fibers of the requests given to the block and not over; nil
+        # while one starts.
+        @fibers = {} #: Hash[Integer, Fiber?]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
       end
 
@@ -156,7 +157,7 @@ module Raiha::Next::Runtime
         @fibers.each do |stream_id, fiber|
           @http3.cancel(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
           @exchanges[stream_id]&.reset = Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED
-          next unless fiber.alive? && scheduler.respond_to?(:fiber_interrupt)
+          next unless fiber&.alive? && scheduler.respond_to?(:fiber_interrupt)
           scheduler.fiber_interrupt(fiber, StreamReset.new(stream_id, Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED))
         end
         @binding.flush(now: Driver.clock)
@@ -220,7 +221,12 @@ module Raiha::Next::Runtime
       private def start(handler, arrived)
         stream_id, headers = arrived
         exchange = @exchanges.fetch(stream_id)
-        @fibers[stream_id] = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+        # The fiber runs at once, and a request with nothing to wait for is
+        # over before Fiber.schedule returns: it is known as there before it
+        # starts, and not kept once over.
+        @fibers[stream_id] = nil
+        fiber = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+        @fibers[stream_id] = fiber if @fibers.key?(stream_id)
       end
 
       # The server is stopping: GOAWAY twice, with the requests that come in

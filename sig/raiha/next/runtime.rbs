@@ -564,7 +564,7 @@ module Raiha::Next::Runtime
       LAST_REQUEST: Integer
 
       @session: Session
-      @fibers: Hash[Integer, Fiber]
+      @fibers: Hash[Integer, Fiber?]
       @http3: Raiha::Next::HTTP3::Connection
       @binding: Raiha::Next::HTTP3Binding
       @exchanges: Hash[Integer, Exchange]

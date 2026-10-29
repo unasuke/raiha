@@ -212,6 +212,22 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     end
   end
 
+  # A request over before its fiber is known does not hold a stop back.
+  def test_stop_after_a_request_over_at_once
+    Sync do
+      serving(->(request) { request.respond(200, [], "at once") }) do |port, server, running|
+        h3_connect(port) do |session|
+          assert_equal "at once", Runtime::HTTP3::Client.new(session).get("/").body
+          started = Runtime::Driver.clock
+          server.stop(timeout: 5)
+          sleep 0.01 until session.closed?
+          assert_operator Runtime::Driver.clock - started, :<, 2
+        end
+        sleep 0.01 while running.alive?
+      end
+    end
+  end
+
   # A request still running when the server is out of time is cancelled, and
   # its fiber interrupted where it waits.
   def test_stop_out_of_time
