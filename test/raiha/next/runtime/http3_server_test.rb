@@ -53,6 +53,18 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     end
   end
 
+  # A request answered without its body: the client is told to send no
+  # more of it, and has the response all the same.
+  def test_a_request_body_not_read
+    body = StringIO.new(Random.new(5).bytes(4_000_000))
+    Sync do
+      serving(->(request) { request.respond(200, [], "no thanks") }) do |port|
+        assert_equal "no thanks", client(port) { _1.request("POST", "/upload", body:).body }
+      end
+    end
+    assert_operator body.pos, :<, 4_000_000
+  end
+
   def test_requests_in_fibers_of_their_own
     handler = lambda do |request|
       sleep 0.05 if request.path == "/slow"

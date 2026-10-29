@@ -314,10 +314,12 @@ module Raiha::Next::Runtime
         end
       end
 
+      # The request is over: what of its body has not come is not wanted.
       private def forget(request)
         stream_id = request.stream_id
         @exchanges.delete(stream_id)
         @fibers.delete(stream_id)
+        @http3.stop_reading(stream_id)
         @binding.resume(stream_id)
         # A stop waits for the requests to be over.
         @session.changed
