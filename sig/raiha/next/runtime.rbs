@@ -398,7 +398,7 @@ module Raiha::Next::Runtime
       attr_accessor paused: bool
       attr_reader unread: Integer
 
-      @chunks: Array[String]
+      @data: String
       @ended: bool
 
       def initialize: () -> void

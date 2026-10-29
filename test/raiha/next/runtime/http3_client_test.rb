@@ -143,6 +143,15 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
     end
   end
 
+  # What comes unread, however small the frames, is kept in one String.
+  def test_the_unread_body_in_one_string
+    exchange = Runtime::HTTP3::Exchange.new
+    1_000.times { exchange << "x" }
+    assert_equal [1_000, true], [exchange.unread, exchange.instance_variable_get(:@data).is_a?(String)]
+    assert_equal "x" * 1_000, exchange.shift
+    assert_equal [nil, 0], [exchange.shift, exchange.unread]
+  end
+
   def test_requests_in_fibers_of_their_own
     Sync do
       answering(BODIES) do |port|

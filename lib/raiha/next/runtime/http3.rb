@@ -21,7 +21,10 @@ module Raiha::Next::Runtime
     # it, and how the peer reset the response or stopped the request.
     class Exchange
       # The most of a body kept unread before its stream is read no more,
-      # so that the peer's flow control holds the rest back.
+      # so that the peer's flow control holds the rest back. What one read
+      # of the stream takes comes on top, as much as the stream's flow
+      # control window lets the peer send. What is unread is kept in one
+      # String, however small the DATA frames it came in.
       MAX_UNREAD = 256 * 1024
 
       attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused
@@ -30,7 +33,7 @@ module Raiha::Next::Runtime
       def initialize
         @status = nil #: Integer?
         @headers = [] #: Array[[String, String]]
-        @chunks = [] #: Array[String]
+        @data = "".b
         @unread = 0
         @trailers = [] #: Array[[String, String]]
         @reset = nil #: Integer?
@@ -40,16 +43,18 @@ module Raiha::Next::Runtime
       end
 
       def <<(chunk)
-        @chunks << chunk
+        @data << chunk
         @unread += chunk.bytesize
         self
       end
 
-      # The next chunk of the body not read yet, nil when none has come.
+      # What of the body has come and is not read yet, nil when nothing has.
       def shift
-        chunk = @chunks.shift or return nil
-        @unread -= chunk.bytesize
-        chunk
+        return nil if @data.empty?
+        data = @data
+        @data = "".b
+        @unread = 0
+        data
       end
 
       def full? = @unread >= MAX_UNREAD
@@ -60,7 +65,7 @@ module Raiha::Next::Runtime
       def end!(dropped: false)
         @ended = true
         return unless dropped
-        @chunks.clear
+        @data = "".b
         @unread = 0
       end
     end
