@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "stringio"
 require_relative "../http3_binding"
 
 module Raiha::Next::Runtime
@@ -16,31 +17,109 @@ module Raiha::Next::Runtime
     class Response < Data.define(:status, :headers, :body, :trailers); end
 
     # What the client keeps of a request until its response is read: the
-    # response as it comes, and how the peer reset it, if it did.
+    # response as it comes, its body as far as the application has not read
+    # it, and how the peer reset the response or stopped the request.
     class Exchange
-      attr_accessor :status, :headers, :trailers, :reset
-      attr_reader :chunks
+      # The most of a body kept unread before its stream is read no more,
+      # so that the peer's flow control holds the rest back.
+      MAX_UNREAD = 256 * 1024
+
+      attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused
+      attr_reader :unread
 
       def initialize
         @status = nil #: Integer?
         @headers = [] #: Array[[String, String]]
         @chunks = [] #: Array[String]
+        @unread = 0
         @trailers = [] #: Array[[String, String]]
         @reset = nil #: Integer?
+        @stopped = nil #: Integer?
+        @paused = false
         @ended = false
       end
 
+      def <<(chunk)
+        @chunks << chunk
+        @unread += chunk.bytesize
+        self
+      end
+
+      # The next chunk of the body not read yet, nil when none has come.
+      def shift
+        chunk = @chunks.shift or return nil
+        @unread -= chunk.bytesize
+        chunk
+      end
+
+      def full? = @unread >= MAX_UNREAD
+
       def ended? = @ended
 
-      def end!
+      # The response has ended; with `dropped`, what was not read goes.
+      def end!(dropped: false)
         @ended = true
+        return unless dropped
+        @chunks.clear
+        @unread = 0
+      end
+    end
+
+    # A response as it comes, given to the block of Client#request once
+    # its header section has.
+    class ResponseStream
+      attr_reader :status, :headers, :body
+
+      def initialize(client, stream_id, exchange, status)
+        @client = client
+        @stream_id = stream_id
+        @exchange = exchange
+        @status = status
+        @headers = exchange.headers
+        @body = Body.new(client, stream_id)
+      end
+
+      # The trailer fields, once the body has been read to its end.
+      def trailers = @exchange.trailers
+
+      # Stops the request and its response with H3_REQUEST_CANCELLED.
+      def cancel
+        @client.cancel(@stream_id)
+      end
+    end
+
+    # The body of a response, read as it comes.
+    class Body
+      def initialize(client, stream_id)
+        @client = client
+        @stream_id = stream_id
+      end
+
+      # Each chunk until the end, waiting for each.
+      def each
+        while (chunk = @client.read_chunk(@stream_id))
+          yield chunk
+        end
+      end
+
+      # All of what is left.
+      def read
+        data = "".b
+        each { |chunk| data << chunk }
+        data
       end
     end
 
     # The client of HTTP/3 over a Session, which it attaches itself to. Each
-    # request goes on a stream of its own, and the fiber that made it waits
-    # for its response.
+    # request goes on a stream of its own, and the fiber that made it writes
+    # its body and waits for its response. A body is a String or what reads
+    # as an IO does, and goes as the peer's flow control lets it; the body
+    # of a response is read no further than MAX_UNREAD bytes ahead of the
+    # application.
     class Client
+      # The most of a request's body read from it at a time.
+      PIECE = 64 * 1024
+
       def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
         @session = session
         @http3 = Raiha::Next::HTTP3::Connection.client(settings:)
@@ -52,16 +131,50 @@ module Raiha::Next::Runtime
 
       # The response to a GET of `path`, its body read whole.
       def get(path, headers: [])
-        stream_id = start("GET", path, headers)
+        request("GET", path, headers:)
+      end
+
+      # Sends a request, with `body` when there is one, and its priority
+      # (RFC 9218) as the `priority` field when `urgency` (0 to 7) or
+      # `incremental` is given. The response comes to the block as a
+      # ResponseStream, and the block's value is returned; with no block, the
+      # response is read whole into a Response. A response the block left
+      # unread is cancelled.
+      def request(method, path, headers: [], body: nil, urgency: nil, incremental: nil)
+        stream_id = start(method, path, headers + priority(urgency, incremental), fin: body.nil?)
         exchange = @exchanges.fetch(stream_id)
+        upload(stream_id, exchange, body) if body
         status = @session.wait_for do
           reset = exchange.reset and raise StreamReset.new(stream_id, reset)
-          # HTTP/3 ends no response before its final status.
-          exchange.status if exchange.ended?
+          exchange.status
         end
-        Response.new(status:, headers: exchange.headers, body: exchange.chunks.join, trailers: exchange.trailers)
+        return yield ResponseStream.new(self, stream_id, exchange, status) if block_given?
+        Response.new(status:, headers: exchange.headers, body: Body.new(self, stream_id).read, trailers: exchange.trailers)
       ensure
-        @exchanges.delete(stream_id) if stream_id
+        finish(stream_id) if stream_id
+      end
+
+      # The next chunk of the response on `stream_id` once there is one, nil
+      # at its end; for Body.
+      def read_chunk(stream_id)
+        exchange = @exchanges[stream_id] or return nil
+        chunk = @session.wait_for do
+          reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+          exchange.shift || (:end if exchange.ended?)
+        end
+        resume(stream_id, exchange) if exchange.paused && !exchange.full?
+        chunk if chunk.is_a?(String)
+      end
+
+      # Stops the request on `stream_id` and its response; for
+      # ResponseStream.
+      def cancel(stream_id)
+        exchange = @exchanges[stream_id] or return
+        return if exchange.ended? || exchange.reset
+        @http3.cancel(stream_id)
+        exchange.end!(dropped: true)
+        @binding.resume(stream_id)
+        flush
       end
 
       # The Session's protocol: the events of QUIC that are HTTP/3's.
@@ -76,14 +189,66 @@ module Raiha::Next::Runtime
       end
 
       # Sends the request on a new stream: its ID.
-      private def start(method, path, headers, fin: true)
+      private def start(method, path, headers, fin:)
         stream_id = @session.open_stream_id
         @exchanges[stream_id] = Exchange.new
         pseudo = [[":method", method], [":scheme", "https"], [":authority", @authority], [":path", path]] #: Array[[String, String]]
         @http3.send_request(stream_id, pseudo + headers, fin:)
+        flush
+        stream_id
+      end
+
+      private def priority(urgency, incremental)
+        raise ArgumentError, "an urgency is 0 to 7, not #{urgency.inspect}" unless urgency.nil? || (urgency.is_a?(Integer) && urgency.between?(0, 7))
+        parameters = [("u=#{urgency}" if urgency), ("i" if incremental)].compact
+        parameters.empty? ? [] : [["priority", parameters.join(", ")]]
+      end
+
+      # Writes `body` as the request's content, as the stream takes it, and
+      # ends it. A peer that stops the request with H3_NO_ERROR wants no
+      # more of it and answers all the same (RFC 9114 "Request
+      # Cancellation and Rejection").
+      private def upload(stream_id, exchange, body)
+        source = body.is_a?(String) ? StringIO.new(body) : body
+        while (piece = source.read(PIECE))
+          written = 0
+          until written == piece.bytesize
+            written += @session.wait_for do
+              reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+              stopped = exchange.stopped and return check_stopped(stream_id, stopped)
+              taken = @http3.send_data(stream_id, piece.byteslice(written..) || "".b)
+              # Nothing taken, nothing to send: waking the driver would wake
+              # this fiber again at once.
+              next nil unless taken.positive?
+              flush
+              taken
+            end
+          end
+        end
+        @http3.send_data(stream_id, "".b, fin: true)
+        flush
+      end
+
+      private def check_stopped(stream_id, error_code)
+        raise StreamReset.new(stream_id, error_code) unless error_code == Raiha::Next::HTTP3::ErrorCode::NO_ERROR
+      end
+
+      # Lets go of what was kept of the request; a response not read to its
+      # end is cancelled.
+      private def finish(stream_id)
+        cancel(stream_id)
+        @exchanges.delete(stream_id)
+      end
+
+      private def resume(stream_id, exchange)
+        exchange.paused = false
+        @binding.resume(stream_id)
+        flush
+      end
+
+      private def flush
         @binding.flush(now: Driver.clock)
         @session.changed
-        stream_id
       end
 
       private def take_http3(event)
@@ -97,15 +262,21 @@ module Raiha::Next::Runtime
           exchange.end! if event.fin
         when Raiha::Next::HTTP3::Event::Data
           exchange = @exchanges[event.stream_id] or return
-          exchange.chunks << event.data
+          exchange << event.data unless event.data.empty?
           exchange.end! if event.fin
+          pause(event.stream_id, exchange) if exchange.full? && !exchange.paused
         when Raiha::Next::HTTP3::Event::Trailers
           exchange = @exchanges[event.stream_id] or return
           exchange.trailers = event.headers
           exchange.end!
-        when Raiha::Next::HTTP3::Event::Reset
-          @exchanges[event.stream_id]&.reset = event.error_code
+        when Raiha::Next::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
+        when Raiha::Next::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
         end
+      end
+
+      private def pause(stream_id, exchange)
+        exchange.paused = true
+        @binding.pause(stream_id)
       end
     end
   end

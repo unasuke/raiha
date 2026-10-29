@@ -378,22 +378,66 @@ module Raiha::Next::Runtime
     end
 
     class Exchange
+      MAX_UNREAD: Integer
+
       attr_accessor status: Integer?
       attr_accessor headers: Array[[String, String]]
       attr_accessor trailers: Array[[String, String]]
       attr_accessor reset: Integer?
-      attr_reader chunks: Array[String]
+      attr_accessor stopped: Integer?
+      attr_accessor paused: bool
+      attr_reader unread: Integer
 
+      @chunks: Array[String]
       @ended: bool
 
       def initialize: () -> void
 
+      def <<: (String chunk) -> self
+
+      def shift: () -> String?
+
+      def full?: () -> bool
+
       def ended?: () -> bool
 
-      def end!: () -> void
+      def end!: (?dropped: bool) -> void
+    end
+
+    class ResponseStream
+      attr_reader status: Integer
+      attr_reader headers: Array[[String, String]]
+      attr_reader body: Body
+
+      @client: Client
+      @stream_id: Integer
+      @exchange: Exchange
+
+      def initialize: (Client client, Integer stream_id, Exchange exchange, Integer status) -> void
+
+      def trailers: () -> Array[[String, String]]
+
+      def cancel: () -> void
+    end
+
+    class Body
+      @client: Client
+      @stream_id: Integer
+
+      def initialize: (Client client, Integer stream_id) -> void
+
+      def each: () { (String chunk) -> void } -> void
+
+      def read: () -> String
+    end
+
+    interface _Readable
+      def read: (Integer length) -> String?
     end
 
     class Client
+      PIECE: Integer
+
       @session: Session
       @http3: Raiha::Next::HTTP3::Connection
       @binding: Raiha::Next::HTTP3Binding
@@ -404,13 +448,34 @@ module Raiha::Next::Runtime
 
       def get: (String path, ?headers: Array[[String, String]]) -> Response
 
+      def request: (String method, String path, ?headers: Array[[String, String]], ?body: String | (_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) -> Response
+                 | [T] (String method, String path, ?headers: Array[[String, String]], ?body: String | (_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) { (ResponseStream response) -> T } -> T
+
+      def read_chunk: (Integer stream_id) -> String?
+
+      def cancel: (Integer stream_id) -> void
+
       def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
 
       def turn: (Float now) -> void
 
-      private def start: (String method, String path, Array[[String, String]] headers, ?fin: bool) -> Integer
+      private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> Integer
+
+      private def priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
+
+      private def upload: (Integer stream_id, Exchange exchange, String | (_Readable & Object) body) -> void
+
+      private def check_stopped: (Integer stream_id, Integer error_code) -> void
+
+      private def finish: (Integer stream_id) -> void
+
+      private def resume: (Integer stream_id, Exchange exchange) -> void
+
+      private def flush: () -> void
 
       private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
+
+      private def pause: (Integer stream_id, Exchange exchange) -> void
     end
   end
 end

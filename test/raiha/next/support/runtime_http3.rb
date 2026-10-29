@@ -4,7 +4,8 @@ require "raiha/next/support/runtime_owner"
 # "h3" for ALPN, and a server's HTTP/3 attached to a Session of a
 # Runtime::Server that answers each request whole with 200 and the body of
 # its path, or 404. "/early" is answered with a 103 first, "/trailers" with
-# trailer fields after its body, and "/reset" is cancelled.
+# trailer fields after its body, "/echo" with the request's body,
+# "/priority" with its priority field, and "/reset" is cancelled.
 module NextRuntimeHTTP3
   include NextRuntimeOwner
 
@@ -19,25 +20,35 @@ module NextRuntimeHTTP3
       @bodies = bodies
       @http3 = HTTP3::Connection.server
       @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
-      @paths = {}
+      @requests = {}
       @left = {}
       session.attach(self)
     end
 
     def take(event, now) = @binding.receive(event, now:)
 
+    # The events of a turn are all looked at before any is answered: a
+    # stream the client stopped or reset in it is written to no more.
     def turn(now)
       @binding.flush(now:)
-      @http3.each_event { |event| answer(event) }
+      events = []
+      @http3.each_event { |event| events << event }
+      events.grep(HTTP3::Event::Reset).each { |event| @requests.delete(event.stream_id) }
+      events.grep(HTTP3::Event::Stopped).each { |event| @left.delete(event.stream_id) && @requests.delete(event.stream_id) }
+      stopped = events.grep(HTTP3::Event::Stopped).map(&:stream_id)
+      events.each { |event| answer(event) unless stopped.include?(event.respond_to?(:stream_id) && event.stream_id) }
       @binding.flush(now:)
     end
 
     private def answer(event)
       case event
       when HTTP3::Event::Headers
-        @paths[event.stream_id] = event.headers.to_h.fetch(":path")
+        fields = event.headers.to_h
+        @requests[event.stream_id] = { path: fields.fetch(":path"), priority: fields["priority"], body: "".b }
         respond(event.stream_id) if event.fin
-      when HTTP3::Event::Data then respond(event.stream_id) if event.fin
+      when HTTP3::Event::Data
+        @requests[event.stream_id]&.fetch(:body)&.<<(event.data)
+        respond(event.stream_id) if event.fin
       when HTTP3::Event::Trailers then respond(event.stream_id)
       when HTTP3::Event::Writable then write(event.stream_id)
       when HTTP3::Event::Reset, HTTP3::Event::Stopped then @left.delete(event.stream_id)
@@ -45,9 +56,15 @@ module NextRuntimeHTTP3
     end
 
     private def respond(stream_id)
-      path = @paths.delete(stream_id)
+      request = @requests.delete(stream_id) or return
+      path = request.fetch(:path)
       return @http3.cancel(stream_id) if path == "/reset"
-      body = @bodies[path] or return @http3.send_headers(stream_id, [[":status", "404"]], fin: true)
+      body = case path
+      when "/echo" then request.fetch(:body)
+      when "/priority" then request.fetch(:priority) || "none"
+      else @bodies[path]
+      end
+      return @http3.send_headers(stream_id, [[":status", "404"]], fin: true) unless body
       @http3.send_headers(stream_id, [[":status", "103"], ["link", "</style.css>"]]) if path == "/early"
       @http3.send_headers(stream_id, [[":status", "200"], ["content-length", body.bytesize.to_s]])
       @left[stream_id] = [body, path == "/trailers"]
