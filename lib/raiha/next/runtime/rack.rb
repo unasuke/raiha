@@ -65,7 +65,8 @@ module Raiha::Next::Runtime
     end
 
     # The stream a streaming body is called with: it reads the request and
-    # writes the response.
+    # writes the response, which ends at `close_write` though the body
+    # goes on.
     class Stream
       def initialize(input, output)
         @input = input
@@ -76,7 +77,10 @@ module Raiha::Next::Runtime
 
       def read(...) = @input.read(...)
 
-      def write(data) = @output.write(data)
+      def write(data)
+        raise IOError, "the stream is closed for writing" if @write_closed
+        @output.write(data)
+      end
 
       def <<(data)
         write(data)
@@ -92,6 +96,7 @@ module Raiha::Next::Runtime
 
       def close_write
         @write_closed = true
+        @output.close
         nil
       end
 
@@ -109,6 +114,8 @@ module Raiha::Next::Runtime
       def write(data) = data.bytesize
 
       def <<(_data) = self
+
+      def close = nil
     end
 
     def initialize(app)

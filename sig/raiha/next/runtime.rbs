@@ -684,6 +684,8 @@ module Raiha::Next::Runtime
       def write: (String data) -> Integer
 
       def <<: (String _data) -> self
+
+      def close: () -> nil
     end
 
     @app: _App

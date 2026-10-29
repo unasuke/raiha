@@ -91,6 +91,29 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     end
   end
 
+  # A streaming body closed for writing has its response whole while it
+  # goes on, and writes no more.
+  def test_a_streaming_body_closed_for_writing
+    release = Thread::Queue.new
+    raised = nil
+    app = lambda do |_env|
+      [200, {}, lambda do |stream|
+        (stream << "whole").close_write
+        release.pop
+        raised = assert_raises(IOError) { stream << "more" }
+        stream.close
+      end]
+    end
+    Sync do |task|
+      serving(app) do |port|
+        assert_equal "whole", task.with_timeout(5) { client(port) { _1.get("/").body } }
+      ensure
+        release << true
+      end
+    end
+    assert raised
+  end
+
   def test_a_head_has_no_body
     app = ->(_env) { [200, { "content-length" => "5" }, []] }
     Sync do
