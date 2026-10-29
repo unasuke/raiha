@@ -5,7 +5,8 @@ require "rbconfig"
 # Each example under examples/next runs in a process of its own and puts
 # out what the "Expected output:" of its header comment says. The UDP
 # handshake runs a client and a server over real sockets on the loopback
-# interface.
+# interface, and so does the loopback of the runtime, under the scheduler
+# of async.
 class RaihaNextExamplesTest < Minitest::Test
   ROOT = File.expand_path("../../..", __dir__)
   TIMEOUT = 30
@@ -33,6 +34,13 @@ class RaihaNextExamplesTest < Minitest::Test
 
   def test_udp_handshake
     path = File.join(ROOT, "examples/next/udp_handshake.rb")
+    output, status = run_example(path)
+    assert status.success?, output
+    assert_equal expected_output(path), output
+  end
+
+  def test_high_level_loopback
+    path = File.join(ROOT, "examples/next/high_level_loopback.rb")
     output, status = run_example(path)
     assert status.success?, output
     assert_equal expected_output(path), output
