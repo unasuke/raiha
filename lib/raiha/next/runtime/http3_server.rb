@@ -4,6 +4,30 @@ require_relative "http3"
 
 module Raiha::Next::Runtime
   module HTTP3
+    # The body of a response as the block of Request#respond writes it,
+    # each write waiting while the stream holds back, and its trailer
+    # fields.
+    class ResponseBody
+      attr_accessor :trailers
+
+      def initialize(server, stream_id, exchange)
+        @server = server
+        @stream_id = stream_id
+        @exchange = exchange
+        @trailers = [] #: Array[[String, String]]
+      end
+
+      def write(data)
+        @server.write_body(@stream_id, @exchange, data.b)
+        data.bytesize
+      end
+
+      def <<(data)
+        write(data)
+        self
+      end
+    end
+
     # A request to the server of HTTP/3, given to the block of Server#run in
     # a fiber of its own: its pseudo-header fields, its header fields
     # without them, its body as it comes, and its trailer fields once the
@@ -35,11 +59,19 @@ module Raiha::Next::Runtime
       def responded? = @responded
 
       # Answers with `status`, `headers` and the whole of `body`, written as
-      # the stream takes it.
-      def respond(status, headers = [], body = nil)
+      # the stream takes it; with a block, the block writes the body to the
+      # ResponseBody it is given, and its trailer fields.
+      def respond(status, headers = [], body = nil, &)
         raise Error::Usage, "the request on stream #{@stream_id} has its response already" if @responded
         @responded = true
+        return @server.respond_with(@stream_id, @exchange, status, headers, &) if block_given?
         @server.respond(@stream_id, @exchange, status, headers, body)
+      end
+
+      # The priority of the response, `urgency:` and `incremental:`: those
+      # given override what the request asked (RFC 9218).
+      def priority=(parameters)
+        @server.prioritize(@stream_id, urgency: parameters[:urgency], incremental: parameters[:incremental])
       end
     end
 
@@ -105,13 +137,31 @@ module Raiha::Next::Runtime
 
       # Sends the response on `stream_id`; for Request.
       def respond(stream_id, exchange, status, headers, body)
-        fields = [[":status", status.to_s], *headers] #: Array[[String, String]]
-        writable(stream_id, exchange) do
-          @http3.send_headers(stream_id, fields, fin: body.nil? || body.empty?)
-          true
-        end
-        flush
+        send_header_section(stream_id, exchange, [[":status", status.to_s], *headers], fin: body.nil? || body.empty?)
         write(stream_id, exchange, body, fin: true) if body && !body.empty?
+      end
+
+      # Sends the response on `stream_id`, its body written by the block;
+      # for Request.
+      def respond_with(stream_id, exchange, status, headers)
+        send_header_section(stream_id, exchange, [[":status", status.to_s], *headers], fin: false)
+        body = ResponseBody.new(self, stream_id, exchange)
+        yield body
+        return send_header_section(stream_id, exchange, body.trailers, fin: true) unless body.trailers.empty?
+        writable(stream_id, exchange) { @http3.send_data(stream_id, "".b, fin: true) && true }
+        flush
+      end
+
+      # Writes `data` to the body of the response on `stream_id`; for
+      # ResponseBody.
+      def write_body(stream_id, exchange, data)
+        write(stream_id, exchange, data, fin: false)
+      end
+
+      # For Request#priority=.
+      def prioritize(stream_id, urgency:, incremental:)
+        @http3.update_priority(stream_id, urgency:, incremental:)
+        flush
       end
 
       # The Session's protocol: the events of QUIC that are HTTP/3's.
@@ -135,6 +185,14 @@ module Raiha::Next::Runtime
         nil
       ensure
         forget(request)
+      end
+
+      private def send_header_section(stream_id, exchange, fields, fin:)
+        writable(stream_id, exchange) do
+          @http3.send_headers(stream_id, fields, fin:)
+          true
+        end
+        flush
       end
 
       # Writes all of `data`, as the stream takes it.

@@ -70,6 +70,43 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     end
   end
 
+  # A body written as it goes, a megabyte held back by flow control, and
+  # trailer fields after it.
+  def test_a_response_written_as_it_goes
+    large = Random.new(6).bytes(1_000_000)
+    handler = lambda do |request|
+      request.respond(200, [["content-type", "application/octet-stream"]]) do |body|
+        large.bytes.each_slice(100_000) { |slice| body << slice.pack("C*") }
+        body.trailers = [["x-parts", "10"]]
+      end
+    end
+    Sync do
+      serving(handler) do |port|
+        response = client(port) { _1.get("/stream") }
+        assert_equal [200, large, [["x-parts", "10"]]], [response.status, response.body, response.trailers]
+      end
+    end
+  end
+
+  # The priority given to a response overrides what the request asked,
+  # only as far as it gives.
+  def test_the_priority_of_a_response
+    priorities = []
+    handler = lambda do |request|
+      serving = request.instance_variable_get(:@server)
+      http3 = serving.instance_variable_get(:@http3)
+      request.priority = { urgency: 1 }
+      priorities << http3.send(:priority_of, request.stream_id)
+      request.respond(200, [], "prioritized")
+    end
+    Sync do
+      serving(handler) do |port|
+        assert_equal "prioritized", client(port) { _1.request("GET", "/", urgency: 5, incremental: true).body }
+      end
+    end
+    assert_equal [Raiha::Next::HTTP3::Priority.new(urgency: 1, incremental: true)], priorities
+  end
+
   def test_no_response_is_a_500
     Sync do
       serving(->(_request) {}) do |port|

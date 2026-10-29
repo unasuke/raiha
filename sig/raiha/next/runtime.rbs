@@ -488,6 +488,20 @@ end
 
 module Raiha::Next::Runtime
   module HTTP3
+    class ResponseBody
+      attr_accessor trailers: Array[[String, String]]
+
+      @server: Serving
+      @stream_id: Integer
+      @exchange: Exchange
+
+      def initialize: (Serving server, Integer stream_id, Exchange exchange) -> void
+
+      def write: (String data) -> Integer
+
+      def <<: (String data) -> self
+    end
+
     class Request
       attr_reader stream_id: Integer
       attr_reader method: String
@@ -511,6 +525,9 @@ module Raiha::Next::Runtime
       def responded?: () -> bool
 
       def respond: (Integer status, ?Array[[String, String]] headers, ?String? body) -> void
+                 | (Integer status, ?Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+      def priority=: ({ ?urgency: Integer, ?incremental: bool } parameters) -> void
     end
 
     class Server
@@ -545,11 +562,19 @@ module Raiha::Next::Runtime
 
       def respond: (Integer stream_id, Exchange exchange, Integer status, Array[[String, String]] headers, String? body) -> void
 
+      def respond_with: (Integer stream_id, Exchange exchange, Integer status, Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+      def write_body: (Integer stream_id, Exchange exchange, String data) -> void
+
+      def prioritize: (Integer stream_id, urgency: Integer?, incremental: bool?) -> void
+
       def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
 
       def turn: (Float now) -> void
 
       private def handle: (^(Request) -> void handler, Request request) -> void
+
+      private def send_header_section: (Integer stream_id, Exchange exchange, Array[[String, String]] fields, fin: bool) -> void
 
       private def write: (Integer stream_id, Exchange exchange, String data, fin: bool) -> void
 
