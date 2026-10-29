@@ -78,7 +78,8 @@ module Raiha::Next::Runtime
       private def open_locked
         return nil if @dropped
         flags = File::WRONLY | File::APPEND | File::CREAT | File::NOFOLLOW | File::NONBLOCK
-        file = File.open(@path, flags, 0o644)
+        # A trace has what the peers said, which is no one else's to read.
+        file = File.open(@path, flags, 0o600)
         return file if file.stat.file? && file.flock(File::LOCK_EX | File::LOCK_NB)
         file.close
         @dropped = true

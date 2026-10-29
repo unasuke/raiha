@@ -163,6 +163,7 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
       pending.over!
       assert pending.flush
       assert_equal "abcd", File.binread(pending.path)
+      assert_equal 0o600, File.stat(pending.path).mode & 0o777
     end
   end
 end
