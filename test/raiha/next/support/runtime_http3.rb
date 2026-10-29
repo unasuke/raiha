@@ -27,6 +27,8 @@ module NextRuntimeHTTP3
 
     def take(event, now) = @binding.receive(event, now:)
 
+    def expire = nil
+
     # The events of a turn are all looked at before any is answered: a
     # stream the client stopped or reset in it is written to no more.
     def turn(now)

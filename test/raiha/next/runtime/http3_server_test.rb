@@ -10,14 +10,15 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
   include NextRuntimeHTTP3
 
   # A server of HTTP/3 on a free port with `handler` for each request, for
-  # the block, which is given its port; stopped after.
+  # the block, which is given its port, the server and the fiber running
+  # it; stopped after.
   def serving(handler)
     tls = h3_server_config
     server = Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
       port: 0)
     running = Fiber.schedule { server.run(&handler) }
     sleep 0.01 until server.local_address
-    yield server.local_address.fetch(1)
+    yield server.local_address.fetch(1), server, running
   ensure
     server&.stop(timeout: 1)
     sleep 0.01 while running&.alive?
@@ -174,11 +175,69 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
 
     def take(event, now) = @binding.receive(event, now:)
 
+    def expire = nil
+
     def turn(now)
       @binding.flush(now:)
       @http3.each_event { |event| @status = event.headers.to_h[":status"] if event.is_a?(HTTP3::Event::Headers) }
       @binding.flush(now:)
     end
+  end
+
+  # A server asked to stop sends GOAWAY twice, lets the request it took
+  # finish, and closes with H3_NO_ERROR once its response is acknowledged,
+  # well before the timeout.
+  def test_stop
+    handler = lambda do |request|
+      sleep 0.3
+      request.respond(200, [], "finished")
+    end
+    Sync do
+      serving(handler) do |port, server, running|
+        h3_connect(port) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          started = Runtime::Driver.clock
+          Fiber.schedule do
+            sleep 0.05
+            server.stop(timeout: 5)
+          end
+          assert_equal "finished", client.get("/slow").body
+          sleep 0.01 until session.closed?
+          assert_operator Runtime::Driver.clock - started, :<, 2
+          assert_equal [HTTP3::ErrorCode::NO_ERROR, true], session.connection.close_reason.then { [_1.code, _1.application] }
+          assert_equal 4, client.instance_variable_get(:@http3).instance_variable_get(:@peer_goaway)
+        end
+        sleep 0.01 while running.alive?
+      end
+    end
+  end
+
+  # A request still running when the server is out of time is cancelled, and
+  # its fiber interrupted where it waits.
+  def test_stop_out_of_time
+    interrupted = nil
+    handler = lambda do |request|
+      sleep 10
+      request.respond(200)
+    rescue Runtime::HTTP3::StreamReset => error
+      interrupted = error.error_code
+      raise
+    end
+    Sync do
+      serving(handler) do |port, server, running|
+        h3_connect(port) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          Fiber.schedule do
+            sleep 0.05
+            server.stop(timeout: 0.3)
+          end
+          error = assert_raises(Runtime::HTTP3::StreamReset, Raiha::Next::QUIC::ClosedError) { client.get("/forever") }
+          assert_equal HTTP3::ErrorCode::REQUEST_CANCELLED, error.error_code if error.is_a?(Runtime::HTTP3::StreamReset)
+        end
+        sleep 0.01 while running.alive?
+      end
+    end
+    assert_equal HTTP3::ErrorCode::REQUEST_CANCELLED, interrupted
   end
 
   def test_no_response_is_a_500

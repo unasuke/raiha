@@ -170,13 +170,13 @@ module Raiha::Next::Runtime
       unless @stop_deadline
         @stop_deadline = now + timeout
         @sessions.each do |session|
-          session.stopping!
+          session.stopping!(@stop_deadline)
           session.connection.close(error_code:, application: true, now:) unless @started.key?(session)
         end
       end
       deadline = @stop_deadline
       return unless @sessions.empty? || (deadline && now >= deadline)
-      @sessions.each { |session| session.connection.close(error_code:, application: true, now:) }
+      @sessions.each { |session| session.expire(error_code:) }
       driver!.flush
       driver!.stop
     end

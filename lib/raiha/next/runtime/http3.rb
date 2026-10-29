@@ -180,6 +180,10 @@ module Raiha::Next::Runtime
       # The Session's protocol: the events of QUIC that are HTTP/3's.
       def take(event, now) = @binding.receive(event, now:)
 
+      # The Session's protocol: a client's session runs out of no server's
+      # time.
+      def expire = nil
+
       # The Session's protocol: HTTP/3 reads what came and has what it wrote
       # go out, and its events go to the exchanges they are of.
       def turn(now)

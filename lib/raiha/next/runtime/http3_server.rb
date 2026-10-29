@@ -84,6 +84,16 @@ module Raiha::Next::Runtime
     # reset with H3_INTERNAL_ERROR in the middle of it, and the exception
     # goes on to the scheduler; the other requests and the connection go
     # on.
+    #
+    # `stop` stops it as RFC 9114 "Connection Shutdown" has it: each
+    # connection is sent a GOAWAY of the largest ID, then, twice the RTT
+    # later, one of the first request it has not seen, from which HTTP/3
+    # rejects requests with H3_REQUEST_REJECTED; the requests taken are let
+    # finish, what was sent is let be acknowledged, and the connection
+    # closes with H3_NO_ERROR. A connection out of time has the requests it
+    # had not yet given to the block rejected, and those it had cancelled
+    # with H3_REQUEST_CANCELLED, their fibers interrupted where they wait,
+    # before it closes.
     class Server
       def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
         settings: Raiha::Next::HTTP3::Settings.new(enable_connect_protocol: true))
@@ -97,7 +107,9 @@ module Raiha::Next::Runtime
 
       def local_address = @server.local_address
 
-      def stop(...) = @server.stop(...)
+      def stop(timeout: Raiha::Next::Runtime::Server::STOP_TIMEOUT)
+        @server.stop(timeout:, error_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+      end
 
       def reconfigure(...) = @server.reconfigure(...)
     end
@@ -105,6 +117,10 @@ module Raiha::Next::Runtime
     # The HTTP/3 of one connection of a Server: the requests as they come,
     # each to a fiber of its own.
     class Serving
+      # The largest ID a server's GOAWAY gives, which only tells the client
+      # to make no more requests.
+      LAST_REQUEST = (1 << 62) - 4
+
       def initialize(session, settings)
         @session = session
         @http3 = Raiha::Next::HTTP3::Connection.server(settings:)
@@ -113,19 +129,36 @@ module Raiha::Next::Runtime
         # The requests whose header sections have come, not yet given to a
         # fiber, with their header fields.
         @arrived = [] #: Array[[Integer, Array[[String, String]]]]
+        # The fibers of the requests given to the block and not over.
+        @fibers = {} #: Hash[Integer, Fiber]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
       end
 
       # Gives each request to the block in a fiber of its own until the
-      # connection closes.
+      # connection closes, or until the server stops and the requests taken
+      # are over.
       def serve(&handler)
         loop do
-          stream_id, headers = @session.wait_for { @arrived.shift }
-          exchange = @exchanges.fetch(stream_id)
-          Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+          arrived = @session.wait_for { @arrived.shift || (:stopping if @session.stopping?) }
+          return go_away(handler) if arrived == :stopping
+          start(handler, arrived)
         end
       rescue Raiha::Next::QUIC::ClosedError
         nil
+      end
+
+      # The Session's protocol: the server is out of time to stop.
+      def expire
+        @arrived.each { |stream_id, _| @http3.cancel(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_REJECTED) }
+        @arrived.clear
+        scheduler = Fiber.scheduler
+        @fibers.each do |stream_id, fiber|
+          @http3.cancel(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @exchanges[stream_id]&.reset = Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED
+          next unless fiber.alive? && scheduler.respond_to?(:fiber_interrupt)
+          scheduler.fiber_interrupt(fiber, StreamReset.new(stream_id, Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED))
+        end
+        @binding.flush(now: Driver.clock)
       end
 
       # The next chunk of the request on `stream_id` once there is one, nil
@@ -181,6 +214,36 @@ module Raiha::Next::Runtime
         @http3.each_event { |event| events << event }
         events.each { |event| take_http3(event) }
         @binding.flush(now:)
+      end
+
+      private def start(handler, arrived)
+        stream_id, headers = arrived
+        exchange = @exchanges.fetch(stream_id)
+        @fibers[stream_id] = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+      end
+
+      # The server is stopping: GOAWAY twice, with the requests that come in
+      # between taken, then the requests taken let finish and what was sent
+      # let be acknowledged, until the server is out of time. A connection
+      # whose control stream could not be opened has nothing to be told.
+      private def go_away(handler)
+        begin
+          @http3.goaway(LAST_REQUEST)
+        rescue Raiha::Next::HTTP3::Error::Usage
+          return
+        end
+        flush
+        between = Driver.clock + 2 * @session.connection.stats.rtt
+        while (arrived = @session.wait_for(deadline: between) { @arrived.shift })
+          start(handler, arrived)
+        end
+        @http3.goaway
+        flush
+        while (arrived = @session.wait_for { @arrived.shift || (:over if @fibers.empty?) }) != :over
+          start(handler, arrived)
+        end
+        deadline = @session.stop_deadline or return
+        @session.wait_for(deadline:) { @session.connection.stats.send_buffer_bytes.zero? || nil }
       end
 
       private def handle(handler, request)
@@ -241,7 +304,10 @@ module Raiha::Next::Runtime
       private def forget(request)
         stream_id = request.stream_id
         @exchanges.delete(stream_id)
+        @fibers.delete(stream_id)
         @binding.resume(stream_id)
+        # A stop waits for the requests to be over.
+        @session.changed
       end
 
       private def resume(stream_id, exchange)

@@ -13,6 +13,8 @@ module Raiha::Next::Runtime
     def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
 
     def turn: (Float now) -> void
+
+    def expire: () -> void
   end
 
   # What a client or a server of the runtime is to its Driver.
@@ -137,6 +139,7 @@ module Raiha::Next::Runtime
     @peer_next: Array[Integer]
     @aborted: StandardError?
     @stopping: bool
+    @stop_deadline: Float?
     @connected: Raiha::Next::QUIC::Event::Connected?
     @protocol: _Protocol?
     @close_code: Integer
@@ -152,6 +155,7 @@ module Raiha::Next::Runtime
     def open_stream_id: (?direction: :bidi | :uni) -> Integer
 
     def wait_for: [T < Object] () { () -> T? } -> T
+                | [T < Object] (deadline: Float) { () -> T? } -> T?
 
     def open_stream: (?direction: :bidi | :uni) -> Stream
 
@@ -173,7 +177,11 @@ module Raiha::Next::Runtime
 
     def stopping?: () -> bool
 
-    def stopping!: () -> void
+    attr_reader stop_deadline: Float?
+
+    def stopping!: (?Float? deadline) -> void
+
+    def expire: (error_code: Integer) -> void
 
     def turn: () -> void
 
@@ -463,6 +471,8 @@ module Raiha::Next::Runtime
 
       def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
 
+      def expire: () -> nil
+
       def turn: (Float now) -> void
 
       private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> Integer
@@ -542,13 +552,16 @@ module Raiha::Next::Runtime
 
       def local_address: () -> UDP::address?
 
-      def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
+      def stop: (?timeout: Float | Integer) -> nil
 
       def reconfigure: (tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring) -> nil
     end
 
     class Serving
+      LAST_REQUEST: Integer
+
       @session: Session
+      @fibers: Hash[Integer, Fiber]
       @http3: Raiha::Next::HTTP3::Connection
       @binding: Raiha::Next::HTTP3Binding
       @exchanges: Hash[Integer, Exchange]
@@ -557,6 +570,8 @@ module Raiha::Next::Runtime
       def initialize: (Session session, Raiha::Next::HTTP3::Settings settings) -> void
 
       def serve: () { (Request request) -> void } -> void
+
+      def expire: () -> void
 
       def read_chunk: (Integer stream_id) -> String?
 
@@ -571,6 +586,10 @@ module Raiha::Next::Runtime
       def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
 
       def turn: (Float now) -> void
+
+      private def start: (^(Request) -> void handler, [Integer, Array[[String, String]]] arrived) -> void
+
+      private def go_away: (^(Request) -> void handler) -> void
 
       private def handle: (^(Request) -> void handler, Request request) -> void
 

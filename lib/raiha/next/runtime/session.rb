@@ -55,6 +55,7 @@ module Raiha::Next::Runtime
       @peer_next = [0, 0, 0, 0]
       @aborted = nil #: StandardError?
       @stopping = false
+      @stop_deadline = nil #: Float?
       @connected = nil #: Raiha::Next::QUIC::Event::Connected?
       @protocol = nil #: _Protocol?
       # The application's error code a close with none given closes with.
@@ -88,10 +89,11 @@ module Raiha::Next::Runtime
     end
 
     # Calls the block until it gives something other than nil, waiting for
-    # a change in between, as `wait` does: for a protocol's waits.
+    # a change in between, as `wait` does: for a protocol's waits. With
+    # `deadline`, nil once the clock is past it.
     # steep picks no overload of `wait` for a block that gives T?.
-    def wait_for # steep:ignore
-      wait { yield }
+    def wait_for(deadline: nil) # steep:ignore
+      deadline ? wait(deadline:) { yield } : wait { yield }
     end
 
     # A new stream of `direction` (:bidi or :uni), once the peer allows it.
@@ -155,10 +157,25 @@ module Raiha::Next::Runtime
     # connection soon.
     def stopping? = @stopping
 
-    # The server is stopping: what waits for a stream to come wakes.
-    def stopping!
+    # When the server will close what is left, while it is stopping.
+    attr_reader :stop_deadline
+
+    # The server is stopping, and closes what is left at `deadline`: what
+    # waits for a stream to come wakes.
+    def stopping!(deadline = nil)
       @stopping = true
+      @stop_deadline = deadline
       notify
+    end
+
+    # The server is out of time to stop: the protocol is told, what it
+    # sent goes, and the connection closes with `error_code` without
+    # waiting for anything to be acknowledged.
+    def expire(error_code:)
+      return if closed?
+      @protocol&.expire
+      @driver.flush
+      close(error_code:)
     end
 
     # The driver has stopped, after `failure` when something failed in it:
