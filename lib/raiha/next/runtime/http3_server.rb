@@ -123,7 +123,8 @@ module Raiha::Next::Runtime
 
       def initialize(session, settings)
         @session = session
-        @http3 = Raiha::Next::HTTP3::Connection.server(settings:)
+        tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
+        @http3 = Raiha::Next::HTTP3::Connection.server(settings:, tracer:)
         @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
         # The requests whose header sections have come, not yet given to a

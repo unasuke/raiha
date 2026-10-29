@@ -125,7 +125,8 @@ module Raiha::Next::Runtime
 
       def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
         @session = session
-        @http3 = Raiha::Next::HTTP3::Connection.client(settings:)
+        tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
+        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer:)
         @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)

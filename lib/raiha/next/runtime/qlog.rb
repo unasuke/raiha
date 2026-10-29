@@ -109,12 +109,15 @@ module Raiha::Next::Runtime
 
     # A tracer of a connection seen from `vantage_point` (:client or
     # :server), in the file "<name>_<vantage point>.sqlog", and its Pending,
-    # to be told when the connection is over.
-    def trace(vantage_point, name)
+    # to be told when the connection is over. A connection whose ALPN may
+    # be HTTP/3 names the schema of HTTP/3's events too, which an
+    # HTTP3::Qlog::Tracer over this one records.
+    def trace(vantage_point, name, tls_config:)
       rotate
       pending = Pending.new(File.join(@dir, "#{name}_#{vantage_point}.sqlog"))
       @pending << pending
-      [Raiha::Next::QUIC::Qlog::Tracer.new(pending, vantage_point:, budget: @budget), pending]
+      event_schemas = tls_config.alpn.include?("h3") ? [Raiha::Next::HTTP3::Qlog::EVENT_SCHEMA] : [] #: Array[String]
+      [Raiha::Next::QUIC::Qlog::Tracer.new(pending, vantage_point:, budget: @budget, event_schemas:), pending]
     end
 
     # Puts what the traces have written in their files, and lets go those

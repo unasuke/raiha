@@ -1,5 +1,5 @@
 require "raiha/next/test_helper"
-require "raiha/next/support/runtime_owner"
+require "raiha/next/support/runtime_http3"
 require "async"
 require "json"
 require "timeout"
@@ -9,7 +9,7 @@ require "tmpdir"
 # server, written after the turn that traced it and closed once the
 # connection is over, and one budget for the traces of a worker.
 class RaihaNextRuntimeQlogTest < Minitest::Test
-  include NextRuntimeOwner
+  include NextRuntimeHTTP3
 
   # The records of a JSON Text Sequence.
   def records(path) = File.binread(path).split("\x1e").reject(&:empty?).map { JSON.parse(_1) }
@@ -46,6 +46,34 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
     end
   end
 
+  # A connection of HTTP/3 has the events of HTTP/3 in its qlog, under the
+  # schema the header names, at either end.
+  def test_the_events_of_http3
+    Dir.mktmpdir do |dir|
+      Sync do
+        tls = h3_server_config
+        server = Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
+          port: 0, qlog_dir: File.join(dir, "server"))
+        running = Fiber.schedule { server.run { |request| request.respond(200, [], "traced") } }
+        sleep 0.01 until server.local_address
+        tls = h3_client_config
+        body = Runtime::Client.connect("127.0.0.1", server.local_address.fetch(1), config: QUIC::Config.new, tls_config: tls,
+          keyring: client_keyring(config: tls), server_name: "localhost", qlog_dir: File.join(dir, "client")) do |session|
+          Runtime::HTTP3::Client.new(session).get("/").body
+        end
+        assert_equal "traced", body
+      ensure
+        server&.stop(timeout: 1)
+        sleep 0.01 while running&.alive?
+      end
+      %w[server client].each do |vantage_point|
+        header, *events = records(Dir[File.join(dir, vantage_point, "*.sqlog")].fetch(0))
+        assert_includes header.dig("trace", "event_schemas"), Raiha::Next::HTTP3::Qlog::EVENT_SCHEMA
+        assert_includes events.map { _1["name"] }, "http3:frame_parsed"
+      end
+    end
+  end
+
   # One budget for the traces of a Ractor, whichever client or server
   # writes them.
   def test_one_budget_for_a_worker
@@ -69,16 +97,16 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
       end
       File.binwrite(File.join(dir, "notes.txt"), "kept")
       qlog = Runtime::Qlog.new(dir, max_bytes: 350, max_files: 4)
-      _, writing = qlog.trace(:server, "new")
+      _, writing = qlog.trace(:server, "new", tls_config: server_config)
       assert_equal old.last(3), old.select { File.exist?(_1) }
       writing.write("y" * 300)
       qlog.flush
-      _, newer = qlog.trace(:server, "newer")
+      _, newer = qlog.trace(:server, "newer", tls_config: server_config)
       assert_equal [writing.path], (old + [writing.path]).select { File.exist?(_1) }
       writing.over!
       newer.write("z" * 100)
       qlog.flush
-      qlog.trace(:server, "newest")
+      qlog.trace(:server, "newest", tls_config: server_config)
       assert_equal [newer.path], [writing.path, newer.path].select { File.exist?(_1) }
       assert File.exist?(File.join(dir, "notes.txt"))
     end
@@ -89,11 +117,11 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
   def test_a_file_another_writer_holds_stays
     Dir.mktmpdir do |dir|
       other = Runtime::Qlog.new(dir)
-      _, live = other.trace(:server, "live")
+      _, live = other.trace(:server, "live", tls_config: server_config)
       live.write("x" * 100)
       other.flush
       qlog = Runtime::Qlog.new(dir, max_files: 1)
-      qlog.trace(:server, "mine")
+      qlog.trace(:server, "mine", tls_config: server_config)
       assert File.exist?(live.path)
       live.over!
       other.flush
@@ -115,7 +143,7 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
       File.delete(old)
       File.mkfifo(old)
       Timeout.timeout(5) do
-        traces = %w[fifo link].map { qlog.trace(:server, _1).last }
+        traces = %w[fifo link].map { qlog.trace(:server, _1, tls_config: server_config).last }
         traces.each { _1.write("written") && _1.over! }
         qlog.flush
       end

@@ -128,6 +128,7 @@ module Raiha::Next::Runtime
     MAX_ACK_DELAY: Float
 
     attr_reader connection: Raiha::Next::QUIC::Connection
+    attr_reader tracer: Raiha::Next::QUIC::Qlog::Tracer?
 
     @driver: Driver
     @role: :client | :server
@@ -144,7 +145,7 @@ module Raiha::Next::Runtime
     @protocol: _Protocol?
     @close_code: Integer
 
-    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server) -> void
+    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?) -> void
 
     def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
 
@@ -360,7 +361,7 @@ module Raiha::Next::Runtime
 
     def initialize: (String dir, ?budget: Raiha::Next::QUIC::Qlog::Budget, ?max_bytes: Integer, ?max_files: Integer) -> void
 
-    def trace: (:client | :server vantage_point, String name) -> [Raiha::Next::QUIC::Qlog::Tracer, Pending]
+    def trace: (:client | :server vantage_point, String name, tls_config: Raiha::Next::TLS::Config) -> [Raiha::Next::QUIC::Qlog::Tracer, Pending]
 
     def flush: () -> nil
 

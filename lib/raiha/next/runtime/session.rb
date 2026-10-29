@@ -39,10 +39,13 @@ module Raiha::Next::Runtime
     # Parameter Definitions"), for a PTO of the connection.
     MAX_ACK_DELAY = 0.025
 
-    attr_reader :connection
+    # The connection, and the qlog tracer of it, if it has one, which a
+    # protocol records its own events with.
+    attr_reader :connection, :tracer
 
-    def initialize(connection, driver, role:)
+    def initialize(connection, driver, role:, tracer: nil)
       @connection = connection
+      @tracer = tracer
       @driver = driver
       @role = role
       @lock = Thread::Mutex.new

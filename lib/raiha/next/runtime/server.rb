@@ -113,9 +113,9 @@ module Raiha::Next::Runtime
         return endpoint.retry(route.handle, now:) if !route.address_validated && @sessions.size * 2 >= @max_connections
         hello = endpoint.admit(route.handle, now:) and route(hello, now)
       when Raiha::Next::QUIC::Route::ClientHello
-        tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"))
+        tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
         connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:)
-        session = Session.new(connection, driver!, role: :server)
+        session = Session.new(connection, driver!, role: :server, tracer:)
         @sessions << session
         @traces[session] = pending if pending
       end

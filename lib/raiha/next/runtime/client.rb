@@ -134,9 +134,9 @@ module Raiha::Next::Runtime
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
-      tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"))
+      tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:)
-      session = @session = Session.new(connection, driver, role: :client)
+      session = @session = Session.new(connection, driver, role: :client, tracer:)
       @deadline = Driver.clock + @connect_timeout
       made = true
       [driver, session] #: [Driver, Session]
