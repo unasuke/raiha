@@ -107,6 +107,80 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     assert_equal [Raiha::Next::HTTP3::Priority.new(urgency: 1, incremental: true)], priorities
   end
 
+  # A block that raises before its response has it answered with 500, and
+  # in the middle of it has the request reset with H3_INTERNAL_ERROR; the
+  # connection goes on.
+  def test_a_block_that_raises
+    level = Console.logger.level
+    Console.logger.off!
+    handler = lambda do |request|
+      raise "before" if request.path == "/before"
+      return request.respond(200, [], "fine") if request.path == "/fine"
+      request.respond(200) do |body|
+        body << "partial"
+        raise "during"
+      end
+    end
+    Sync do
+      serving(handler) do |port|
+        client(port) do |client|
+          assert_equal 500, client.get("/before").status
+          error = assert_raises(Runtime::HTTP3::StreamReset) { client.get("/during") }
+          assert_equal HTTP3::ErrorCode::INTERNAL_ERROR, error.error_code
+          assert_equal "fine", client.get("/fine").body
+        end
+      end
+    end
+  ensure
+    Console.logger.level = level
+  end
+
+  # An Extended CONNECT the block does not answer is a 501.
+  def test_an_extended_connect_not_taken
+    Sync do
+      serving(->(_request) {}) do |port|
+        status = h3_connect(port) do |session|
+          ConnectRequest.new(session, protocol: "websocket").status
+        end
+        assert_equal "501", status
+      end
+    end
+  end
+
+  # A client's HTTP/3 that sends one Extended CONNECT (RFC 9220) and waits
+  # for the status of its response.
+  class ConnectRequest
+    HTTP3 = Raiha::Next::HTTP3
+
+    def initialize(session, protocol:)
+      @session = session
+      @http3 = HTTP3::Connection.client
+      @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+      @protocol = protocol
+      @status = nil
+      session.attach(self)
+    end
+
+    def status
+      stream_id = nil
+      @session.wait_for { @http3.peer_settings&.enable_connect_protocol || nil }
+      stream_id = @session.open_stream_id
+      @http3.send_request(stream_id, [[":method", "CONNECT"], [":protocol", @protocol], [":scheme", "https"], [":authority", "localhost"],
+        [":path", "/chat"]])
+      @binding.flush(now: Raiha::Next::Runtime::Driver.clock)
+      @session.changed
+      @session.wait_for { @status }
+    end
+
+    def take(event, now) = @binding.receive(event, now:)
+
+    def turn(now)
+      @binding.flush(now:)
+      @http3.each_event { |event| @status = event.headers.to_h[":status"] if event.is_a?(HTTP3::Event::Headers) }
+      @binding.flush(now:)
+    end
+  end
+
   def test_no_response_is_a_500
     Sync do
       serving(->(_request) {}) do |port|

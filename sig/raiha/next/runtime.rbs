@@ -574,6 +574,8 @@ module Raiha::Next::Runtime
 
       private def handle: (^(Request) -> void handler, Request request) -> void
 
+      private def failed: (Request request) -> void
+
       private def send_header_section: (Integer stream_id, Exchange exchange, Array[[String, String]] fields, fin: bool) -> void
 
       private def write: (Integer stream_id, Exchange exchange, String data, fin: bool) -> void

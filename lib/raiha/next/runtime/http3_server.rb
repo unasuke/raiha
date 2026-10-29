@@ -78,7 +78,12 @@ module Raiha::Next::Runtime
     # The server of HTTP/3 of the runtime: a Runtime::Server whose
     # sessions each have HTTP/3 attached, and whose block is given each
     # request in a fiber of its own. A block that leaves a request with no
-    # response has it answered with 500.
+    # response has it answered with 500, or with 501 for an Extended
+    # CONNECT, whose protocol it then does not take (RFC 9220). A block that
+    # raises has its request answered with 500 before the response, and
+    # reset with H3_INTERNAL_ERROR in the middle of it, and the exception
+    # goes on to the scheduler; the other requests and the connection go
+    # on.
     class Server
       def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
         settings: Raiha::Next::HTTP3::Settings.new(enable_connect_protocol: true))
@@ -180,11 +185,23 @@ module Raiha::Next::Runtime
 
       private def handle(handler, request)
         handler.call(request)
-        request.respond(500) unless request.responded?
+        request.respond(request.protocol ? 501 : 500) unless request.responded?
       rescue Raiha::Next::QUIC::ClosedError, StreamReset
         nil
+      rescue StandardError
+        failed(request)
+        raise
       ensure
         forget(request)
+      end
+
+      # The block raised: what can be told of it, told.
+      private def failed(request)
+        return request.respond(500) unless request.responded?
+        @http3.cancel(request.stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::INTERNAL_ERROR)
+        flush
+      rescue Raiha::Next::QUIC::ClosedError, StreamReset
+        nil
       end
 
       private def send_header_section(stream_id, exchange, fields, fin:)
