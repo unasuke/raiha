@@ -646,11 +646,11 @@ module Raiha::Next::Runtime
 
     class Stream
       @input: Input
-      @output: HTTP3::ResponseBody
+      @output: HTTP3::ResponseBody | Discard
       @read_closed: bool
       @write_closed: bool
 
-      def initialize: (Input input, HTTP3::ResponseBody output) -> void
+      def initialize: (Input input, HTTP3::ResponseBody | Discard output) -> void
 
       def read: (?Integer? length, ?String? outbuf) -> String?
 
@@ -667,6 +667,12 @@ module Raiha::Next::Runtime
       def close: () -> nil
 
       def closed?: () -> bool
+    end
+
+    class Discard
+      def write: (String data) -> Integer
+
+      def <<: (String _data) -> self
     end
 
     @app: _App

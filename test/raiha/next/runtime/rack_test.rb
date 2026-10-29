@@ -99,4 +99,14 @@ class RaihaNextRuntimeRackTest < Minitest::Test
       end
     end
   end
+
+  # What a streaming body writes to a response to HEAD goes nowhere.
+  def test_a_head_has_no_body_however_it_streams
+    app = ->(_env) { [200, {}, ->(stream) { (stream << "hello").close }] }
+    Sync do
+      serving(app) do |port|
+        assert_equal [200, ""], client(port) { _1.request("HEAD", "/").then { |response| [response.status, response.body] } }
+      end
+    end
+  end
 end

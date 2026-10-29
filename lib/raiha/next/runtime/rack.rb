@@ -103,6 +103,14 @@ module Raiha::Next::Runtime
       def closed? = @read_closed && @write_closed
     end
 
+    # What the body of a response to HEAD is written to: nothing, as such a
+    # response has no content (RFC 9110 "HEAD").
+    class Discard
+      def write(data) = data.bytesize
+
+      def <<(_data) = self
+    end
+
     def initialize(app)
       @app = app
     end
@@ -117,10 +125,11 @@ module Raiha::Next::Runtime
       # A body of Rack answers `each` or `call`, which steep does not narrow
       # to by `respond_to?`.
       request.respond(status, fields(headers)) do |response|
+        output = request.method == "HEAD" ? Discard.new : response
         if body.respond_to?(:each)
-          body.each { |chunk| response << chunk unless request.method == "HEAD" } # steep:ignore
+          body.each { |chunk| output << chunk } # steep:ignore
         else
-          body.call(Stream.new(env.fetch("rack.input"), response)) # steep:ignore
+          body.call(Stream.new(env.fetch("rack.input"), output)) # steep:ignore
         end
       end
     ensure
