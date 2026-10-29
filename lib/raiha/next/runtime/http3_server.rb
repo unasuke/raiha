@@ -62,6 +62,8 @@ module Raiha::Next::Runtime
       # the stream takes it; with a block, the block writes the body to the
       # ResponseBody it is given, and its trailer fields.
       def respond(status, headers = [], body = nil, &)
+        # An interim response (1xx) has no way out yet.
+        raise ArgumentError, "a response's status is 200 to 599, not #{status.inspect}" unless status.is_a?(Integer) && status.between?(200, 599)
         raise Error::Usage, "the request on stream #{@stream_id} has its response already" if @responded
         @responded = true
         return @server.respond_with(@stream_id, @exchange, status, headers, &) if block_given?

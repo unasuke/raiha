@@ -265,6 +265,20 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     assert_equal HTTP3::ErrorCode::REQUEST_CANCELLED, interrupted
   end
 
+  # Only a final status makes a response; an interim one is the block's
+  # mistake, answered with 500.
+  def test_an_interim_status
+    level = Console.logger.level
+    Console.logger.off!
+    Sync do
+      serving(->(request) { request.respond(103, [["link", "</style.css>"]]) }) do |port|
+        assert_equal 500, client(port) { _1.get("/").status }
+      end
+    end
+  ensure
+    Console.logger.level = level
+  end
+
   def test_no_response_is_a_500
     Sync do
       serving(->(_request) {}) do |port|
