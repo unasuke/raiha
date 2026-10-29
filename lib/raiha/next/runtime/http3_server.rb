@@ -6,20 +6,41 @@ module Raiha::Next::Runtime
   module HTTP3
     # The body of a response as the block of Request#respond writes it,
     # each write waiting while the stream holds back, and its trailer
-    # fields.
+    # fields. It ends when the block is over, or before at `close`.
     class ResponseBody
-      attr_accessor :trailers
+      attr_reader :trailers
 
       def initialize(server, stream_id, exchange)
         @server = server
         @stream_id = stream_id
         @exchange = exchange
         @trailers = [] #: Array[[String, String]]
+        @closed = false
       end
 
       def write(data)
+        closed!
         @server.write_body(@stream_id, @exchange, data.b)
         data.bytesize
+      end
+
+      def trailers=(fields)
+        closed!
+        @trailers = fields
+      end
+
+      # Ends the body, with the trailer fields given so far: the response is
+      # whole though the block goes on.
+      def close
+        return if @closed
+        @closed = true
+        @server.finish_body(@stream_id, @exchange, @trailers)
+      end
+
+      def closed? = @closed
+
+      private def closed!
+        raise Error::Usage, "the body of the response on stream #{@stream_id} has ended" if @closed
       end
 
       def <<(data)
@@ -193,7 +214,13 @@ module Raiha::Next::Runtime
         send_header_section(stream_id, exchange, [[":status", status.to_s], *headers], fin: false)
         body = ResponseBody.new(self, stream_id, exchange)
         yield body
-        return send_header_section(stream_id, exchange, body.trailers, fin: true) unless body.trailers.empty?
+        body.close
+      end
+
+      # Ends the body of the response on `stream_id`, with `trailers` when
+      # there are any; for ResponseBody.
+      def finish_body(stream_id, exchange, trailers)
+        return send_header_section(stream_id, exchange, trailers, fin: true) unless trailers.empty?
         writable(stream_id, exchange) { @http3.send_data(stream_id, "".b, fin: true) && true }
         flush
       end

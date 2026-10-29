@@ -103,6 +103,31 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
 
   # The priority given to a response overrides what the request asked,
   # only as far as it gives.
+  # A body closed before the block is over: the response is whole, and
+  # nothing more is written to it.
+  def test_a_response_closed_before_its_block_is_over
+    release = Thread::Queue.new
+    after = nil
+    handler = lambda do |request|
+      request.respond(200) do |body|
+        body << "whole"
+        body.trailers = [["x-done", "1"]]
+        body.close
+        release.pop
+        after = [body.closed?, assert_raises(Runtime::Error::Usage) { body << "more" }, assert_raises(Runtime::Error::Usage) { body.trailers = [] }]
+      end
+    end
+    Sync do |task|
+      serving(handler) do |port|
+        response = task.with_timeout(5) { client(port) { _1.get("/") } }
+        assert_equal ["whole", [["x-done", "1"]]], [response.body, response.trailers]
+      ensure
+        release << true
+      end
+    end
+    assert after.first
+  end
+
   def test_the_priority_of_a_response
     priorities = []
     handler = lambda do |request|

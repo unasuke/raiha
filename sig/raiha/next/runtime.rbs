@@ -502,17 +502,26 @@ end
 module Raiha::Next::Runtime
   module HTTP3
     class ResponseBody
-      attr_accessor trailers: Array[[String, String]]
+      attr_reader trailers: Array[[String, String]]
 
       @server: Serving
       @stream_id: Integer
       @exchange: Exchange
+      @closed: bool
 
       def initialize: (Serving server, Integer stream_id, Exchange exchange) -> void
 
       def write: (String data) -> Integer
 
       def <<: (String data) -> self
+
+      def trailers=: (Array[[String, String]] fields) -> Array[[String, String]]
+
+      def close: () -> void
+
+      def closed?: () -> bool
+
+      private def closed!: () -> void
     end
 
     class Request
@@ -581,6 +590,8 @@ module Raiha::Next::Runtime
       def respond: (Integer stream_id, Exchange exchange, Integer status, Array[[String, String]] headers, String? body) -> void
 
       def respond_with: (Integer stream_id, Exchange exchange, Integer status, Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+      def finish_body: (Integer stream_id, Exchange exchange, Array[[String, String]] trailers) -> void
 
       def write_body: (Integer stream_id, Exchange exchange, String data) -> void
 
