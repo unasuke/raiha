@@ -45,6 +45,22 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     assert_kind_of Runtime::HTTP3::Request, env["raiha.request"]
   end
 
+  # A field named with an underscore is not taken for the one with a hyphen,
+  # nor a host field added to HTTP_HOST.
+  def test_fields_that_would_be_taken_for_others
+    env = nil
+    app = lambda do |given|
+      env = given
+      [200, {}, []]
+    end
+    Sync do
+      serving(app) do |port|
+        client(port) { _1.get("/", headers: [["x_forwarded_for", "10.0.0.1"], ["x-forwarded-for", "192.0.2.1"], ["host", "localhost"]]) }
+      end
+    end
+    assert_equal ["192.0.2.1", "localhost", "localhost"], env.values_at("HTTP_X_FORWARDED_FOR", "HTTP_HOST", "SERVER_NAME")
+  end
+
   # rack.input read by lines and as a whole, a megabyte of it.
   def test_rack_input
     app = lambda do |env|

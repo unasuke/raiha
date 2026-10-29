@@ -618,6 +618,8 @@ module Raiha::Next::Runtime
   class Rack
     type env_value = String | Input | IO | HTTP3::Request | Array[String]
 
+    SCHEMES: Array[String]
+
     # An application of Rack 3.
     interface _App
       def call: (Hash[String, env_value] env) -> [Integer, Hash[String, String | Array[String]], Object]

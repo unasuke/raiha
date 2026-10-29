@@ -14,7 +14,15 @@ module Raiha::Next::Runtime
   # writes the response. A header value of an Array goes as a field line
   # of each. The trailer fields, the priority and the rest of the request
   # are in env["raiha.request"]. It depends on no rack gem.
+  #
+  # A header field whose name has an underscore is left out of the env, as
+  # it would be taken for the one with a hyphen there (HTTP_X_FORWARDED_FOR
+  # of x_forwarded_for), and HTTP_HOST, SERVER_NAME and SERVER_PORT come
+  # once from :authority, or the host field when there is none. A request
+  # of a scheme other than http and https is answered with 400.
   class Rack
+    SCHEMES = %w[http https].freeze
+
     # rack.input: the body of the request as it comes, read as an IO is.
     class Input
       def initialize(body)
@@ -103,6 +111,7 @@ module Raiha::Next::Runtime
 
     # Answers `request` with what the application gives for its env.
     def call(request)
+      return request.respond(400) unless SCHEMES.include?(request.scheme)
       env = env(request)
       status, headers, body = @app.call(env)
       # A body of Rack answers `each` or `call`, which steep does not narrow
@@ -119,7 +128,7 @@ module Raiha::Next::Runtime
     end
 
     private def env(request)
-      authority = request.authority || ""
+      authority = request.authority || request.headers.find { |name, _| name == "host" }&.last || ""
       host, port = authority.match(/\A(\[[^\]]*\]|[^:]*)(?::(\d+))?\z/)&.captures
       path, query = request.path.split("?", 2)
       env = {
@@ -130,6 +139,7 @@ module Raiha::Next::Runtime
       } #: Hash[String, String | Input | IO | HTTP3::Request | Array[String]]
       env["rack.protocol"] = [request.protocol] if request.protocol
       request.headers.each do |name, value|
+        next if name == "host" || name.include?("_")
         key = { "content-type" => "CONTENT_TYPE", "content-length" => "CONTENT_LENGTH" }.fetch(name) { "HTTP_#{name.upcase.tr("-", "_")}" }
         # Cookie lines are joined with "; " (RFC 9114 "Header Compression"),
         # others with ", ".
