@@ -228,6 +228,19 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # A stop as `run` closes the pipe raises nothing out of a signal handler,
+  # its end read from closed first.
+  def test_a_stop_as_the_pipe_closes
+    tls = server_config
+    server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
+    reader, writer = IO.pipe
+    reader.close
+    server.instance_variable_set(:@wake, writer)
+    assert_nil server.stop
+  ensure
+    writer&.close
+  end
+
   def test_a_scheduler_is_needed
     tls = server_config
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)

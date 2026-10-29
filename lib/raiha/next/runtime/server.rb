@@ -98,8 +98,8 @@ module Raiha::Next::Runtime
       @stop ||= [timeout, error_code]
       @wake&.write_nonblock(".", exception: false)
       nil
-    rescue IOError
-      # `run` has returned and closed the pipe.
+    rescue IOError, SystemCallError
+      # `run` is returning and has closed the pipe, or the end it reads.
       nil
     end
 
