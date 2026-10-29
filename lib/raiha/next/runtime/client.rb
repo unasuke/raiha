@@ -60,12 +60,17 @@ module Raiha::Next::Runtime
       end
       addresses.each do |address|
         driver, session = attempt(address, server_name)
+        connected = false
         begin
+          driver.start
           session.wait_handshake
+          connected = true
         rescue Raiha::Next::QUIC::ClosedError => error
-          driver.stop
           errors << [address, error]
           next
+        ensure
+          # However the attempt is left, a task stopped included.
+          driver.stop unless connected
         end
         begin
           return yield session
@@ -120,8 +125,8 @@ module Raiha::Next::Runtime
       end.uniq
     end
 
-    # A connection to `address` on a socket of its own, its handshake under
-    # way: [driver, session].
+    # A connection to `address` on a socket of its own, its handshake to
+    # begin once the driver starts: [driver, session].
     private def attempt(address, server_name)
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
@@ -130,7 +135,6 @@ module Raiha::Next::Runtime
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:)
       session = @session = Session.new(connection, driver, role: :client)
       @deadline = Driver.clock + @connect_timeout
-      driver.start
       [driver, session]
     end
   end

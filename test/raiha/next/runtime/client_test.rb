@@ -107,6 +107,21 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     end
   end
 
+  # The task of a connect stopped from outside leaves no fiber behind and
+  # the socket closed.
+  def test_a_connect_stopped_from_outside
+    Sync do |task|
+      client = Addressed.new([["127.0.0.1", free_port]], **options)
+      connecting = task.async { client.connect("example.test", 443, server_name: "localhost") { flunk } }
+      sleep 0.05
+      connecting.stop
+      sleep 0.01 until connecting.stopped?
+      driver = client.instance_variable_get(:@session).instance_variable_get(:@driver)
+      assert driver.stopped?
+      assert driver.instance_variable_get(:@udp).closed?
+    end
+  end
+
   def test_a_scheduler_is_needed
     assert_raises(Runtime::Error::Usage) { Runtime::Client.connect("127.0.0.1", free_port, **options) { flunk } }
   end
