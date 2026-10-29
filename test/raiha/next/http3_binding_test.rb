@@ -126,6 +126,26 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     assert_empty server.of(HTTP3::Event::Data)
   end
 
+  # A response the server sent just before it closed, taken by the client
+  # in the same turn as the close, still reaches HTTP/3.
+  def test_a_response_that_comes_with_the_close
+    client_quic = client_connection
+    server_quic = server_connection
+    now = handshake(client_quic, server_quic)
+    client = NextHTTP3Side.new(client_quic, HTTP3::Connection.client)
+    server = NextHTTP3Side.new(server_quic, HTTP3::Connection.server)
+    stream_id = client_quic.open_stream
+    client.turn(now) { client.http3.send_request(stream_id, GET, fin: true) }
+    deliver(client_quic, server_quic, now)
+    server.turn(now) { server.http3.send_headers(stream_id, OK, fin: true) }
+    deliver(server_quic, client_quic, now)
+    server_quic.close(error_code: HTTP3::ErrorCode::NO_ERROR, now:)
+    deliver(server_quic, client_quic, now)
+    client.turn(now)
+    assert client_quic.draining?
+    assert_equal [HTTP3::Event::Headers.new(stream_id:, headers: OK, fin: true)], client.of(HTTP3::Event::Headers)
+  end
+
   # RFC 9114 "Unidirectional Streams": a peer must allow three streams
   # going one way; the client closes the connection with
   # H3_GENERAL_PROTOCOL_ERROR when it allows two.

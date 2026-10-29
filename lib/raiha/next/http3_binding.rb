@@ -48,10 +48,12 @@ module Raiha::Next
 
     # Reads the streams with something to read into HTTP/3, all but those
     # paused, and gives QUIC what HTTP/3 asks of it, writes to its streams
-    # and sends as DATAGRAMs, in that order. Nothing once QUIC has closed.
+    # and sends as DATAGRAMs, in that order. Once QUIC has closed, what came
+    # before the close is still read, a response that came with the
+    # CONNECTION_CLOSE say, and nothing is written.
     def flush(now:)
-      return if @closed
       @connection.readable_streams.each { |stream_id| read(stream_id) unless @paused.key?(stream_id) }
+      return if @closed
       @http3.each_action { |action| perform(action, now) }
       @http3.each_send { |stream_id, data, fin| @connection.stream_write(stream_id, data, fin:) }
       @http3.each_datagram_send { |data, urgency| @connection.datagram_send(data, urgency:) }
