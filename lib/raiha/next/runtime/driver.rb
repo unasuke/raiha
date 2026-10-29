@@ -58,12 +58,13 @@ module Raiha::Next::Runtime
     end
 
     # Stops the reader and the runner and closes the socket; the owner is
-    # told.
+    # told. The socket closes even when telling the owner fails.
     def stop
       return if @stopped
       @stopped = true
       changed
       @owner.stopped(@failure)
+    ensure
       @udp.close unless @udp.closed?
     end
 

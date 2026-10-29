@@ -62,13 +62,18 @@ module Raiha::Next::Runtime
       @handler = handler
       udp = @udp = UDP.bind(@host, @port)
       endpoint = Raiha::Next::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
-      driver = @driver = Driver.new(endpoint, udp, self).start
+      # Known before it starts, so that leaving `run` while it starts stops
+      # it too.
+      driver = @driver = Driver.new(endpoint, udp, self)
+      driver.start
       reader, @wake = IO.pipe
       Fiber.schedule { wake_on(reader, driver) }
       @lock.synchronize { @stopped.wait(@lock) until driver.stopped? }
       failure = driver.failure and raise failure
       nil
     ensure
+      # Left by an exception, or by the task running it being stopped.
+      @driver&.stop
       reader&.close
       @wake&.close
     end
@@ -139,6 +144,7 @@ module Raiha::Next::Runtime
       @sessions.each { |session| session.abort(failure) }
       @traces.each_value(&:over!)
       @qlog&.flush
+    ensure
       @lock.synchronize { @stopped.broadcast }
     end
 

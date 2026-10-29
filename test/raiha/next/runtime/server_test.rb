@@ -212,6 +212,22 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # The task running a server stopped from outside leaves no fiber behind
+  # and the socket closed.
+  def test_a_run_stopped_from_outside
+    Sync do |task|
+      tls = server_config
+      server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
+        port: 0)
+      running = task.async { server.run { flunk } }
+      sleep 0.01 until server.local_address
+      running.stop
+      sleep 0.01 until running.stopped?
+      assert server.instance_variable_get(:@udp).closed?
+      assert server.instance_variable_get(:@driver).stopped?
+    end
+  end
+
   def test_a_scheduler_is_needed
     tls = server_config
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
