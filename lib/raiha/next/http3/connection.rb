@@ -387,11 +387,12 @@ module Raiha::Next::HTTP3
     end
 
     # Gives the request on `stream_id` `urgency` and `incremental` (RFC
-    # 9218): a client tells the server with PRIORITY_UPDATE, and both send
-    # by it what they send on the stream.
-    def update_priority(stream_id, urgency:, incremental:)
-      priority = Priority.new(urgency:, incremental:)
+    # 9218), each left as it is when not given ("Merging Client- and
+    # Server-Driven Priority Parameters"): a client tells the server with
+    # PRIORITY_UPDATE, and both send by it what they send on the stream.
+    def update_priority(stream_id, urgency: nil, incremental: nil)
       raise Error::Usage, "stream #{stream_id} has no request" unless @receiving.key?(stream_id) || @sending.key?(stream_id) || @outputs.key?(stream_id)
+      priority = priority_of(stream_id).merge(urgency, incremental)
       if @role == :client
         control = @own_critical.first or raise Error::Usage, "no control stream to send PRIORITY_UPDATE on yet"
         frame = Frame::PriorityUpdate.new(element_id: stream_id, priority: priority.to_field)

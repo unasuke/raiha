@@ -83,6 +83,9 @@ class RaihaNextHTTP3ConnectionPriorityTest < Minitest::Test
     server.send_headers(0, [[":status", "200"], ["priority", "u=1"]])
     server.update_priority(0, urgency: 0, incremental: false)
     assert_equal [priority(0, 1, true), priority(0, 0, false)], priorities(server)
+    server.update_priority(0, incremental: true)
+    server.update_priority(0, urgency: 6)
+    assert_equal [priority(0, 0, true), priority(0, 6, true)], priorities(server)
     assert_raises(HTTP3::Error::Usage) { server.update_priority(4, urgency: 0, incremental: false) }
   end
 
