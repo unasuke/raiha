@@ -152,6 +152,20 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
     assert_equal [nil, 0], [exchange.shift, exchange.unread]
   end
 
+  # Requests HTTP/3 does not take give their streams up, so more of them
+  # than the server allows streams leave room for one it takes.
+  def test_requests_not_taken_give_their_streams_up
+    Sync do
+      answering(BODIES) do |port|
+        h3_connect(port) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          120.times { assert_raises(ArgumentError) { client.get("/hello", headers: [["X-Upper", "case"]]) } }
+          assert_equal "hello world", client.get("/hello").body
+        end
+      end
+    end
+  end
+
   def test_requests_in_fibers_of_their_own
     Sync do
       answering(BODIES) do |port|

@@ -201,12 +201,22 @@ module Raiha::Next::Runtime
         @binding.flush(now:)
       end
 
-      # Sends the request on a new stream: its ID.
+      # Sends the request on a new stream: its ID. A request HTTP/3 does not
+      # take, after the server's GOAWAY or with header fields it finds
+      # malformed, gives its stream up both ways.
       private def start(method, path, headers, fin:)
         stream_id = @session.open_stream_id
         @exchanges[stream_id] = Exchange.new
         pseudo = [[":method", method], [":scheme", "https"], [":authority", @authority], [":path", path]] #: Array[[String, String]]
-        @http3.send_request(stream_id, pseudo + headers, fin:)
+        begin
+          @http3.send_request(stream_id, pseudo + headers, fin:)
+        rescue StandardError
+          @exchanges.delete(stream_id)
+          @session.connection.stream_reset(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @session.connection.stream_stop_sending(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @session.changed
+          raise
+        end
         flush
         stream_id
       end
