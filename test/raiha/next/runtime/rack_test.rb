@@ -76,6 +76,19 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     assert_equal "5", env["CONTENT_LENGTH"]
   end
 
+  # An authority of http with no port is of port 80, of https of 443.
+  def test_the_port_of_a_scheme
+    request = Struct.new(:method, :path, :authority, :scheme, :protocol, :headers, :body) do
+      def respond(*) = nil
+    end
+    envs = %w[http https].map do |scheme|
+      env = nil
+      Runtime::Rack.new(->(given) { (env = given) && [200, {}, []] }).call(request.new("GET", "/", "example.com", scheme, nil, [], nil))
+      env.values_at("SERVER_NAME", "SERVER_PORT", "rack.url_scheme")
+    end
+    assert_equal [["example.com", "80", "http"], ["example.com", "443", "https"]], envs
+  end
+
   # rack.input read by lines and as a whole, a megabyte of it.
   def test_rack_input
     app = lambda do |env|

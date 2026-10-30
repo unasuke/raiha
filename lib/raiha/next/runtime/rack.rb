@@ -147,9 +147,12 @@ module Raiha::Next::Runtime
       authority = request.authority || request.headers.find { |name, _| name == "host" }&.last || ""
       host, port = authority.match(/\A(\[[^\]]*\]|[^:]*)(?::(\d+))?\z/)&.captures
       path, query = request.path.split("?", 2)
+      # An authority with no port is of the scheme's (RFC 9110 "http URI
+      # Scheme", "https URI Scheme").
+      port ||= request.scheme == "http" ? "80" : "443"
       env = {
         "REQUEST_METHOD" => request.method, "SCRIPT_NAME" => "", "PATH_INFO" => path || "", "QUERY_STRING" => query || "",
-        "SERVER_NAME" => host || "", "SERVER_PORT" => port || "443", "SERVER_PROTOCOL" => "HTTP/3", "HTTP_HOST" => authority,
+        "SERVER_NAME" => host || "", "SERVER_PORT" => port, "SERVER_PROTOCOL" => "HTTP/3", "HTTP_HOST" => authority,
         "rack.url_scheme" => request.scheme || "https", "rack.input" => Input.new(request.body), "rack.errors" => $stderr,
         "raiha.request" => request
       } #: Hash[String, String | Input | IO | HTTP3::Request | Array[String]]
