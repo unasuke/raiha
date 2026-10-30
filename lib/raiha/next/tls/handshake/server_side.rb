@@ -109,6 +109,7 @@ module Raiha::Next::TLS
 
       def forget_secrets!
         @exporter_values.each_value(&:clear).clear
+        @resumption&.ticket&.psk&.clear
         nil
       end
 
@@ -194,10 +195,16 @@ module Raiha::Next::TLS
           algorithms = case (ext = ch.extension(Extension::SignatureAlgorithms::TYPE))
             when Extension::SignatureAlgorithms then ext.supported_signature_algorithms
             end
-          return fail!(:missing_extension, :signature_algorithms) unless algorithms
+          unless algorithms
+            shared_secret.clear
+            return fail!(:missing_extension, :signature_algorithms)
+          end
           selected = @keyring.server_credential(server_name: @server_name, signature_algorithms: algorithms,
             signature_algorithms_cert: signature_algorithms_cert(ch), certificate_authorities: certificate_authorities(ch))
-          return fail!(:handshake_failure, :no_usable_certificate) unless selected
+          unless selected
+            shared_secret.clear
+            return fail!(:handshake_failure, :no_usable_certificate)
+          end
         end
 
         @resumption = resumption
@@ -234,6 +241,7 @@ module Raiha::Next::TLS
           when Ticket::Plaintext
             reason = ticket_refusal(opened, suite, now)
             return verify_binder(index, opened, offer.binders.fetch(index), suite) unless reason
+            opened.psk.clear
             reject_psk(index, reason)
           else reject_psk(index, opened)
           end
@@ -270,7 +278,10 @@ module Raiha::Next::TLS
         schedule = KeySchedule.new(hash: suite.hash_algorithm, psk: ticket.psk)
         verified = schedule.verify_binder(kind: :resumption, transcript_hash: @conductor.binder_transcript_hash(suite.hash_algorithm), binder:)
         schedule.discard!
-        return Violation.new(alert: :decrypt_error, reason: :psk_binder_mismatch) unless verified
+        unless verified
+          ticket.psk.clear
+          return Violation.new(alert: :decrypt_error, reason: :psk_binder_mismatch)
+        end
         @conductor.trace(Trace::BinderVerified.new(index:)) if @conductor.tracing?
         Resumption.new(index:, ticket:)
       end
@@ -347,6 +358,8 @@ module Raiha::Next::TLS
           @peer_certificates = [Crypto::Certificate.parse(client.leaf) || raise("a ticket holds a leaf it was sealed with")] if client
         end
         schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: ch.random, psk: resumption&.ticket&.psk)
+        # The early secret holds it now.
+        resumption&.ticket&.psk&.clear
         schedule.handshake!(shared_secret)
         shared_secret.clear
         transcript_hash = @conductor.transcript_hash

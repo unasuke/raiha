@@ -79,4 +79,11 @@ class RaihaNextTLSTicketTest < Minitest::Test
   def test_the_psk_does_not_show
     refute_includes plaintext.inspect, plaintext.psk.inspect
   end
+
+  # The server clears an opened ticket's PSK once it is done with it.
+  def test_the_psk_of_an_opened_ticket_can_be_forgotten
+    psk = open(seal).psk
+    psk.clear
+    assert_empty psk
+  end
 end

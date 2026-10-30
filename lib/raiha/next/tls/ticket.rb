@@ -68,12 +68,13 @@ module Raiha::Next::TLS
       end
 
       # The Plaintext of `padded`, nil when it does not parse or its padding
-      # is not all zeros.
+      # is not all zeros. Its PSK is a String of its own, which the server
+      # clears once it is done with it.
       def self.decode(padded)
         r = Codec::Reader.new(padded)
         plaintext = new(
           issued_at: Ticket.read_u64(r), authenticated_at: Ticket.read_u64(r), lifetime: r.u32, age_add: r.u32,
-          cipher_suite: r.u16, psk: r.opaque(1, min: 32, max: 64), alpn: r.opaque(1, max: 255),
+          cipher_suite: r.u16, psk: r.opaque(1, min: 32, max: 64).dup, alpn: r.opaque(1, max: 255),
           early_data_allowed: Ticket.read_flag(r), client: decode_client(r), early_data_context: r.opaque(2, max: 0xffff)
         )
         rest = padded.byteslice(padded.bytesize - r.remaining, r.remaining).to_s
@@ -159,7 +160,9 @@ module Raiha::Next::TLS
       sealed = ticket.byteslice(header.bytesize + NONCE_LENGTH, ticket.bytesize).to_s
       padded = Crypto::AEAD.new(:aes_256_gcm, entry.aead_key).open(nonce:, aad: header + binding, ciphertext: sealed)
       return :aead_failure unless padded
-      Plaintext.decode(padded) || :malformed #: Plaintext | reason
+      plaintext = Plaintext.decode(padded)
+      padded.clear
+      plaintext || :malformed #: Plaintext | reason
     end
 
     def self.u64(w, value)
