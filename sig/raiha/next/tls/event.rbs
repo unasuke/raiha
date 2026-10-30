@@ -41,6 +41,13 @@ module Raiha::Next::TLS
                   | (Integer type, String data, Integer message) -> instance
     end
 
+    class NewSessionTicket < Data
+      attr_reader session: Session
+
+      def self.new: (session: Session) -> instance
+                  | (Session session) -> instance
+    end
+
     class Failed < Data
       attr_reader alert: Symbol?
       attr_reader reason: Symbol
@@ -49,6 +56,6 @@ module Raiha::Next::TLS
                   | (Symbol? alert, Symbol reason) -> instance
     end
 
-    type t = HandshakeComplete | EarlyDataRejected | SessionNotOffered | PeerExtension | Failed
+    type t = HandshakeComplete | EarlyDataRejected | SessionNotOffered | PeerExtension | NewSessionTicket | Failed
   end
 end

@@ -5,6 +5,7 @@ require_relative "../config"
 require_relative "../event"
 require_relative "../extension"
 require_relative "../iana"
+require_relative "../session"
 require_relative "authentication_messages"
 require_relative "client_hello_builder"
 require_relative "key_update_handling"
@@ -63,6 +64,9 @@ module Raiha::Next::TLS
         # @type var peer_certificates: Array[OpenSSL::X509::Certificate]
         peer_certificates = []
         @peer_certificates = peer_certificates
+        # When the full handshake whose key material the connection holds
+        # took place (milliseconds), nil until the handshake is over.
+        @authenticated_at = nil #: Integer?
         # @type var exporter_values: Hash[String, String]
         exporter_values = {}
         @exporter_values = exporter_values
@@ -101,8 +105,8 @@ module Raiha::Next::TLS
         when CertificateRequest then certificate_request(message)
         when Certificate then certificate(message, now)
         when CertificateVerify then certificate_verify(message, transcript_hash_before) # steep:ignore
-        when Finished then finished(message, transcript_hash_before) # steep:ignore
-        when NewSessionTicket then new_session_ticket(message)
+        when Finished then finished(message, transcript_hash_before, now) # steep:ignore
+        when NewSessionTicket then new_session_ticket(message, now)
         when KeyUpdate then receive_key_update(message)
         end
       end
@@ -296,7 +300,7 @@ module Raiha::Next::TLS
         end
       end
 
-      private def finished(message, transcript_hash)
+      private def finished(message, transcript_hash, now)
         schedule = key_schedule
         case (result = @authentication.verify_finished(message, schedule, transcript_hash))
         when AuthenticationMessages::Failure then return fail!(result.alert, result.reason)
@@ -311,6 +315,7 @@ module Raiha::Next::TLS
           secrets: [[:application, :read, server_secret], [:application, :write, client_secret]])
         send_client_flight(schedule)
         schedule.resumption!(@conductor.transcript_hash)
+        @authenticated_at = (now.to_r * 1000).floor
         @conductor.change_epochs!(cipher_suite: suite, write: :application)
         @conductor.transition!(:connected)
         @conductor.event!(Event::HandshakeComplete.new(
@@ -341,16 +346,25 @@ module Raiha::Next::TLS
         @conductor.emit_message!(:handshake, @authentication.finished(schedule, @conductor.transcript_hash))
       end
 
-      # Tickets wait for resumption, which is not built yet; their
-      # max_early_data_size is checked already.
-      private def new_session_ticket(message)
-        return unless @config.profile.max_early_data_size_policy == :sentinel
-        case (ext = message.extension(Extension::EarlyData::TYPE))
-        when Extension::EarlyData::NST
-          unless ext.max_early_data_size == EARLY_DATA_SENTINEL
-            fail!(:illegal_parameter, :max_early_data_size_not_sentinel)
+      # A ticket becomes a Session the application may keep (TLS API design
+      # 13.1), its age counted from now. With QUIC, max_early_data_size is
+      # checked first, a ticket ignored or not (RFC 9001 "Enabling 0-RTT");
+      # a client that does not resume ignores it then (RFC 9846 "New Session
+      # Ticket Message").
+      private def new_session_ticket(message, now)
+        early_data = case (ext = message.extension(Extension::EarlyData::TYPE))
+          when Extension::EarlyData::NST then ext.max_early_data_size
           end
+        if @config.profile.max_early_data_size_policy == :sentinel && early_data && early_data != EARLY_DATA_SENTINEL
+          return fail!(:illegal_parameter, :max_early_data_size_not_sentinel)
         end
+        return unless @config.resumption
+        @conductor.event!(Event::NewSessionTicket.new(session: Session.new(
+          ticket: message.ticket, ticket_nonce: message.ticket_nonce, resumption_secret: key_schedule.resumption_secret,
+          cipher_suite: suite.id, issued_at: (now.to_r * 1000).floor, lifetime: message.ticket_lifetime,
+          age_add: message.ticket_age_add, max_early_data_size: early_data || 0, server_name: @server_name, alpn: @alpn,
+          peer_certificates: @peer_certificates.map(&:to_der), authenticated_at: @authenticated_at || raise("no handshake to resume")
+        )))
       end
 
 

@@ -173,6 +173,7 @@ module Raiha::Next::TLS
       @hello_retry_request: ServerHello?
       @key_pairs: Array[KeyExchange::KeyPair]
       @certificate_request: CertificateRequest?
+      @authenticated_at: Integer?
       @key_updates: Integer
 
       attr_reader cipher_suite: CipherSuite?
@@ -203,9 +204,9 @@ module Raiha::Next::TLS
       private def certificate_request: (CertificateRequest message) -> void
       private def certificate: (Certificate message, Time now) -> void
       private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
-      private def finished: (Finished message, String transcript_hash) -> void
+      private def finished: (Finished message, String transcript_hash, Time now) -> void
       private def send_client_flight: (KeySchedule schedule) -> void
-      private def new_session_ticket: (NewSessionTicket message) -> void
+      private def new_session_ticket: (NewSessionTicket message, Time now) -> void
       private def key_update: (KeyUpdate message) -> void
       private def key_share_groups: (ClientHello client_hello) -> Array[Integer]
     end

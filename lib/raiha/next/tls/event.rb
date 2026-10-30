@@ -31,6 +31,11 @@ module Raiha::Next::TLS
     class PeerExtension < Data.define(:type, :data, :message)
     end
 
+    # A client may resume `session` later (TLS API design 13.1); keeping it
+    # is the application's.
+    class NewSessionTicket < Data.define(:session)
+    end
+
     # The alert sent and a Symbol naming the check that failed. A QUIC
     # binding maps a reason listed in Profile#protocol_violation_reasons to
     # PROTOCOL_VIOLATION. The alert is nil when none was sent: over TCP, a

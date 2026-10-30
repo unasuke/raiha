@@ -100,3 +100,47 @@ class RaihaNextTLSTicketIssuanceTest < Minitest::Test
     assert_equal [:ticket_keys_exhausted], tracer.values.grep(TLS::Trace::TicketNotIssued).map(&:reason)
   end
 end
+
+# A client's side of the tickets (TLS API design 13.1): each becomes an
+# Event::NewSessionTicket whose Session gives the PSK the server sealed in
+# the ticket, unless the client does not resume.
+class RaihaNextTLSTicketReceiptTest < Minitest::Test
+  Pair = NextTLSPair
+  TLS = Pair::TLS
+  NOW = Pair::NOW
+  SEED = "\x0b".b * 32
+
+  def events(machine) = [].tap { |all| machine.each_event { all << _1 } }
+
+  # The handshake, then the server's last outputs, its tickets, to the
+  # client: Pair.run stops once both are complete.
+  def handshake(client, config)
+    pair = Pair.run(client, { config: })
+    Pair.deliver(pair.server_outputs.select { |output| output.is_a?(TLS::Output::Message) && output.epoch == :application }, pair.client)
+    pair
+  end
+
+  def test_a_session_of_each_ticket
+    config = Pair.server_config(ticket_key: SEED, max_early_data_size: 1024)
+    pair = handshake(Pair.client, config)
+    sessions = events(pair.client).grep(TLS::Event::NewSessionTicket).map(&:session)
+    assert_equal 2, sessions.size
+    session = sessions.first
+    now_ms = (NOW.to_r * 1000).floor
+    assert_equal [0x1301, now_ms, now_ms, 7200, 1024, "localhost", nil],
+      [session.cipher_suite, session.issued_at, session.authenticated_at, session.lifetime, session.max_early_data_size,
+        session.server_name, session.alpn]
+    assert_equal [2, Pair.ca.der], [session.peer_certificates.size, session.peer_certificates.last]
+    binding = TLS::Ticket.binding(config.ticket_binding, resumption_binding: "", server_name: "localhost", alpn: "")
+    sealed = TLS::Ticket.open(session.ticket, keys: config.ticket_keys, binding:, now: NOW, max_size: 8192)
+    assert_equal sealed.psk, session.psk
+    assert_equal sealed.age_add, session.age_add
+    refute_equal sessions.last.psk, session.psk
+  end
+
+  def test_a_client_that_does_not_resume_ignores_tickets
+    pair = handshake(Pair.client(config: Pair.client_config(resumption: false)), Pair.server_config(ticket_key: SEED))
+    assert pair.client.complete?
+    assert_empty events(pair.client).grep(TLS::Event::NewSessionTicket)
+  end
+end

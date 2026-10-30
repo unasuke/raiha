@@ -38,6 +38,7 @@ module Raiha::Next::TLS
     def finished_verify_data: (side side, String transcript_hash) -> String
     def verify_finished: (side side, String transcript_hash, String verify_data) -> bool
     def resumption!: (String transcript_hash) -> self
+    def resumption_secret: () -> String
     def ticket_psk: (String ticket_nonce) -> String
     def update_application_traffic_secret!: (side side) -> String
     def discard!: () -> self

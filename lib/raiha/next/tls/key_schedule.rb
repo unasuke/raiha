@@ -183,6 +183,9 @@ module Raiha::Next::TLS
       advance(:main, :resumption) { |main| derive(main, :resumption, transcript_hash) }
     end
 
+    # A copy of the resumption secret, for a client to keep in a Session.
+    def resumption_secret = stage_secret(:resumption).dup
+
     # The PSK of the ticket that carries `ticket_nonce`.
     def ticket_psk(ticket_nonce)
       KeySchedule.expand_label(secret: stage_secret(:resumption), label: LABELS.fetch(:ticket_psk), context: ticket_nonce,
