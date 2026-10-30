@@ -106,6 +106,64 @@ class RaihaNextTLSSessionOfferTest < Minitest::Test
     assert_equal [:illegal_parameter, :key_share_group_not_offered], answered(selected: 1, share: share(0x0017))
   end
 
+  def hello_retry_request(ch, suite: 0x1301)
+    extensions = [TLS::Extension::KeyShare::HRR.new(selected_group: 0x0017), TLS::Extension::SupportedVersions::SH.new(selected_version: 0x0304)]
+    TLS::Handshake::ServerHello.new(legacy_version: 0x0303, random: TLS::Handshake::ServerHello::HELLO_RETRY_REQUEST_RANDOM,
+      legacy_session_id_echo: ch.legacy_session_id, cipher_suite: suite, legacy_compression_method: 0, extensions:)
+  end
+
+  # The ClientHello a client sends after `hrr` at `now`, as bytes and parsed.
+  def retried(machine, hrr, now:)
+    machine.receive(hrr.encode, epoch: :initial, now:)
+    client_hello(machine)
+  end
+
+  # After a HelloRetryRequest the session is offered again, its age counted
+  # to the second ClientHello and its binder a MAC over message_hash, the
+  # HelloRetryRequest and the second ClientHello up to the binders (RFC 9846
+  # "PSK Binder").
+  def test_a_session_offered_again_after_a_hello_retry_request
+    machine = Pair.client(session:, now: NOW)
+    ch1_bytes, ch1 = client_hello(machine)
+    hrr = hello_retry_request(ch1)
+    later = NOW + 3
+    bytes, ch2 = retried(machine, hrr, now: later)
+    psk = ch2.extensions.last
+    assert_instance_of TLS::Extension::PreSharedKey::CH, psk
+    assert_equal [session.obfuscated_ticket_age(later)], psk.identities.map(&:obfuscated_ticket_age)
+    refute_equal ch1.extensions.last.identities, psk.identities
+    message_hash = [254, 0, 0, 32].pack("C4") + OpenSSL::Digest.digest("SHA256", ch1_bytes)
+    truncated = bytes.byteslice(0, bytes.bytesize - ch2.binders_wire_length)
+    transcript_hash = OpenSSL::Digest.digest("SHA256", message_hash + hrr.encode + truncated)
+    expected = TLS::KeySchedule.new(hash: :sha256, psk: session.psk).binder(kind: :resumption, transcript_hash:)
+    assert_equal [expected], psk.binders
+    assert_equal ch1.extensions.map(&:extension_type), ch2.extensions.map(&:extension_type)
+  end
+
+  # A session whose hash is not the suite's the HelloRetryRequest chose is
+  # offered no more, and a ServerHello that selects it fails at row 3.
+  def test_a_session_of_another_hash_dropped_after_a_hello_retry_request
+    machine = Pair.client(session:, now: NOW)
+    _, ch1 = client_hello(machine)
+    _, ch2 = retried(machine, hello_retry_request(ch1, suite: 0x1302), now: NOW + 3)
+    assert_nil ch2.extension(TLS::Extension::PreSharedKey::TYPE)
+    assert_equal ch1.extensions.map(&:extension_type) - [TLS::Extension::PreSharedKey::TYPE], ch2.extensions.map(&:extension_type)
+    sh = server_hello(ch2, selected: 0, suite: 0x1302, share: share(0x0017))
+    machine.receive(sh.encode, epoch: :initial, now: NOW + 3)
+    assert_equal [:unsupported_extension, :unsolicited_extension], events(machine).grep(TLS::Event::Failed).first&.then { |f| [f.alert, f.reason] }
+  end
+
+  # A server that sends a HelloRetryRequest takes the second ClientHello,
+  # its pre_shared_key changed.
+  def test_a_server_takes_the_session_offered_again
+    pair = Pair.run(Pair.client(session:), { config: Pair.server_config(groups: %i[secp256r1]) })
+    assert pair.client.complete? && pair.server.complete?
+    hellos = pair.client_outputs.grep(TLS::Output::Message).select { |output| output.epoch == :initial }
+      .map { |output| TLS::Handshake.parse(output.bytes, registry: TLS::Extension::Registry::BUILTIN) }
+    assert_equal 2, hellos.size
+    assert hellos.all? { |ch| ch.extension(TLS::Extension::PreSharedKey::TYPE) }
+  end
+
   def test_a_client_that_does_not_resume_takes_no_session
     assert_raises(TLS::UsageError) { Pair.client(config: Pair.client_config(resumption: false), session:) }
     assert_raises(ArgumentError) { Pair.client(session: session.to_h) }

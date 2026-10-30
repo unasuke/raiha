@@ -201,8 +201,9 @@ module Raiha::Next::TLS
       private def suite: () -> CipherSuite
       private def fail!: (Symbol alert, Symbol reason) -> nil
       private def offered_types: () -> Array[Integer]
-      private def server_hello: (ServerHello message, String raw) -> void
-      private def hello_retry_request: (ServerHello hrr, String raw, CipherSuite suite) -> void
+      private def server_hello: (ServerHello message, String raw, Time now) -> void
+      private def hello_retry_request: (ServerHello hrr, String raw, CipherSuite suite, Time now) -> void
+      private def offer_again: (ClientHello second, CipherSuite suite, Time now) -> ClientHello
       private def check_after_hello_retry_request: (ServerHello message, ServerHello hrr) -> Violation?
       private def accept_server_hello: (ServerHello message, String raw, CipherSuite suite) -> void
       private def encrypted_extensions: (EncryptedExtensions message) -> void

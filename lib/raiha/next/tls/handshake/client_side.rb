@@ -111,7 +111,7 @@ module Raiha::Next::TLS
 
       def handle(message, raw:, transcript_hash_before:, now:)
         case message
-        when ServerHello then server_hello(message, raw)
+        when ServerHello then server_hello(message, raw, now)
         when EncryptedExtensions then encrypted_extensions(message)
         when CertificateRequest then certificate_request(message)
         when Certificate then certificate(message, now)
@@ -143,7 +143,7 @@ module Raiha::Next::TLS
 
       private def offered_types = client_hello.extensions.map(&:extension_type)
 
-      private def server_hello(message, raw)
+      private def server_hello(message, raw, now)
         hrr = @hello_retry_request
         # 0a to 0c, after a HelloRetryRequest, before everything else.
         if hrr
@@ -165,7 +165,7 @@ module Raiha::Next::TLS
         unless message.extensions.all? { |ext| allowed.include?(ext.extension_type) }
           return fail!(:unsupported_extension, :unsolicited_extension)
         end
-        message.hello_retry_request? ? hello_retry_request(message, raw, suite) : accept_server_hello(message, raw, suite)
+        message.hello_retry_request? ? hello_retry_request(message, raw, suite, now) : accept_server_hello(message, raw, suite)
       end
 
       # RFC 9846 "Hello Retry Request" and "Key Share": one
@@ -188,7 +188,7 @@ module Raiha::Next::TLS
         nil
       end
 
-      private def hello_retry_request(hrr, raw, suite)
+      private def hello_retry_request(hrr, raw, suite, now)
         # 4: the server cannot send anything before our second ClientHello.
         return fail!(:unexpected_message, :data_after_hello_retry_request) if @conductor.pending_input?
         requested = case (ext = hrr.extension(Extension::KeyShare::TYPE))
@@ -212,8 +212,23 @@ module Raiha::Next::TLS
           @key_pairs = [key_pair]
           Extension::KeyShare::Entry.new(group:, key_exchange: key_pair.public_bytes)
         end
-        @client_hello = @conductor.emit_message!(:initial, second)
+        @client_hello = offer_again(second, suite, now)
         @conductor.transition!(:wait_sh2)
+      end
+
+      # The second ClientHello offers the session again, its age and binder
+      # made anew, when the session's hash is the suite's; otherwise it
+      # offers none, as RFC 9846 "Pre-Shared Key Extension" asks, and the
+      # handshake is a full one.
+      private def offer_again(second, suite, now)
+        session = @session
+        if session && CipherSuite.find(session.cipher_suite)&.hash_algorithm == suite.hash_algorithm
+          return offer(second, session, now)
+        end
+        @psk&.clear
+        @psk = nil
+        @session = nil
+        @conductor.emit_message!(:initial, second.with(extensions: second.extensions.reject { |ext| ext.extension_type == Extension::PreSharedKey::TYPE }))
       end
 
       private def accept_server_hello(message, raw, suite)
@@ -450,13 +465,15 @@ module Raiha::Next::TLS
 
       # `client_hello` with the session's PSK (RFC 9846 "Pre-Shared Key
       # Extension"): one identity, its age as the client counts it, and
-      # pre_shared_key last; psk_dhe_ke is offered already.
+      # pre_shared_key last, in place of the one a first ClientHello had;
+      # psk_dhe_ke is offered already.
       private def offer(client_hello, session, now)
         suite = CipherSuite.find(session.cipher_suite) or raise "the session's cipher suite was checked"
         identity = Extension::PreSharedKey::Identity.new(identity: session.ticket, obfuscated_ticket_age: session.obfuscated_ticket_age(now))
         placeholder = Extension::PreSharedKey::CH.new(identities: [identity], binders: ["\x00".b * suite.hash_length])
-        psk = @psk = session.psk
-        @conductor.emit_client_hello_with_binders!(client_hello.with(extensions: client_hello.extensions + [placeholder]), suite.hash_algorithm) do |transcript_hash|
+        others = client_hello.extensions.reject { |ext| ext.extension_type == Extension::PreSharedKey::TYPE }
+        psk = @psk ||= session.psk
+        @conductor.emit_client_hello_with_binders!(client_hello.with(extensions: others + [placeholder]), suite.hash_algorithm) do |transcript_hash|
           schedule = KeySchedule.new(hash: suite.hash_algorithm, psk:)
           [schedule.binder(kind: :resumption, transcript_hash:)].tap { schedule.discard! }
         end
