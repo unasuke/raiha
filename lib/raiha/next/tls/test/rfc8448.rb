@@ -497,6 +497,60 @@ module Raiha::Next::TLS::Test::RFC8448
       33 e1 b9 e7 7b 60 dd 57 c2 05 3c d9 45 12 ab 47
       f1 15 e8 6e ff 50 94 2c ea 31 00 2b 00 02 03 04
     HEX
+
+    # The values of the client's side, for its role.
+    CLIENT_X25519_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze
+      bf f9 11 88 28 38 46 dd 6a 21 34 ef 71 80 ca 2b
+      0b 14 fb 10 dc e7 07 b5 09 8c 0d dd c8 13 b2 df
+    HEX
+
+    CLIENT_EARLY_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      3f bb e6 a6 0d eb 66 c3 0a 32 79 5a ba 0e ff 7e
+      aa 10 10 55 86 e7 be 5c 09 67 8d 63 b6 ca ab 62
+    HEX
+
+    CLIENT_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      2f aa c0 8f 85 1d 35 fe a3 60 4f cb 4d e8 2d c6
+      2c 9b 16 4a 70 97 4d 04 62 e2 7f 1a b2 78 70 0f
+    HEX
+
+    SERVER_HANDSHAKE_TRAFFIC_SECRET = [<<~HEX.delete(" \n")].pack("H*").freeze
+      fe 92 7a e2 71 31 2e 8b f0 27 5b 58 1c 54 ee f0
+      20 45 0d c4 ec ff aa 05 a1 a3 5d 27 51 8e 78 03
+    HEX
+
+    CLIENT_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      2a bb f2 b8 e3 81 d2 3d be be 1d d2 a7 d1 6a 8b
+      f4 84 cb 49 50 d2 3f b7 fb 7f a8 54 70 62 d9 a1
+    HEX
+
+    SERVER_APPLICATION_TRAFFIC_SECRET_0 = [<<~HEX.delete(" \n")].pack("H*").freeze
+      cc 21 f1 bf 8f eb 7d d5 fa 50 5b d9 c4 b4 68 a9
+      98 4d 55 4a 99 3d c4 9e 6d 28 55 98 fb 67 26 91
+    HEX
+
+    # NSS's EncryptedExtensions, taking 0-RTT.
+    ENCRYPTED_EXTENSIONS = [<<~HEX.delete(" \n")].pack("H*").freeze
+      08 00 00 28 00 26 00 0a 00 14 00 12 00 1d 00 17
+      00 18 00 19 01 00 01 01 01 02 01 03 01 04 00 1c
+      00 02 40 01 00 00 00 00 00 2a 00 00
+    HEX
+
+    SERVER_FINISHED = [<<~HEX.delete(" \n")].pack("H*").freeze
+      14 00 00 20 48 d3 e0 e1 b3 d9 07 c6 ac ff 14 5e
+      16 09 03 88 c7 7b 05 c0 50 b6 34 ab 1a 88 bb d0
+      dd 1a 34 b2
+    HEX
+
+    END_OF_EARLY_DATA = [<<~HEX.delete(" \n")].pack("H*").freeze
+      05 00 00 00
+    HEX
+
+    CLIENT_FINISHED = [<<~HEX.delete(" \n")].pack("H*").freeze
+      14 00 00 20 72 30 a9 c9 52 c2 5c d6 13 8f c5 e6
+      62 83 08 c4 1c 53 35 dd 81 b9 f9 6b ce a5 0f d3
+      2b da 41 6d
+    HEX
   end
 
   # RFC 8448 §5, HelloRetryRequest.

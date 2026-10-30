@@ -1,8 +1,8 @@
 require "raiha/next/test_helper"
 require "raiha/next/tls/test"
 
-# RFC 8448 sections 3, 5 and 6, played by the Machine in both roles against
-# the trace's messages: every Secret it outputs, and every message it
+# RFC 8448 sections 3, 5 and 6, played by the Machine in both roles, and
+# section 4 by its client, against the trace's messages: every Secret it outputs, and every message it
 # builds itself, byte for byte. Messages NSS sent that this implementation
 # never builds are replaced by the trace's bytes (Test::RFC8448.machine).
 #
@@ -53,6 +53,26 @@ class RaihaNextTLSRFC8448HandshakeTest < Minitest::Test
       [:handshake, S::CLIENT_FINISHED]
     ], outputs
     assert client.complete?
+  end
+
+  # Section 4: the binder over NSS's ClientHello, the 0-RTT key over the
+  # whole of it, then EndOfEarlyData under that key before the Finished.
+  def test_resumed_0rtt_client
+    r = RFC8448::Resumed0RTT
+    client = machine(:resumed_0rtt, :client)
+    assert_outputs [[:early_data, :write, r::CLIENT_EARLY_TRAFFIC_SECRET], [:initial, r::CLIENT_HELLO]], client.outputs
+    assert_outputs [[:handshake, :read, r::SERVER_HANDSHAKE_TRAFFIC_SECRET], [:handshake, :write, r::CLIENT_HANDSHAKE_TRAFFIC_SECRET]],
+      receive(client, :initial, r::SERVER_HELLO)
+    assert_equal :early_data, client.write_epoch
+    assert_outputs [
+      [:application, :read, r::SERVER_APPLICATION_TRAFFIC_SECRET_0],
+      [:application, :write, r::CLIENT_APPLICATION_TRAFFIC_SECRET_0],
+      [:early_data, r::END_OF_EARLY_DATA],
+      [:handshake, r::CLIENT_FINISHED]
+    ], receive(client, :handshake, r::ENCRYPTED_EXTENSIONS, r::SERVER_FINISHED)
+    assert client.complete?
+    complete = client.each_event.grep(TLS::Event::HandshakeComplete).first
+    assert complete.resumed && complete.early_data_accepted
   end
 
   def test_simple_1rtt_server
