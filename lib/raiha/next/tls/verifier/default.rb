@@ -60,7 +60,11 @@ module Raiha::Next::TLS
         failure(:bad_certificate)
       end
 
-      def resumption_policy = "default;verify_flags=#{@verify_flags}"
+      # Nil when revocation is checked, which a resumption, holding no more
+      # than the leaf, could not check again.
+      def resumption_policy
+        "default;verify_flags=#{@verify_flags}" if (@verify_flags & REVOCATION_FLAGS).zero?
+      end
 
       private def failure(alert) = Result.new(ok: false, reason: alert, verified_chain: [])
     end

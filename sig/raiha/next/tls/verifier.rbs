@@ -41,7 +41,7 @@ module Raiha::Next::TLS
 
       def initialize: (store: OpenSSL::X509::Store, ?verify_flags: Integer) -> void
       def verify: (chain: Array[OpenSSL::X509::Certificate], server_name: String?, now: Time, purpose: purpose) -> Result
-      def resumption_policy: () -> String
+      def resumption_policy: () -> String?
 
       private def failure: (Symbol alert) -> Result
     end

@@ -76,8 +76,11 @@ class RaihaNextTLSVerifierTest < Minitest::Test
 
   def test_resumption_policy
     assert_equal "default;verify_flags=0", verifier.resumption_policy
-    refute_equal verifier.resumption_policy, verifier(verify_flags: OpenSSL::X509::V_FLAG_CRL_CHECK).resumption_policy
+    refute_equal verifier.resumption_policy, verifier(verify_flags: OpenSSL::X509::V_FLAG_X509_STRICT).resumption_policy
     assert_equal "none", Verifier::None.new.resumption_policy
+    # Revocation, which a resumption could not check again, has none.
+    assert_nil verifier(verify_flags: OpenSSL::X509::V_FLAG_CRL_CHECK).resumption_policy
+    assert_nil verifier(verify_flags: OpenSSL::X509::V_FLAG_CRL_CHECK | OpenSSL::X509::V_FLAG_CRL_CHECK_ALL).resumption_policy
   end
 
   def test_none_accepts_anything
