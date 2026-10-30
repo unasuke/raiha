@@ -96,7 +96,7 @@ class RaihaNextTLSHandshakeHygieneTest < Minitest::Test
       "PeerCertificateVerified" => [[authentication, :verify_certificate]],
       "PeerSignatureVerified" => [[authentication, :verify_certificate_verify]],
       "PeerFinishedVerified" => [[authentication, :verify_finished]],
-      "BinderVerified" => []
+      "BinderVerified" => [["handshake/server_side.rb", :verify_binder]]
     }.each do |name, expected|
       assert_equal expected, sites { |node| new_of?(node, name) }, name
     end

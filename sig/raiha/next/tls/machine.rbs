@@ -235,6 +235,13 @@ module Raiha::Next::TLS
       ALLOWED_TO_CHANGE: Array[Integer]
       PSK_DHE_KE: Integer
 
+      class Resumption < Data
+        attr_reader index: Integer
+        attr_reader ticket: Ticket::Plaintext
+
+        def self.new: (index: Integer, ticket: Ticket::Plaintext) -> instance
+      end
+
       @conductor: Conductor
       @config: Config
       @keyring: Keyring
@@ -248,6 +255,7 @@ module Raiha::Next::TLS
       @resumption_binding: String
       @early_data_context: String
       @authenticated_at: Integer?
+      @resumption: Resumption?
 
       attr_reader cipher_suite: CipherSuite?
       attr_reader group: Symbol?
@@ -267,11 +275,15 @@ module Raiha::Next::TLS
       private def key_schedule: () -> KeySchedule
       private def suite: () -> CipherSuite
       private def fail!: (Symbol alert, Symbol reason) -> nil
-      private def client_hello: (ClientHello ch) -> void
+      private def client_hello: (ClientHello ch, Time now) -> void
       private def check_second_client_hello: (ClientHello first, ClientHello second) -> Violation?
       private def hello_retry_request: (ClientHello ch, CipherSuite suite, Integer group) -> void
+      private def choose_psk: (ClientHello ch, CipherSuite suite, String? alpn, Time now) -> (Resumption | Violation | nil)
+      private def ticket_refusal: (Ticket::Plaintext ticket, CipherSuite suite, Time now) -> Symbol?
+      private def verify_binder: (Integer index, Ticket::Plaintext ticket, String binder, CipherSuite suite) -> (Resumption | Violation)
+      private def reject_psk: (Integer index, Symbol reason) -> nil
       private def send_first_flight: (ClientHello ch, Extension::KeyShare::Entry share, String shared_secret,
-                                      Keyring::Credential credential, SignatureScheme scheme) -> void
+                                      [Keyring::Credential, SignatureScheme]? selected) -> void
       private def encrypted_extensions: (ClientHello ch) -> Array[Extension::_Extension]
       private def certificate_request: () -> CertificateRequest
       private def certificate: (Certificate message, Time now) -> void
