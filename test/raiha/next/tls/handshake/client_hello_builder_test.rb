@@ -18,10 +18,17 @@ class RaihaNextTLSClientHelloBuilderTest < Minitest::Test
     config = TLS::Config.deterministic(alpn: ["h3"], record_size_limit: 16385,
       extensions: [Extension::Opaque.new(type: 0xff01, data: "\x00".b), Extension::Opaque.new(type: 0x39, data: "tp".b)])
     client_hello = build(config).client_hello
-    assert_equal [0, 43, 10, 51, 13, 50, 16, 28, 0x39, 0xff01], types(client_hello)
+    assert_equal [0, 43, 10, 51, 13, 50, 45, 16, 28, 0x39, 0xff01], types(client_hello)
+    assert_equal [1], client_hello.extension(45).ke_modes
     assert_equal [0x1301, 0x1302, 0x1303], client_hello.cipher_suites
     assert_equal [0x001d, 0x0017, 0x0018], client_hello.extension(10).named_group_list
     assert_equal [0x001d], client_hello.extension(51).client_shares.map(&:group)
+  end
+
+  # A client that does not resume offers no PSK key exchange mode, so no
+  # server issues it tickets.
+  def test_no_psk_key_exchange_modes_without_resumption
+    refute_includes types(build(TLS::Config.deterministic(resumption: false)).client_hello), 45
   end
 
   # The random is drawn before anything else, so injecting the random

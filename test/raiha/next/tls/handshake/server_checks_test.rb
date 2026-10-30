@@ -75,7 +75,7 @@ class RaihaNextTLSServerChecksTest < Minitest::Test
   # its key share too. No ticket can be decrypted, so the PSK is never
   # chosen and the server falls back to a certificate.
   def psk_only(ke_modes:, groups: false)
-    ch = without(client_hello, 13, 50)
+    ch = without(client_hello, 13, 50, 45)
     ch = without(ch, 10, 51) unless groups
     ch = adding(ch, Extension::PskKeyExchangeModes.new(ke_modes:))
     psk = Extension::PreSharedKey::CH.new(identities: [Extension::PreSharedKey::Identity.new(identity: "ticket".b, obfuscated_ticket_age: 0)],

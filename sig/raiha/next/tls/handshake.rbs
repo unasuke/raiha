@@ -300,6 +300,7 @@ module Raiha::Next::TLS
       LEGACY_VERSION: Integer
       FIXED_ORDER: Array[Integer]
       PADDING: Integer
+      PSK_DHE_KE: Integer
       GREASE_SLOTS: Hash[Symbol, Integer]
 
       def self.build: (config: Config, keyring: Keyring, server_name: String?, ?extensions: Array[Extension::_Extension]) -> Built
