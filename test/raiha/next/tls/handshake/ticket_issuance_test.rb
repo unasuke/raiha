@@ -82,13 +82,71 @@ class RaihaNextTLSTicketIssuanceTest < Minitest::Test
     pair, _, refused = issued(max_ticket_size: 64)
     assert_empty tickets(pair)
     assert_equal [:ticket_too_large] * 2, refused.map(&:reason)
-    # An authenticated client, until its tickets can be resumed.
-    pair, _, refused = issued(client_auth: :required, identities: [Pair.client_identity])
-    assert_empty tickets(pair)
-    assert_equal [:client_auth_not_resumable], refused.map(&:reason)
     # Without keys, nothing and nothing traced.
     plain = Pair.run(Pair.client, { config: Pair.server_config, tracer: Recorder.new })
     assert_empty tickets(plain)
+  end
+
+  # A Verifier that accepts what `inner` does but cannot say what its rules
+  # are.
+  class Unsayable
+    def initialize(inner) = @inner = inner
+
+    def verify(**) = @inner.verify(**)
+
+    def resumption_policy = nil
+  end
+
+  def default_verifier(verify_flags: 0) = TLS::Verifier::Default.new(store: TLS::Verifier::Default.store([Pair.ca.der]), verify_flags:)
+
+  def authenticated(verify_flags: 0, verifier: nil, identity: Pair.client_identity)
+    config = Pair.server_config(ticket_key: SEED, client_auth: :required, verify_flags:)
+    tracer = Recorder.new
+    pair = Pair.run(Pair.client(identities: [identity]), { config:, keyring: Pair.server_keyring(config:, verifier:), tracer: })
+    assert pair.client.complete? && pair.server.complete?
+    [pair, config, tracer.values.grep(TLS::Trace::TicketNotIssued).map(&:reason)]
+  end
+
+  # A ticket of a client certificate keeps the leaf, the rules and anchor it
+  # was verified by, and when the whole chain was valid.
+  def test_a_ticket_of_a_client_certificate
+    pair, config, refused = authenticated
+    assert_empty refused
+    assert_equal 2, tickets(pair).size
+    sealed = TLS::Ticket.open(parse(tickets(pair).first).ticket, keys: config.ticket_keys, binding: binding(config), now: NOW, max_size: 8192)
+    chain = pair.server.each_event.grep(TLS::Event::HandshakeComplete).first.peer_certificates
+    client = sealed.client
+    assert_equal chain.first.to_der, client.leaf
+    assert_equal TLS::Ticket.rules_digest("default;verify_flags=0"), client.rules_digest
+    assert_equal OpenSSL::Digest.digest("SHA256", Pair.ca.der), client.anchor_digest
+    assert_equal [(NOW - 86_400).to_i, (NOW + 86_400 * 30).to_i, true], [client.valid_from, client.valid_until, client.verified]
+  end
+
+  # A ticket holds no time before 1970; a certificate valid since before
+  # then is valid since 1970 in it. Verifier::None takes the leaf alone,
+  # which ends at no anchor, unverified.
+  def test_a_client_certificate_valid_since_before_1970
+    leaf = Pair::PKI.leaf(Pair.ca, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 4,
+      not_before: Time.at(-86_400))
+    pair, config, refused = authenticated(identity: TLS::Keyring::Identity.new(cert_der: [leaf.der], key_der: leaf.key_der),
+      verifier: TLS::Verifier::None.new)
+    assert_empty refused
+    sealed = TLS::Ticket.open(parse(tickets(pair).first).ticket, keys: config.ticket_keys, binding: binding(config), now: NOW, max_size: 8192)
+    assert_equal [0, TLS::Ticket::NO_ANCHOR, TLS::Ticket.rules_digest("none"), false],
+      [sealed.client.valid_from, sealed.client.anchor_digest, sealed.client.rules_digest, sealed.client.verified]
+  end
+
+  # Not a ticket for a client certificate whose verification a resumption
+  # could not repeat.
+  def test_no_ticket_of_a_client_certificate_that_cannot_be_checked_again
+    pair, _, refused = authenticated(verifier: Unsayable.new(default_verifier))
+    assert_empty tickets(pair)
+    assert_equal [:client_auth_not_resumable], refused
+    # Revocation, checked here by a Verifier given no CRL flags so that the
+    # handshake passes.
+    pair, _, refused = authenticated(verify_flags: OpenSSL::X509::V_FLAG_CRL_CHECK, verifier: default_verifier)
+    assert_empty tickets(pair)
+    assert_equal [:client_auth_not_resumable], refused
   end
 
   def test_keys_past_their_horizon

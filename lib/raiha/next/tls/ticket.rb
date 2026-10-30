@@ -32,9 +32,14 @@ module Raiha::Next::TLS
     PROFILE_NAMES = { Profile::TCP => "tcp", Profile::QUIC => "quic" }.freeze #: Hash[Profile, String]
 
     # A client certificate as a ticket keeps it: the leaf, the digests of the
-    # rules it was verified by and of the anchor its chain ended at, when
-    # the whole chain was valid (seconds), and whether it was verified.
+    # rules it was verified by and of the anchor its chain ended at (all
+    # zeros for a chain that ended at none), when the whole chain was valid
+    # (seconds), and whether it was verified.
     class ClientCertificate < Data.define(:leaf, :rules_digest, :anchor_digest, :valid_from, :valid_until, :verified); end
+
+    NO_ANCHOR = ("\x00".b * 32).freeze
+    # The latest time a ticket holds, a 64-bit count.
+    MAX_TIME = (1 << 64) - 1
 
     # What a ticket holds. `issued_at` and `authenticated_at` are
     # milliseconds of the wall clock; `client` is nil when the client was not
@@ -116,6 +121,19 @@ module Raiha::Next::TLS
       w.vector(1) { w.bytes(alpn) }
       Crypto.hash(HASH, w.to_s)
     end
+
+    # The digest of the rules a client certificate is verified by: what the
+    # Verifier says they are, given as its resumption_policy, for the
+    # client's purpose.
+    def self.rules_digest(resumption_policy)
+      w = Codec::Writer.new
+      w.vector(2) { w.bytes(resumption_policy) }
+      w.vector(1) { w.bytes("client") }
+      Crypto.hash(HASH, w.to_s)
+    end
+
+    # The digest a ticket names the trust anchor `der` by.
+    def self.anchor_digest(der) = Crypto.hash(HASH, der)
 
     # The ticket of `plaintext` under `entry`; `random` is RANDOM_LENGTH fresh
     # bytes.

@@ -454,20 +454,22 @@ module Raiha::Next::TLS
 
       # Issues ticket_count tickets right after the client Finished, sealed
       # under the key of `now`; none, the reason traced, for a client that
-      # does not take psk_dhe_ke, without a key that seals now, for an
-      # authenticated client, or past 7 days from the full handshake the
-      # key material comes from. A ticket past max_ticket_size is not sent.
+      # does not take psk_dhe_ke, without a key that seals now, for a client
+      # certificate whose verification a resumption could not repeat, or past
+      # 7 days from the full handshake the key material comes from. A ticket
+      # past max_ticket_size is not sent.
       private def issue_tickets(schedule, now)
         return unless @config.issues_tickets?
         keys = @config.ticket_keys or return
         ch = @client_hello or raise "no ClientHello to issue tickets for"
         return refuse_ticket(:psk_mode_unsupported) unless psk_dhe_ke?(ch)
         entry = keys.sealing(now) or return refuse_ticket(:ticket_keys_exhausted)
-        # Tickets of client certificates wait for the checks that resume them.
-        return refuse_ticket(:client_auth_not_resumable) unless @peer_certificates.empty?
+        rules_digest = client_rules_digest
+        return refuse_ticket(:client_auth_not_resumable) unless @peer_certificates.empty? || rules_digest
         now_ms = (now.to_r * 1000).floor
         authenticated_at = @authenticated_at ||= now_ms
         return refuse_ticket(:authentication_expired) if now_ms - authenticated_at > Config::MAX_TICKET_LIFETIME * 1000
+        client = ticket_client(rules_digest)
         binding = Ticket.binding(@config.ticket_binding, resumption_binding: @resumption_binding, server_name: @server_name || "",
           alpn: @alpn || "")
         early_data = @config.max_early_data_size
@@ -477,7 +479,7 @@ module Raiha::Next::TLS
           age_add = @keyring.random_bytes(4).unpack1("N") #: Integer
           psk = schedule.ticket_psk(nonce)
           plaintext = Ticket::Plaintext.new(issued_at: now_ms, authenticated_at:, lifetime: @config.ticket_lifetime,
-            age_add:, cipher_suite: suite.id, psk:, alpn: @alpn || "".b, early_data_allowed: early_data.positive?, client: nil,
+            age_add:, cipher_suite: suite.id, psk:, alpn: @alpn || "".b, early_data_allowed: early_data.positive?, client:,
             early_data_context: @early_data_context)
           ticket = Ticket.seal(plaintext, entry:, binding:, random: @keyring.random_bytes(Ticket::RANDOM_LENGTH))
           psk.clear
@@ -485,6 +487,30 @@ module Raiha::Next::TLS
           @conductor.emit_message!(:application, NewSessionTicket.new(ticket_lifetime: @config.ticket_lifetime, ticket_age_add: age_add,
             ticket_nonce: nonce, ticket:, extensions:))
         end
+      end
+
+      # The digest of the rules a client certificate is verified by, nil when
+      # a resumption could not verify it the same way: the Verifier cannot
+      # say what its rules are, or the Config checks revocation.
+      private def client_rules_digest
+        policy = @keyring.verifier.resumption_policy
+        Ticket.rules_digest(policy) if policy && (@config.verify_flags & Verifier::Default::REVOCATION_FLAGS).zero?
+      end
+
+      # What a ticket keeps of the client's certificate, nil without one: the
+      # leaf, `rules_digest`, the anchor the verified chain ended at, and when
+      # every certificate of the chain was valid.
+      private def ticket_client(rules_digest)
+        leaf = @peer_certificates.first or return nil
+        rules_digest or raise "a ticket of a client certificate needs the rules it was verified by"
+        anchor = @peer_certificates.fetch(-1).to_der
+        anchor_digest = @config.trust_anchors.include?(anchor) ? Ticket.anchor_digest(anchor) : Ticket::NO_ANCHOR
+        # Seconds from 1970, as a ticket holds them: a date before is 1970,
+        # as much in the past for the checks.
+        valid_from = @peer_certificates.map { |cert| cert.not_before.to_i }.max.clamp(0, Ticket::MAX_TIME)
+        valid_until = @peer_certificates.map { |cert| cert.not_after.to_i }.min.clamp(0, Ticket::MAX_TIME)
+        Ticket::ClientCertificate.new(leaf: leaf.to_der, rules_digest:, anchor_digest:, valid_from:, valid_until:,
+          verified: @keyring.peer_verified?)
       end
 
       private def refuse_ticket(reason)

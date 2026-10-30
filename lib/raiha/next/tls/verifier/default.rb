@@ -21,6 +21,9 @@ module Raiha::Next::TLS
         OpenSSL::X509::V_ERR_INVALID_PURPOSE => :unsupported_certificate
       }.freeze #: Hash[Integer, Symbol]
 
+      # The verify_flags that check revocation.
+      REVOCATION_FLAGS = OpenSSL::X509::V_FLAG_CRL_CHECK | OpenSSL::X509::V_FLAG_CRL_CHECK_ALL
+
       PURPOSES = {
         server: OpenSSL::X509::PURPOSE_SSL_SERVER,
         client: OpenSSL::X509::PURPOSE_SSL_CLIENT

@@ -55,6 +55,11 @@ module Raiha::Next::TLS
     def self.config_binding: (profile: Profile, resumption_scope: String) -> String
     def self.binding: (String config_part, resumption_binding: String, server_name: String, alpn: String) -> String
     def self.seal: (Plaintext plaintext, entry: TicketKeys::Entry, binding: String, random: String) -> String
+    NO_ANCHOR: String
+    MAX_TIME: Integer
+
+    def self.rules_digest: (String resumption_policy) -> String
+    def self.anchor_digest: (String der) -> String
     def self.open: (String ticket, keys: TicketKeys, binding: String, now: Time, max_size: Integer) -> (Plaintext | reason)
     def self.u64: (Codec::Writer w, Integer value) -> void
     def self.read_u64: (Codec::Reader r) -> Integer

@@ -290,6 +290,8 @@ module Raiha::Next::TLS
       private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
       private def finished: (Finished message, String transcript_hash, Time now) -> void
       private def issue_tickets: (KeySchedule schedule, Time now) -> void
+      private def client_rules_digest: () -> String?
+      private def ticket_client: (String? rules_digest) -> Ticket::ClientCertificate?
       private def refuse_ticket: (Symbol reason) -> nil
       private def server_name: (ClientHello ch) -> String?
       private def psk_dhe_ke?: (ClientHello ch) -> bool

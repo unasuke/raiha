@@ -30,6 +30,7 @@ module Raiha::Next::TLS
 
     class Default
       ALERTS: Hash[Integer, Symbol]
+      REVOCATION_FLAGS: Integer
       PURPOSES: Hash[Symbol, Integer]
 
       def self.store: (Array[String] trust_anchors) -> OpenSSL::X509::Store
