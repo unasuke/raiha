@@ -137,6 +137,24 @@ class RaihaNextTLSServerEarlyDataTest < Minitest::Test
     assert_equal [:replayed], events(second).grep(TLS::Event::EarlyDataRejected).map(&:reason)
   end
 
+  # A replay passes the freshness check no later than the record was asked
+  # to keep the ClientHello: the server's clock is not rounded to
+  # milliseconds.
+  def test_the_record_outlives_the_freshness_window
+    hello = Pair.client(session:, early_data: true, now: NOW + 60).outputs.grep(TLS::Output::Message).first.bytes
+    asked = []
+    record = Object.new
+    record.define_singleton_method(:check) { |_binder, expires_at:, now:| asked << expires_at && :accepted }
+    Pair.server(hello, config: server_config, anti_replay: record, now: NOW + 60 + Rational(4, 10_000))
+    expires_at = asked.fetch(0)
+    Pair.server(hello, config: server_config, anti_replay: record, now: expires_at)
+    assert_equal 2, asked.size
+    tracer = Recorder.new
+    Pair.server(hello, config: server_config, anti_replay: record, now: expires_at + Rational(5, 10_000), tracer:)
+    assert_equal 2, asked.size
+    assert_equal [:ticket_age_skew], tracer.values.grep(TLS::Trace::EarlyDataRejected).map(&:reason)
+  end
+
   # Only the first identity's 0-RTT is taken.
   def test_0rtt_on_another_identity
     session = self.session

@@ -318,7 +318,9 @@ module Raiha::Next::TLS
           else raise "a PSK was selected"
           end
         client_age = (offer.identities.fetch(0).obfuscated_ticket_age - ticket.age_add) % (1 << 32)
-        skew = client_age - ((now.to_r * 1000).floor - ticket.issued_at)
+        # The server's milliseconds not rounded, so that a replay passes this
+        # check no later than the record is asked to keep the ClientHello.
+        skew = client_age - (now.to_r * 1000 - ticket.issued_at)
         return :ticket_age_skew unless skew.between?(-10_000, 1_000)
         anti_replay = @anti_replay or raise "a Config that takes 0-RTT has an anti-replay record"
         case (result = anti_replay.check(offer.binders.fetch(0), expires_at: now + Rational(skew + 10_000, 1000), now:))
