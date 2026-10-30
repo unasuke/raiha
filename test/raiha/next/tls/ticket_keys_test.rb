@@ -50,3 +50,85 @@ class RaihaNextTLSTicketKeysTest < Minitest::Test
     assert_includes keys.inspect, entry.key_id.unpack1("H*")
   end
 end
+
+# Keys of a ratchet: every worker computes the same ones, seals with the
+# current epoch's until past the horizon, and opens a ticket only within the
+# epochs a ticket can live, one ahead for clocks that differ.
+class RaihaNextTLSTicketKeysRatchetTest < Minitest::Test
+  TicketKeys = Raiha::Next::TLS::TicketKeys
+  BASE = (1..32).to_a.pack("C*")
+  ORIGIN = Time.at(1_700_000_000)
+  HOUR = 3600
+
+  def ratchet(now, base: BASE, base_epoch: 0, **options)
+    TicketKeys.ratchet(base:, base_epoch:, origin: ORIGIN, now:, **options).for_ticket_lifetime(7200)
+  end
+
+  # The seed of `epoch` from BASE at epoch 0, by hand.
+  def seed(epoch)
+    (0...epoch).inject(BASE) do |seed, _|
+      info = [32, "raiha ticket ratchet".bytesize].pack("nC") + "raiha ticket ratchet" + "\x00".b
+      OpenSSL::HMAC.digest("SHA256", seed, info + "\x01".b)
+    end
+  end
+
+  def test_workers_compute_the_same_keys
+    now = ORIGIN + 100 * HOUR + 5
+    keys = ratchet(now)
+    assert_equal TicketKeys.derive(seed(100), 100), keys.sealing(now)
+    assert_equal keys.sealing(now), ratchet(now + 600).sealing(now)
+    later = now + 2 * HOUR
+    advanced = keys.advance(now: later)
+    assert_equal ratchet(later).sealing(later), advanced.sealing(later)
+    assert_equal keys.sealing(now), advanced.opening(keys.sealing(now).key_id, later)
+    assert Ractor.shareable?(keys)
+  end
+
+  # Without retain, the ticket lifetime in epochs plus one; with too few, an
+  # error.
+  def test_how_long_keys_are_kept
+    now = ORIGIN + 100 * HOUR
+    keys = ratchet(now)
+    assert_equal 3, keys.retain
+    assert_equal 97, keys.base_epoch
+    assert_equal seed(97), keys.base
+    assert_raises(ArgumentError) { TicketKeys.ratchet(base: BASE, base_epoch: 0, origin: ORIGIN, now:, retain: 1).for_ticket_lifetime(7200) }
+    assert_raises(Raiha::Next::TLS::UsageError) { TicketKeys.ratchet(base: BASE, base_epoch: 0, origin: ORIGIN, now:).sealing(now) }
+  end
+
+  def test_sealing_stops_past_the_horizon
+    now = ORIGIN + 100 * HOUR
+    keys = ratchet(now)
+    assert_equal ORIGIN + 125 * HOUR, keys.issuing_until
+    assert_equal ORIGIN + 101 * HOUR, keys.next_advance_at
+    refute_nil keys.sealing(keys.issuing_until - 1)
+    assert_nil keys.sealing(keys.issuing_until)
+    refute_nil keys.advance(now: keys.issuing_until).sealing(keys.issuing_until)
+  end
+
+  def test_which_tickets_open
+    now = ORIGIN + 100 * HOUR
+    keys = ratchet(now)
+    sealed = keys.sealing(now)
+    assert_equal sealed, keys.opening(sealed.key_id, now + 3 * HOUR)
+    assert_nil keys.opening(sealed.key_id, now + 4 * HOUR)
+    ahead = keys.sealing(now + HOUR)
+    assert_equal ahead, keys.opening(ahead.key_id, now)
+    assert_nil keys.opening(keys.sealing(now + 2 * HOUR).key_id, now)
+  end
+
+  def test_what_a_ratchet_refuses
+    now = ORIGIN + 100 * HOUR
+    assert_raises(ArgumentError) { ratchet(now, horizon: 0) }
+    assert_raises(ArgumentError) { ratchet(now, base_epoch: 98) }
+    assert_raises(ArgumentError) { ratchet(ORIGIN + 5000 * HOUR) }
+    assert_raises(ArgumentError) { ratchet(now, base: "\x00".b * 16) }
+    assert_raises(ArgumentError) { ratchet(now, epoch: 0) }
+  end
+
+  def test_no_key_shows
+    keys = ratchet(ORIGIN + 100 * HOUR)
+    refute_includes keys.inspect, keys.base.unpack1("H*")
+    refute_includes keys.inspect, keys.base.inspect
+  end
+end
