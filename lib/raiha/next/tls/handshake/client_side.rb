@@ -5,7 +5,9 @@ require_relative "../config"
 require_relative "../event"
 require_relative "../extension"
 require_relative "../iana"
+require_relative "../key_schedule"
 require_relative "../session"
+require_relative "../verifier"
 require_relative "authentication_messages"
 require_relative "client_hello_builder"
 require_relative "key_update_handling"
@@ -43,7 +45,7 @@ module Raiha::Next::TLS
 
       attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
-      def initialize(conductor, server_name:, sni:, extensions:, tracer:)
+      def initialize(conductor, server_name:, sni:, extensions:, tracer:, session:)
         @conductor = conductor
         @config = conductor.config
         @keyring = conductor.keyring
@@ -51,6 +53,10 @@ module Raiha::Next::TLS
         @sni = sni
         @extensions = extensions
         @authentication = AuthenticationMessages.new(AuthenticationMessages::Parameters::CLIENT, tracer:)
+        # The session given to resume, until it is not offered, and the PSK
+        # offered with it.
+        @session = session
+        @psk = nil #: String?
         @client_hello = nil #: ClientHello?
         @hello_retry_request = nil #: ServerHello?
         # @type var key_pairs: Array[KeyExchange::KeyPair]
@@ -73,11 +79,13 @@ module Raiha::Next::TLS
         start_key_updates
       end
 
-      # Sends the ClientHello.
+      # Sends the ClientHello, with the session's PSK when it passes the
+      # checks.
       def start(now:)
+        session = session_to_offer(now)
         built = ClientHelloBuilder.build(config: @config, keyring: @keyring, server_name: @sni, extensions: @extensions)
         @key_pairs = built.key_pairs
-        @client_hello = @conductor.emit_message!(:initial, built.client_hello)
+        @client_hello = session ? offer(built.client_hello, session, now) : @conductor.emit_message!(:initial, built.client_hello)
         @conductor.transition!(:wait_sh)
       end
 
@@ -112,6 +120,7 @@ module Raiha::Next::TLS
       end
 
       def forget_secrets!
+        @psk&.clear
         @key_pairs = []
         @exporter_values.each_value(&:clear).clear
         nil
@@ -368,6 +377,54 @@ module Raiha::Next::TLS
         )))
       end
 
+
+      # The session to offer, or nil, with Event::SessionNotOffered, for one
+      # that fails a check (TLS API design 13.1).
+      private def session_to_offer(now)
+        session = @session or return nil
+        reason = session_refusal(session, now) or return session
+        @session = nil
+        @conductor.event!(Event::SessionNotOffered.new(reason:))
+        nil
+      end
+
+      # The first check, in order, that `session` fails at `now`: those after
+      # which no connection can use it come first. The chain is verified as
+      # for the name it was verified for, so that another name now is
+      # :server_name_mismatch; a name that is the same was valid for the
+      # leaf then and still is (RFC 9846 "New Session Ticket Message").
+      private def session_refusal(session, now)
+        return :ticket_expired unless session.usable?(now:)
+        chain = session.peer_certificates.map { |der| Crypto::Certificate.parse(der) }
+        return :untrusted_chain if chain.empty? || chain.include?(nil)
+        # @type var parsed: Array[OpenSSL::X509::Certificate]
+        parsed = chain.compact
+        # A certificate always has its dates; OpenSSL's signature allows nil.
+        return :certificate_expired if parsed.any? { |cert| cert.not_before > now || cert.not_after < now } # steep:ignore
+        return :unverified_origin unless session.peer_verified
+        result = @keyring.verifier.verify(chain: parsed, server_name: session.server_name, now:, purpose: :server)
+        raise UsageError, "a Verifier must return a Verifier::Result, not #{result.class}" unless result.is_a?(Verifier::Result)
+        return :untrusted_chain unless result.ok
+        return :server_name_mismatch unless session.server_name == @server_name
+        hash = CipherSuite.find(session.cipher_suite)&.hash_algorithm
+        offered = @config.cipher_suite_ids.any? { |id| CipherSuite.find(id)&.hash_algorithm == hash }
+        return :cipher_suite_unavailable unless hash && offered
+        nil
+      end
+
+      # `client_hello` with the session's PSK (RFC 9846 "Pre-Shared Key
+      # Extension"): one identity, its age as the client counts it, and
+      # pre_shared_key last; psk_dhe_ke is offered already.
+      private def offer(client_hello, session, now)
+        suite = CipherSuite.find(session.cipher_suite) or raise "the session's cipher suite was checked"
+        identity = Extension::PreSharedKey::Identity.new(identity: session.ticket, obfuscated_ticket_age: session.obfuscated_ticket_age(now))
+        placeholder = Extension::PreSharedKey::CH.new(identities: [identity], binders: ["\x00".b * suite.hash_length])
+        psk = @psk = session.psk
+        @conductor.emit_client_hello_with_binders!(client_hello.with(extensions: client_hello.extensions + [placeholder]), suite.hash_algorithm) do |transcript_hash|
+          schedule = KeySchedule.new(hash: suite.hash_algorithm, psk:)
+          [schedule.binder(kind: :resumption, transcript_hash:)].tap { schedule.discard! }
+        end
+      end
 
       private def key_share_groups(client_hello)
         # @type var none: Array[Integer]

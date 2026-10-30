@@ -27,8 +27,10 @@ module Raiha::Next::TLS
       # this connection's own, beside the Config's. `keylog`, anything with
       # `#write(String)`, gets a Keylog line for each traffic secret: never in
       # production (RFC 9850).
-      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil)
-        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil)
+      # `session` is one to resume, offered if it passes the checks of TLS API
+      # design 13.1 at `now`, else reported by Event::SessionNotOffered.
+      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil)
+        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil, session:)
       end
 
       # Starts a server on the ClientHello an Acceptor offered; everything up
@@ -46,12 +48,15 @@ module Raiha::Next::TLS
       end
 
       # The constructors, with the `substitutions` only Test::RFC8448 passes.
-      private_class_method def self.start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions:)
+      private_class_method def self.start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions:,
+        session: nil)
         raise ArgumentError, "Machine.client takes a client Config" unless config.client?
         check(config, keyring, extensions)
+        raise ArgumentError, "session must be a Session" unless session.nil? || session.is_a?(Session)
+        raise UsageError, "a Config with resumption: false resumes no session" if session && !config.resumption
         sni, name = ServerName.for_client(server_name)
         new(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello: nil) do |conductor|
-          ClientSide.new(conductor, server_name: name, sni:, extensions:, tracer:)
+          ClientSide.new(conductor, server_name: name, sni:, extensions:, tracer:, session:)
         end
       end
 

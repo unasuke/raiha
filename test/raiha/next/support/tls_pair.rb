@@ -28,9 +28,10 @@ module NextTLSPair
 
   def server_config(**options) = TLS::Config.server(trust_anchors: [ca.der], **options)
 
-  def client(config: client_config, keyring: nil, server_name: "localhost", extensions: [], tracer: nil, keylog: nil, now: NOW, **keyring_options)
+  def client(config: client_config, keyring: nil, server_name: "localhost", extensions: [], tracer: nil, keylog: nil, now: NOW, session: nil,
+    **keyring_options)
     keyring ||= TLS::Keyring.client(config:, **keyring_options)
-    TLS::Handshake::Machine.client(config:, keyring:, server_name:, extensions:, tracer:, keylog:, now:)
+    TLS::Handshake::Machine.client(config:, keyring:, server_name:, extensions:, tracer:, keylog:, now:, session:)
   end
 
   def server_keyring(config: server_config, identities: [server_identity], **options)

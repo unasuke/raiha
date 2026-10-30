@@ -109,6 +109,7 @@ module Raiha::Next::TLS
       def change_epochs!: (cipher_suite: CipherSuite, ?read: epoch?, ?write: epoch?, ?secrets: Array[secret_entry]) -> bool
       def fail!: (Symbol alert, Symbol reason) -> nil
       def discard!: () -> nil
+      def emit_client_hello_with_binders!: (ClientHello message, Symbol hash) { (String transcript_hash) -> Array[String] } -> ClientHello
       def emit_message!: [M < _Message] (epoch epoch, M message) -> M
       def emit_server_hello!: (ServerHello message, Symbol hash) -> ServerHello
       def record_server_hello!: (String raw, Symbol hash) -> nil
@@ -174,6 +175,8 @@ module Raiha::Next::TLS
       @key_pairs: Array[KeyExchange::KeyPair]
       @certificate_request: CertificateRequest?
       @authenticated_at: Integer?
+      @session: Session?
+      @psk: String?
       @key_updates: Integer
 
       attr_reader cipher_suite: CipherSuite?
@@ -184,7 +187,7 @@ module Raiha::Next::TLS
       attr_reader peer_record_size_limit: Integer?
 
       def initialize: (Conductor conductor, server_name: String, sni: String?, extensions: Array[Extension::_Extension],
-                       tracer: Trace::_Tracer?) -> void
+                       tracer: Trace::_Tracer?, session: Session?) -> void
       def start: (now: Time) -> void
       def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
       def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
@@ -207,6 +210,9 @@ module Raiha::Next::TLS
       private def finished: (Finished message, String transcript_hash, Time now) -> void
       private def send_client_flight: (KeySchedule schedule) -> void
       private def new_session_ticket: (NewSessionTicket message, Time now) -> void
+      private def session_to_offer: (Time now) -> Session?
+      private def session_refusal: (Session session, Time now) -> Symbol?
+      private def offer: (ClientHello client_hello, Session session, Time now) -> ClientHello
       private def key_update: (KeyUpdate message) -> void
       private def key_share_groups: (ClientHello client_hello) -> Array[Integer]
     end
@@ -276,14 +282,15 @@ module Raiha::Next::TLS
       @acceptor: Acceptor?
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Machine
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?session: Session?) -> Machine
       def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
                         ?resumption_binding: String, ?early_data_context: String) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
-                                      substitutions: Hash[Integer, Array[String]]?) -> Machine
+                                      substitutions: Hash[Integer, Array[String]]?, ?session: Session?) -> Machine
       private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?, ?resumption_binding: String,

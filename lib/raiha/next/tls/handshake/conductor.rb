@@ -220,6 +220,26 @@ module Raiha::Next::TLS
         message
       end
 
+      # A client's ClientHello offering a PSK, whose binders are MACs over the
+      # transcript up to them (RFC 9846 "PSK Binder"): the ClientHello up to
+      # the binders goes into the transcript, the block makes the binders from
+      # its hash under `hash`, then the binders follow. A substitute's bytes
+      # up to its binders take the place of ours, so its binders are made
+      # here as ours would be.
+      def emit_client_hello_with_binders!(message, hash)
+        bytes, message = substitute(message)
+        truncated = bytes.byteslice(0, bytes.bytesize - message.binders_wire_length).to_s
+        @transcript << truncated
+        binders = yield(@transcript.digest(hash))
+        w = Codec::Writer.new
+        w.vector(2, min: 33) { binders.each { |binder| w.vector(1, min: 32) { w.bytes(binder) } } }
+        @transcript << w.to_s
+        sent = message.with_binders(binders)
+        trace_transcript(sent.msg_type, truncated.bytesize + w.to_s.bytesize)
+        @flight_messages << Output::Message.new(epoch: :initial, bytes: (truncated + w.to_s).freeze)
+        sent
+      end
+
       # A server's ServerHello: the suite is chosen, so the transcript keeps
       # only its hash from here.
       def emit_server_hello!(message, hash)

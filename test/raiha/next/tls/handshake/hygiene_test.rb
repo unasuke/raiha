@@ -75,11 +75,13 @@ class RaihaNextTLSHandshakeHygieneTest < Minitest::Test
       sites { |node| new_of?(node, "::Alert") || (new_of?(node, "Alert") && node.receiver&.slice == "Alert") }
   end
 
-  # The transcript is added to when receiving or sending a message, and
-  # around a ServerHello or HelloRetryRequest, and nowhere else.
+  # The transcript is added to when receiving or sending a message, around a
+  # ServerHello or HelloRetryRequest, and in two parts around the binders of
+  # a ClientHello, and nowhere else.
   def test_transcript_changes_in_the_conductor_only
     found = sites { |node| call_on?(node, "@transcript", %i[<< select! restart_with_message_hash!]) }
     assert_equal [
+      [CONDUCTOR, :emit_client_hello_with_binders!],
       [CONDUCTOR, :emit_hello_retry_request!], [CONDUCTOR, :emit_message!], [CONDUCTOR, :emit_server_hello!],
       [CONDUCTOR, :process], [CONDUCTOR, :receive_hello_retry_request!], [CONDUCTOR, :record_server_hello!]
     ], found.sort
