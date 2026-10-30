@@ -157,8 +157,10 @@ module Raiha::Next::Runtime
       request.headers.each do |name, value|
         next if name == "host" || name.include?("_")
         key = { "content-type" => "CONTENT_TYPE", "content-length" => "CONTENT_LENGTH" }.fetch(name) { "HTTP_#{name.upcase.tr("-", "_")}" }
-        # Cookie lines are joined with "; " (RFC 9114 "Header Compression"),
-        # others with ", ".
+        # Content-Length lines, which HTTP/3 lets come only the same, are one
+        # number. Cookie lines are joined with "; " (RFC 9114 "Header
+        # Compression"), others with ", ".
+        next if key == "CONTENT_LENGTH" && env.key?(key)
         env[key] = env.key?(key) ? "#{env[key]}#{name == "cookie" ? "; " : ", "}#{value}" : value
       end
       env

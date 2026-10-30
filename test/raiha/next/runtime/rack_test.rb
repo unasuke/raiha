@@ -61,6 +61,21 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     assert_equal ["192.0.2.1", "localhost", "localhost"], env.values_at("HTTP_X_FORWARDED_FOR", "HTTP_HOST", "SERVER_NAME")
   end
 
+  # Content-Length given twice the same is one number.
+  def test_a_content_length_given_twice
+    env = nil
+    app = lambda do |given|
+      env = given
+      [200, {}, [given["rack.input"].read]]
+    end
+    Sync do
+      serving(app) do |port|
+        assert_equal "hello", client(port) { _1.request("POST", "/", body: "hello", headers: [["content-length", "5"], ["content-length", "5"]]).body }
+      end
+    end
+    assert_equal "5", env["CONTENT_LENGTH"]
+  end
+
   # rack.input read by lines and as a whole, a megabyte of it.
   def test_rack_input
     app = lambda do |env|
