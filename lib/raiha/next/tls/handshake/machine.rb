@@ -40,11 +40,13 @@ module Raiha::Next::TLS
       # `resumption_binding` is what the layer above binds the tickets of the
       # connection to, a ticket bound to another failing to open (the QUIC
       # version); `early_data_context` is what a ticket keeps for 0-RTT to be
-      # taken on it later only if the same.
+      # taken on it later only if the same. `anti_replay` records the
+      # ClientHellos whose 0-RTT was taken (AntiReplay), and a Config that
+      # takes 0-RTT needs one.
       def self.server(config:, keyring:, now:, client_hello: nil, extensions: [], tracer: nil, keylog: nil,
-        resumption_binding: "".b, early_data_context: "".b)
+        resumption_binding: "".b, early_data_context: "".b, anti_replay: nil)
         start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, keylog:, substitutions: nil,
-          resumption_binding:, early_data_context:)
+          resumption_binding:, early_data_context:, anti_replay:)
       end
 
       # The constructors, with the `substitutions` only Test::RFC8448 passes.
@@ -62,14 +64,17 @@ module Raiha::Next::TLS
       end
 
       private_class_method def self.start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, keylog:, substitutions:,
-        resumption_binding: "".b, early_data_context: "".b)
+        resumption_binding: "".b, early_data_context: "".b, anti_replay: nil)
         raise ArgumentError, "Machine.server takes a server Config" unless config.server?
         check(config, keyring, extensions)
         unless resumption_binding.is_a?(String) && early_data_context.is_a?(String)
           raise ArgumentError, "resumption_binding and early_data_context must be Strings"
         end
+        # Without a record, 0-RTT the tickets allow could never be taken.
+        raise UsageError, "a Config that takes 0-RTT needs anti_replay:" unless anti_replay || config.max_early_data_size.zero?
         new(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello: client_hello || Acceptor.new) do |conductor|
-          ServerSide.new(conductor, extensions:, tracer:, resumption_binding: resumption_binding.b, early_data_context: early_data_context.b)
+          ServerSide.new(conductor, extensions:, tracer:, resumption_binding: resumption_binding.b, early_data_context: early_data_context.b,
+            anti_replay:)
         end
       end
 

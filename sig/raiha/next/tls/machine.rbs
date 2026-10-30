@@ -260,6 +260,7 @@ module Raiha::Next::TLS
       @key_updates: Integer
       @resumption_binding: String
       @early_data_context: String
+      @anti_replay: AntiReplay::_AntiReplay?
       @authenticated_at: Integer?
       @resumption: Resumption?
 
@@ -271,7 +272,7 @@ module Raiha::Next::TLS
       attr_reader peer_record_size_limit: Integer?
 
       def initialize: (Conductor conductor, extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
-                       resumption_binding: String, early_data_context: String) -> void
+                       resumption_binding: String, early_data_context: String, anti_replay: AntiReplay::_AntiReplay?) -> void
       def start: (now: Time) -> nil
       def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
       def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
@@ -316,7 +317,7 @@ module Raiha::Next::TLS
                         ?session: Session?, ?early_data: bool) -> Machine
       def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
-                        ?resumption_binding: String, ?early_data_context: String) -> Machine
+                        ?resumption_binding: String, ?early_data_context: String, ?anti_replay: AntiReplay::_AntiReplay?) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
@@ -324,7 +325,7 @@ module Raiha::Next::TLS
       private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?, ?resumption_binding: String,
-                                      ?early_data_context: String) -> Machine
+                                      ?early_data_context: String, ?anti_replay: AntiReplay::_AntiReplay?) -> Machine
       private def self.check: (Config config, Keyring keyring, Array[Extension::_Extension] extensions) -> void
       private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                              substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> Machine

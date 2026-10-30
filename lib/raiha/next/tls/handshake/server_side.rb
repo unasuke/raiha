@@ -56,7 +56,7 @@ module Raiha::Next::TLS
 
       attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
-      def initialize(conductor, extensions:, tracer:, resumption_binding:, early_data_context:)
+      def initialize(conductor, extensions:, tracer:, resumption_binding:, early_data_context:, anti_replay:)
         @conductor = conductor
         @config = conductor.config
         @keyring = conductor.keyring
@@ -64,6 +64,7 @@ module Raiha::Next::TLS
         @tracer = tracer
         @resumption_binding = resumption_binding
         @early_data_context = early_data_context
+        @anti_replay = anti_replay
         # When the full handshake whose key material the connection holds
         # took place (milliseconds), nil until the handshake is over; a
         # resumption takes it from the ticket.

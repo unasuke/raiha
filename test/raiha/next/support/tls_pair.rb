@@ -40,9 +40,11 @@ module NextTLSPair
 
   # A server given the client's first flight through `receive`, as a server
   # that does not choose its Config by the ClientHello is. `options` go to
-  # Machine.server.
+  # Machine.server; a Config that takes 0-RTT gets an anti-replay record of
+  # its own unless one is given, open from the start.
   def server(client_hello, config: server_config, keyring: nil, extensions: [], tracer: nil, now: NOW, **options)
     keyring ||= server_keyring(config:)
+    options[:anti_replay] ||= TLS::AntiReplay::Memory.new(now:, warmup: false) if config.max_early_data_size.positive?
     server = TLS::Handshake::Machine.server(config:, keyring:, extensions:, tracer:, now:, **options)
     server.receive(client_hello, epoch: :initial, now:)
     server

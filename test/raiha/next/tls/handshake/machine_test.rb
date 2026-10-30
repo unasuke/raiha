@@ -257,6 +257,18 @@ class RaihaNextTLSMachineTest < Minitest::Test
     end
   end
 
+  # A server Config that takes 0-RTT needs a record of what was taken, or
+  # its tickets would allow 0-RTT it could never take.
+  def test_a_server_that_takes_0rtt_needs_an_anti_replay_record
+    config = Pair.server_config(ticket_key: "\x01".b * 32, max_early_data_size: 1024)
+    keyring = Pair.server_keyring(config:)
+    assert_raises(TLS::UsageError) { TLS::Handshake::Machine.server(config:, keyring:, now: NOW) }
+    anti_replay = TLS::AntiReplay::Memory.new(now: NOW)
+    assert TLS::Handshake::Machine.server(config:, keyring:, now: NOW, anti_replay:)
+    plain = Pair.server_config
+    assert TLS::Handshake::Machine.server(config: plain, keyring: Pair.server_keyring(config: plain), now: NOW)
+  end
+
   # An IP address is checked against the certificate but never sent as SNI.
   def test_ip_address_server_name
     client = Pair.client(server_name: "192.0.2.1")
