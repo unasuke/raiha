@@ -460,6 +460,8 @@ module Raiha::Next::TLS
         @conductor.transition!(:wait_finished)
       end
 
+      def skip_early_data_limit = (@config.max_early_data_size if @early_data_rejected && @config.profile.record_layer)
+
       # The client offered every type we answer with: server_name when its
       # SNI was used, ALPN, record_size_limit, and the extensions given from
       # outside. A given extension of a type the client did not offer is

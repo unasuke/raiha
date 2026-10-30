@@ -177,6 +177,15 @@ module Raiha::Next::TLS
       # from the ClientHello.
       def peer_record_size_limit = @conductor.side.peer_record_size_limit
 
+      # How many bytes of 0-RTT records a server's record layer skips (RFC
+      # 9846 "Early Data Indication"): the Config's max_early_data_size when
+      # the ClientHello offered 0-RTT that was not taken, else nil. Records
+      # of application_data while `read_epoch` is :initial (after a
+      # HelloRetryRequest), records that do not open under the handshake key
+      # while it is :handshake; the record layer counts them and ends the
+      # skipping. Nil for a client, and where there is no record layer.
+      def skip_early_data_limit = @conductor.side.skip_early_data_limit
+
       def failed? = @conductor.failed?
 
       def alert = @conductor.alert
@@ -198,10 +207,6 @@ module Raiha::Next::TLS
         suite = side.cipher_suite or raise UsageError, "the handshake is not complete"
         KeySchedule.export(inner_value: inner, context:, length:, hash: suite.hash_algorithm)
       end
-
-      # How much a TCP server should read past of rejected 0-RTT data. No
-      # 0-RTT is accepted or offered yet, so nil.
-      def skip_early_data_limit = nil
 
       # The most handshake data the peer may send in `epoch`, for a QUIC
       # binding to bound its CRYPTO buffer: the sum of the limits on the

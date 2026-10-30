@@ -131,6 +131,9 @@ module Raiha::Next::TLS
         end
       end
 
+      # A client skips no 0-RTT of its peer.
+      def skip_early_data_limit = nil
+
       def forget_secrets!
         @psk&.clear
         @key_pairs = []
