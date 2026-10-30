@@ -44,6 +44,15 @@ class RaihaNextHTTP3MessageTest < Minitest::Test
     assert_malformed GET.map { |name, value| name == ":path" ? [name, ""] : [name, value] }
   end
 
+  # RFC 9114 "Request Pseudo-Header Fields": the :path of http and https
+  # is an absolute path, or "*" for OPTIONS.
+  def test_the_path
+    with = ->(method, path) { [[":method", method], [":scheme", "https"], [":authority", "a"], [":path", path]] }
+    assert_nil request(with.("GET", "/a/b?c=d"))
+    ["a", "?x", "*", "https://example.com/", "example.com:443"].each { |path| assert_malformed with.("GET", path) }
+    assert_malformed with.("OPTIONS", "**")
+  end
+
   def test_names_and_values
     assert_malformed GET + [["Accept", "*/*"]]
     assert_malformed GET + [["bad name", "x"]]

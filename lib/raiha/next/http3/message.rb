@@ -42,6 +42,7 @@ module Raiha::Next::HTTP3
         %w[:scheme :path].each { |name| raise Malformed, "no #{name}" unless pseudo.key?(name) }
       end
       authority(headers, pseudo)
+      path(pseudo)
       content_length(headers)
     end
 
@@ -102,7 +103,6 @@ module Raiha::Next::HTTP3
     # no userinfo.
     def self.authority(headers, pseudo)
       return unless SCHEMES_WITH_AUTHORITY.include?(pseudo[":scheme"])
-      raise Malformed, "an empty :path" if pseudo[":path"]&.empty?
       hosts = headers.filter_map { |name, value| value if name == "host" }
       raise Malformed, "Host #{hosts.size} times" if hosts.size > 1
       authority = pseudo[":authority"]
@@ -111,6 +111,16 @@ module Raiha::Next::HTTP3
       raise Malformed, "an empty :authority or Host" if authority&.empty? || host&.empty?
       raise Malformed, ":authority and Host differ" if authority && host && authority != host
       raise Malformed, "userinfo in the authority" if (authority || host)&.include?("@")
+    end
+
+    # RFC 9114 "Request Pseudo-Header Fields": the :path of a scheme that
+    # has an authority is an absolute path, with a query or not, or "*" for
+    # an OPTIONS of no path (RFC 9110 "OPTIONS").
+    def self.path(pseudo)
+      return unless SCHEMES_WITH_AUTHORITY.include?(pseudo[":scheme"])
+      path = pseudo[":path"] or return
+      return if path.start_with?("/") || (path == "*" && pseudo[":method"] == "OPTIONS")
+      raise Malformed, ":path #{path.inspect}"
     end
 
     # The value of Content-Length, the same in every field line; nil when
@@ -122,6 +132,6 @@ module Raiha::Next::HTTP3
       Integer(values.first, 10)
     end
 
-    private_class_method :pseudo_header_fields, :authority, :content_length
+    private_class_method :pseudo_header_fields, :authority, :path, :content_length
   end
 end
