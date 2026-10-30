@@ -77,6 +77,7 @@ module Raiha::Next::TLS
     attr_reader resumption_scope: String
     attr_reader max_early_data_size: Integer
     attr_reader ticket_binding: String
+    attr_reader trust_anchor_digests: Array[String]
 
     @ticket_count_given: Integer?
     attr_reader cipher_suite_ids: Array[Integer]

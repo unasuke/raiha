@@ -81,7 +81,7 @@ module Raiha::Next::TLS
       :max_certificate_chain_length, :permute_extensions, :grease, :exporter_labels, :record_size_limit,
       :trust_anchors, :verify_flags, :client_auth, :certificate_authorities, :require_server_name,
       :resumption, :ticket_keys, :ticket_lifetime, :ticket_count, :max_ticket_size, :resumption_scope, :max_early_data_size,
-      :ticket_binding
+      :ticket_binding, :trust_anchor_digests
 
     # The wire values of the Symbol settings above, in the same order.
     attr_reader :cipher_suite_ids, :group_ids, :signature_algorithm_ids, :signature_algorithm_cert_ids
@@ -157,6 +157,9 @@ module Raiha::Next::TLS
         raise ArgumentError, "trust_anchors must be an Array of DER Strings"
       end
       @trust_anchors = trust_anchors.map(&:b)
+      # How a ticket of a client certificate names the anchor its chain
+      # ended at.
+      @trust_anchor_digests = @trust_anchors.map { |der| Ticket.anchor_digest(der) }
       raise ArgumentError, "verify_flags must be an Integer" unless verify_flags.is_a?(Integer)
       @verify_flags = verify_flags
 

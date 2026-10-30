@@ -2,6 +2,7 @@
 
 require_relative "../cipher_suite"
 require_relative "../config"
+require_relative "../crypto"
 require_relative "../event"
 require_relative "../extension"
 require_relative "../iana"
@@ -243,8 +244,10 @@ module Raiha::Next::TLS
       # The first check of `ticket` against the current Config at `now` that
       # it fails, nil when it passes them all: the age of the ticket and of
       # the full handshake its key material comes from, the hash of the
-      # suite, and whether the client is to be authenticated now as it was
-      # then.
+      # suite, whether the client is to be authenticated now as it was then,
+      # and for a client certificate, the rules it was verified by, the
+      # anchor its chain ended at, which must still be trusted (a chain that
+      # ended at none never is), and the dates of the whole chain.
       private def ticket_refusal(ticket, suite, now)
         now_ms = (now.to_r * 1000).floor
         lifetime = [ticket.lifetime, @config.ticket_lifetime, Config::MAX_TICKET_LIFETIME].min
@@ -254,8 +257,11 @@ module Raiha::Next::TLS
         client = ticket.client
         return :client_certificate_missing if client.nil? && @config.client_auth == :required
         return :client_auth_disabled if client && @config.client_auth == :none
-        # Tickets of client certificates wait for the checks that resume them.
-        return :client_auth_not_resumable if client
+        return nil unless client
+        rules_digest = client_rules_digest or return :client_auth_not_resumable
+        return :verification_rules_changed unless client.rules_digest == rules_digest
+        return :trust_anchor_removed unless @config.trust_anchor_digests.include?(client.anchor_digest)
+        return :client_certificate_expired unless now.to_i.between?(client.valid_from, client.valid_until)
         nil
       end
 
@@ -334,7 +340,12 @@ module Raiha::Next::TLS
           legacy_session_id_echo: ch.legacy_session_id, cipher_suite: suite.id, legacy_compression_method: 0, extensions:
         )
         @conductor.emit_server_hello!(server_hello, suite.hash_algorithm)
-        @authenticated_at = resumption.ticket.authenticated_at if resumption
+        if resumption
+          @authenticated_at = resumption.ticket.authenticated_at
+          # The leaf alone: a ticket keeps no more of the chain.
+          client = resumption.ticket.client
+          @peer_certificates = [Crypto::Certificate.parse(client.leaf) || raise("a ticket holds a leaf it was sealed with")] if client
+        end
         schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: ch.random, psk: resumption&.ticket&.psk)
         schedule.handshake!(shared_secret)
         shared_secret.clear
@@ -447,8 +458,7 @@ module Raiha::Next::TLS
         issue_tickets(schedule, now)
         @conductor.event!(Event::HandshakeComplete.new(
           server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: !@resumption.nil?,
-          early_data_accepted: false, peer_certificates: @peer_certificates,
-          peer_verified: !@peer_certificates.empty? && @keyring.peer_verified?
+          early_data_accepted: false, peer_certificates: @peer_certificates, peer_verified: peer_verified?
         ))
       end
 
@@ -497,10 +507,21 @@ module Raiha::Next::TLS
         Ticket.rules_digest(policy) if policy && (@config.verify_flags & Verifier::Default::REVOCATION_FLAGS).zero?
       end
 
+      # Whether the client's certificate was verified, by this handshake or
+      # by the one the ticket resumed comes from.
+      private def peer_verified?
+        return false if @peer_certificates.empty?
+        resumed = @resumption&.ticket&.client
+        resumed ? resumed.verified : @keyring.peer_verified?
+      end
+
       # What a ticket keeps of the client's certificate, nil without one: the
       # leaf, `rules_digest`, the anchor the verified chain ended at, and when
-      # every certificate of the chain was valid.
+      # every certificate of the chain was valid; a resumed connection's, as
+      # the ticket it resumed kept it.
       private def ticket_client(rules_digest)
+        resumed = @resumption&.ticket&.client
+        return resumed if resumed
         leaf = @peer_certificates.first or return nil
         rules_digest or raise "a ticket of a client certificate needs the rules it was verified by"
         anchor = @peer_certificates.fetch(-1).to_der

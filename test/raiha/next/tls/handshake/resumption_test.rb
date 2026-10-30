@@ -73,9 +73,9 @@ class RaihaNextTLSResumptionTest < Minitest::Test
 
   # The reasons each identity is passed over for, a full handshake
   # following.
-  def passed_over(config, now: NOW + 60, session: self.session)
+  def passed_over(config, now: NOW + 60, session: self.session, keyring: nil)
     tracer = Recorder.new
-    pair = Pair.run(Pair.client(session:, now:), { config:, tracer: }, now:)
+    pair = Pair.run(Pair.client(session:, now:), { config:, keyring:, tracer: }, now:)
     refute completion(pair.server)&.resumed
     tracer.values.grep(TLS::Trace::PskRejected).map { |rejected| [rejected.index, rejected.reason] }
   end
@@ -91,6 +91,82 @@ class RaihaNextTLSResumptionTest < Minitest::Test
     }.each do |reason, config|
       assert_equal [[0, reason]], passed_over(config, session:), reason
     end
+  end
+
+  def client_auth_config(**options) = server_config(client_auth: :required, **options)
+
+  # A session from a full handshake at NOW with a client certificate, and
+  # the leaf the server verified.
+  def authenticated_session(identity: Pair.client_identity)
+    pair = handshake(Pair.client(identities: [identity]), { config: client_auth_config })
+    [sessions(pair.client).first, completion(pair.server).peer_certificates.first]
+  end
+
+  # The server takes the client's certificate from the ticket, the leaf
+  # alone, and asks for none.
+  def test_a_server_resumes_an_authenticated_client
+    session, leaf = authenticated_session
+    later = NOW + 60
+    pair = handshake(Pair.client(session:, now: later), { config: client_auth_config }, now: later)
+    server = completion(pair.server)
+    assert server.resumed
+    assert_equal [leaf.to_der], server.peer_certificates.map(&:to_der)
+    assert server.peer_verified
+    refute_includes pair.server_outputs.grep(TLS::Output::Message).map { |output| output.bytes.getbyte(0) },
+      TLS::Handshake::CertificateRequest::MSG_TYPE
+    # The tickets of the resumed connection keep what the first one did.
+    keys = client_auth_config.ticket_keys
+    binding = TLS::Ticket.binding(client_auth_config.ticket_binding, resumption_binding: "", server_name: "localhost", alpn: "")
+    first, renewed = [session, sessions(pair.client).first].map do |s|
+      TLS::Ticket.open(s.ticket, keys:, binding:, now: later, max_size: 8192).client
+    end
+    assert_equal first, renewed
+  end
+
+  # A Verifier that accepts what `inner` does but cannot say what its rules
+  # are.
+  class Unsayable
+    def initialize(inner) = @inner = inner
+
+    def verify(**) = @inner.verify(**)
+
+    def resumption_policy = nil
+  end
+
+  def test_client_certificate_tickets_passed_over
+    session, = authenticated_session
+    store = TLS::Verifier::Default.store([Pair.ca.der])
+    {
+      client_auth_disabled: [server_config, nil],
+      client_auth_not_resumable: [client_auth_config, ->(config) { Unsayable.new(TLS::Verifier::Default.new(store:)) }],
+      verification_rules_changed:
+        [client_auth_config, ->(config) { TLS::Verifier::Default.new(store:, verify_flags: OpenSSL::X509::V_FLAG_PARTIAL_CHAIN) }],
+      trust_anchor_removed: [client_auth_config(trust_anchors: [Pair::PKI.ca(name: "Another CA").der]), nil]
+    }.each do |reason, (config, verifier)|
+      keyring = verifier && Pair.server_keyring(config:, verifier: verifier.call(config))
+      assert_equal [[0, reason]], passed_over(config, session:, keyring:), reason
+    end
+  end
+
+  # The chain's dates are checked again, here past the leaf's.
+  def test_a_ticket_of_a_client_certificate_past_its_dates
+    leaf = Pair::PKI.leaf(Pair.ca, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 5,
+      not_after: NOW + 120)
+    session, = authenticated_session(identity: TLS::Keyring::Identity.new(cert_der: [leaf.der, Pair.ca.der], key_der: leaf.key_der))
+    assert_equal [[0, :client_certificate_expired]], passed_over(client_auth_config, now: NOW + 180, session:)
+  end
+
+  # A chain that ended at no anchor, as Verifier::None takes it, is never
+  # trusted again.
+  def test_a_ticket_of_a_chain_that_ended_at_no_anchor
+    leaf = Pair::PKI.leaf(Pair.ca, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 6)
+    identity = TLS::Keyring::Identity.new(cert_der: [leaf.der], key_der: leaf.key_der)
+    config = client_auth_config
+    keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
+    pair = handshake(Pair.client(identities: [identity]), { config:, keyring: })
+    session = sessions(pair.client).first
+    later_keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
+    assert_equal [[0, :trust_anchor_removed]], passed_over(config, session:, keyring: later_keyring)
   end
 
   # The client's own clock lets the session go; the ticket keeps the time
