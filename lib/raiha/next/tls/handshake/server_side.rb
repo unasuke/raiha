@@ -70,6 +70,10 @@ module Raiha::Next::TLS
         # resumption takes it from the ticket.
         @authenticated_at = nil #: Integer?
         @resumption = nil #: Resumption?
+        # Whether this ClientHello's 0-RTT is taken, and whether it offered
+        # 0-RTT that is not, which the record layer then skips.
+        @early_data_accepted = false
+        @early_data_rejected = false
         @authentication = AuthenticationMessages.new(AuthenticationMessages::Parameters::SERVER, tracer:)
         @client_hello = nil #: ClientHello?
         @hello_retry_request = nil #: ServerHello?
@@ -101,6 +105,7 @@ module Raiha::Next::TLS
       def handle(message, raw:, transcript_hash_before:, now:)
         case message
         when ClientHello then client_hello(message, now)
+        when EndOfEarlyData then end_of_early_data
         when Certificate then certificate(message, now)
         when CertificateVerify then certificate_verify(message, transcript_hash_before) # steep:ignore
         when Finished then finished(message, transcript_hash_before, now) # steep:ignore
@@ -213,6 +218,10 @@ module Raiha::Next::TLS
         @cipher_suite = suite
         @group = group_name
         @alpn = alpn
+        if ch.extension(Extension::EarlyData::TYPE)
+          reason = resumption ? early_data_refusal(ch, resumption, now) : :psk_not_selected
+          reason ? reject_early_data(reason) : (@early_data_accepted = true)
+        end
         ch.extensions.each do |ext|
           next if Config::RESERVED_EXTENSIONS.include?(ext.extension_type) || IANA.grease?(ext.extension_type)
           @conductor.event!(Event::PeerExtension.new(type: ext.extension_type, data: ext.encode, message: ClientHello::MSG_TYPE))
@@ -287,6 +296,46 @@ module Raiha::Next::TLS
         Resumption.new(index:, ticket:)
       end
 
+      # The first check that keeps this ClientHello's 0-RTT from being taken
+      # on `resumption`, nil when it passes them all and the anti-replay
+      # record takes it: the ticket and the Config allow 0-RTT, the first
+      # identity, the cipher suite, ALPN protocol and early_data_context of
+      # the ticket (which the layer above must give where there is no
+      # record layer), the ticket's age as the client counts it (RFC 9846
+      # "Early Data Indication", "Freshness Checks"), and last, as only it
+      # records, the anti-replay record ("Client Hello Recording").
+      private def early_data_refusal(ch, resumption, now)
+        ticket = resumption.ticket
+        return :ticket_disallows unless ticket.early_data_allowed
+        return :config_disallows unless @config.max_early_data_size.positive?
+        return :not_first_identity unless resumption.index.zero?
+        return :cipher_suite_mismatch unless ticket.cipher_suite == suite.id
+        return :alpn_mismatch unless ticket.alpn == (@alpn || "".b)
+        context = @early_data_context
+        return :early_data_context_mismatch unless ticket.early_data_context == context && (@config.profile.record_layer || !context.empty?)
+        offer = case (ext = ch.extension(Extension::PreSharedKey::TYPE))
+          when Extension::PreSharedKey::CH then ext
+          else raise "a PSK was selected"
+          end
+        client_age = (offer.identities.fetch(0).obfuscated_ticket_age - ticket.age_add) % (1 << 32)
+        skew = client_age - ((now.to_r * 1000).floor - ticket.issued_at)
+        return :ticket_age_skew unless skew.between?(-10_000, 1_000)
+        anti_replay = @anti_replay or raise "a Config that takes 0-RTT has an anti-replay record"
+        case (result = anti_replay.check(offer.binders.fetch(0), expires_at: now + Rational(skew + 10_000, 1000), now:))
+        when :accepted then nil
+        when :replayed then :replayed
+        when :unavailable then :anti_replay_unavailable
+        # A record that breaks its contract can answer anything.
+        else raise UsageError, "an anti-replay record answers :accepted, :replayed or :unavailable, not #{result.inspect}" # steep:ignore
+        end
+      end
+
+      private def reject_early_data(reason)
+        @early_data_rejected = true
+        @conductor.event!(Event::EarlyDataRejected.new(reason:))
+        @conductor.trace(Trace::EarlyDataRejected.new(reason:)) if @conductor.tracing?
+      end
+
       private def reject_psk(index, reason)
         @conductor.trace(Trace::PskRejected.new(index:, reason:)) if @conductor.tracing?
         nil
@@ -331,6 +380,9 @@ module Raiha::Next::TLS
         )
         @client_hello = ch
         @cipher_suite = suite
+        # No 0-RTT after a HelloRetryRequest (RFC 9846 "Early Data
+        # Indication").
+        reject_early_data(:hello_retry_request) if ch.extension(Extension::EarlyData::TYPE)
         @hello_retry_request = @conductor.emit_hello_retry_request!(hrr, suite.hash_algorithm)
         @conductor.transition!(:wait_ch2)
       end
@@ -351,6 +403,8 @@ module Raiha::Next::TLS
           legacy_version: ClientHelloBuilder::LEGACY_VERSION, random: @keyring.random_bytes(32),
           legacy_session_id_echo: ch.legacy_session_id, cipher_suite: suite.id, legacy_compression_method: 0, extensions:
         )
+        # 0-RTT's key is over the ClientHello alone.
+        client_hello_hash = @conductor.transcript_hash(suite.hash_algorithm)
         @conductor.emit_server_hello!(server_hello, suite.hash_algorithm)
         if resumption
           @authenticated_at = resumption.ticket.authenticated_at
@@ -361,6 +415,9 @@ module Raiha::Next::TLS
         schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: ch.random, psk: resumption&.ticket&.psk)
         # The early secret holds it now.
         resumption&.ticket&.psk&.clear
+        # @type var secrets: Array[Conductor::secret_entry]
+        secrets = []
+        secrets << [:early_data, :read, schedule.client_early_traffic_secret(client_hello_hash)] if @early_data_accepted
         schedule.handshake!(shared_secret)
         shared_secret.clear
         transcript_hash = @conductor.transcript_hash
@@ -381,11 +438,26 @@ module Raiha::Next::TLS
         server_application = schedule.server_application_traffic_secret(through_server_finished)
         schedule.client_application_traffic_secret(through_server_finished)
         @exporter_values = schedule.exporter_values(@config.exporter_labels, through_server_finished)
-        moved = @conductor.change_epochs!(cipher_suite: suite, read: :handshake, write: :application, secrets: [
-          [:handshake, :read, client_handshake], [:handshake, :write, server_handshake],
-          [:application, :write, server_application]
-        ])
-        @conductor.transition!(resumption || @config.client_auth == :none ? :wait_finished : :wait_cert) if moved
+        # Where there is a record layer, the client's 0-RTT comes first, up to
+        # its EndOfEarlyData.
+        until_end_of_early_data = @early_data_accepted && @config.profile.send_end_of_early_data
+        secrets.push([:handshake, :read, client_handshake], [:handshake, :write, server_handshake], [:application, :write, server_application])
+        moved = @conductor.change_epochs!(cipher_suite: suite, read: until_end_of_early_data ? :early_data : :handshake, write: :application,
+          secrets:)
+        return unless moved
+        if until_end_of_early_data
+          @conductor.transition!(:wait_eoed)
+        else
+          @conductor.transition!(resumption || @config.client_auth == :none ? :wait_finished : :wait_cert)
+        end
+      end
+
+      # The end of the client's 0-RTT; its Finished follows under the
+      # handshake key. Only a resumed connection takes 0-RTT, so no
+      # certificate comes.
+      private def end_of_early_data
+        return unless @conductor.change_epochs!(cipher_suite: suite, read: :handshake)
+        @conductor.transition!(:wait_finished)
       end
 
       # The client offered every type we answer with: server_name when its
@@ -397,6 +469,7 @@ module Raiha::Next::TLS
         # @type var extensions: Array[Extension::_Extension]
         extensions = []
         extensions << Extension::ServerName::EE.new if @server_name
+        extensions << Extension::EarlyData::EE.new if @early_data_accepted
         alpn = @alpn
         extensions << Extension::Alpn.new(protocol_name_list: [alpn]) if alpn
         case (ext = ch.extension(Extension::RecordSizeLimit::TYPE))
@@ -472,7 +545,7 @@ module Raiha::Next::TLS
         issue_tickets(schedule, now)
         @conductor.event!(Event::HandshakeComplete.new(
           server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: !@resumption.nil?,
-          early_data_accepted: false, peer_certificates: @peer_certificates, peer_verified: peer_verified?
+          early_data_accepted: @early_data_accepted, peer_certificates: @peer_certificates, peer_verified: peer_verified?
         ))
       end
 

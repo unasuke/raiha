@@ -263,6 +263,8 @@ module Raiha::Next::TLS
       @anti_replay: AntiReplay::_AntiReplay?
       @authenticated_at: Integer?
       @resumption: Resumption?
+      @early_data_accepted: bool
+      @early_data_rejected: bool
 
       attr_reader cipher_suite: CipherSuite?
       attr_reader group: Symbol?
@@ -289,6 +291,9 @@ module Raiha::Next::TLS
       private def ticket_refusal: (Ticket::Plaintext ticket, CipherSuite suite, Time now) -> Symbol?
       private def verify_binder: (Integer index, Ticket::Plaintext ticket, String binder, CipherSuite suite) -> (Resumption | Violation)
       private def reject_psk: (Integer index, Symbol reason) -> nil
+      private def early_data_refusal: (ClientHello ch, Resumption resumption, Time now) -> Symbol?
+      private def reject_early_data: (Symbol reason) -> void
+      private def end_of_early_data: () -> void
       private def send_first_flight: (ClientHello ch, Extension::KeyShare::Entry share, String shared_secret,
                                       [Keyring::Credential, SignatureScheme]? selected) -> void
       private def encrypted_extensions: (ClientHello ch) -> Array[Extension::_Extension]

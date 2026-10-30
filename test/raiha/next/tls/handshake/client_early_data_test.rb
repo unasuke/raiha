@@ -83,10 +83,10 @@ class RaihaNextTLSClientEarlyDataTest < Minitest::Test
     [reasons, complete, pair]
   end
 
-  # This server resumes but takes no 0-RTT yet: EncryptedExtensions has no
+  # This server resumes but takes no 0-RTT now: EncryptedExtensions has no
   # early_data.
   def test_0rtt_rejected_by_the_server
-    reasons, complete, pair = rejected({ config: server_config })
+    reasons, complete, pair = rejected({ config: Pair.server_config(ticket_key: SEED) })
     assert_equal [:rejected_by_server], reasons
     assert complete.resumed
     refute_includes pair.client_outputs.grep(TLS::Output::Message).map(&:epoch), :early_data
