@@ -16,13 +16,15 @@ module Raiha::Next::TLS
     attr_reader alpn: String?
     attr_reader peer_certificates: Array[String]
     attr_reader authenticated_at: Integer
+    attr_reader peer_verified: bool
 
     def self.new: (ticket: String, ticket_nonce: String, resumption_secret: String, cipher_suite: Integer,
                    issued_at: Integer, lifetime: Integer, age_add: Integer, max_early_data_size: Integer,
-                   server_name: String?, alpn: String?, peer_certificates: Array[String], authenticated_at: Integer) -> instance
+                   server_name: String?, alpn: String?, peer_certificates: Array[String], authenticated_at: Integer,
+                   peer_verified: bool) -> instance
                 | (String ticket, String ticket_nonce, String resumption_secret, Integer cipher_suite, Integer issued_at,
                    Integer lifetime, Integer age_add, Integer max_early_data_size, String? server_name, String? alpn,
-                   Array[String] peer_certificates, Integer authenticated_at) -> instance
+                   Array[String] peer_certificates, Integer authenticated_at, bool peer_verified) -> instance
 
     def self.from_h: (Hash[Symbol, Object] hash) -> Session
     def masked_members: () -> Array[Symbol]

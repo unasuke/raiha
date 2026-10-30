@@ -363,7 +363,8 @@ module Raiha::Next::TLS
           ticket: message.ticket, ticket_nonce: message.ticket_nonce, resumption_secret: key_schedule.resumption_secret,
           cipher_suite: suite.id, issued_at: (now.to_r * 1000).floor, lifetime: message.ticket_lifetime,
           age_add: message.ticket_age_add, max_early_data_size: early_data || 0, server_name: @server_name, alpn: @alpn,
-          peer_certificates: @peer_certificates.map(&:to_der), authenticated_at: @authenticated_at || raise("no handshake to resume")
+          peer_certificates: @peer_certificates.map(&:to_der), authenticated_at: @authenticated_at || raise("no handshake to resume"),
+          peer_verified: @keyring.peer_verified?
         )))
       end
 

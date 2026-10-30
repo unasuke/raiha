@@ -130,7 +130,7 @@ class RaihaNextTLSTicketReceiptTest < Minitest::Test
     assert_equal [0x1301, now_ms, now_ms, 7200, 1024, "localhost", nil],
       [session.cipher_suite, session.issued_at, session.authenticated_at, session.lifetime, session.max_early_data_size,
         session.server_name, session.alpn]
-    assert_equal [2, Pair.ca.der], [session.peer_certificates.size, session.peer_certificates.last]
+    assert_equal [2, Pair.ca.der, true], [session.peer_certificates.size, session.peer_certificates.last, session.peer_verified]
     binding = TLS::Ticket.binding(config.ticket_binding, resumption_binding: "", server_name: "localhost", alpn: "")
     sealed = TLS::Ticket.open(session.ticket, keys: config.ticket_keys, binding:, now: NOW, max_size: 8192)
     assert_equal sealed.psk, session.psk

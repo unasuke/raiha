@@ -13,7 +13,7 @@ class RaihaNextTLSSessionTest < Minitest::Test
   def session(**changes)
     Session.new(ticket: "ticket".b, ticket_nonce: "\x00\x01".b, resumption_secret: "\x07".b * 32, cipher_suite: 0x1301,
       issued_at: NOW_MS, lifetime: 7200, age_add: 0xffff_fff0, max_early_data_size: 0, server_name: "example.com",
-      alpn: "h2", peer_certificates: ["der".b], authenticated_at: NOW_MS - 1000).with(**changes)
+      alpn: "h2", peer_certificates: ["der".b], authenticated_at: NOW_MS - 1000, peer_verified: true).with(**changes)
   end
 
   def test_into_plain_values_and_back
@@ -22,6 +22,7 @@ class RaihaNextTLSSessionTest < Minitest::Test
     assert_raises(ArgumentError) { Session.from_h(session.to_h.except(:ticket)) }
     assert_raises(ArgumentError) { Session.from_h(session.to_h.merge(issued_at: "0")) }
     assert_raises(ArgumentError) { Session.from_h(session.to_h.merge(cipher_suite: 0x9999)) }
+    assert_raises(ArgumentError) { Session.from_h(session.to_h.merge(peer_verified: nil)) }
   end
 
   # The ticket's lifetime, at most 7 days, and 7 days from the full

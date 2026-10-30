@@ -14,11 +14,12 @@ module Raiha::Next::TLS
   # `authenticated_at` when the full handshake the session comes from took
   # place, both in milliseconds of the wall clock; `cipher_suite` is the ID
   # of the cipher suite; `peer_certificates` is the server's chain, DER,
-  # leaf first; `server_name` and `alpn` are nil for none.
+  # leaf first, and `peer_verified` whether it was verified (false when
+  # Verifier::None let it in); `server_name` and `alpn` are nil for none.
   class Session < Data.define(
     :ticket, :ticket_nonce, :resumption_secret, :cipher_suite,
     :issued_at, :lifetime, :age_add, :max_early_data_size,
-    :server_name, :alpn, :peer_certificates, :authenticated_at
+    :server_name, :alpn, :peer_certificates, :authenticated_at, :peer_verified
   )
     include MaskedInspect
 
@@ -34,6 +35,8 @@ module Raiha::Next::TLS
       bytes = ->(name) { hash.fetch(name).then { |v| v.is_a?(String) ? v.b.freeze : raise(ArgumentError, "#{name} must be a String") } }
       integer = ->(name) { hash.fetch(name).then { |v| v.is_a?(Integer) && !v.negative? ? v : raise(ArgumentError, "#{name} must be an Integer") } }
       optional = ->(name) { hash.fetch(name).nil? ? nil : bytes.(name) }
+      verified = hash.fetch(:peer_verified)
+      raise ArgumentError, "peer_verified must be true or false" unless verified == true || verified == false
       certificates = hash.fetch(:peer_certificates)
       raise ArgumentError, "peer_certificates must be an Array of Strings" unless certificates.is_a?(Array) && certificates.all?(String)
       raise ArgumentError, "unknown cipher suite" unless CipherSuite.find(integer.(:cipher_suite))
@@ -41,7 +44,7 @@ module Raiha::Next::TLS
         cipher_suite: integer.(:cipher_suite), issued_at: integer.(:issued_at), lifetime: integer.(:lifetime),
         age_add: integer.(:age_add), max_early_data_size: integer.(:max_early_data_size), server_name: optional.(:server_name),
         alpn: optional.(:alpn), peer_certificates: certificates.map { |der| der.b.freeze }.freeze,
-        authenticated_at: integer.(:authenticated_at))
+        authenticated_at: integer.(:authenticated_at), peer_verified: verified)
     rescue KeyError => e
       raise ArgumentError, "a session lacks #{e.key}"
     end
