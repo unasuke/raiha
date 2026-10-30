@@ -9,6 +9,12 @@ module Raiha::Next::TLS
     DEFAULT_SIGNATURE_ALGORITHMS_CERT: Array[Symbol]
     RESERVED_EXTENSIONS: Array[Integer]
     EXPORTER_LABEL_LENGTH: Range[Integer]
+    MAX_TICKET_LIFETIME: Integer
+    DEFAULT_TICKET_LIFETIME: Integer
+    DEFAULT_TICKET_COUNT: Integer
+    DEFAULT_MAX_TICKET_SIZE: Integer
+    MAX_TICKET_SIZE: Integer
+    MAX_EARLY_DATA_SIZE: Integer
     CIPHER_SUITES_BY_NAME: Hash[Symbol, CipherSuite]
     GROUPS_BY_NAME: Hash[Symbol, Integer]
     SCHEMES_BY_NAME: Hash[Symbol, SignatureScheme]
@@ -20,7 +26,9 @@ module Raiha::Next::TLS
                       ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
                       ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
                       ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
-                      ?require_server_name: boolish) -> Config
+                      ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                      ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                      ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
     def self.server: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
                       ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
                       ?alpn: Array[String], ?registry: Extension::Registry, ?extensions: Array[Extension::_Extension],
@@ -28,7 +36,9 @@ module Raiha::Next::TLS
                       ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
                       ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
                       ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
-                      ?require_server_name: boolish) -> Config
+                      ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                      ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                      ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
     def self.deterministic: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
                              ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
                              ?alpn: Array[String], ?registry: Extension::Registry,
@@ -59,6 +69,15 @@ module Raiha::Next::TLS
     attr_reader client_auth: client_auth
     attr_reader certificate_authorities: bool
     attr_reader require_server_name: bool
+    attr_reader resumption: bool
+    attr_reader ticket_keys: TicketKeys?
+    attr_reader ticket_lifetime: Integer
+    attr_reader ticket_count: Integer
+    attr_reader max_ticket_size: Integer
+    attr_reader resumption_scope: String
+    attr_reader max_early_data_size: Integer
+
+    @ticket_count_given: Integer?
     attr_reader cipher_suite_ids: Array[Integer]
     attr_reader group_ids: Array[Integer]
     attr_reader signature_algorithm_ids: Array[Integer]
@@ -71,7 +90,9 @@ module Raiha::Next::TLS
                      ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
                      ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
                      ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
-                     ?require_server_name: boolish) -> void
+                     ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                     ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                     ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> void
 
     def client?: () -> bool
     def server?: () -> bool
@@ -82,12 +103,18 @@ module Raiha::Next::TLS
                ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
                ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
                ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
-               ?require_server_name: boolish) -> Config
+               ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+               ?ticket_lifetime: Integer, ?ticket_count: Integer?, ?max_ticket_size: Integer,
+               ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
+    def issues_tickets?: () -> bool
 
     private def names: [T] (Symbol setting, Array[Symbol] given, Hash[Symbol, T] table) -> Array[Symbol]
     private def check_alpn: (Array[String] alpn) -> Array[String]
     private def check_extensions: (Array[Extension::_Extension] extensions, Extension::Registry registry) -> Array[Extension::_Extension]
     private def check_exporter_labels: (Array[String] labels) -> Array[String]
+    private def resumption_settings: (resumption: boolish, ticket_keys: TicketKeys?, ticket_key: String?,
+                                      ticket_lifetime: Integer, ticket_count: Integer?, max_ticket_size: Integer,
+                                      resumption_scope: String, max_early_data_size: Integer) -> void
     private def positive: (Symbol setting, Integer value) -> Integer
   end
 end

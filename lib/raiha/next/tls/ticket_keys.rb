@@ -165,7 +165,7 @@ module Raiha::Next::TLS
         last = @built_epoch + horizon
         raise ArgumentError, "base_epoch #{base_epoch} is after the first epoch kept, #{first}" if base_epoch > first
         if last - base_epoch > MAX_STEPS
-          raise ArgumentError, "the base is #{last - base_epoch} epochs behind; hand out the base of keys advanced(now:) instead"
+          raise ArgumentError, "the base is #{last - base_epoch} epochs behind; hand out the base of the keys advance(now:) gives instead"
         end
         seed = @base
         (first - base_epoch).times { seed = step(seed) }

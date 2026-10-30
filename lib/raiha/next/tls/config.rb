@@ -5,6 +5,7 @@ require_relative "cipher_suite"
 require_relative "signature_scheme"
 require_relative "profile"
 require_relative "extension"
+require_relative "ticket_keys"
 
 module Raiha::Next::TLS
   # The settings a handshake runs with, shared by every connection and every
@@ -47,6 +48,20 @@ module Raiha::Next::TLS
     # HKDF-Expand-Label takes a label of 7 to 255 bytes, "tls13 " included.
     EXPORTER_LABEL_LENGTH = 1..249
 
+    # RFC 9846 "New Session Ticket Message": a ticket lives 7 days at most.
+    MAX_TICKET_LIFETIME = 604_800
+    DEFAULT_TICKET_LIFETIME = 7200
+    DEFAULT_TICKET_COUNT = 2
+    # A ticket fits a leaf of ML-DSA-87 for client authentication.
+    DEFAULT_MAX_TICKET_SIZE = 8192
+    # A ticket rides in a ClientHello, which an Acceptor takes up to 16 KiB;
+    # the rest of a ClientHello with a post-quantum key share needs about
+    # 2.3 KB, and 4 KiB is left for it, so no Config issues a ticket its own
+    # server would refuse.
+    MAX_TICKET_SIZE = 12_288
+    # max_early_data_size is a uint32.
+    MAX_EARLY_DATA_SIZE = 0xffff_ffff
+
     CIPHER_SUITES_BY_NAME = CipherSuite::SUITES.values.to_h { |suite| [suite.name, suite] }.freeze
     GROUPS_BY_NAME = IANA::NAMED_GROUPS.invert.freeze
     SCHEMES_BY_NAME = SignatureScheme::SCHEMES.values.to_h { |scheme| [scheme.name, scheme] }.freeze
@@ -63,7 +78,8 @@ module Raiha::Next::TLS
     attr_reader :role, :profile, :cipher_suites, :groups, :signature_algorithms, :signature_algorithms_cert,
       :alpn, :registry, :extensions, :max_handshake_message_size, :max_certificate_message_size,
       :max_certificate_chain_length, :permute_extensions, :grease, :exporter_labels, :record_size_limit,
-      :trust_anchors, :verify_flags, :client_auth, :certificate_authorities, :require_server_name
+      :trust_anchors, :verify_flags, :client_auth, :certificate_authorities, :require_server_name,
+      :resumption, :ticket_keys, :ticket_lifetime, :ticket_count, :max_ticket_size, :resumption_scope, :max_early_data_size
 
     # The wire values of the Symbol settings above, in the same order.
     attr_reader :cipher_suite_ids, :group_ids, :signature_algorithm_ids, :signature_algorithm_cert_ids
@@ -89,7 +105,15 @@ module Raiha::Next::TLS
       verify_flags: 0,
       client_auth: :none,
       certificate_authorities: true,
-      require_server_name: false
+      require_server_name: false,
+      resumption: true,
+      ticket_keys: nil,
+      ticket_key: nil,
+      ticket_lifetime: DEFAULT_TICKET_LIFETIME,
+      ticket_count: nil,
+      max_ticket_size: DEFAULT_MAX_TICKET_SIZE,
+      resumption_scope: "",
+      max_early_data_size: 0
     )
       raise ArgumentError, "role must be :client or :server, not #{role.inspect}" unless %i[client server].include?(role)
       raise ArgumentError, "profile must be a Profile" unless profile.is_a?(Profile)
@@ -142,6 +166,8 @@ module Raiha::Next::TLS
       @client_auth = client_auth
       @certificate_authorities = certificate_authorities ? true : false
       @require_server_name = require_server_name ? true : false
+      resumption_settings(resumption:, ticket_keys:, ticket_key:, ticket_lifetime:, ticket_count:, max_ticket_size:,
+        resumption_scope:, max_early_data_size:)
 
       # Every setting above is a copy of what was given, so this freezes
       # nothing of the caller's.
@@ -163,15 +189,21 @@ module Raiha::Next::TLS
       permute_extensions: self.permute_extensions, grease: self.grease, exporter_labels: self.exporter_labels,
       record_size_limit: self.record_size_limit, trust_anchors: self.trust_anchors, verify_flags: self.verify_flags,
       client_auth: self.client_auth, certificate_authorities: self.certificate_authorities,
-      require_server_name: self.require_server_name
+      require_server_name: self.require_server_name, resumption: self.resumption, ticket_keys: self.ticket_keys,
+      ticket_lifetime: self.ticket_lifetime, ticket_count: @ticket_count_given, max_ticket_size: self.max_ticket_size,
+      resumption_scope: self.resumption_scope, max_early_data_size: self.max_early_data_size
     )
       Config.new(
         role:, profile:, cipher_suites:, groups:, signature_algorithms:, signature_algorithms_cert:, alpn:, registry:,
         extensions:, max_handshake_message_size:, max_certificate_message_size:, max_certificate_chain_length:,
         permute_extensions:, grease:, exporter_labels:, record_size_limit:, trust_anchors:, verify_flags:,
-        client_auth:, certificate_authorities:, require_server_name:
+        client_auth:, certificate_authorities:, require_server_name:, resumption:, ticket_keys:, ticket_lifetime:,
+        ticket_count:, max_ticket_size:, resumption_scope:, max_early_data_size:
       )
     end
+
+    # Whether a server issues tickets: only when given keys to seal them.
+    def issues_tickets? = !ticket_keys.nil? && ticket_count.positive?
 
     private def names(setting, given, table)
       raise ArgumentError, "#{setting} must be a non-empty Array of Symbols" unless given.is_a?(Array) && !given.empty?
@@ -230,6 +262,45 @@ module Raiha::Next::TLS
       end
       raise ArgumentError, "exporter_labels lists a label twice" unless labels.uniq.size == labels.size
       labels
+    end
+
+    # The settings of session resumption (TLS API design 13.2). A client
+    # resumes unless `resumption` is false. A server issues tickets only
+    # when given `ticket_keys:` (or a `ticket_key:` String, a static key), and
+    # takes 0-RTT only then; a setting that would do nothing without them is
+    # refused. With QUIC, max_early_data_size is the sentinel RFC 9001
+    # "Enabling 0-RTT" asks for whenever 0-RTT is allowed at all.
+    private def resumption_settings(resumption:, ticket_keys:, ticket_key:, ticket_lifetime:, ticket_count:,
+      max_ticket_size:, resumption_scope:, max_early_data_size:)
+      @resumption = resumption ? true : false
+      raise ArgumentError, "a server resumes when given ticket_keys; resumption is a client setting" if role == :server && !@resumption
+      if role == :client && (ticket_keys || ticket_key || ticket_count || max_early_data_size != 0 || resumption_scope != "")
+        raise ArgumentError, "ticket_keys, ticket_count, max_early_data_size and resumption_scope are server settings"
+      end
+      raise ArgumentError, "give ticket_keys or ticket_key, not both" if ticket_keys && ticket_key
+      unless ticket_lifetime.is_a?(Integer) && ticket_lifetime.between?(1, MAX_TICKET_LIFETIME)
+        raise ArgumentError, "ticket_lifetime is 1 to #{MAX_TICKET_LIFETIME} seconds"
+      end
+      keys = ticket_key ? TicketKeys.static(current: ticket_key) : ticket_keys
+      raise ArgumentError, "ticket_keys must be TicketKeys" unless keys.nil? || keys.is_a?(TicketKeys)
+      raise ArgumentError, "ticket_count must be an Integer of 0 or more" unless ticket_count.nil? || (ticket_count.is_a?(Integer) && !ticket_count.negative?)
+      raise ArgumentError, "ticket_count without ticket_keys issues nothing" if keys.nil? && ticket_count&.positive?
+      unless max_ticket_size.is_a?(Integer) && max_ticket_size.between?(1, MAX_TICKET_SIZE)
+        raise ArgumentError, "max_ticket_size is 1 to #{MAX_TICKET_SIZE} bytes"
+      end
+      raise ArgumentError, "resumption_scope must be a String" unless resumption_scope.is_a?(String)
+      unless max_early_data_size.is_a?(Integer) && max_early_data_size.between?(0, MAX_EARLY_DATA_SIZE)
+        raise ArgumentError, "max_early_data_size is 0 to #{MAX_EARLY_DATA_SIZE}"
+      end
+      raise ArgumentError, "max_early_data_size without ticket_keys takes no 0-RTT" if keys.nil? && max_early_data_size.positive?
+      @ticket_keys = keys&.for_ticket_lifetime(ticket_lifetime)
+      @ticket_lifetime = ticket_lifetime
+      @ticket_count_given = ticket_count
+      @ticket_count = ticket_count || (keys ? DEFAULT_TICKET_COUNT : 0)
+      @max_ticket_size = max_ticket_size
+      @resumption_scope = resumption_scope.b
+      sentinel = profile.max_early_data_size_policy == :sentinel && max_early_data_size.positive?
+      @max_early_data_size = sentinel ? MAX_EARLY_DATA_SIZE : max_early_data_size
     end
 
     private def positive(setting, value)

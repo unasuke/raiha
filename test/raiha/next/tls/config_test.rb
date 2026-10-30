@@ -107,6 +107,59 @@ class RaihaNextTLSConfigTest < Minitest::Test
     assert_raises(ArgumentError) { Config.client(record_size_limit: 16386) }
   end
 
+  def test_resumption_defaults
+    client = Config.client
+    assert client.resumption
+    server = Config.server
+    assert_equal [nil, 7200, 0, 8192, "", 0, false],
+      [server.ticket_keys, server.ticket_lifetime, server.ticket_count, server.max_ticket_size, server.resumption_scope,
+        server.max_early_data_size, server.issues_tickets?]
+  end
+
+  # A server issues tickets only with keys to seal them; a ticket_key is a
+  # static one.
+  def test_ticket_keys
+    seed = "\x01".b * 32
+    server = Config.server(ticket_key: seed)
+    assert_equal TLS::TicketKeys.derive(seed, nil), server.ticket_keys.sealing(Time.now)
+    assert_equal [2, true], [server.ticket_count, server.issues_tickets?]
+    assert_equal 5, server.with(ticket_count: 5).ticket_count
+    assert_equal [0, false], [Config.server(ticket_key: seed, ticket_count: 0).ticket_count, Config.server(ticket_key: seed, ticket_count: 0).issues_tickets?]
+    assert Ractor.shareable?(server)
+  end
+
+  # A ratchet without retain keeps the ticket lifetime in epochs plus one.
+  def test_a_ratchet_is_given_the_ticket_lifetime
+    now = Time.at(1_800_000_000)
+    keys = TLS::TicketKeys.ratchet(base: "\x02".b * 32, base_epoch: 27_000, origin: Time.at(1_700_000_000), now:)
+    assert_equal 3, Config.server(ticket_keys: keys).ticket_keys.retain
+    assert_equal 4, Config.server(ticket_keys: keys, ticket_lifetime: 10_000).ticket_keys.retain
+  end
+
+  # TLS API design 13.2: what would do nothing, or exceed a limit, is refused.
+  def test_resumption_settings_that_cannot_work_raise
+    seed = "\x01".b * 32
+    assert_raises(ArgumentError) { Config.server(ticket_key: seed, ticket_lifetime: 604_801) }
+    assert_raises(ArgumentError) { Config.server(ticket_key: seed, ticket_lifetime: 0) }
+    assert_raises(ArgumentError) { Config.server(max_early_data_size: 16_384) }
+    assert_raises(ArgumentError) { Config.server(ticket_count: 1) }
+    assert_raises(ArgumentError) { Config.server(ticket_key: seed, max_ticket_size: 12_289) }
+    assert_raises(ArgumentError) { Config.server(ticket_key: seed, ticket_keys: TLS::TicketKeys.static(current: seed)) }
+    assert_raises(ArgumentError) { Config.server(ticket_keys: seed) }
+    assert_raises(ArgumentError) { Config.server(resumption: false) }
+    assert_raises(ArgumentError) { Config.client(ticket_key: seed) }
+    assert_raises(ArgumentError) { Config.client(resumption_scope: "tenant") }
+    assert_raises(ArgumentError) { Config.client(max_early_data_size: 1) }
+  end
+
+  # RFC 9001 "Enabling 0-RTT": a QUIC server that takes 0-RTT at all says
+  # so with the sentinel.
+  def test_quic_max_early_data_size_is_the_sentinel
+    config = Config.server(profile: TLS::Profile::QUIC, ticket_key: "\x01".b * 32, max_early_data_size: 16_384)
+    assert_equal 0xffffffff, config.max_early_data_size
+    assert_equal 16_384, Config.server(ticket_key: "\x01".b * 32, max_early_data_size: 16_384).max_early_data_size
+  end
+
   def test_server_settings_on_a_client_raise
     assert_raises(ArgumentError) { Config.client(client_auth: :required) }
     assert_raises(ArgumentError) { Config.client(require_server_name: true) }
