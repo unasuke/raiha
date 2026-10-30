@@ -6,9 +6,9 @@ require_relative "masked_inspect"
 
 module Raiha::Next::TLS
   # A session a client may resume, as a value: what a NewSessionTicket gave
-  # and what of the connection it came on a resumption needs (TLS API
-  # design 13.1). The application keeps it where it likes, `to_h` and
-  # `from_h` turning it into plain values and back.
+  # and what of the connection it came on a resumption needs. The
+  # application keeps it where it likes, `to_h` and `from_h` turning it
+  # into plain values and back.
   #
   # `issued_at` is when the client received the ticket and
   # `authenticated_at` when the full handshake the session comes from took

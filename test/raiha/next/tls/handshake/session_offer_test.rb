@@ -1,10 +1,9 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/tls_pair"
 
-# A client given a session (TLS API design 13.1): checked against its
-# settings first, offered as a PSK whose binder is a MAC over the
-# ClientHello up to the binders, or not offered, with the reason of the
-# first check it fails.
+# A client given a session: checked against its settings first, offered as a
+# PSK whose binder is a MAC over the ClientHello up to the binders, or not
+# offered, with the reason of the first check it fails.
 class RaihaNextTLSSessionOfferTest < Minitest::Test
   Pair = NextTLSPair
   TLS = Pair::TLS

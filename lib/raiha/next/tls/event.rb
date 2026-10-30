@@ -31,8 +31,7 @@ module Raiha::Next::TLS
     class PeerExtension < Data.define(:type, :data, :message)
     end
 
-    # A client may resume `session` later (TLS API design 13.1); keeping it
-    # is the application's.
+    # A client may resume `session` later; keeping it is the application's.
     class NewSessionTicket < Data.define(:session)
     end
 

@@ -136,7 +136,7 @@ class RaihaNextTLSConfigTest < Minitest::Test
     assert_equal 4, Config.server(ticket_keys: keys, ticket_lifetime: 10_000).ticket_keys.retain
   end
 
-  # TLS API design 13.2: what would do nothing, or exceed a limit, is refused.
+  # A resumption setting that would do nothing, or exceed a limit, is refused.
   def test_resumption_settings_that_cannot_work_raise
     seed = "\x01".b * 32
     assert_raises(ArgumentError) { Config.server(ticket_key: seed, ticket_lifetime: 604_801) }

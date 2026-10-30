@@ -266,12 +266,12 @@ module Raiha::Next::TLS
       labels
     end
 
-    # The settings of session resumption (TLS API design 13.2). A client
-    # resumes unless `resumption` is false. A server issues tickets only
-    # when given `ticket_keys:` (or a `ticket_key:` String, a static key), and
-    # takes 0-RTT only then; a setting that would do nothing without them is
-    # refused. With QUIC, max_early_data_size is the sentinel RFC 9001
-    # "Enabling 0-RTT" asks for whenever 0-RTT is allowed at all.
+    # The settings of session resumption. A client resumes unless `resumption`
+    # is false. A server issues tickets only when given `ticket_keys:` (or a
+    # `ticket_key:` String, a static key), and takes 0-RTT only then; a
+    # setting that would do nothing without them is refused. With QUIC,
+    # max_early_data_size is the sentinel RFC 9001 "Enabling 0-RTT" asks for
+    # whenever 0-RTT is allowed at all.
     private def resumption_settings(resumption:, ticket_keys:, ticket_key:, ticket_lifetime:, ticket_count:,
       max_ticket_size:, resumption_scope:, max_early_data_size:)
       @resumption = resumption ? true : false

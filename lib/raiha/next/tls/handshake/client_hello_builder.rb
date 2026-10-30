@@ -37,7 +37,8 @@ module Raiha::Next::TLS
 
       PADDING = 21
 
-      # The only PSK key exchange mode offered (TLS API design 13.4).
+      # The only PSK key exchange mode offered: a resumption keeps forward
+      # secrecy only with a key exchange of its own.
       PSK_DHE_KE = 1
 
       # Where the GREASE values are taken from the seed.
@@ -74,7 +75,7 @@ module Raiha::Next::TLS
             Extension::SignatureAlgorithmsCert.new(supported_signature_algorithms: config.signature_algorithm_cert_ids)
         end
         # A client that resumes says how it takes a PSK, so that a server
-        # issues it tickets (TLS API design 13.4): psk_dhe_ke alone.
+        # issues it tickets: psk_dhe_ke alone.
         built[Extension::PskKeyExchangeModes::TYPE] = Extension::PskKeyExchangeModes.new(ke_modes: [PSK_DHE_KE]) if config.resumption
         built[Extension::Alpn::TYPE] = Extension::Alpn.new(protocol_name_list: config.alpn) unless config.alpn.empty?
         if (limit = config.record_size_limit)

@@ -355,11 +355,10 @@ module Raiha::Next::TLS
         @conductor.emit_message!(:handshake, @authentication.finished(schedule, @conductor.transcript_hash))
       end
 
-      # A ticket becomes a Session the application may keep (TLS API design
-      # 13.1), its age counted from now. With QUIC, max_early_data_size is
-      # checked first, a ticket ignored or not (RFC 9001 "Enabling 0-RTT");
-      # a client that does not resume ignores it then (RFC 9846 "New Session
-      # Ticket Message").
+      # A ticket becomes a Session the application may keep, its age counted
+      # from now. With QUIC, max_early_data_size is checked first, a ticket
+      # ignored or not (RFC 9001 "Enabling 0-RTT"); a client that does not
+      # resume ignores it then (RFC 9846 "New Session Ticket Message").
       private def new_session_ticket(message, now)
         early_data = case (ext = message.extension(Extension::EarlyData::TYPE))
           when Extension::EarlyData::NST then ext.max_early_data_size
@@ -379,7 +378,7 @@ module Raiha::Next::TLS
 
 
       # The session to offer, or nil, with Event::SessionNotOffered, for one
-      # that fails a check (TLS API design 13.1).
+      # that fails a check.
       private def session_to_offer(now)
         session = @session or return nil
         reason = session_refusal(session, now) or return session

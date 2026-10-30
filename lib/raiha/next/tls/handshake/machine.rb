@@ -27,8 +27,8 @@ module Raiha::Next::TLS
       # this connection's own, beside the Config's. `keylog`, anything with
       # `#write(String)`, gets a Keylog line for each traffic secret: never in
       # production (RFC 9850).
-      # `session` is one to resume, offered if it passes the checks of TLS API
-      # design 13.1 at `now`, else reported by Event::SessionNotOffered.
+      # `session` is one to resume, offered if it still passes the client's
+      # checks at `now`, else reported by Event::SessionNotOffered.
       def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil)
         start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil, session:)
       end
@@ -40,7 +40,7 @@ module Raiha::Next::TLS
       # `resumption_binding` is what the layer above binds the tickets of the
       # connection to, a ticket bound to another failing to open (the QUIC
       # version); `early_data_context` is what a ticket keeps for 0-RTT to be
-      # taken on it later only if the same (TLS API design 13.6).
+      # taken on it later only if the same.
       def self.server(config:, keyring:, now:, client_hello: nil, extensions: [], tracer: nil, keylog: nil,
         resumption_binding: "".b, early_data_context: "".b)
         start_server(config:, keyring:, client_hello:, now:, extensions:, tracer:, keylog:, substitutions: nil,

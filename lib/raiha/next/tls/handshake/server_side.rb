@@ -364,11 +364,10 @@ module Raiha::Next::TLS
         ))
       end
 
-      # TLS API design 13.12: ticket_count tickets right after the client
-      # Finished, sealed under the key of `now`; none, the reason traced, for
-      # a client that does not take psk_dhe_ke, without a key that seals now,
-      # or for an authenticated client. A ticket past max_ticket_size is not
-      # sent.
+      # Issues ticket_count tickets right after the client Finished, sealed
+      # under the key of `now`; none, the reason traced, for a client that
+      # does not take psk_dhe_ke, without a key that seals now, or for an
+      # authenticated client. A ticket past max_ticket_size is not sent.
       private def issue_tickets(schedule, now)
         return unless @config.issues_tickets?
         keys = @config.ticket_keys or return

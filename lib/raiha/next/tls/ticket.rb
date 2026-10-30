@@ -8,8 +8,7 @@ require_relative "ticket_keys"
 
 module Raiha::Next::TLS
   # A session ticket a server seals for itself, holding what a resumption
-  # takes from the connection it was issued on (TLS API design 13.6 to
-  # 13.8):
+  # takes from the connection it was issued on:
   #
   #   version (1) || key_id (8) || nonce (12) || AES-256-GCM(padded plaintext) || tag (16)
   #   AAD = version || key_id || binding
@@ -128,11 +127,11 @@ module Raiha::Next::TLS
       header + nonce + Crypto::AEAD.new(:aes_256_gcm, entry.aead_key).seal(nonce:, aad:, plaintext: padded)
     end
 
-    # The Plaintext of `ticket`, or why it gives none, in the order TLS API
-    # design 13.12 checks: :malformed (a length out of range, or a plaintext
-    # that does not parse), :unknown_version, :unknown_key (no key of `keys`
-    # opens it at `now`) or :aead_failure (forged, or bound to something
-    # else; the two are not told apart).
+    # The Plaintext of `ticket`, or why it gives none, cheapest check first:
+    # :malformed (a length out of range, or a plaintext that does not parse),
+    # :unknown_version, :unknown_key (no key of `keys` opens it at `now`) or
+    # :aead_failure (forged, or bound to something else; the two are not told
+    # apart).
     def self.open(ticket, keys:, binding:, now:, max_size:)
       return :malformed unless ticket.bytesize.between?(OVERHEAD, max_size)
       return :unknown_version unless ticket.getbyte(0) == VERSION

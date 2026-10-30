@@ -1,9 +1,9 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/tls_pair"
 
-# A server's NewSessionTickets (TLS API design 13.12): how many it issues
-# right after the client Finished, what each holds and is bound to, and
-# when it issues none, with the reason traced.
+# A server's NewSessionTickets: how many it issues right after the client
+# Finished, what each holds and is bound to, and when it issues none, with the
+# reason traced.
 class RaihaNextTLSTicketIssuanceTest < Minitest::Test
   Pair = NextTLSPair
   TLS = Pair::TLS
@@ -101,9 +101,9 @@ class RaihaNextTLSTicketIssuanceTest < Minitest::Test
   end
 end
 
-# A client's side of the tickets (TLS API design 13.1): each becomes an
-# Event::NewSessionTicket whose Session gives the PSK the server sealed in
-# the ticket, unless the client does not resume.
+# A client's side of the tickets: each becomes an Event::NewSessionTicket
+# whose Session gives the PSK the server sealed in the ticket, unless the
+# client does not resume.
 class RaihaNextTLSTicketReceiptTest < Minitest::Test
   Pair = NextTLSPair
   TLS = Pair::TLS
