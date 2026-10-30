@@ -139,7 +139,8 @@ module Raiha::Next::TLS
       # being handled.
       def pending_input? = reassembler_for(@read_epoch).pending?
 
-      def transcript_hash = @transcript.digest
+      # The transcript hash under `hash`, the selected one unless named.
+      def transcript_hash(hash = @transcript.selected) = @transcript.digest(hash)
 
       # The transcript hash under `hash` the binders of the ClientHello just
       # received are MACs over (RFC 9846 "PSK Binder").
@@ -148,6 +149,7 @@ module Raiha::Next::TLS
       # The key schedule of this handshake. Each traffic secret goes to the
       # keylog, if any, as it is derived.
       def start_key_schedule(hash:, client_random:, psk: nil)
+        @key_schedule&.discard!
         keylog = @keylog
         log = keylog && ->(name, secret) { keylog.write(Keylog.line(name, client_random, secret)) }
         @key_schedule = KeySchedule.new(hash:, psk:, on_traffic_secret: log)

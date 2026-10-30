@@ -103,7 +103,7 @@ module Raiha::Next::TLS
       def next_event: () -> Event::t?
       def expected_types: () -> Set[Integer]
       def pending_input?: () -> bool
-      def transcript_hash: () -> String
+      def transcript_hash: (?Symbol? hash) -> String
       def binder_transcript_hash: (Symbol hash) -> String
       def start_key_schedule: (hash: Symbol, client_random: String, ?psk: String?) -> KeySchedule
       def event!: (Event::t event) -> nil
@@ -184,6 +184,8 @@ module Raiha::Next::TLS
       @psk: String?
       @resumed: bool
       @peer_verified: bool
+      @early_data_requested: bool
+      @early_data: :none | :attempted | :accepted | :rejected
       @key_updates: Integer
 
       attr_reader cipher_suite: CipherSuite?
@@ -194,7 +196,7 @@ module Raiha::Next::TLS
       attr_reader peer_record_size_limit: Integer?
 
       def initialize: (Conductor conductor, server_name: String, sni: String?, extensions: Array[Extension::_Extension],
-                       tracer: Trace::_Tracer?, session: Session?) -> void
+                       tracer: Trace::_Tracer?, session: Session?, early_data: bool) -> void
       def start: (now: Time) -> void
       def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
       def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
@@ -212,6 +214,7 @@ module Raiha::Next::TLS
       private def check_after_hello_retry_request: (ServerHello message, ServerHello hrr) -> Violation?
       private def accept_server_hello: (ServerHello message, String raw, CipherSuite suite) -> void
       private def encrypted_extensions: (EncryptedExtensions message) -> void
+      private def check_early_data_accepted: (String? alpn) -> Violation?
       private def certificate_request: (CertificateRequest message) -> void
       private def certificate: (Certificate message, Time now) -> void
       private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
@@ -221,7 +224,10 @@ module Raiha::Next::TLS
       private def new_session_ticket: (NewSessionTicket message, Time now) -> void
       private def session_to_offer: (Time now) -> Session?
       private def session_refusal: (Session session, Time now) -> Symbol?
-      private def offer: (ClientHello client_hello, Session session, Time now) -> ClientHello
+      private def offer: (ClientHello client_hello, Session session, Time now, ?early_data: bool) -> ClientHello
+      private def early_data?: (Session session) -> bool
+      private def start_early_data: (CipherSuite suite, ClientHello client_hello, String psk) -> void
+      private def reject_early_data: (Symbol reason) -> void
       private def key_update: (KeyUpdate message) -> void
       private def key_share_groups: (ClientHello client_hello) -> Array[Integer]
     end
@@ -307,14 +313,14 @@ module Raiha::Next::TLS
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
-                        ?session: Session?) -> Machine
+                        ?session: Session?, ?early_data: bool) -> Machine
       def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
                         ?resumption_binding: String, ?early_data_context: String) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
-                                      substitutions: Hash[Integer, Array[String]]?, ?session: Session?) -> Machine
+                                      substitutions: Hash[Integer, Array[String]]?, ?session: Session?, ?early_data: bool) -> Machine
       private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?, ?resumption_binding: String,

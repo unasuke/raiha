@@ -29,8 +29,8 @@ module Raiha::Next::TLS
       # production (RFC 9850).
       # `session` is one to resume, offered if it still passes the client's
       # checks at `now`, else reported by Event::SessionNotOffered.
-      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil)
-        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil, session:)
+      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil, early_data: false)
+        start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions: nil, session:, early_data:)
       end
 
       # Starts a server on the ClientHello an Acceptor offered; everything up
@@ -49,14 +49,15 @@ module Raiha::Next::TLS
 
       # The constructors, with the `substitutions` only Test::RFC8448 passes.
       private_class_method def self.start_client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, substitutions:,
-        session: nil)
+        session: nil, early_data: false)
         raise ArgumentError, "Machine.client takes a client Config" unless config.client?
         check(config, keyring, extensions)
         raise ArgumentError, "session must be a Session" unless session.nil? || session.is_a?(Session)
         raise UsageError, "a Config with resumption: false resumes no session" if session && !config.resumption
+        raise ArgumentError, "early_data must be true or false" unless early_data == true || early_data == false
         sni, name = ServerName.for_client(server_name)
         new(config:, keyring:, tracer:, keylog:, substitutions:, now:, client_hello: nil) do |conductor|
-          ClientSide.new(conductor, server_name: name, sni:, extensions:, tracer:, session:)
+          ClientSide.new(conductor, server_name: name, sni:, extensions:, tracer:, session:, early_data:)
         end
       end
 

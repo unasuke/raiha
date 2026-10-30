@@ -7,6 +7,7 @@ require_relative "../extension"
 require_relative "../iana"
 require_relative "../key_schedule"
 require_relative "../session"
+require_relative "../trace"
 require_relative "../verifier"
 require_relative "authentication_messages"
 require_relative "client_hello_builder"
@@ -45,7 +46,7 @@ module Raiha::Next::TLS
 
       attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
-      def initialize(conductor, server_name:, sni:, extensions:, tracer:, session:)
+      def initialize(conductor, server_name:, sni:, extensions:, tracer:, session:, early_data:)
         @conductor = conductor
         @config = conductor.config
         @keyring = conductor.keyring
@@ -59,6 +60,10 @@ module Raiha::Next::TLS
         @psk = nil #: String?
         # Whether the server took the offered PSK.
         @resumed = false
+        # Whether 0-RTT is to be sent when it can be, and how it went: :none,
+        # :attempted, then :accepted or :rejected.
+        @early_data_requested = early_data
+        @early_data = :none #: :none | :attempted | :accepted | :rejected
         @client_hello = nil #: ClientHello?
         @hello_retry_request = nil #: ServerHello?
         # @type var key_pairs: Array[KeyExchange::KeyPair]
@@ -88,7 +93,11 @@ module Raiha::Next::TLS
         session = session_to_offer(now)
         built = ClientHelloBuilder.build(config: @config, keyring: @keyring, server_name: @sni, extensions: @extensions)
         @key_pairs = built.key_pairs
-        @client_hello = session ? offer(built.client_hello, session, now) : @conductor.emit_message!(:initial, built.client_hello)
+        @client_hello = if session
+          offer(built.client_hello, session, now, early_data: early_data?(session))
+        else
+          @conductor.emit_message!(:initial, built.client_hello)
+        end
         @conductor.transition!(:wait_sh)
       end
 
@@ -207,6 +216,10 @@ module Raiha::Next::TLS
         end
         @conductor.receive_hello_retry_request!(raw, suite.hash_algorithm)
         @hello_retry_request = hrr
+        # No 0-RTT after a HelloRetryRequest (RFC 9846 "Early Data
+        # Indication"): back to sending in the clear.
+        reject_early_data(:hello_retry_request)
+        @conductor.change_epochs!(cipher_suite: suite, write: :initial)
         second = ClientHelloBuilder.retry(client_hello, hrr) do |group|
           key_pair = @keyring.key_exchange.generate(IANA::NAMED_GROUPS.fetch(group))
           @key_pairs = [key_pair]
@@ -262,6 +275,7 @@ module Raiha::Next::TLS
         @group = key_pair.group
         @key_pairs = []
         @resumed = !selected.nil?
+        reject_early_data(:psk_not_selected) unless @resumed
         schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: client_hello.random, psk: (@psk if @resumed))
         @psk&.clear
         @psk = nil
@@ -270,7 +284,8 @@ module Raiha::Next::TLS
         transcript_hash = @conductor.transcript_hash
         client_secret = schedule.client_handshake_traffic_secret(transcript_hash)
         server_secret = schedule.server_handshake_traffic_secret(transcript_hash)
-        moved = @conductor.change_epochs!(cipher_suite: suite, read: :handshake, write: :handshake,
+        # 0-RTT goes on until EncryptedExtensions says whether it was taken.
+        moved = @conductor.change_epochs!(cipher_suite: suite, read: :handshake, write: (:handshake unless @early_data == :attempted),
           secrets: [[:handshake, :read, server_secret], [:handshake, :write, client_secret]])
         @conductor.transition!(:wait_ee) if moved
       end
@@ -284,10 +299,14 @@ module Raiha::Next::TLS
         end
         # 1
         return fail!(:unsupported_extension, :unsolicited_extension) unless (types - offered_types).empty?
-        # 4
         alpn = case (ext = message.extension(Extension::Alpn::TYPE))
           when Extension::Alpn then ext.protocol_name_list
           end
+        if types.include?(Extension::EarlyData::TYPE)
+          failure = check_early_data_accepted(alpn&.first)
+          return fail!(failure.alert, failure.reason) if failure
+        end
+        # 4
         if alpn && !(alpn.size == 1 && @config.alpn.include?(alpn.fetch(0)))
           return fail!(:no_application_protocol, :alpn_not_offered)
         end
@@ -300,6 +319,12 @@ module Raiha::Next::TLS
         return fail!(:missing_extension, :required_extension) unless missing.empty?
 
         @alpn = alpn&.first
+        if types.include?(Extension::EarlyData::TYPE)
+          @early_data = :accepted
+        else
+          reject_early_data(:rejected_by_server)
+          @conductor.change_epochs!(cipher_suite: suite, write: :handshake)
+        end
         case (ext = message.extension(Extension::RecordSizeLimit::TYPE))
         when Extension::RecordSizeLimit then @peer_record_size_limit = ext.record_size_limit
         end
@@ -310,6 +335,18 @@ module Raiha::Next::TLS
         # A server that resumes authenticates by the PSK alone (RFC 9846
         # "Certificate Request").
         @conductor.transition!(@resumed ? :wait_finished : :wait_cert_cr)
+      end
+
+      # 2 and 3 of the checks of EncryptedExtensions, for one that takes
+      # 0-RTT: the PSK it was sent under selected, and the session's cipher
+      # suite and ALPN protocol, which 0-RTT was sent under too (RFC 9846
+      # "Early Data Indication").
+      private def check_early_data_accepted(alpn)
+        session = @session
+        return Violation.new(alert: :illegal_parameter, reason: :early_data_without_psk) unless @resumed && session
+        return Violation.new(alert: :illegal_parameter, reason: :early_data_cipher_suite_changed) unless suite.id == session.cipher_suite
+        return Violation.new(alert: :illegal_parameter, reason: :early_data_alpn_changed) unless alpn == session.alpn
+        nil
       end
 
       private def certificate_request(message)
@@ -358,6 +395,10 @@ module Raiha::Next::TLS
         @exporter_values = schedule.exporter_values(@config.exporter_labels, through_server_finished)
         return unless @conductor.change_epochs!(cipher_suite: suite, read: :application,
           secrets: [[:application, :read, server_secret], [:application, :write, client_secret]])
+        # The end of 0-RTT, under its key, where there is a record layer.
+        if @early_data == :accepted && @config.profile.send_end_of_early_data
+          @conductor.emit_message!(:early_data, EndOfEarlyData.new)
+        end
         send_client_flight(schedule)
         schedule.resumption!(@conductor.transcript_hash)
         authenticated(now)
@@ -365,7 +406,7 @@ module Raiha::Next::TLS
         @conductor.transition!(:connected)
         @conductor.event!(Event::HandshakeComplete.new(
           server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: @resumed,
-          early_data_accepted: false, peer_certificates: @peer_certificates, peer_verified: @peer_verified
+          early_data_accepted: @early_data == :accepted, peer_certificates: @peer_certificates, peer_verified: @peer_verified
         ))
       end
 
@@ -466,17 +507,55 @@ module Raiha::Next::TLS
       # `client_hello` with the session's PSK (RFC 9846 "Pre-Shared Key
       # Extension"): one identity, its age as the client counts it, and
       # pre_shared_key last, in place of the one a first ClientHello had;
-      # psk_dhe_ke is offered already.
-      private def offer(client_hello, session, now)
+      # psk_dhe_ke is offered already. With `early_data`, early_data before
+      # it, and 0-RTT starts.
+      private def offer(client_hello, session, now, early_data: false)
         suite = CipherSuite.find(session.cipher_suite) or raise "the session's cipher suite was checked"
         identity = Extension::PreSharedKey::Identity.new(identity: session.ticket, obfuscated_ticket_age: session.obfuscated_ticket_age(now))
         placeholder = Extension::PreSharedKey::CH.new(identities: [identity], binders: ["\x00".b * suite.hash_length])
         others = client_hello.extensions.reject { |ext| ext.extension_type == Extension::PreSharedKey::TYPE }
+        others += [Extension::EarlyData::CH.new] if early_data
         psk = @psk ||= session.psk
-        @conductor.emit_client_hello_with_binders!(client_hello.with(extensions: others + [placeholder]), suite.hash_algorithm) do |transcript_hash|
+        sent = @conductor.emit_client_hello_with_binders!(client_hello.with(extensions: others + [placeholder]), suite.hash_algorithm) do |transcript_hash|
           schedule = KeySchedule.new(hash: suite.hash_algorithm, psk:)
           [schedule.binder(kind: :resumption, transcript_hash:)].tap { schedule.discard! }
         end
+        start_early_data(suite, sent, psk) if early_data
+        sent
+      end
+
+      # Whether to send 0-RTT with `session`: only when asked, and when the
+      # server could take it, the ticket allowing it and the session's cipher
+      # suite and ALPN protocol offered again (RFC 9846 "Early Data
+      # Indication"); otherwise traced why not.
+      private def early_data?(session)
+        return false unless @early_data_requested
+        alpn = session.alpn
+        reason = if session.max_early_data_size.zero? then :ticket_disallows
+          elsif !@config.cipher_suite_ids.include?(session.cipher_suite) then :cipher_suite_not_offered
+          elsif alpn && !@config.alpn.include?(alpn) then :alpn_not_offered
+          end
+        return true unless reason
+        @conductor.trace(Trace::EarlyDataNotAttempted.new(reason:)) if @conductor.tracing?
+        false
+      end
+
+      # The client's 0-RTT key, from the PSK over the whole ClientHello (RFC
+      # 9846 "Key Schedule"), under the session's cipher suite.
+      private def start_early_data(suite, client_hello, psk)
+        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: client_hello.random, psk:)
+        secret = schedule.client_early_traffic_secret(@conductor.transcript_hash(suite.hash_algorithm))
+        @conductor.change_epochs!(cipher_suite: suite, write: :early_data, secrets: [[:early_data, :write, secret]])
+        @early_data = :attempted
+      end
+
+      # 0-RTT that was sent is not taken; what was sent in it is not sent
+      # again here.
+      private def reject_early_data(reason)
+        return unless @early_data == :attempted
+        @early_data = :rejected
+        @conductor.event!(Event::EarlyDataRejected.new(reason:))
+        @conductor.trace(Trace::EarlyDataRejected.new(reason:)) if @conductor.tracing?
       end
 
       private def key_share_groups(client_hello)
