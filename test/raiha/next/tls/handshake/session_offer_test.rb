@@ -153,11 +153,12 @@ class RaihaNextTLSSessionOfferTest < Minitest::Test
     assert_equal [:unsupported_extension, :unsolicited_extension], events(machine).grep(TLS::Event::Failed).first&.then { |f| [f.alert, f.reason] }
   end
 
-  # A server that sends a HelloRetryRequest takes the second ClientHello,
-  # its pre_shared_key changed.
+  # A server that sends a HelloRetryRequest resumes with the second
+  # ClientHello, its pre_shared_key changed.
   def test_a_server_takes_the_session_offered_again
-    pair = Pair.run(Pair.client(session:), { config: Pair.server_config(groups: %i[secp256r1]) })
+    pair = Pair.run(Pair.client(session:), { config: Pair.server_config(ticket_key: SEED, groups: %i[secp256r1]) })
     assert pair.client.complete? && pair.server.complete?
+    [pair.client, pair.server].each { |machine| assert machine.each_event.grep(TLS::Event::HandshakeComplete).first.resumed }
     hellos = pair.client_outputs.grep(TLS::Output::Message).select { |output| output.epoch == :initial }
       .map { |output| TLS::Handshake.parse(output.bytes, registry: TLS::Extension::Registry::BUILTIN) }
     assert_equal 2, hellos.size

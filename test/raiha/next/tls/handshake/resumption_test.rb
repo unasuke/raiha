@@ -148,12 +148,20 @@ class RaihaNextTLSResumptionTest < Minitest::Test
     end
   end
 
-  # The chain's dates are checked again, here past the leaf's.
+  # The chain's dates are checked again: past the leaf's, or past those of
+  # the CA that issued it, the leaf's own still good.
   def test_a_ticket_of_a_client_certificate_past_its_dates
     leaf = Pair::PKI.leaf(Pair.ca, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 5,
       not_after: NOW + 120)
     session, = authenticated_session(identity: TLS::Keyring::Identity.new(cert_der: [leaf.der, Pair.ca.der], key_der: leaf.key_der))
     assert_equal [[0, :client_certificate_expired]], passed_over(client_auth_config, now: NOW + 180, session:)
+
+    short = Pair::PKI.ca(name: "Short-lived CA", key: Pair::PKI.key(:short_lived_ca), not_after: NOW + 120)
+    leaf = Pair::PKI.leaf(short, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 7)
+    config = client_auth_config(trust_anchors: [Pair.ca.der, short.der])
+    identity = TLS::Keyring::Identity.new(cert_der: [leaf.der, short.der], key_der: leaf.key_der)
+    session = sessions(handshake(Pair.client(identities: [identity]), { config: }).client).first
+    assert_equal [[0, :client_certificate_expired]], passed_over(config, now: NOW + 180, session:)
   end
 
   # A chain that ended at no anchor is never trusted again; one that
@@ -225,6 +233,50 @@ class RaihaNextTLSResumptionTest < Minitest::Test
 
   # The first identity that passes is selected, and only its binder is
   # verified: the other's binder is all zeros.
+  # A ClientHello offering the tickets of `sessions`, with the binder of the
+  # one at `index` made under its PSK and the others all zeros.
+  def offering(sessions, index:)
+    identities = sessions.map { |s| TLS::Extension::PreSharedKey::Identity.new(identity: s.ticket, obfuscated_ticket_age: 0) }
+    psk = TLS::Extension::PreSharedKey::CH.new(identities:, binders: ["\x00".b * 32] * sessions.size)
+    ch = offered_client_hello(sessions.first)
+    ch = ch.with(extensions: ch.extensions[0...-1] + [psk])
+    transcript_hash = OpenSSL::Digest.digest("SHA256", ch.encode_truncated)
+    binder = TLS::KeySchedule.new(hash: :sha256, psk: sessions.fetch(index).psk).binder(kind: :resumption, transcript_hash:)
+    ch.with_binders(Array.new(sessions.size) { |i| i == index ? binder : "\x00".b * 32 })
+  end
+
+  # The first identity whose ticket opens and passes is the one whose
+  # binder counts: a wrong one fails the handshake though a later identity
+  # would have done.
+  def test_the_binder_of_the_first_identity_that_passes
+    first, second = sessions(handshake(Pair.client, { config: server_config }).client)
+    assert_equal [:decrypt_error, :psk_binder_mismatch], failure(serve(offering([first, second], index: 1)))
+  end
+
+  # A ticket that opens but fails a check is passed over for the next.
+  def test_a_ticket_passed_over_for_the_next
+    stale = session
+    later = NOW + 7300
+    fresh = sessions(handshake(Pair.client(now: later - 100), { config: server_config }, now: later - 100).client).first
+    tracer = Recorder.new
+    server = Pair.server(offering([stale, fresh], index: 1).encode, config: server_config, tracer:, now: later)
+    server_hello = TLS::Handshake.parse(server.outputs.find { |o| o.is_a?(TLS::Output::Message) }.bytes, registry: REGISTRY)
+    assert_equal 1, server_hello.extension(TLS::Extension::PreSharedKey::TYPE).selected_identity
+    assert_equal [[0, :ticket_expired]], tracer.values.grep(TLS::Trace::PskRejected).map { |r| [r.index, r.reason] }
+  end
+
+  # A session of SHA-384, the second of the hashes this server's transcript
+  # runs: the binder is checked under it.
+  def test_a_session_of_the_second_hash
+    config = Pair.client_config(cipher_suites: %i[TLS_AES_256_GCM_SHA384])
+    session = sessions(handshake(Pair.client(config:), { config: server_config }).client).first
+    assert_equal 0x1302, session.cipher_suite
+    tracer = Recorder.new
+    pair = handshake(Pair.client(config:, session:, now: NOW + 60), { config: server_config, tracer: }, now: NOW + 60)
+    assert completion(pair.server).resumed
+    assert_equal [TLS::Trace::BinderVerified.new(index: 0)], tracer.values.grep(TLS::Trace::BinderVerified)
+  end
+
   def test_the_first_identity_that_passes
     session = self.session
     real = offered_client_hello(session).extensions.last.identities.first
