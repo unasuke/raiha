@@ -173,6 +173,28 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
     Console.logger.level = level
   end
 
+  # A block that raises once its response is whole leaves it as it is, its
+  # request's body not read included.
+  def test_a_block_that_raises_after_its_response
+    level = Console.logger.level
+    Console.logger.off!
+    handler = lambda do |request|
+      request.respond(200, [], "whole") if request.path == "/whole"
+      request.respond(200) { |body| (body << "closed").close } if request.path == "/closed"
+      raise "after"
+    end
+    Sync do
+      serving(handler) do |port|
+        client(port) do |client|
+          assert_equal "whole", client.request("POST", "/whole", body: "x" * 100_000).body
+          assert_equal "closed", client.request("POST", "/closed", body: "x" * 100_000).body
+        end
+      end
+    end
+  ensure
+    Console.logger.level = level
+  end
+
   # Extended CONNECT is offered only when the settings offer it, and one the
   # block does not answer is a 501.
   def test_an_extended_connect_not_taken

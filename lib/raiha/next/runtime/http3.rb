@@ -18,7 +18,9 @@ module Raiha::Next::Runtime
 
     # What the client keeps of a request until its response is read: the
     # response as it comes, its body as far as the application has not read
-    # it, and how the peer reset the response or stopped the request.
+    # it, and how the peer reset the response or stopped the request. The
+    # server keeps the same of a request's body until the request is over,
+    # and whether its response has gone whole.
     class Exchange
       # The most of a body kept unread before its stream is read no more,
       # so that the peer's flow control holds the rest back. What one read
@@ -27,7 +29,7 @@ module Raiha::Next::Runtime
       # String, however small the DATA frames it came in.
       MAX_UNREAD = 256 * 1024
 
-      attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused
+      attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused, :answered
       attr_reader :unread
 
       def initialize
@@ -39,6 +41,7 @@ module Raiha::Next::Runtime
         @reset = nil #: Integer?
         @stopped = nil #: Integer?
         @paused = false
+        @answered = false
         @ended = false
       end
 

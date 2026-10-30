@@ -206,6 +206,7 @@ module Raiha::Next::Runtime
       def respond(stream_id, exchange, status, headers, body)
         send_header_section(stream_id, exchange, [[":status", status.to_s], *headers], fin: body.nil? || body.empty?)
         write(stream_id, exchange, body, fin: true) if body && !body.empty?
+        exchange.answered = true
       end
 
       # Sends the response on `stream_id`, its body written by the block;
@@ -220,9 +221,13 @@ module Raiha::Next::Runtime
       # Ends the body of the response on `stream_id`, with `trailers` when
       # there are any; for ResponseBody.
       def finish_body(stream_id, exchange, trailers)
-        return send_header_section(stream_id, exchange, trailers, fin: true) unless trailers.empty?
-        writable(stream_id, exchange) { @http3.send_data(stream_id, "".b, fin: true) && true }
-        flush
+        if trailers.empty?
+          writable(stream_id, exchange) { @http3.send_data(stream_id, "".b, fin: true) && true }
+          flush
+        else
+          send_header_section(stream_id, exchange, trailers, fin: true)
+        end
+        exchange.answered = true
       end
 
       # Writes `data` to the body of the response on `stream_id`; for
@@ -298,9 +303,11 @@ module Raiha::Next::Runtime
         forget(request)
       end
 
-      # The block raised: what can be told of it, told.
+      # The block raised: what can be told of it, told. A response gone whole
+      # is not cut short for it.
       private def failed(request)
         return request.respond(500) unless request.responded?
+        return if @exchanges[request.stream_id]&.answered
         @http3.cancel(request.stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::INTERNAL_ERROR)
         flush
       rescue Raiha::Next::QUIC::ClosedError, StreamReset

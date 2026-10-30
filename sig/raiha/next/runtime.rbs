@@ -396,6 +396,7 @@ module Raiha::Next::Runtime
       attr_accessor reset: Integer?
       attr_accessor stopped: Integer?
       attr_accessor paused: bool
+      attr_accessor answered: bool
       attr_reader unread: Integer
 
       @data: String
