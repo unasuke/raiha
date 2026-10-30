@@ -229,6 +229,9 @@ module Raiha::Next::TLS
       @hello_retry_request: ServerHello?
       @server_name: String?
       @key_updates: Integer
+      @resumption_binding: String
+      @early_data_context: String
+      @authenticated_at: Integer?
 
       attr_reader cipher_suite: CipherSuite?
       attr_reader group: Symbol?
@@ -237,7 +240,8 @@ module Raiha::Next::TLS
       attr_reader exporter_values: Hash[String, String]
       attr_reader peer_record_size_limit: Integer?
 
-      def initialize: (Conductor conductor, extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?) -> void
+      def initialize: (Conductor conductor, extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?,
+                       resumption_binding: String, early_data_context: String) -> void
       def start: (now: Time) -> nil
       def expected_types: (Symbol? state, epoch epoch) -> Set[Integer]
       def unexpected_reason: (Symbol? state, Integer? msg_type) -> Symbol
@@ -256,7 +260,9 @@ module Raiha::Next::TLS
       private def certificate_request: () -> CertificateRequest
       private def certificate: (Certificate message, Time now) -> void
       private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
-      private def finished: (Finished message, String transcript_hash) -> void
+      private def finished: (Finished message, String transcript_hash, Time now) -> void
+      private def issue_tickets: (KeySchedule schedule, Time now) -> void
+      private def refuse_ticket: (Symbol reason) -> nil
       private def server_name: (ClientHello ch) -> String?
       private def psk_dhe_ke?: (ClientHello ch) -> bool
       private def signature_algorithms_cert: (ClientHello ch) -> Array[Integer]?
@@ -271,14 +277,16 @@ module Raiha::Next::TLS
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Machine
       def self.server: (config: Config, keyring: Keyring, now: Time, ?client_hello: Accepted?,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Machine
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?resumption_binding: String, ?early_data_context: String) -> Machine
 
       private def self.start_client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                                       substitutions: Hash[Integer, Array[String]]?) -> Machine
       private def self.start_server: (config: Config, keyring: Keyring, client_hello: Accepted?, now: Time,
                                       extensions: Array[Extension::_Extension], tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
-                                      substitutions: Hash[Integer, Array[String]]?) -> Machine
+                                      substitutions: Hash[Integer, Array[String]]?, ?resumption_binding: String,
+                                      ?early_data_context: String) -> Machine
       private def self.check: (Config config, Keyring keyring, Array[Extension::_Extension] extensions) -> void
       private def self.new: (config: Config, keyring: Keyring, tracer: Trace::_Tracer?, keylog: Keylog::_Writer?,
                              substitutions: Hash[Integer, Array[String]]?, now: Time, client_hello: (Accepted | Acceptor)?) { (Conductor) -> _Side } -> Machine

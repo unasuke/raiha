@@ -6,6 +6,7 @@ require_relative "signature_scheme"
 require_relative "profile"
 require_relative "extension"
 require_relative "ticket_keys"
+require_relative "ticket"
 
 module Raiha::Next::TLS
   # The settings a handshake runs with, shared by every connection and every
@@ -79,7 +80,8 @@ module Raiha::Next::TLS
       :alpn, :registry, :extensions, :max_handshake_message_size, :max_certificate_message_size,
       :max_certificate_chain_length, :permute_extensions, :grease, :exporter_labels, :record_size_limit,
       :trust_anchors, :verify_flags, :client_auth, :certificate_authorities, :require_server_name,
-      :resumption, :ticket_keys, :ticket_lifetime, :ticket_count, :max_ticket_size, :resumption_scope, :max_early_data_size
+      :resumption, :ticket_keys, :ticket_lifetime, :ticket_count, :max_ticket_size, :resumption_scope, :max_early_data_size,
+      :ticket_binding
 
     # The wire values of the Symbol settings above, in the same order.
     attr_reader :cipher_suite_ids, :group_ids, :signature_algorithm_ids, :signature_algorithm_cert_ids
@@ -301,6 +303,8 @@ module Raiha::Next::TLS
       @resumption_scope = resumption_scope.b
       sentinel = profile.max_early_data_size_policy == :sentinel && max_early_data_size.positive?
       @max_early_data_size = sentinel ? MAX_EARLY_DATA_SIZE : max_early_data_size
+      # The part of a ticket's binding this Config gives, computed once.
+      @ticket_binding = Ticket.config_binding(profile:, resumption_scope: @resumption_scope)
     end
 
     private def positive(setting, value)

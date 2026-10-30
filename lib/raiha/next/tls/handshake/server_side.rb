@@ -6,6 +6,7 @@ require_relative "../event"
 require_relative "../extension"
 require_relative "../iana"
 require_relative "../server_name"
+require_relative "../ticket"
 require_relative "../trace"
 require_relative "authentication_messages"
 require_relative "key_update_handling"
@@ -49,12 +50,18 @@ module Raiha::Next::TLS
 
       attr_reader :cipher_suite, :group, :alpn, :peer_certificates, :exporter_values, :peer_record_size_limit
 
-      def initialize(conductor, extensions:, tracer:)
+      def initialize(conductor, extensions:, tracer:, resumption_binding:, early_data_context:)
         @conductor = conductor
         @config = conductor.config
         @keyring = conductor.keyring
         @extensions = extensions
         @tracer = tracer
+        @resumption_binding = resumption_binding
+        @early_data_context = early_data_context
+        # When the full handshake whose key material the connection holds
+        # took place (milliseconds), nil until the handshake is over; a
+        # resumption takes it from the ticket.
+        @authenticated_at = nil #: Integer?
         @authentication = AuthenticationMessages.new(AuthenticationMessages::Parameters::SERVER, tracer:)
         @client_hello = nil #: ClientHello?
         @hello_retry_request = nil #: ServerHello?
@@ -88,7 +95,7 @@ module Raiha::Next::TLS
         when ClientHello then client_hello(message)
         when Certificate then certificate(message, now)
         when CertificateVerify then certificate_verify(message, transcript_hash_before) # steep:ignore
-        when Finished then finished(message, transcript_hash_before) # steep:ignore
+        when Finished then finished(message, transcript_hash_before, now) # steep:ignore
         when KeyUpdate then receive_key_update(message)
         end
       end
@@ -338,7 +345,7 @@ module Raiha::Next::TLS
         end
       end
 
-      private def finished(message, transcript_hash)
+      private def finished(message, transcript_hash, now)
         schedule = key_schedule
         case (result = @authentication.verify_finished(message, schedule, transcript_hash))
         when AuthenticationMessages::Failure then return fail!(result.alert, result.reason)
@@ -349,11 +356,52 @@ module Raiha::Next::TLS
           secrets: [[:application, :read, schedule.application_traffic_secret(:client)]])
         schedule.resumption!(@conductor.transcript_hash)
         @conductor.transition!(:connected)
+        issue_tickets(schedule, now)
         @conductor.event!(Event::HandshakeComplete.new(
           server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: false,
           early_data_accepted: false, peer_certificates: @peer_certificates,
           peer_verified: !@peer_certificates.empty? && @keyring.peer_verified?
         ))
+      end
+
+      # TLS API design 13.12: ticket_count tickets right after the client
+      # Finished, sealed under the key of `now`; none, the reason traced, for
+      # a client that does not take psk_dhe_ke, without a key that seals now,
+      # or for an authenticated client. A ticket past max_ticket_size is not
+      # sent.
+      private def issue_tickets(schedule, now)
+        return unless @config.issues_tickets?
+        keys = @config.ticket_keys or return
+        ch = @client_hello or raise "no ClientHello to issue tickets for"
+        return refuse_ticket(:psk_mode_unsupported) unless psk_dhe_ke?(ch)
+        entry = keys.sealing(now) or return refuse_ticket(:ticket_keys_exhausted)
+        # Tickets of client certificates wait for the checks that resume them.
+        return refuse_ticket(:client_auth_not_resumable) unless @peer_certificates.empty?
+        now_ms = (now.to_r * 1000).floor
+        @authenticated_at ||= now_ms
+        binding = Ticket.binding(@config.ticket_binding, resumption_binding: @resumption_binding, server_name: @server_name || "",
+          alpn: @alpn || "")
+        early_data = @config.max_early_data_size
+        extensions = early_data.positive? ? [Extension::EarlyData::NST.new(max_early_data_size: early_data)] : [] #: Array[Extension::_Extension]
+        @config.ticket_count.times do |index|
+          nonce = [index].pack("Q>")
+          age_add = @keyring.random_bytes(4).unpack1("N") #: Integer
+          psk = schedule.ticket_psk(nonce)
+          # steep narrows no instance variable by the ||= above.
+          plaintext = Ticket::Plaintext.new(issued_at: now_ms, authenticated_at: @authenticated_at, lifetime: @config.ticket_lifetime, # steep:ignore
+            age_add:, cipher_suite: suite.id, psk:, alpn: @alpn || "".b, early_data_allowed: early_data.positive?, client: nil,
+            early_data_context: @early_data_context)
+          ticket = Ticket.seal(plaintext, entry:, binding:, random: @keyring.random_bytes(Ticket::RANDOM_LENGTH))
+          psk.clear
+          next refuse_ticket(:ticket_too_large) if ticket.bytesize > @config.max_ticket_size
+          @conductor.emit_message!(:application, NewSessionTicket.new(ticket_lifetime: @config.ticket_lifetime, ticket_age_add: age_add,
+            ticket_nonce: nonce, ticket:, extensions:))
+        end
+      end
+
+      private def refuse_ticket(reason)
+        @conductor.trace(Trace::TicketNotIssued.new(reason:)) if @conductor.tracing?
+        nil
       end
 
       private def server_name(ch)
