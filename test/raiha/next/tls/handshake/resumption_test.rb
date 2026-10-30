@@ -156,17 +156,20 @@ class RaihaNextTLSResumptionTest < Minitest::Test
     assert_equal [[0, :client_certificate_expired]], passed_over(client_auth_config, now: NOW + 180, session:)
   end
 
-  # A chain that ended at no anchor, as Verifier::None takes it, is never
-  # trusted again.
+  # A chain that ended at no anchor is never trusted again; one that
+  # Verifier::None took ended at none, even when the client put a trusted
+  # anchor last.
   def test_a_ticket_of_a_chain_that_ended_at_no_anchor
     leaf = Pair::PKI.leaf(Pair.ca, names: [], common_name: "client", key: Pair::PKI.key(:client), purpose: "clientAuth", serial: 6)
-    identity = TLS::Keyring::Identity.new(cert_der: [leaf.der], key_der: leaf.key_der)
     config = client_auth_config
-    keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
-    pair = handshake(Pair.client(identities: [identity]), { config:, keyring: })
-    session = sessions(pair.client).first
-    later_keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
-    assert_equal [[0, :trust_anchor_removed]], passed_over(config, session:, keyring: later_keyring)
+    [[leaf.der], [leaf.der, Pair.ca.der]].each do |chain|
+      identity = TLS::Keyring::Identity.new(cert_der: chain, key_der: leaf.key_der)
+      keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
+      pair = handshake(Pair.client(identities: [identity]), { config:, keyring: })
+      session = sessions(pair.client).first
+      later_keyring = Pair.server_keyring(config:, verifier: TLS::Verifier::None.new)
+      assert_equal [[0, :trust_anchor_removed]], passed_over(config, session:, keyring: later_keyring), chain.size
+    end
   end
 
   # The client's own clock lets the session go; the ticket keeps the time

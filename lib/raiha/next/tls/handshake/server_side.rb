@@ -518,14 +518,17 @@ module Raiha::Next::TLS
       # What a ticket keeps of the client's certificate, nil without one: the
       # leaf, `rules_digest`, the anchor the verified chain ended at, and when
       # every certificate of the chain was valid; a resumed connection's, as
-      # the ticket it resumed kept it.
+      # the ticket it resumed kept it. A chain nothing verified ended at no
+      # anchor, whatever its last certificate: Verifier::None hands back the
+      # peer's chain as it came.
       private def ticket_client(rules_digest)
         resumed = @resumption&.ticket&.client
         return resumed if resumed
         leaf = @peer_certificates.first or return nil
         rules_digest or raise "a ticket of a client certificate needs the rules it was verified by"
         anchor = @peer_certificates.fetch(-1).to_der
-        anchor_digest = @config.trust_anchors.include?(anchor) ? Ticket.anchor_digest(anchor) : Ticket::NO_ANCHOR
+        anchored = @keyring.peer_verified? && @config.trust_anchors.include?(anchor)
+        anchor_digest = anchored ? Ticket.anchor_digest(anchor) : Ticket::NO_ANCHOR
         # Seconds from 1970, as a ticket holds them: a date before is 1970,
         # as much in the past for the checks.
         valid_from = @peer_certificates.map { |cert| cert.not_before.to_i }.max.clamp(0, Ticket::MAX_TIME)
