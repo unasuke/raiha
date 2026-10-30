@@ -9,7 +9,7 @@ module Raiha::Next::TLS
     BINDER_LABELS: Hash[Symbol, Symbol]
 
     def self.extract: (salt: String, ikm: String, hash: Symbol) -> String
-    def self.expand_label: (secret: String, label: String, length: Integer, hash: Symbol, ?context: String) -> String
+    def self.expand_label: (secret: String, label: String, length: Integer, hash: Symbol, ?context: String, ?prefix: String) -> String
     def self.derive_secret: (secret: String, label: String, transcript_hash: String, hash: Symbol) -> String
     def self.export: (inner_value: String, context: String, length: Integer, hash: Symbol) -> String
 

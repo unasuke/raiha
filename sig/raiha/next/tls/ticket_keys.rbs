@@ -1,0 +1,35 @@
+module Raiha::Next::TLS
+  class TicketKeys
+    class Entry < Data
+      include MaskedInspect
+
+      attr_reader key_id: String
+      attr_reader aead_key: String
+      attr_reader nonce_key: String
+      attr_reader epoch: Integer?
+
+      def self.new: (key_id: String, aead_key: String, nonce_key: String, epoch: Integer?) -> instance
+                  | (String key_id, String aead_key, String nonce_key, Integer? epoch) -> instance
+
+      def masked_members: () -> Array[Symbol]
+    end
+
+    PREFIX: String
+    SEED_LENGTH: Integer
+    KEY_LENGTH: Integer
+    KEY_ID_LENGTH: Integer
+    HASH: Symbol
+
+    @entries: Array[Entry]
+    @by_id: Hash[String, Entry]
+
+    def self.static: (current: String, ?previous: Array[String]) -> TicketKeys
+    def self.derive: (String seed, Integer? epoch) -> Entry
+    def self.expand: (String seed, String label, Integer length) -> String
+
+    def initialize: (Array[Entry] entries) -> void
+    def sealing: (Time now) -> Entry?
+    def opening: (String key_id, Time now) -> Entry?
+    def inspect: () -> String
+  end
+end

@@ -52,11 +52,12 @@ module Raiha::Next::TLS
 
     def self.extract(salt:, ikm:, hash:) = Crypto::HKDF.extract(hash:, salt:, ikm:)
 
-    # HKDF-Expand-Label. `label` is given without the "tls13 " prefix.
-    def self.expand_label(secret:, label:, length:, hash:, context: "".b)
+    # HKDF-Expand-Label. `label` is given without the "tls13 " prefix; a
+    # derivation of this implementation's own gives a prefix of its own.
+    def self.expand_label(secret:, label:, length:, hash:, context: "".b, prefix: PREFIX)
       w = Codec::Writer.new
       w.u16(length)
-      w.vector(1, min: 7, max: 255) { w.bytes(PREFIX + label) }
+      w.vector(1, min: 7, max: 255) { w.bytes(prefix + label) }
       w.vector(1, max: 255) { w.bytes(context) }
       Crypto::HKDF.expand(hash:, prk: secret, info: w.to_s, length:)
     end
