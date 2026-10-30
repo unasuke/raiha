@@ -1,0 +1,63 @@
+module Raiha::Next::TLS
+  module Ticket
+    type reason = :malformed | :unknown_version | :unknown_key | :aead_failure
+
+    VERSION: Integer
+    NONCE_LENGTH: Integer
+    RANDOM_LENGTH: Integer
+    OVERHEAD: Integer
+    PADDING: Integer
+    HASH: Symbol
+    PROFILE_NAMES: Hash[Profile, String]
+
+    class ClientCertificate < Data
+      attr_reader leaf: String
+      attr_reader rules_digest: String
+      attr_reader anchor_digest: String
+      attr_reader valid_from: Integer
+      attr_reader valid_until: Integer
+      attr_reader verified: bool
+
+      def self.new: (leaf: String, rules_digest: String, anchor_digest: String, valid_from: Integer, valid_until: Integer,
+                     verified: bool) -> instance
+                  | (String leaf, String rules_digest, String anchor_digest, Integer valid_from, Integer valid_until,
+                     bool verified) -> instance
+    end
+
+    class Plaintext < Data
+      include MaskedInspect
+
+      attr_reader issued_at: Integer
+      attr_reader authenticated_at: Integer
+      attr_reader lifetime: Integer
+      attr_reader age_add: Integer
+      attr_reader cipher_suite: Integer
+      attr_reader psk: String
+      attr_reader alpn: String
+      attr_reader early_data_allowed: bool
+      attr_reader client: ClientCertificate?
+      attr_reader early_data_context: String
+
+      def self.new: (issued_at: Integer, authenticated_at: Integer, lifetime: Integer, age_add: Integer,
+                     cipher_suite: Integer, psk: String, alpn: String, early_data_allowed: bool,
+                     client: ClientCertificate?, early_data_context: String) -> instance
+                  | (Integer issued_at, Integer authenticated_at, Integer lifetime, Integer age_add, Integer cipher_suite,
+                     String psk, String alpn, bool early_data_allowed, ClientCertificate? client,
+                     String early_data_context) -> instance
+
+      def masked_members: () -> Array[Symbol]
+      def encode: () -> String
+      def self.decode: (String padded) -> Plaintext?
+      def self.decode_client: (Codec::Reader r) -> ClientCertificate?
+      private def encode_client: (Codec::Writer w) -> void
+    end
+
+    def self.config_binding: (profile: Profile, resumption_scope: String) -> String
+    def self.binding: (String config_part, resumption_binding: String, server_name: String, alpn: String) -> String
+    def self.seal: (Plaintext plaintext, entry: TicketKeys::Entry, binding: String, random: String) -> String
+    def self.open: (String ticket, keys: TicketKeys, binding: String, now: Time, max_size: Integer) -> (Plaintext | reason)
+    def self.u64: (Codec::Writer w, Integer value) -> void
+    def self.read_u64: (Codec::Reader r) -> Integer
+    def self.read_flag: (Codec::Reader r) -> bool
+  end
+end
