@@ -73,6 +73,39 @@ class RaihaNextTLSSessionOfferTest < Minitest::Test
     refute TLS::Event::SessionNotOffered.new(reason: :server_name_mismatch).discard?
   end
 
+  def share(group = 0x001d)
+    key_pair = TLS::KeyExchange::OpenSSL.new.generate(TLS::IANA::NAMED_GROUPS.fetch(group))
+    TLS::Extension::KeyShare::Entry.new(group:, key_exchange: key_pair.public_bytes)
+  end
+
+  # A ServerHello to the client's ClientHello that selects `selected`.
+  def server_hello(ch, selected:, suite: 0x1301, share: self.share)
+    extensions = [TLS::Extension::SupportedVersions::SH.new(selected_version: 0x0304),
+      TLS::Extension::PreSharedKey::SH.new(selected_identity: selected)]
+    extensions.unshift(TLS::Extension::KeyShare::SH.new(server_share: share)) if share
+    TLS::Handshake::ServerHello.new(legacy_version: 0x0303, random: "\x01".b * 32, legacy_session_id_echo: ch.legacy_session_id,
+      cipher_suite: suite, legacy_compression_method: 0, extensions:)
+  end
+
+  def answered(offered: session, **options)
+    machine = Pair.client(session: offered)
+    _, ch = client_hello(machine)
+    machine.receive(server_hello(ch, **options).encode, epoch: :initial, now: NOW)
+    events(machine).grep(TLS::Event::Failed).first&.then { |f| [f.alert, f.reason] }
+  end
+
+  # :wait_sh row 9: the one identity offered, a suite of the session's hash,
+  # and a key share, psk_dhe_ke being the only mode offered.
+  def test_a_server_hello_that_selects_the_psk_wrongly
+    assert_equal [:illegal_parameter, :selected_identity_out_of_range], answered(selected: 1)
+    assert_equal [:illegal_parameter, :psk_cipher_suite_mismatch], answered(selected: 0, suite: 0x1302)
+    assert_equal [:illegal_parameter, :missing_key_share], answered(selected: 0, share: nil)
+    # A pre_shared_key that was not offered fails at row 3.
+    assert_equal [:unsupported_extension, :unsolicited_extension], answered(selected: 0, offered: nil)
+    # Row 8 comes first.
+    assert_equal [:illegal_parameter, :key_share_group_not_offered], answered(selected: 1, share: share(0x0017))
+  end
+
   def test_a_client_that_does_not_resume_takes_no_session
     assert_raises(TLS::UsageError) { Pair.client(config: Pair.client_config(resumption: false), session:) }
     assert_raises(ArgumentError) { Pair.client(session: session.to_h) }

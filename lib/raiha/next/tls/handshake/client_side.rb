@@ -57,6 +57,8 @@ module Raiha::Next::TLS
         # offered with it.
         @session = session
         @psk = nil #: String?
+        # Whether the server took the offered PSK.
+        @resumed = false
         @client_hello = nil #: ClientHello?
         @hello_retry_request = nil #: ServerHello?
         # @type var key_pairs: Array[KeyExchange::KeyPair]
@@ -70,6 +72,7 @@ module Raiha::Next::TLS
         # @type var peer_certificates: Array[OpenSSL::X509::Certificate]
         peer_certificates = []
         @peer_certificates = peer_certificates
+        @peer_verified = false
         # When the full handshake whose key material the connection holds
         # took place (milliseconds), nil until the handshake is over.
         @authenticated_at = nil #: Integer?
@@ -217,11 +220,24 @@ module Raiha::Next::TLS
         share = case (ext = message.extension(Extension::KeyShare::TYPE))
           when Extension::KeyShare::SH then ext.server_share
           end
-        # 7: without a PSK there is no key exchange but this one.
+        # 7, and 9 with a PSK: psk_dhe_ke is the only mode offered, so there
+        # is always a key exchange.
         return fail!(:illegal_parameter, :missing_key_share) unless share
         # 8
         key_pair = @key_pairs.find { |pair| Config::GROUPS_BY_NAME[pair.group] == share.group }
         return fail!(:illegal_parameter, :key_share_group_not_offered) unless key_pair
+        # 9: one identity offered, of the session's hash (RFC 9846
+        # "Pre-Shared Key Extension"); an unoffered pre_shared_key fails at 3.
+        selected = case (ext = message.extension(Extension::PreSharedKey::TYPE))
+          when Extension::PreSharedKey::SH then ext.selected_identity
+          end
+        session = @session
+        if selected
+          return fail!(:illegal_parameter, :selected_identity_out_of_range) unless selected.zero? && session
+          unless CipherSuite.find(session.cipher_suite)&.hash_algorithm == suite.hash_algorithm
+            return fail!(:illegal_parameter, :psk_cipher_suite_mismatch)
+          end
+        end
         # 10
         shared_secret = @keyring.key_exchange.decapsulate(key_pair, share.key_exchange)
         return fail!(:illegal_parameter, :invalid_key_share) unless shared_secret
@@ -230,7 +246,10 @@ module Raiha::Next::TLS
         @cipher_suite = suite
         @group = key_pair.group
         @key_pairs = []
-        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: client_hello.random)
+        @resumed = !selected.nil?
+        schedule = @conductor.start_key_schedule(hash: suite.hash_algorithm, client_random: client_hello.random, psk: (@psk if @resumed))
+        @psk&.clear
+        @psk = nil
         schedule.handshake!(shared_secret)
         shared_secret.clear
         transcript_hash = @conductor.transcript_hash
@@ -273,7 +292,9 @@ module Raiha::Next::TLS
           next if Config::RESERVED_EXTENSIONS.include?(ext.extension_type)
           @conductor.event!(Event::PeerExtension.new(type: ext.extension_type, data: ext.encode, message: EncryptedExtensions::MSG_TYPE))
         end
-        @conductor.transition!(:wait_cert_cr)
+        # A server that resumes authenticates by the PSK alone (RFC 9846
+        # "Certificate Request").
+        @conductor.transition!(@resumed ? :wait_finished : :wait_cert_cr)
       end
 
       private def certificate_request(message)
@@ -324,13 +345,29 @@ module Raiha::Next::TLS
           secrets: [[:application, :read, server_secret], [:application, :write, client_secret]])
         send_client_flight(schedule)
         schedule.resumption!(@conductor.transcript_hash)
-        @authenticated_at = (now.to_r * 1000).floor
+        authenticated(now)
         @conductor.change_epochs!(cipher_suite: suite, write: :application)
         @conductor.transition!(:connected)
         @conductor.event!(Event::HandshakeComplete.new(
-          server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: false,
-          early_data_accepted: false, peer_certificates: @peer_certificates, peer_verified: @keyring.peer_verified?
+          server_name: @server_name, alpn: @alpn, cipher_suite: suite.name, group: @group, resumed: @resumed,
+          early_data_accepted: false, peer_certificates: @peer_certificates, peer_verified: @peer_verified
         ))
+      end
+
+      # What the server was authenticated by: this handshake's Certificate,
+      # or, when it resumed, the full handshake the session comes from, whose
+      # chain and time a resumption carries on to the tickets it receives.
+      private def authenticated(now)
+        session = @session
+        if @resumed && session
+          @peer_certificates = session.peer_certificates.map { |der| Crypto::Certificate.parse(der) or raise "the session's chain was checked" }
+          @peer_verified = session.peer_verified
+          @authenticated_at = session.authenticated_at
+        else
+          @peer_verified = @keyring.peer_verified?
+          @authenticated_at = (now.to_r * 1000).floor
+        end
+        @session = nil
       end
 
       # Our Certificate and CertificateVerify when the server asked, then our
@@ -372,7 +409,7 @@ module Raiha::Next::TLS
           cipher_suite: suite.id, issued_at: (now.to_r * 1000).floor, lifetime: message.ticket_lifetime,
           age_add: message.ticket_age_add, max_early_data_size: early_data || 0, server_name: @server_name, alpn: @alpn,
           peer_certificates: @peer_certificates.map(&:to_der), authenticated_at: @authenticated_at || raise("no handshake to resume"),
-          peer_verified: @keyring.peer_verified?
+          peer_verified: @peer_verified
         )))
       end
 

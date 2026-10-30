@@ -177,6 +177,8 @@ module Raiha::Next::TLS
       @authenticated_at: Integer?
       @session: Session?
       @psk: String?
+      @resumed: bool
+      @peer_verified: bool
       @key_updates: Integer
 
       attr_reader cipher_suite: CipherSuite?
@@ -209,6 +211,7 @@ module Raiha::Next::TLS
       private def certificate_verify: (CertificateVerify message, String transcript_hash) -> void
       private def finished: (Finished message, String transcript_hash, Time now) -> void
       private def send_client_flight: (KeySchedule schedule) -> void
+      private def authenticated: (Time now) -> void
       private def new_session_ticket: (NewSessionTicket message, Time now) -> void
       private def session_to_offer: (Time now) -> Session?
       private def session_refusal: (Session session, Time now) -> Symbol?
