@@ -34,6 +34,8 @@ module Raiha::Next::TLS
 
       # The transcript hash before these messages is what their check covers.
       CHECKED_AGAINST_PREVIOUS_TRANSCRIPT = Set[CertificateVerify::MSG_TYPE, Finished::MSG_TYPE].freeze
+      # Messages that enter the transcript once they are parsed, not before.
+      AFTER_PARSING = Set[ServerHello::MSG_TYPE, ClientHello::MSG_TYPE].freeze
 
       attr_reader :config, :keyring, :side, :state, :read_epoch, :write_epoch, :alert, :key_schedule
 
@@ -54,9 +56,13 @@ module Raiha::Next::TLS
         reassemblers = {}
         @reassemblers = reassemblers
         hashes = config.cipher_suites.map { |name| Config::CIPHER_SUITES_BY_NAME.fetch(name).hash_algorithm }.uniq
+        @hashes = hashes
         @transcript = Transcript.new(hashes:)
         # What a trace shows before a hash is selected.
         @trace_hash = hashes.fetch(0)
+        # The transcript hashes of a received ClientHello up to its binders,
+        # by hash.
+        @binder_transcript_hashes = {} #: Hash[Symbol, String]
         @key_schedule = nil #: KeySchedule?
         # @type var outputs: Array[Output::t]
         outputs = []
@@ -134,6 +140,10 @@ module Raiha::Next::TLS
       def pending_input? = reassembler_for(@read_epoch).pending?
 
       def transcript_hash = @transcript.digest
+
+      # The transcript hash under `hash` the binders of the ClientHello just
+      # received are MACs over (RFC 9846 "PSK Binder").
+      def binder_transcript_hash(hash) = @binder_transcript_hashes.fetch(hash)
 
       # The key schedule of this handshake. Each traffic secret goes to the
       # keylog, if any, as it is derived.
@@ -305,11 +315,12 @@ module Raiha::Next::TLS
 
       # Bytes, then the transcript, then the parser, then the side. The
       # ServerHello waits for the side, which knows whether it is a
-      # HelloRetryRequest only after checking it.
+      # HelloRetryRequest only after checking it; the ClientHello waits for
+      # the parser, which finds its binders.
       private def process(epoch, msg_type, body, now)
         raw = [msg_type, body.bytesize >> 16, body.bytesize >> 8 & 0xff, body.bytesize & 0xff].pack("C4") + body
         before = @transcript.digest if CHECKED_AGAINST_PREVIOUS_TRANSCRIPT.include?(msg_type)
-        if msg_type != ServerHello::MSG_TYPE && Transcript::TRANSCRIPT_MESSAGES.include?(msg_type)
+        if Transcript::TRANSCRIPT_MESSAGES.include?(msg_type) && !AFTER_PARSING.include?(msg_type)
           @transcript << raw
           trace_transcript(msg_type, raw.bytesize)
         end
@@ -321,7 +332,23 @@ module Raiha::Next::TLS
         if (violation = message.validate)
           return fail!(violation.alert, violation.reason)
         end
+        case message
+        when ClientHello then record_client_hello(raw, message)
+        end
         @side.handle(message, raw:, transcript_hash_before: before, now:)
+      end
+
+      # A received ClientHello goes into the transcript in two parts around
+      # its binders, the hashes between them kept for a binder to be
+      # verified by, as the client made them; the same order as
+      # emit_client_hello_with_binders!.
+      private def record_client_hello(raw, client_hello)
+        cut = raw.bytesize - client_hello.binders_wire_length
+        @transcript << raw.byteslice(0, cut).to_s
+        hashes = (selected = @transcript.selected) ? [selected] : @hashes
+        @binder_transcript_hashes = hashes.to_h { |hash| [hash, @transcript.digest(hash)] }
+        @transcript << raw.byteslice(cut, raw.bytesize - cut).to_s
+        trace_transcript(ClientHello::MSG_TYPE, raw.bytesize)
       end
 
       private def reassembly_failed(status, reassembler)

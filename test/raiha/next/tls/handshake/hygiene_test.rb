@@ -83,7 +83,8 @@ class RaihaNextTLSHandshakeHygieneTest < Minitest::Test
     assert_equal [
       [CONDUCTOR, :emit_client_hello_with_binders!],
       [CONDUCTOR, :emit_hello_retry_request!], [CONDUCTOR, :emit_message!], [CONDUCTOR, :emit_server_hello!],
-      [CONDUCTOR, :process], [CONDUCTOR, :receive_hello_retry_request!], [CONDUCTOR, :record_server_hello!]
+      [CONDUCTOR, :process], [CONDUCTOR, :receive_hello_retry_request!], [CONDUCTOR, :record_client_hello],
+      [CONDUCTOR, :record_server_hello!]
     ], found.sort
   end
 

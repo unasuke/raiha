@@ -64,6 +64,7 @@ module Raiha::Next::TLS
     class Conductor
       CERTIFICATE_MESSAGES: Set[Integer]
       CHECKED_AGAINST_PREVIOUS_TRANSCRIPT: Set[Integer]
+      AFTER_PARSING: Set[Integer]
 
       type secret_entry = [epoch, Output::direction, String]
 
@@ -73,6 +74,8 @@ module Raiha::Next::TLS
       @reassemblers: Hash[epoch, Reassembler]
       @transcript: Transcript
       @trace_hash: Symbol
+      @hashes: Array[Symbol]
+      @binder_transcript_hashes: Hash[Symbol, String]
       @outputs: Array[Output::t]
       @events: Array[Event::t]
       @flight_secrets: Array[Output::Secret]
@@ -101,6 +104,7 @@ module Raiha::Next::TLS
       def expected_types: () -> Set[Integer]
       def pending_input?: () -> bool
       def transcript_hash: () -> String
+      def binder_transcript_hash: (Symbol hash) -> String
       def start_key_schedule: (hash: Symbol, client_random: String, ?psk: String?) -> KeySchedule
       def event!: (Event::t event) -> nil
       def tracing?: () -> bool
@@ -120,6 +124,7 @@ module Raiha::Next::TLS
       private def guard: () { () -> void } -> nil
       private def drain: (Reassembler reassembler, epoch epoch, Time now) -> (:ok | :overflow | :unexpected)
       private def process: (epoch epoch, Integer msg_type, String body, Time now) -> void
+      private def record_client_hello: (String raw, ClientHello client_hello) -> void
       private def reassembly_failed: (:overflow | :unexpected status, Reassembler reassembler) -> nil
       private def reassembler_for: (epoch epoch) -> Reassembler
       private def message_limit: (Integer msg_type) -> Integer
