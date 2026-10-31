@@ -28,6 +28,8 @@ module Raiha::Next::TLS
     class Failure < Data.define(:alert, :reason)
     end
 
+    BAD_RECORD_MAC = Failure.new(alert: :bad_record_mac, reason: :bad_record_mac)
+
     # The TLS record layer for Profile::TCP (RFC 9846 "Record Protocol").
     # Independent of the handshake: it holds a key table per epoch and
     # direction, filled from Output::Secret in queue order, and frames,
@@ -42,6 +44,9 @@ module Raiha::Next::TLS
         @write = {} #: Hash[epoch, Protection]
         @send_size_limit = DEFAULT_SIZE_LIMIT
         @receive_size_limit = DEFAULT_SIZE_LIMIT
+        # The client's 0-RTT skipped so far, and whether skipping has ended.
+        @early_data_skipped = 0
+        @skipping_ended = false
       end
 
       # Puts a key in the table, replacing the one of the same epoch and
@@ -71,20 +76,29 @@ module Raiha::Next::TLS
       def pending_bytes = @buffer.bytesize
 
       # The next whole record, opened with `epoch`'s key: a Plaintext, a
-      # Failure, or nil until a whole record is buffered.
-      def read(epoch:)
-        return nil if @buffer.bytesize < HEADER_LENGTH
-        # The version field is ignored, as RFC 9846 asks. Only a record of
-        # application_data is ever protected, so any other is held to the
-        # plaintext limit as soon as its header is in.
-        type, length = @buffer.unpack("Cx2n").map(&:to_i)
-        limit = type == CONTENT_TYPES.fetch(:application_data) ? MAX_PLAINTEXT + MAX_EXPANSION : MAX_PLAINTEXT
-        return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit # steep:ignore
-        return nil if @buffer.bytesize < HEADER_LENGTH + length # steep:ignore
-        header = @buffer.byteslice(0, HEADER_LENGTH).to_s
-        fragment = @buffer.byteslice(HEADER_LENGTH, length).to_s # steep:ignore
-        @buffer = @buffer.byteslice((HEADER_LENGTH + length)..).to_s # steep:ignore
-        epoch == :initial ? unprotected(type, fragment) : protected(epoch, type, header, fragment) # steep:ignore
+      # Failure, or nil until a whole record is buffered. A server that did
+      # not take the client's 0-RTT gives `skip_early_data`, the most of it
+      # to skip in bytes (Machine#skip_early_data_limit).
+      def read(epoch:, skip_early_data: nil)
+        loop do
+          return nil if @buffer.bytesize < HEADER_LENGTH
+          # The version field is ignored, as RFC 9846 asks. Only a record of
+          # application_data is ever protected, so any other is held to the
+          # plaintext limit as soon as its header is in.
+          type, length = @buffer.unpack("Cx2n").map(&:to_i)
+          limit = type == CONTENT_TYPES.fetch(:application_data) ? MAX_PLAINTEXT + MAX_EXPANSION : MAX_PLAINTEXT
+          return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit # steep:ignore
+          return nil if @buffer.bytesize < HEADER_LENGTH + length # steep:ignore
+          header = @buffer.byteslice(0, HEADER_LENGTH).to_s
+          fragment = @buffer.byteslice(HEADER_LENGTH, length).to_s # steep:ignore
+          @buffer = @buffer.byteslice((HEADER_LENGTH + length)..).to_s # steep:ignore
+          result = epoch == :initial ? unprotected(type, fragment) : protected(epoch, type, header, fragment) # steep:ignore
+          return result unless skip_early_data && skipped?(epoch, type, result) # steep:ignore
+          # The plaintext the record carried, at most: its tag and content
+          # type are not 0-RTT.
+          @early_data_skipped += (fragment.bytesize - Crypto::AEAD::TAG_LENGTH - 1).clamp(0, MAX_PLAINTEXT)
+          return Failure.new(alert: :unexpected_message, reason: :too_much_early_data) if @early_data_skipped > skip_early_data
+        end
       end
 
       # The records carrying `payload`, split to fit the peer's limit and
@@ -121,6 +135,24 @@ module Raiha::Next::TLS
         @write.clear
         @buffer.clear
         nil
+      end
+
+      # RFC 9846 "Early Data Indication": the client's 0-RTT that was not
+      # taken comes until its next flight, and is skipped. While the server
+      # reads in the clear, after a HelloRetryRequest, that is each record of
+      # application_data; under the handshake key, each record that does not
+      # open. Any other record ends the skipping for good, but for the
+      # change_cipher_spec of middlebox compatibility, which a client sends
+      # before its 0-RTT.
+      private def skipped?(epoch, type, result)
+        return false if @skipping_ended
+        rejected = case epoch
+          when :initial then type == CONTENT_TYPES.fetch(:application_data)
+          when :handshake then result == BAD_RECORD_MAC
+          else false
+          end
+        @skipping_ended = true unless rejected || type == CONTENT_TYPES.fetch(:change_cipher_spec)
+        rejected
       end
 
       # An empty payload is one empty record: zero-length application data is
@@ -168,7 +200,7 @@ module Raiha::Next::TLS
         if fragment.bytesize > @receive_size_limit + MAX_EXPANSION - 1
           return Failure.new(alert: :record_overflow, reason: :record_too_large)
         end
-        inner = protection.open(header, fragment) or return Failure.new(alert: :bad_record_mac, reason: :bad_record_mac)
+        inner = protection.open(header, fragment) or return BAD_RECORD_MAC
         return Failure.new(alert: :record_overflow, reason: :record_too_large) if inner.bytesize > @receive_size_limit
         # TLSInnerPlaintext: the content, its type, then zeros.
         last = inner.bytesize - 1

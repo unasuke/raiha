@@ -170,6 +170,38 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
     assert_equal failure(:bad_record_mac, :bad_record_mac), reader.read(epoch: :handshake)
   end
 
+  # RFC 9846 "Early Data Indication": a server that did not take 0-RTT
+  # skips the records that do not open under the handshake key, up to its
+  # limit, until one does.
+  def test_skipping_rejected_0rtt_under_the_handshake_key
+    reader, sealer = reader_and_sealer
+    early = Record::Protection.new(secret: RFC8448::SERVER_HANDSHAKE_TRAFFIC_SECRET, cipher_suite: SUITE)
+    reader << early.seal(("a" * 100 + "\x17").b) << early.seal(("b" * 100 + "\x17").b) << sealer.seal("fin\x16".b)
+    assert_equal plaintext(:handshake, "fin".b), reader.read(epoch: :handshake, skip_early_data: 200)
+    # Skipping has ended: a record that does not open fails now.
+    reader << early.seal("c\x17".b)
+    assert_equal failure(:bad_record_mac, :bad_record_mac), reader.read(epoch: :handshake, skip_early_data: 200)
+  end
+
+  def test_skipping_past_the_limit
+    reader, = reader_and_sealer
+    early = Record::Protection.new(secret: RFC8448::SERVER_HANDSHAKE_TRAFFIC_SECRET, cipher_suite: SUITE)
+    reader << early.seal(("a" * 100 + "\x17").b) << early.seal(("b" * 100 + "\x17").b)
+    assert_equal failure(:unexpected_message, :too_much_early_data), reader.read(epoch: :handshake, skip_early_data: 199)
+  end
+
+  # After a HelloRetryRequest the server reads in the clear: records of
+  # application_data are skipped, the client's change_cipher_spec passes,
+  # and its second ClientHello ends the skipping.
+  def test_skipping_rejected_0rtt_in_the_clear
+    reader = layer
+    early = Record::Protection.new(secret: SECRET, cipher_suite: SUITE)
+    reader << plaintext_record(20, "\x01") << early.seal(("a" * 10 + "\x17").b) << server_hello_record << early.seal("b\x17".b)
+    assert_equal plaintext(:change_cipher_spec, "\x01".b), reader.read(epoch: :initial, skip_early_data: 100)
+    assert_equal plaintext(:handshake, RFC8448::SERVER_HELLO), reader.read(epoch: :initial, skip_early_data: 100)
+    assert_equal failure(:unexpected_message, :unexpected_record), reader.read(epoch: :initial, skip_early_data: 100)
+  end
+
   def test_our_record_size_limit
     reader, sealer = reader_and_sealer
     reader.limit_sizes(receive: 100)

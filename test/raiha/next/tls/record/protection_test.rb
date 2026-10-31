@@ -51,12 +51,15 @@ class RaihaNextTLSRecordProtectionTest < Minitest::Test
   end
 
   # The nonce follows the sequence number, so a record opened out of turn
-  # does not authenticate.
+  # does not authenticate; it is not counted, and the record in turn still
+  # opens.
   def test_a_skipped_record_does_not_open
     _, records = flights.fetch(:server_application)
     protection = Protection.new(secret: RFC8448::SERVER_APPLICATION_TRAFFIC_SECRET_0, cipher_suite: SUITE)
-    record = records.fetch(1).last
-    assert_nil protection.open(record.byteslice(0, 5).to_s, record.byteslice(5..).to_s)
+    first, second = records.fetch(0).last, records.fetch(1).last
+    assert_nil protection.open(second.byteslice(0, 5).to_s, second.byteslice(5..).to_s)
+    assert_equal 0, protection.sequence_number
+    assert protection.open(first.byteslice(0, 5).to_s, first.byteslice(5..).to_s)
     assert_equal 1, protection.sequence_number
   end
 

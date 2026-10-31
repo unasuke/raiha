@@ -33,8 +33,15 @@ module Raiha::Next::TLS
       end
 
       # The TLSInnerPlaintext of the record with `header` and
-      # `encrypted_record`, or nil when it does not authenticate.
-      def open(header, encrypted_record) = @aead.open(nonce: next_nonce, aad: header, ciphertext: encrypted_record)
+      # `encrypted_record`, or nil when it does not authenticate. Only a
+      # record that opens is counted: a server that did not take the
+      # client's 0-RTT tries its records under the handshake key and skips
+      # those that do not open (Layer#read).
+      def open(header, encrypted_record)
+        inner = @aead.open(nonce: nonce(@sequence_number), aad: header, ciphertext: encrypted_record)
+        @sequence_number += 1 if inner
+        inner
+      end
 
       def discard!
         @iv.clear
@@ -43,12 +50,16 @@ module Raiha::Next::TLS
 
       private def instance_variables_to_inspect = %i[@cipher_suite @sequence_number]
 
-      # The IV XORed with the sequence number, which counts every record
-      # under this key, opened or not. Every suite here has a 12-byte IV.
       private def next_nonce
-        high, middle, low = @iv.unpack("N3")
         sequence = @sequence_number
         @sequence_number += 1
+        nonce(sequence)
+      end
+
+      # The IV XORed with `sequence`, the number of records protected or
+      # opened under this key before. Every suite here has a 12-byte IV.
+      private def nonce(sequence)
+        high, middle, low = @iv.unpack("N3")
         [high.to_i, middle.to_i ^ (sequence >> 32), low.to_i ^ (sequence & 0xffff_ffff)].pack("N3")
       end
     end

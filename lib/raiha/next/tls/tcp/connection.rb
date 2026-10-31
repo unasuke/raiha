@@ -76,7 +76,7 @@ module Raiha::Next::TLS
       def receive(bytes, now:)
         return nil if @failed || @read_closed
         @record << bytes
-        until @failed || @read_closed || (record = @record.read(epoch: @machine.read_epoch)).nil?
+        until @failed || @read_closed || (record = @record.read(epoch: @machine.read_epoch, skip_early_data: @machine.skip_early_data_limit)).nil?
           case record
           when Record::Failure then fail!(record.alert, record.reason)
           else take(record, now)

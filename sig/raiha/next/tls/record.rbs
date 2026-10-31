@@ -25,25 +25,30 @@ module Raiha::Next::TLS
                   | (Symbol alert, Symbol reason) -> instance
     end
 
+    BAD_RECORD_MAC: Failure
+
     class Layer
       @buffer: String
       @read: Hash[epoch, Protection]
       @write: Hash[epoch, Protection]
       @send_size_limit: Integer
       @receive_size_limit: Integer
+      @early_data_skipped: Integer
+      @skipping_ended: bool
 
       def initialize: (profile: Profile) -> void
       def install: (direction: Output::direction, epoch: epoch, secret: String, cipher_suite: CipherSuite) -> nil
       def limit_sizes: (?send: Integer, ?receive: Integer) -> nil
       def <<: (String bytes) -> self
       def pending_bytes: () -> Integer
-      def read: (epoch: epoch) -> (Plaintext | Failure | nil)
+      def read: (epoch: epoch, ?skip_early_data: Integer?) -> (Plaintext | Failure | nil)
       def write: (content_type: content_type, payload: String, epoch: epoch) -> String
       def fragment_size: (epoch epoch) -> Integer
       def records_written: (epoch epoch) -> Integer
       def key_update_due?: (epoch epoch) -> bool
       def discard!: () -> nil
 
+      private def skipped?: (epoch epoch, Integer type, Plaintext | Failure result) -> bool
       private def fragments: (String payload, Integer size) -> Array[String]
       private def unprotected: (Integer type, String fragment) -> (Plaintext | Failure)
       private def protected: (epoch epoch, Integer type, String header, String fragment) -> (Plaintext | Failure)
@@ -68,6 +73,7 @@ module Raiha::Next::TLS
 
       private def instance_variables_to_inspect: () -> Array[Symbol]
       private def next_nonce: () -> String
+      private def nonce: (Integer sequence) -> String
     end
   end
 end
