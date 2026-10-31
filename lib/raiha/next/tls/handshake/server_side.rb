@@ -50,6 +50,12 @@ module Raiha::Next::TLS
 
       PSK_DHE_KE = 1
 
+      # The least 0-RTT skipped when it is not taken, in bytes, even by a
+      # server that takes none: a client may still hold a ticket from when it
+      # did, and then gets a full handshake rather than a failure. OpenSSL
+      # skips this much by default, BoringSSL always.
+      SKIPPED_EARLY_DATA_FLOOR = 16_384
+
       # The ticket a server resumes with, and the index of its identity in
       # the ClientHello.
       class Resumption < Data.define(:index, :ticket); end
@@ -462,7 +468,7 @@ module Raiha::Next::TLS
         @conductor.transition!(:wait_finished)
       end
 
-      def skip_early_data_limit = (@config.max_early_data_size if @early_data_rejected && @config.profile.record_layer)
+      def skip_early_data_limit = ([@config.max_early_data_size, SKIPPED_EARLY_DATA_FLOOR].max if @early_data_rejected && @config.profile.record_layer)
 
       # The client offered every type we answer with: server_name when its
       # SNI was used, ALPN, record_size_limit, and the extensions given from

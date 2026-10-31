@@ -242,6 +242,7 @@ module Raiha::Next::TLS
       NONE: Set[Integer]
       ALLOWED_TO_CHANGE: Array[Integer]
       PSK_DHE_KE: Integer
+      SKIPPED_EARLY_DATA_FLOOR: Integer
 
       class Resumption < Data
         attr_reader index: Integer

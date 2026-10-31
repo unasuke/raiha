@@ -178,8 +178,9 @@ module Raiha::Next::TLS
       def peer_record_size_limit = @conductor.side.peer_record_size_limit
 
       # How many bytes of 0-RTT records a server's record layer skips (RFC
-      # 9846 "Early Data Indication"): the Config's max_early_data_size when
-      # the ClientHello offered 0-RTT that was not taken, else nil. Records
+      # 9846 "Early Data Indication"): the Config's max_early_data_size, or
+      # 16 KiB if more, when the ClientHello offered 0-RTT that was not
+      # taken, else nil. Records
       # of application_data while `read_epoch` is :initial (after a
       # HelloRetryRequest), records that do not open under the handshake key
       # while it is :handshake; the record layer counts them and ends the

@@ -109,17 +109,22 @@ class RaihaNextTLSServerEarlyDataTest < Minitest::Test
   end
 
   # How much of the client's 0-RTT a server's record layer skips: the
-  # Config's max_early_data_size for 0-RTT offered and not taken, else
-  # nothing; never for QUIC or a client.
+  # Config's max_early_data_size, 16 KiB at least, for 0-RTT offered and
+  # not taken, else nothing; never for QUIC or a client.
   def test_how_much_rejected_0rtt_is_skipped
     session = self.session
     hello = Pair.client(session:, early_data: true, now: NOW + 60).outputs.grep(TLS::Output::Message).first.bytes
     taken = Pair.server(hello, config: server_config, now: NOW + 60)
     assert_nil taken.skip_early_data_limit
     rejected = Pair.server(hello, config: server_config(ticket_key: "\x12".b * 32), now: NOW + 60)
-    assert_equal 1024, rejected.skip_early_data_limit
+    assert_equal 16_384, rejected.skip_early_data_limit
+    large = Pair.server(hello, config: server_config(max_early_data_size: 65_536, ticket_key: "\x12".b * 32), now: NOW + 60)
+    assert_equal 65_536, large.skip_early_data_limit
+    # A server that takes no 0-RTT skips it all the same.
+    none = Pair.server(hello, config: Pair.server_config(ticket_key: SEED), now: NOW + 60)
+    assert_equal 16_384, none.skip_early_data_limit
     retried = Pair.server(hello, config: server_config(groups: %i[secp256r1]), now: NOW + 60)
-    assert_equal [1024, :initial], [retried.skip_early_data_limit, retried.read_epoch]
+    assert_equal [16_384, :initial], [retried.skip_early_data_limit, retried.read_epoch]
     plain = Pair.server(Pair.client.outputs.first.bytes, config: server_config)
     assert_nil plain.skip_early_data_limit
     assert_nil Pair.client(session:, early_data: true).skip_early_data_limit
