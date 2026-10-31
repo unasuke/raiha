@@ -94,9 +94,12 @@ module Raiha::Next::TLS
           @buffer = @buffer.byteslice((HEADER_LENGTH + length)..).to_s # steep:ignore
           result = epoch == :initial ? unprotected(type, fragment) : protected(epoch, type, header, fragment) # steep:ignore
           return result unless skip_early_data && skipped?(epoch, type, result) # steep:ignore
-          # The plaintext the record carried, at most: its tag and content
-          # type are not 0-RTT.
-          @early_data_skipped += (fragment.bytesize - Crypto::AEAD::TAG_LENGTH - 1).clamp(0, MAX_PLAINTEXT)
+          # Too short for a tag and a content type, it was never 0-RTT.
+          return BAD_RECORD_MAC if fragment.bytesize <= Crypto::AEAD::TAG_LENGTH
+          # The plaintext the record carried, at most, as its tag and content
+          # type are not 0-RTT; an empty one counts once, so that the records
+          # tried under the handshake key are bounded too.
+          @early_data_skipped += (fragment.bytesize - Crypto::AEAD::TAG_LENGTH - 1).clamp(1, MAX_PLAINTEXT)
           return Failure.new(alert: :unexpected_message, reason: :too_much_early_data) if @early_data_skipped > skip_early_data
         end
       end

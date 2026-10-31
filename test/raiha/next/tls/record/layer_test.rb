@@ -190,6 +190,19 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
     assert_equal failure(:unexpected_message, :too_much_early_data), reader.read(epoch: :handshake, skip_early_data: 199)
   end
 
+  # Empty 0-RTT records count once each, so a flood of them reaches the
+  # limit too; a record too short for a tag and a content type was never
+  # 0-RTT.
+  def test_skipping_empty_and_short_records
+    reader, = reader_and_sealer
+    early = Record::Protection.new(secret: RFC8448::SERVER_HANDSHAKE_TRAFFIC_SECRET, cipher_suite: SUITE)
+    3.times { reader << early.seal("\x17".b) }
+    assert_equal failure(:unexpected_message, :too_much_early_data), reader.read(epoch: :handshake, skip_early_data: 2)
+    reader, = reader_and_sealer
+    reader << [23, 0x0303, 16].pack("Cnn") + "\x00".b * 16
+    assert_equal failure(:bad_record_mac, :bad_record_mac), reader.read(epoch: :handshake, skip_early_data: 1024)
+  end
+
   # After a HelloRetryRequest the server reads in the clear: records of
   # application_data are skipped, the client's change_cipher_spec passes,
   # and its second ClientHello ends the skipping.
