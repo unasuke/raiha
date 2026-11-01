@@ -57,9 +57,13 @@ module Raiha::Next::QUIC
     # A client connection to `remote` ([host, port]), with its first
     # Initial packet waiting to be sent. `tls_config` has the QUIC profile.
     # The connection's Source Connection ID is `source_connection_id`, which
-    # an Endpoint routes by, or one of its own.
-    def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil)
-      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:) do |connection, parameters|
+    # an Endpoint routes by, or one of its own. `token` is one a server gave
+    # in a NEW_TOKEN frame, which the Initials carry until a Retry's takes
+    # its place (RFC 9000 "Address Validation for Future Connections").
+    def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil,
+      token: nil)
+      raise ArgumentError, "a token is a String of one byte or more" unless token.nil? || (token.is_a?(String) && !token.empty?)
+      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:) do |connection, parameters|
         TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:)
       end
     end
@@ -87,7 +91,8 @@ module Raiha::Next::QUIC
     private_class_method :new
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
-      retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, &start)
+      retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
+      &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -144,8 +149,8 @@ module Raiha::Next::QUIC
       # must name.
       @original_destination_connection_id = original_destination_connection_id
       @retry_source_connection_id = retry_source_connection_id
-      # The token a client's Initials carry, from a Retry.
-      @token = Wire::EMPTY
+      # The token a client's Initials carry, from a NEW_TOKEN or a Retry.
+      @token = token&.b || Wire::EMPTY
       # The connection IDs the peer issued, from its transport parameters
       # on.
       @peer_ids = nil #: PeerConnectionIDs?

@@ -67,6 +67,21 @@ class RaihaNextQUICConnectionRetryTest < Minitest::Test
 
   # RFC 9000 "Retry Packet": a client takes one Retry, with the tag of its
   # first connection ID, and none once a packet of the server has opened.
+  # A token from a NEW_TOKEN frame goes in the client's Initials until a
+  # Retry's takes its place (RFC 9000 "Address Validation for Future
+  # Connections").
+  def test_a_token_from_new_token
+    token = "\x01".b + "t".b * 40
+    header, = next_initial(client_connection(token:), now: 0.0)
+    assert_equal token, header.token
+    # A server that does not take it sends a Retry, whose token the client
+    # carries then.
+    client = client_connection(token:)
+    exchange(client, endpoint)
+    assert client.handshake_complete?
+    assert_raises(ArgumentError) { client_connection(token: "".b) }
+  end
+
   def test_retries_the_client_does_not_take
     client = client_connection
     first = QUIC::Wire::Packet.parse(client.transmits(now: 0.0).first.payload, dcid_length: 8).header

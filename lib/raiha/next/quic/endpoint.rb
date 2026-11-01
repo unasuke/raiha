@@ -231,11 +231,11 @@ module Raiha::Next::QUIC
     # first Initial waiting to be sent, found by the Source Connection ID
     # the Endpoint chooses for it. A server's Endpoint connects to no one:
     # Error::Usage.
-    def connect(tls_config:, keyring:, server_name:, remote:, now:, tracer: nil, keylog: nil)
+    def connect(tls_config:, keyring:, server_name:, remote:, now:, tracer: nil, keylog: nil, token: nil)
       raise Error::Usage, "a server's Endpoint does not connect" unless @role == :client
       scid = new_connection_id
       connection = Connection.client(config: @config, tls_config:, keyring:, server_name:, remote:, time: wall_clock(now), now:, tracer:,
-        keylog:, source_connection_id: scid)
+        keylog:, source_connection_id: scid, token:)
       add(connection, [scid], remote)
     end
 
