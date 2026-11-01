@@ -30,10 +30,11 @@ module Raiha::Next::QUIC
     # stream. `transport_parameters` are this end's; `time` is the wall
     # clock TLS takes. `tracer` is the connection's, which TLS is given only
     # when it takes TLS's traces with `tls_trace`.
-    def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil)
+    def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil, session: nil)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.client(
-        config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:
+        config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:,
+        session:
       )
       new(connection, machine, config.profile).tap { |binding| binding.pump }
     end
@@ -41,10 +42,24 @@ module Raiha::Next::QUIC
     # A server's binding, given the ClientHello an Acceptor took when there
     # was one. Its bytes are the start of the Initial CRYPTO stream, so the
     # frames that carried them, received again, are not read twice.
-    def self.server(connection:, config:, keyring:, transport_parameters:, time:, client_hello: nil, tracer: nil, keylog: nil)
+    #
+    # Its tickets are bound to `version`, and keep for 0-RTT the context
+    # (RFC 9001 "Validating 0-RTT Configuration")
+    #
+    #   varint(length) || QUIC part || varint(length) || application part
+    #
+    # whose QUIC part is the server's own transport parameters that a client
+    # remembers, in their canonical form, and whose application part is
+    # `app_early_data_context`; 0-RTT is taken on a ticket only if the same.
+    def self.server(connection:, config:, keyring:, transport_parameters:, time:, version:, client_hello: nil, tracer: nil, keylog: nil,
+      anti_replay: nil, app_early_data_context: "".b)
       check(config)
+      quic = transport_parameters.remembered.encode
+      early_data_context = Wire::Writer.new.varint(quic.bytesize).bytes(quic).varint(app_early_data_context.bytesize)
+        .bytes(app_early_data_context).to_s
       machine = Raiha::Next::TLS::Handshake::Machine.server(
-        config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:
+        config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:,
+        resumption_binding: [version.number].pack("N"), early_data_context:, anti_replay:
       )
       new(connection, machine, config.profile, consumed: client_hello&.bytes&.bytesize || 0).tap { |binding| binding.pump }
     end

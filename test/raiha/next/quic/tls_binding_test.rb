@@ -30,7 +30,7 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
 
   def server(connection, config: server_config)
     QUIC::TLSBinding.server(connection:, config:, keyring: server_keyring(config:), transport_parameters: parameters("s".b * 8),
-      time: NOW)
+      time: NOW, version: QUIC::Version::V1)
   end
 
   # Moves CRYPTO frames each way until neither has any.
@@ -110,7 +110,7 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
     server_connection = Connection.new
     config = server_config
     server = QUIC::TLSBinding.server(connection: server_connection, config:, keyring: server_keyring(config:),
-      transport_parameters: parameters("s".b * 8), time: NOW, client_hello: acceptor.accepted)
+      transport_parameters: parameters("s".b * 8), time: NOW, version: QUIC::Version::V1, client_hello: acceptor.accepted)
     frames.each { |frame| server.receive_crypto(:initial, frame, time: NOW) }
     exchange(client, server)
     assert client.complete?

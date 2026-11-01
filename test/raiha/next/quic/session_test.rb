@@ -56,6 +56,36 @@ class RaihaNextQUICSessionTest < Minitest::Test
     assert_raises(ArgumentError) { QUIC::Session.from_h(session.to_h.except(:version)) }
   end
 
+  def connected(events) = events.grep(QUIC::Event::Connected).first.handshake
+
+  def test_a_client_resumes
+    session = exchange(client_connection, server_with_tickets).grep(QUIC::Event::SessionTicket).first.session
+    client = client_connection(session:)
+    server = server_with_tickets
+    events = exchange(client, server)
+    assert connected(events).resumed
+    assert connected([].tap { |all| server.each_event { all << _1 } }).resumed
+    assert_raises(ArgumentError) { client_connection(session: session.tls) }
+  end
+
+  # A server's tickets are bound to its QUIC version, and keep for 0-RTT its
+  # transport parameters that a client remembers and the application's
+  # part, each after its length.
+  def test_what_a_server_binds_its_tickets_to
+    config = server_config(ticket_key: SEED)
+    server = QUIC::Connection.server(config: QUIC::Config.new, tls_config: config, keyring: server_keyring(config:), time: NOW, now: 0.0,
+      app_early_data_context: "settings".b)
+    session = exchange(client_connection, server).grep(QUIC::Event::SessionTicket).first.session
+    open = ->(version) do
+      binding = TLS::Ticket.binding(config.ticket_binding, resumption_binding: [version].pack("N"), server_name: "localhost", alpn: "hq-interop")
+      TLS::Ticket.open(session.tls.ticket, keys: config.ticket_keys, binding:, now: NOW, max_size: 8192)
+    end
+    assert_equal :aead_failure, open.(0x6b3343cf)
+    quic = QUIC::Config.new.transport_parameters(initial_source_connection_id: "".b).remembered.encode
+    expected = QUIC::Wire::Writer.new.varint(quic.bytesize).bytes(quic).varint(8).bytes("settings").to_s
+    assert_equal expected, open.(QUIC::Version::V1.number).early_data_context
+  end
+
   def test_the_tickets_a_client_holds
     tracer = Recorder.new
     events = exchange(client_connection(tracer:), server_with_tickets(ticket_count: 10))

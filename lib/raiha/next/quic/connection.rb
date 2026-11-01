@@ -60,11 +60,14 @@ module Raiha::Next::QUIC
     # an Endpoint routes by, or one of its own. `token` is one a server gave
     # in a NEW_TOKEN frame, which the Initials carry until a Retry's takes
     # its place (RFC 9000 "Address Validation for Future Connections").
+    # `session` is a QUIC::Session to resume, offered if TLS still may.
     def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil,
-      token: nil)
+      token: nil, session: nil)
       raise ArgumentError, "a token is a String of one byte or more" unless token.nil? || (token.is_a?(String) && !token.empty?)
+      raise ArgumentError, "session must be a QUIC::Session" unless session.nil? || session.is_a?(Session)
       new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:) do |connection, parameters|
-        TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:)
+        TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:,
+          session: session&.tls)
       end
     end
 
@@ -79,12 +82,20 @@ module Raiha::Next::QUIC
     # the client's address is validated. It also chooses the connection's
     # Source Connection ID, and gives its `stateless_reset_token`, which the
     # transport parameters carry (RFC 9000 "Stateless Reset").
+    #
+    # Its tickets are bound to the QUIC version, so that a ticket of another
+    # opens on none of it (RFC 9369 "TLS Resumption and NEW_TOKEN Tokens").
+    # `anti_replay` is the record of the 0-RTT taken, which a TLS Config that
+    # takes 0-RTT needs, and `app_early_data_context` what of the application
+    # 0-RTT is taken only if the same of (TLSBinding.server).
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil, new_token: nil)
+      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b)
+      raise ArgumentError, "app_early_data_context must be a String" unless app_early_data_context.is_a?(String)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
         retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:) do |connection, parameters|
-        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:)
+        TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:,
+          version: config.versions.fetch(0), anti_replay:, app_early_data_context:)
       end
     end
 

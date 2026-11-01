@@ -286,8 +286,9 @@ module Raiha::Next::QUIC
     # is found from now on by its own connection ID, which the Endpoint
     # chooses and gives the stateless reset token of, and by the one the
     # client chose. It sends the client a token of NEW_TOKEN for its later
-    # connections, once it confirms the handshake.
-    def accept(handle, tls_config:, keyring:, now:, tracer: nil, keylog: nil)
+    # connections, once it confirms the handshake. `anti_replay` and
+    # `app_early_data_context` go to Connection.server, for 0-RTT.
+    def accept(handle, tls_config:, keyring:, now:, tracer: nil, keylog: nil, anti_replay: nil, app_early_data_context: "".b)
       pending!(handle)
       accepted = handle.accepted or raise Error::StateError, "the ClientHello of the offer is not whole yet"
       scid = new_connection_id
@@ -297,7 +298,7 @@ module Raiha::Next::QUIC
       connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
-        source_connection_id: scid, stateless_reset_token: token, new_token:)
+        source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }

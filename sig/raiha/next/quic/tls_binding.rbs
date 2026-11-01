@@ -26,10 +26,12 @@ module Raiha::Next::QUIC
 
     def self.client: (connection: _Connection, config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
                       server_name: String, transport_parameters: TransportParameters, time: Time,
-                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> TLSBinding
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?session: ::Raiha::Next::TLS::Session?) -> TLSBinding
     def self.server: (connection: _Connection, config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
-                      transport_parameters: TransportParameters, time: Time, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
-                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?) -> TLSBinding
+                      transport_parameters: TransportParameters, time: Time, version: Version,
+                      ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?,
+                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> TLSBinding
     def self.error_code: (::Raiha::Next::TLS::Profile profile, Symbol? alert, Symbol? reason) -> Integer
     private def self.check: (::Raiha::Next::TLS::Config config) -> void
     private def self.tls_tracer: (_Tracer? tracer) -> ::Raiha::Next::TLS::Trace::_Tracer?
