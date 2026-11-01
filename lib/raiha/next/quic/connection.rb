@@ -177,6 +177,8 @@ module Raiha::Next::QUIC
       # :pending while 0-RTT packets go, then :accepted or :rejected.
       @session = session
       @zero_rtt_state = :disabled #: :disabled | :pending | :accepted | :rejected
+      # The streams a server received data of in 0-RTT packets.
+      @early_data_streams = Set.new #: Set[Integer]
       # The connection IDs the peer issued, from its transport parameters
       # on.
       @peer_ids = nil #: PeerConnectionIDs?
@@ -428,6 +430,14 @@ module Raiha::Next::QUIC
     def zero_rtt_rejected(reason)
       @zero_rtt_state = :rejected if @zero_rtt_state == :pending
     end
+
+    # Whether a STREAM frame of `stream_id` came in a 0-RTT packet, which
+    # may be a replay of another connection's (RFC 9846 "Replay Attacks on
+    # 0-RTT"); it stays true, and is always false at a client and at a
+    # server that took no 0-RTT. An application keeps it apart from
+    # whether the handshake has completed, after which 0-RTT data on this
+    # connection is no replay (RFC 8470 "Using Early Data in HTTP").
+    def stream_early_data?(stream_id) = @early_data_streams.include?(stream_id)
 
     # How a client's 0-RTT goes: :disabled when it sends none, :pending
     # while it sends 0-RTT packets, :accepted or :rejected once the server
@@ -730,7 +740,9 @@ module Raiha::Next::QUIC
       when Wire::Frame::NewToken
         raise Violation.new("NEW_TOKEN from a client", frame_type: 0x07) if @role == :server
         @events << Event::NewToken.new(token: frame.token)
-      when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
+      when Wire::Frame::Stream
+        @streams.receive_stream(frame, now:)
+        @early_data_streams << frame.stream_id if level == :zero_rtt
       when Wire::Frame::MaxData then @streams.receive_max_data(frame, now:)
       when Wire::Frame::MaxStreamData then @streams.receive_max_stream_data(frame, now:)
       when Wire::Frame::MaxStreams then @streams.receive_max_streams(frame)

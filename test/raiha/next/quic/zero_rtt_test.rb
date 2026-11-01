@@ -63,9 +63,17 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     client.transmits(now: LATER).each { |transmit| server.receive(transmit.payload, from: CLIENT, now: LATER) }
     refute server.handshake_complete?
     assert_equal "early", server.stream_read(stream, 100)
+    assert server.stream_early_data?(stream)
     exchange(client, server, now: LATER)
     assert_equal :accepted, client.zero_rtt_state
     assert events(server).grep(QUIC::Event::Connected).first.handshake.early_data_accepted
+    # A stream after the handshake came in 1-RTT, and a client marks none.
+    later = client.open_stream
+    client.stream_write(later, "late", fin: true)
+    exchange(client, server, now: LATER + 0.1)
+    assert_equal "late", server.stream_read(later, 100)
+    refute server.stream_early_data?(later)
+    refute client.stream_early_data?(stream)
   end
 
   # Without early_data: true, or with a session of another version, the

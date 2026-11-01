@@ -60,6 +60,7 @@ module Raiha::Next::QUIC
     @new_token_due: bool
     @session: Session?
     @zero_rtt_state: :disabled | :pending | :accepted | :rejected
+    @early_data_streams: Set[Integer]
     @peer_ids: PeerConnectionIDs?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
@@ -95,6 +96,7 @@ module Raiha::Next::QUIC
                      ?stateless_reset_token: String?, ?token: String?,
                      ?new_token: String?, ?session: Session?) { (Connection, TransportParameters) -> TLSBinding } -> void
     def zero_rtt_state: () -> (:disabled | :pending | :accepted | :rejected)
+    def stream_early_data?: (Integer stream_id) -> bool
     def handshake_complete?: () -> bool
     def handshake_confirmed?: () -> bool
     def closing?: () -> bool
