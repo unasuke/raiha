@@ -80,6 +80,20 @@ class RaihaNextTLSTicketTest < Minitest::Test
     refute_includes plaintext.inspect, plaintext.psk.inspect
   end
 
+  # The default max_ticket_size, 8 KiB, holds a client certificate whose
+  # leaf is the size of an ML-DSA-87 one (7,441 bytes) but not one of
+  # SLH-DSA-SHA2-128s (8,105 bytes), with a SHA-384 PSK and a context of 100
+  # bytes, as the TLS design measured.
+  def test_the_size_of_a_ticket_of_a_post_quantum_leaf
+    sizes = [7441, 8105].map do |leaf_size|
+      client = Ticket::ClientCertificate.new(leaf: "\x30".b * leaf_size, rules_digest: "\x04".b * 32, anchor_digest: "\x05".b * 32,
+        valid_from: 1_700_000_000, valid_until: 1_900_000_000, verified: true)
+      seal(plaintext(client:, psk: "\x02".b * 48, early_data_context: "c".b * 100)).bytesize
+    end
+    assert_operator sizes.first, :<=, TLS::Config::DEFAULT_MAX_TICKET_SIZE
+    assert_operator sizes.last, :>, TLS::Config::DEFAULT_MAX_TICKET_SIZE
+  end
+
   # The server clears an opened ticket's PSK once it is done with it.
   def test_the_psk_of_an_opened_ticket_can_be_forgotten
     psk = open(seal).psk

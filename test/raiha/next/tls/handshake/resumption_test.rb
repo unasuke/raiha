@@ -180,6 +180,16 @@ class RaihaNextTLSResumptionTest < Minitest::Test
     end
   end
 
+  # A ticket is bound to the server name and ALPN protocol of the
+  # connection it came on: another name or protocol passes it over as a
+  # forgery would be.
+  def test_the_name_and_protocol_a_ticket_is_bound_to
+    h2 = Pair.client_config(alpn: %w[h2 http/1.1])
+    session = sessions(handshake(Pair.client(config: h2), { config: server_config(alpn: ["h2"]) }).client).first
+    assert_equal "h2", session.alpn
+    assert_equal [[0, :aead_failure]], passed_over(server_config(alpn: ["http/1.1"]), session:)
+  end
+
   # The client's own clock lets the session go; the ticket keeps the time
   # of the full handshake 7 days ago.
   def test_a_ticket_of_key_material_past_7_days
