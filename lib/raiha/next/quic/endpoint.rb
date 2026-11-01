@@ -57,12 +57,16 @@ module Raiha::Next::QUIC
     class Handle
       attr_reader :remote, :version, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
         :retry_source_connection_id, :expires_at, :datagrams
+      # Whether the client's address is validated, by a Retry or by a token
+      # of NEW_TOKEN.
+      attr_reader :address_validated
       # The bytes of the datagrams kept.
       attr_reader :buffered
 
       def initialize(remote:, version:, destination_connection_id:, source_connection_id:, original_destination_connection_id:,
-        retry_source_connection_id:, expires_at:)
+        retry_source_connection_id:, expires_at:, address_validated:)
         @remote = remote
+        @address_validated = address_validated
         @version = version
         @destination_connection_id = destination_connection_id
         @source_connection_id = source_connection_id
@@ -193,6 +197,7 @@ module Raiha::Next::QUIC
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
+      @new_token_key = NewToken.key(@retry_token_key)
       @stateless_reset_key = config.stateless_reset_key || random.bytes(Config::MIN_KEY_LENGTH).b
       # The connections by each connection ID that leads to them, and by the
       # peer's address.
@@ -288,7 +293,7 @@ module Raiha::Next::QUIC
       token = StatelessReset.token(key: @stateless_reset_key, connection_id: scid) unless scid.empty?
       connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
-        retry_source_connection_id: handle.retry_source_connection_id, address_validated: !handle.retry_source_connection_id.nil?,
+        retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
         source_connection_id: scid, stateless_reset_token: token)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
@@ -375,7 +380,10 @@ module Raiha::Next::QUIC
     # Destination Connection ID (RFC 9000 "Address Validation Using Retry
     # Packets"); one that does not verify is answered with a CONNECTION_CLOSE
     # of INVALID_TOKEN, as the client would not take another Retry (the same
-    # section). A token of another kind is as none.
+    # section). A token of NEW_TOKEN that is valid shows the same of the
+    # address; one that is not is as none, and the application may still send
+    # a Retry (RFC 9000 "Address Validation for Future Connections"). A
+    # token of another kind is as none.
     #
     # Without a Retry, the connection ID is the client's first, which RFC
     # 9000 "Negotiating Connection IDs" has 8 bytes at least, and an
@@ -393,13 +401,16 @@ module Raiha::Next::QUIC
         retry_scid = header.dcid
       end
       return Route::Drop.new(reason: :short_connection_id) if retry_scid.nil? && header.dcid.bytesize < Connection::INITIAL_DCID_LENGTH
+      validated = !retry_scid.nil? || (header.token.getbyte(0) == NewToken::KIND &&
+        NewToken.valid?(header.token, key: @new_token_key, address: from, version: header.version.number, time: wall_clock(now)))
       handle = Handle.new(remote: from, version: header.version, destination_connection_id: header.dcid, source_connection_id: header.scid,
-        original_destination_connection_id: odcid, retry_source_connection_id: retry_scid, expires_at: now + HANDLE_LIFETIME)
+        original_destination_connection_id: odcid, retry_source_connection_id: retry_scid, expires_at: now + HANDLE_LIFETIME,
+        address_validated: validated)
       if (dropped = keep(handle, datagram, from:, to:, ecn:))
         return dropped
       end
       @handles[header.dcid] = handle
-      Route::Incoming.new(handle:, remote: from, address_validated: !retry_scid.nil?)
+      Route::Incoming.new(handle:, remote: from, address_validated: validated)
     end
 
     # Keeps `datagram` with the offer `handle`; nil, or a Route::Drop when

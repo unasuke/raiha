@@ -27,6 +27,7 @@ module Raiha::Next::QUIC
       @largest: Integer?
       @violation: Violation?
       @offered: bool
+      @address_validated: bool
 
       attr_reader remote: address
       attr_reader version: Version
@@ -37,9 +38,11 @@ module Raiha::Next::QUIC
       attr_reader expires_at: Float
       attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
       attr_reader buffered: Integer
+      attr_reader address_validated: bool
 
       def initialize: (remote: address, version: Version, destination_connection_id: String, source_connection_id: String,
-                       original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float) -> void
+                       original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float,
+                       address_validated: bool) -> void
       def keep: (String datagram, from: address, to: address?, ecn: ecn | :ce) -> void
       def expired?: (Float now) -> bool
       def admitted?: () -> bool
@@ -63,6 +66,7 @@ module Raiha::Next::QUIC
     @time: Time
     @created_at: Float
     @retry_token_key: String
+    @new_token_key: String
     @stateless_reset_key: String
     @connections: Hash[String, Connection]
     @peers: Hash[address, Array[Connection]]

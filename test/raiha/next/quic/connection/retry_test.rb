@@ -82,6 +82,32 @@ class RaihaNextQUICConnectionRetryTest < Minitest::Test
     assert_raises(ArgumentError) { client_connection(token: "".b) }
   end
 
+  KEY = "\x07".b * 32
+
+  # The route of the client's first Initial with `token` to a server whose
+  # retry_token_key is KEY.
+  def route_with(token)
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: KEY), random: Random.new(3), time: NOW, now: 0.0)
+    endpoint.receive(client_connection(token:).transmits(now: 0.0).first.payload, from: CLIENT, to: SERVER, now: 0.0)
+  end
+
+  def new_token(address: CLIENT, version: QUIC::Version::V1.number, time: NOW)
+    QUIC::NewToken.mint(key: QUIC::NewToken.key(KEY), address:, version:, time:, random: Random.new(4))
+  end
+
+  # A token of NEW_TOKEN the server made validates the client's address; one
+  # that is not valid is as none, with no INVALID_TOKEN, and the server may
+  # still send a Retry.
+  def test_a_new_token_validates_the_address
+    assert_equal true, route_with(new_token).address_validated
+    [new_token(address: ["192.0.2.9", 50_000]), new_token(time: NOW - QUIC::NewToken::LIFETIME - 1),
+      new_token(version: 0x6b3343cf), "\x01".b + "x".b * 40].each do |token|
+      route = route_with(token)
+      assert_instance_of QUIC::Route::Incoming, route
+      assert_equal false, route.address_validated
+    end
+  end
+
   def test_retries_the_client_does_not_take
     client = client_connection
     first = QUIC::Wire::Packet.parse(client.transmits(now: 0.0).first.payload, dcid_length: 8).header
