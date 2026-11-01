@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/tls_pair"
+require "raiha/next/tls/test"
 
 # A client's 0-RTT: sent only when asked and the server could take it, under
 # a key from the PSK over the whole ClientHello, and rejected, with the
@@ -108,6 +109,51 @@ class RaihaNextTLSClientEarlyDataTest < Minitest::Test
     assert_equal :initial, client.write_epoch
     second = TLS::Handshake.parse(client.outputs.grep(TLS::Output::Message).first.bytes, registry: REGISTRY)
     assert_nil second.extension(TLS::Extension::EarlyData::TYPE)
+  end
+
+  RFC8448 = TLS::Test::RFC8448
+  R = RFC8448::Resumed0RTT
+  # When the trace's certificate was valid.
+  TRACE_NOW = Time.utc(2018, 1, 1)
+
+  # The client of RFC 8448 section 4, given `session` and `config`.
+  def section4_client(session: RFC8448.section3_session(now: TRACE_NOW), config: TLS::Config.deterministic(groups: %i[x25519]))
+    keyring = TLS::Keyring.client(config:, verifier: TLS::Verifier::None.new,
+      key_exchange: TLS::Test::FixedKEM.new({ x25519: R::CLIENT_X25519_PRIVATE_KEY }),
+      random: TLS::Test::FixedRandom.new(R::CLIENT_HELLO.byteslice(6, 32).to_s, "\x00".b * 32))
+    TLS::Handshake::Machine.__send__(:start_client, config:, keyring:, server_name: "server", now: TRACE_NOW, extensions: [], tracer: nil,
+      keylog: nil, substitutions: { 1 => [R::CLIENT_HELLO] }, session:, early_data: true)
+  end
+
+  def failure(machine) = events(machine).grep(TLS::Event::Failed).first&.then { |f| [f.alert, f.reason] }
+
+  def without_psk(server_hello)
+    sh = TLS::Handshake.parse(server_hello, registry: REGISTRY)
+    sh.with(extensions: sh.extensions.reject { |ext| ext.extension_type == TLS::Extension::PreSharedKey::TYPE }).encode
+  end
+
+  def answered(client, server_hello, encrypted_extensions)
+    client.receive(server_hello, epoch: :initial, now: TRACE_NOW)
+    client.receive(encrypted_extensions, epoch: :handshake, now: TRACE_NOW)
+    failure(client)
+  end
+
+  # :wait_ee rows 2 and 3: EncryptedExtensions that take 0-RTT after a
+  # ServerHello that did not select the PSK, or for another cipher suite or
+  # ALPN protocol than the session's.
+  def test_encrypted_extensions_that_take_0rtt_wrongly
+    client = section4_client
+    assert_equal [TLS::Output::Secret, TLS::Output::Message], client.outputs.map(&:class)
+    assert_equal [:illegal_parameter, :early_data_without_psk], answered(client, without_psk(R::SERVER_HELLO), R::ENCRYPTED_EXTENSIONS)
+    chacha = section4_client(session: RFC8448.section3_session(now: TRACE_NOW).with(cipher_suite: 0x1303))
+    assert_equal [:illegal_parameter, :early_data_cipher_suite_changed], answered(chacha, R::SERVER_HELLO, R::ENCRYPTED_EXTENSIONS)
+    h2 = section4_client(session: RFC8448.section3_session(now: TRACE_NOW).with(alpn: "h2".b),
+      config: TLS::Config.deterministic(groups: %i[x25519], alpn: ["h2"]))
+    assert_equal [:illegal_parameter, :early_data_alpn_changed], answered(h2, R::SERVER_HELLO, R::ENCRYPTED_EXTENSIONS)
+    # Row 1 comes first.
+    ee = TLS::Handshake.parse(R::ENCRYPTED_EXTENSIONS, registry: REGISTRY)
+    unsolicited = ee.with(extensions: ee.extensions + [TLS::Extension::Opaque.new(type: 0xff99, data: "".b)]).encode
+    assert_equal [:unsupported_extension, :unsolicited_extension], answered(section4_client, without_psk(R::SERVER_HELLO), unsolicited)
   end
 
   def test_early_data_is_true_or_false
