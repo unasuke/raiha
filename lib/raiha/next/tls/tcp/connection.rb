@@ -31,8 +31,12 @@ module Raiha::Next::TLS
       # kMaxWarningAlerts, which rustls uses too.
       MAX_CONSECUTIVE_WARNING_ALERTS = 4
 
-      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil)
-        new(Handshake::Machine.client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:), config)
+      # A client resumes `session` if it still may (Machine.client), and
+      # with `early_data: true` sends 0-RTT through `write_early_data` when it
+      # can.
+      def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil, early_data: false)
+        machine = Handshake::Machine.client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, session:, early_data:)
+        new(machine, config, early_data_room: session&.max_early_data_size || 0)
       end
 
       # A server takes its ClientHello through `receive`, or from an
@@ -50,10 +54,12 @@ module Raiha::Next::TLS
 
       private_class_method :new
 
-      def initialize(machine, config, record: Record::Layer.new(profile: config.profile), client_hello_received: false)
+      def initialize(machine, config, record: Record::Layer.new(profile: config.profile), client_hello_received: false, early_data_room: 0)
         @machine = machine
         @config = config
         @record = record
+        # How much more 0-RTT the session lets a client send.
+        @early_data_room = early_data_room
         @outgoing = "".b
         @unsent = "".b
         @received = "".b
@@ -103,6 +109,22 @@ module Raiha::Next::TLS
         taken = data.byteslice(0, room.clamp(0..)).to_s # steep:ignore
         @unsent << taken
         send_application_data
+        taken.bytesize
+      end
+
+      # Sends as much of `data` as 0-RTT as the session allows and returns how
+      # much that was, or nil when 0-RTT is over or never began: a client
+      # given `early_data: true` sends it from the start until the server
+      # takes it or not (RFC 9846 "Early Data Indication"). 0-RTT the server
+      # did not take is not sent again (Event::EarlyDataRejected), and may
+      # be replayed: send in it only what may be.
+      def write_early_data(data)
+        raise UsageError, "the connection failed" if @failed
+        raise UsageError, "our side is closed" if @write_closed
+        return nil unless @machine.write_epoch == :early_data
+        taken = data.byteslice(0, @early_data_room).to_s
+        @early_data_room -= taken.bytesize
+        send_record(:application_data, taken, :early_data) unless taken.empty?
         taken.bytesize
       end
 

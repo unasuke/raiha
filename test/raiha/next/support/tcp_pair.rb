@@ -11,8 +11,10 @@ module NextTCPPair
 
   module_function
 
-  def client(config: TLSPair.client_config, server_name: "localhost", keylog: nil, **keyring_options)
-    TLS::TCP::Connection.client(config:, keyring: TLS::Keyring.client(config:, **keyring_options), server_name:, keylog:, now: NOW)
+  def client(config: TLSPair.client_config, server_name: "localhost", keylog: nil, session: nil, early_data: false, now: NOW,
+    **keyring_options)
+    TLS::TCP::Connection.client(config:, keyring: TLS::Keyring.client(config:, **keyring_options), server_name:, keylog:, now:,
+      session:, early_data:)
   end
 
   def server(config: TLSPair.server_config, keyring: nil)

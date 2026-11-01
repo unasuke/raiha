@@ -86,17 +86,22 @@ module Raiha::Next::TLS
       @handshake_received: bool
       @record_size_limits_set: bool
       @change_cipher_spec_sent: bool
+      @early_data_room: Integer
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?session: Session?, ?early_data: bool) -> Connection
       def self.server: (config: Config, keyring: Keyring, now: Time, ?acceptor: Acceptor?,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
-      private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool) -> Connection
+      private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
+                             ?early_data_room: Integer) -> Connection
 
-      def initialize: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool) -> void
+      def initialize: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
+                       ?early_data_room: Integer) -> void
       def receive: (String bytes, now: Time) -> nil
       def each_output: () { (String bytes) -> void } -> void
       def write: (String data) -> Integer
+      def write_early_data: (String data) -> Integer?
       def read: (Integer max_bytes) -> String?
       def request_key_update: (?request_peer_update: bool) -> nil
       def close_notify: () -> nil
