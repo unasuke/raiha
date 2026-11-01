@@ -88,6 +88,31 @@ class RaihaNextTLSTCPEarlyDataTest < Minitest::Test
     assert TCPPair.events(pair.server).grep(TLS::Event::HandshakeComplete).first.resumed
   end
 
+  # A server whose Config takes 0-RTT needs a record of what it took, on
+  # the path that chooses the Config by the ClientHello too.
+  def test_a_server_that_takes_0rtt_needs_an_anti_replay_record
+    config = TLSPair.server_config(ticket_key: SEED, max_early_data_size: 1024)
+    keyring = TLSPair.server_keyring(config:)
+    assert_raises(TLS::UsageError) { TLS::TCP::Connection.server(config:, keyring:, now: NOW) }
+    acceptor = TLS::TCP::Acceptor.new
+    acceptor.receive(TCPPair.take(TCPPair.client), now: NOW)
+    assert acceptor.accepted
+    assert_raises(TLS::UsageError) { TLS::TCP::Connection.server(config:, keyring:, now: NOW, acceptor:) }
+    plain = TLSPair.server_config
+    assert TLS::TCP::Connection.server(config: plain, keyring: TLSPair.server_keyring(config: plain), now: NOW)
+  end
+
+  # Past 16 KiB, a server that skips 0-RTT closes the connection.
+  def test_skipping_past_the_limit
+    client = TCPPair.client(session: session.with(max_early_data_size: 32_768), early_data: true)
+    client.write_early_data("a" * 17_000)
+    server = server()
+    server.receive(TCPPair.take(client), now: NOW)
+    assert server.failed?
+    assert_equal [:unexpected_message, :too_much_early_data],
+      TCPPair.events(server).grep(TLS::Event::Failed).first.then { |f| [f.alert, f.reason] }
+  end
+
   # A server that resumes but takes no 0-RTT skips it; the client learns
   # it was not taken and sends no more, and what it writes then goes as
   # 1-RTT.

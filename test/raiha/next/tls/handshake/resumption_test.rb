@@ -277,6 +277,21 @@ class RaihaNextTLSResumptionTest < Minitest::Test
     assert_equal [TLS::Trace::BinderVerified.new(index: 0)], tracer.values.grep(TLS::Trace::BinderVerified)
   end
 
+  # A ClientHello with a PSK may leave out signature_algorithms (RFC 9846
+  # "Mandatory-to-Implement Extensions"): a server that resumes needs none,
+  # and only one that falls back to a certificate asks for it.
+  def test_a_resumption_without_signature_algorithms
+    session = self.session
+    ch = offered_client_hello(session)
+    ch = ch.with(extensions: ch.extensions.reject { |ext| ext.extension_type == TLS::Extension::SignatureAlgorithms::TYPE })
+    transcript_hash = OpenSSL::Digest.digest("SHA256", ch.encode_truncated)
+    binder = TLS::KeySchedule.new(hash: :sha256, psk: session.psk).binder(kind: :resumption, transcript_hash:)
+    hello = ch.with_binders([binder]).encode
+    refute serve(TLS::Handshake.parse(hello, registry: REGISTRY)).failed?
+    other = Pair.server(hello, config: server_config(ticket_key: "\x0e".b * 32))
+    assert_equal [:missing_extension, :signature_algorithms], failure(other)
+  end
+
   def test_the_first_identity_that_passes
     session = self.session
     real = offered_client_hello(session).extensions.last.identities.first

@@ -38,6 +38,27 @@ class RaihaNextTLSKeylogTest < Minitest::Test
     assert_equal (handshake + application).join, keylog.string
   end
 
+  # The 0-RTT key goes to the client's keylog, and to the server's only
+  # when it takes 0-RTT.
+  def test_the_early_traffic_secret
+    seed = "\x16".b * 32
+    config = Pair.server_config(ticket_key: seed, max_early_data_size: 1024)
+    pair = Pair.run(Pair.client, { config: })
+    Pair.deliver(pair.server_outputs.select { |o| o.is_a?(TLS::Output::Message) && o.epoch == :application }, pair.client)
+    session = pair.client.each_event.grep(TLS::Event::NewSessionTicket).first.session
+    labels = lambda do |server_config|
+      client_log, server_log = StringIO.new, StringIO.new
+      Pair.run(Pair.client(session:, early_data: true, keylog: client_log), { config: server_config, keylog: server_log })
+      [client_log, server_log].map { |log| log.string.lines.map { |l| l.split.first } }
+    end
+    client, server = labels.(config)
+    assert_includes client, "CLIENT_EARLY_TRAFFIC_SECRET"
+    assert_includes server, "CLIENT_EARLY_TRAFFIC_SECRET"
+    client, server = labels.(Pair.server_config(ticket_key: seed))
+    assert_includes client, "CLIENT_EARLY_TRAFFIC_SECRET"
+    refute_includes server, "CLIENT_EARLY_TRAFFIC_SECRET"
+  end
+
   # A KeyUpdate's next generation is not written.
   def test_nothing_after_the_handshake
     keylog = StringIO.new
