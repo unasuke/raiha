@@ -1,0 +1,17 @@
+module Raiha::Next::QUIC
+  class Session < Data
+    attr_reader tls: ::Raiha::Next::TLS::Session
+    attr_reader transport_parameters: RememberedTransportParameters
+    attr_reader alpn: String?
+    attr_reader version: Integer
+
+    def self.new: (tls: ::Raiha::Next::TLS::Session, transport_parameters: RememberedTransportParameters, alpn: String?,
+                   version: Integer) -> instance
+                | (::Raiha::Next::TLS::Session tls, RememberedTransportParameters transport_parameters, String? alpn,
+                   Integer version) -> instance
+    def self.from_h: (Hash[Symbol, Object?] hash) -> Session
+    def to_h: () -> Hash[Symbol, Object?]
+
+    private def self.remembered: (Hash[Object, Object] parameters) -> RememberedTransportParameters
+  end
+end

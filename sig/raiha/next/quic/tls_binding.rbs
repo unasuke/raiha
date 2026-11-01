@@ -8,6 +8,7 @@ module Raiha::Next::QUIC
       def handshake_completed: (::Raiha::Next::TLS::Event::HandshakeComplete event) -> void
       def tls_failed: (Integer code, Symbol reason) -> void
       def tls_event: (::Raiha::Next::TLS::Event::t event) -> void
+      def session_ticket: (::Raiha::Next::TLS::Session tls_session) -> void
     end
 
     LEVEL: Hash[::Raiha::Next::TLS::epoch, PacketProtection::level]

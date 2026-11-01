@@ -161,6 +161,13 @@ module Raiha::Next::QUIC
                   | (Integer phase) -> instance
     end
 
+    class SessionTicket < Data
+      attr_reader session: Session
+
+      def self.new: (session: Session) -> instance
+                  | (Session session) -> instance
+    end
+
     class TLSEvent < Data
       attr_reader event: ::Raiha::Next::TLS::Event::t
 
@@ -177,6 +184,6 @@ module Raiha::Next::QUIC
     end
 
     type t = Connected | StreamReadable | StreamWritable | StreamReset | StopSending | DatagramReceived
-           | PathValidated | KeyUpdated | TLSEvent | Closed
+           | PathValidated | KeyUpdated | SessionTicket | TLSEvent | Closed
   end
 end

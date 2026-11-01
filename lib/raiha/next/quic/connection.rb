@@ -46,6 +46,8 @@ module Raiha::Next::QUIC
     # INTERNAL_ERROR. DATAGRAMs received past their own limit are dropped
     # before they get here.
     MAX_EVENTS = 4096
+    # Event::SessionTicket held until taken (session_ticket).
+    MAX_HELD_TICKETS = 8
 
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
@@ -424,6 +426,21 @@ module Raiha::Next::QUIC
 
     def tls_event(event) = @events << Event::TLSEvent.new(event:)
 
+    # A ticket becomes a QUIC::Session with the server's transport
+    # parameters that 0-RTT may use. The newest MAX_HELD_TICKETS are held
+    # until taken: one more drops the oldest, so that a server sending
+    # tickets without end cannot make a client keep them all.
+    def session_ticket(tls_session)
+      parameters = @peer_parameters or raise "a ticket comes after the server's transport parameters"
+      held = @events.select { |event| event.is_a?(Event::SessionTicket) }
+      if held.size >= MAX_HELD_TICKETS
+        @events.delete(held.fetch(0))
+        @tracer.tls_trace(Raiha::Next::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets)) if @tracer.respond_to?(:tls_trace) # steep:ignore
+      end
+      @events << Event::SessionTicket.new(session: Session.new(tls: tls_session, transport_parameters: parameters.remembered,
+        alpn: tls_session.alpn, version: @version.number))
+    end
+
     # Recovery::Duty::_Owner
 
     def crypto_data_acked(duty) = binding.crypto_acked(duty)
@@ -470,6 +487,7 @@ module Raiha::Next::QUIC
     end
 
     private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
+
 
     # A connection closing or closed takes no more from the application.
     private def open!

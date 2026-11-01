@@ -32,6 +32,11 @@ module Raiha::Next::QUIC
     class KeyUpdated < Data.define(:phase)
     end
 
+    # A ticket the client may resume later, as a QUIC::Session; keeping it
+    # is the application's.
+    class SessionTicket < Data.define(:session)
+    end
+
     # A TLS event the binding does not consume itself, passed on as it came.
     class TLSEvent < Data.define(:event)
     end
