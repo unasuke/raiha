@@ -1,0 +1,14 @@
+module Raiha::Next::QUIC
+  module NewToken
+    KIND: Integer
+    LIFETIME: Integer
+    NONCE_LENGTH: Integer
+    LENGTH: Integer
+
+    def self.key: (String retry_token_key) -> String
+    def self.mint: (key: String, address: address, version: Integer, time: Time, random: Crypto::_Random) -> String
+    def self.valid?: (String token, key: String, address: address, version: Integer, time: Time) -> bool
+
+    private def self.bound: (address address) -> String
+  end
+end
