@@ -180,15 +180,98 @@ class RaihaNextTLSServerEarlyDataTest < Minitest::Test
     hello = Pair.client(session:, early_data: true, now: NOW + 60).outputs.grep(TLS::Output::Message).first.bytes
     config = server_config
     keyring = Pair.server_keyring(config:)
-    lying = Object.new
-    def lying.check(_binder, expires_at:, now:) = true
+    answering = ->(answer) { Object.new.tap { |record| record.define_singleton_method(:check) { |_b, expires_at:, now:| answer } } }
     broken = Object.new
     def broken.check(_binder, expires_at:, now:) = raise(IOError, "store unreachable")
-    { TLS::UsageError => lying, IOError => broken }.each do |error, anti_replay|
+    records = [true, nil, :accept].map { |answer| [TLS::UsageError, answering.(answer)] } + [[IOError, broken]]
+    records.each do |error, anti_replay|
       server = TLS::Handshake::Machine.server(config:, keyring:, now: NOW + 60, anti_replay:)
       assert_raises(error) { server.receive(hello, epoch: :initial, now: NOW + 60) }
       assert server.failed?
       assert_empty server.outputs
+      assert_empty events(server)
+      # Nothing more after that.
+      server.receive(hello, epoch: :initial, now: NOW + 60)
+      assert_empty server.outputs
     end
+  end
+
+  # A record that answers :accepted, counting the times it is asked.
+  def counting_record
+    asked = []
+    record = Object.new
+    record.define_singleton_method(:check) { |binder, expires_at:, now:| asked << binder && :accepted }
+    [record, asked]
+  end
+
+  # A ClientHello offering `session` with 0-RTT and the ticket age the
+  # client counts as `client_age` milliseconds, its binder made again.
+  def client_hello_aged(session, client_age)
+    ch = TLS::Handshake.parse(Pair.client(session:, early_data: true).outputs.grep(TLS::Output::Message).first.bytes, registry: REGISTRY)
+    identity = TLS::Extension::PreSharedKey::Identity.new(identity: session.ticket, obfuscated_ticket_age: (client_age + session.age_add) % (1 << 32))
+    ch = ch.with(extensions: ch.extensions[0...-1] + [TLS::Extension::PreSharedKey::CH.new(identities: [identity], binders: ["\x00".b * 32])])
+    binder = TLS::KeySchedule.new(hash: :sha256, psk: session.psk)
+      .binder(kind: :resumption, transcript_hash: OpenSSL::Digest.digest("SHA256", ch.encode_truncated))
+    ch.with_binders([binder]).encode
+  end
+
+  # RFC 9846 "Freshness Checks": a client counts up to 10 seconds less
+  # than the server and 1 more, which the server checks before it asks the
+  # record; one outside is rejected without asking, the resumption going
+  # on. The server's own count may be negative, a host whose clock is
+  # behind the one that issued the ticket.
+  def test_the_bounds_of_the_freshness_check
+    session = self.session
+    {
+      50_000 => nil, 61_000 => nil, 49_999 => :ticket_age_skew, 61_001 => :ticket_age_skew
+    }.each do |client_age, reason|
+      record, asked = counting_record
+      server = Pair.server(client_hello_aged(session, client_age), config: server_config, anti_replay: record, now: NOW + 60)
+      assert_equal [reason].compact, events(server).grep(TLS::Event::EarlyDataRejected).map(&:reason), client_age
+      assert_equal reason ? 0 : 1, asked.size, client_age
+      refute server.failed?
+    end
+    record, asked = counting_record
+    Pair.server(client_hello_aged(session, 0), config: server_config, anti_replay: record, now: NOW - Rational(1, 2))
+    assert_equal 1, asked.size
+  end
+
+  # A check before the record's that fails rejects 0-RTT without asking it.
+  def test_the_record_is_asked_last
+    session = self.session(early_data_context: "a".b)
+    record, asked = counting_record
+    hello = Pair.client(session:, early_data: true, now: NOW + 60).outputs.grep(TLS::Output::Message).first.bytes
+    server = Pair.server(hello, config: server_config, anti_replay: record, early_data_context: "b".b, now: NOW + 60)
+    assert_equal [:early_data_context_mismatch], events(server).grep(TLS::Event::EarlyDataRejected).map(&:reason)
+    assert_empty asked
+  end
+
+  # Another resumption_binding passes the ticket over, resumption and all;
+  # another early_data_context rejects only 0-RTT.
+  def test_binding_and_context_differ
+    session = self.session(resumption_binding: "v1".b)
+    tracer = Recorder.new
+    pair = Pair.run(Pair.client(session:, early_data: true, now: NOW + 60),
+      { config: server_config, resumption_binding: "v2".b, tracer: }, now: NOW + 60)
+    refute completion(pair.server).resumed
+    assert_equal [[0, :aead_failure]], tracer.values.grep(TLS::Trace::PskRejected).map { |r| [r.index, r.reason] }
+    assert_equal [:psk_not_selected], tracer.values.grep(TLS::Trace::EarlyDataRejected).map(&:reason)
+    pair = Pair.run(Pair.client(session: self.session(early_data_context: "a".b), early_data: true, now: NOW + 60),
+      { config: server_config, early_data_context: "b".b }, now: NOW + 60)
+    complete = completion(pair.server)
+    assert complete.resumed
+    refute complete.early_data_accepted
+  end
+
+  # Where there is no record layer, nothing is skipped.
+  def test_no_skipping_without_a_record_layer
+    client_config = Pair.client_config(profile: TLS::Profile::QUIC, alpn: ["h3"])
+    config = server_config(profile: TLS::Profile::QUIC, alpn: ["h3"])
+    tp = [TRANSPORT_PARAMETERS.new(type: 0x39, data: "tp".b)]
+    session = session_from(Pair.run(Pair.client(config: client_config, extensions: tp), { config:, extensions: tp, early_data_context: "c".b }))
+    hello = Pair.client(config: client_config, extensions: tp, session:, early_data: true).outputs.grep(TLS::Output::Message).first.bytes
+    server = Pair.server(hello, config:, extensions: tp, early_data_context: "d".b)
+    assert_equal [:early_data_context_mismatch], events(server).grep(TLS::Event::EarlyDataRejected).map(&:reason)
+    assert_nil server.skip_early_data_limit
   end
 end
