@@ -108,6 +108,24 @@ class RaihaNextQUICConnectionRetryTest < Minitest::Test
     end
   end
 
+  # A server that confirms the handshake gives the client a token of
+  # NEW_TOKEN, which validates its address on its next connection.
+  def test_a_server_gives_a_token
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: KEY), random: Random.new(3), time: NOW, now: 0.0)
+    client = client_connection
+    exchange(client, endpoint)
+    assert client.handshake_complete?
+    now = 0.1
+    3.times do
+      @server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+      client.transmits(now:).each { @server.receive(_1.payload, from: CLIENT, now:) }
+      now += 0.001
+    end
+    tokens = [].tap { |all| client.each_event { |e| all << e.token if e.is_a?(QUIC::Event::NewToken) } }
+    assert_equal 1, tokens.size
+    assert_equal true, route_with(tokens.first).address_validated
+  end
+
   def test_retries_the_client_does_not_take
     client = client_connection
     first = QUIC::Wire::Packet.parse(client.transmits(now: 0.0).first.payload, dcid_length: 8).header

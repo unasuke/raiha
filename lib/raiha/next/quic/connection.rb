@@ -81,9 +81,9 @@ module Raiha::Next::QUIC
     # transport parameters carry (RFC 9000 "Stateless Reset").
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil)
+      stateless_reset_token: nil, new_token: nil)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
-        retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:) do |connection, parameters|
+        retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:)
       end
     end
@@ -92,7 +92,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      &start)
+      new_token: nil, &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -151,6 +151,10 @@ module Raiha::Next::QUIC
       @retry_source_connection_id = retry_source_connection_id
       # The token a client's Initials carry, from a NEW_TOKEN or a Retry.
       @token = token&.b || Wire::EMPTY
+      # The token a server gives in a NEW_TOKEN frame once it confirms the
+      # handshake, and whether the frame is to go (again, if lost).
+      @new_token = new_token
+      @new_token_due = false
       # The connection IDs the peer issued, from its transport parameters
       # on.
       @peer_ids = nil #: PeerConnectionIDs?
@@ -419,6 +423,7 @@ module Raiha::Next::QUIC
       @events << Event::Connected.new(handshake: event)
       return unless @role == :server
       @handshake_done_due = true
+      @new_token_due = !@new_token.nil?
       confirm(@now)
     end
 
@@ -484,7 +489,9 @@ module Raiha::Next::QUIC
     # come back.
 
     def new_connection_id_lost(duty) = nil
-    def new_token_lost(duty) = nil
+    def new_token_lost(duty)
+      @new_token_due = true if @state == :open && @new_token
+    end
     # RFC 9000 "Retransmission of Information": HANDSHAKE_DONE goes again
     # until it is acknowledged.
     def handshake_done_lost
@@ -674,9 +681,10 @@ module Raiha::Next::QUIC
         raise Violation.new("HANDSHAKE_DONE from a client", frame_type: 0x1e) if @role == :server
         confirm(now)
       # Only a server sends NEW_TOKEN (RFC 9000 "NEW_TOKEN Frames"); a
-      # client keeps no token yet.
+      # client passes the token on for a later connection.
       when Wire::Frame::NewToken
         raise Violation.new("NEW_TOKEN from a client", frame_type: 0x07) if @role == :server
+        @events << Event::NewToken.new(token: frame.token)
       when Wire::Frame::Stream then @streams.receive_stream(frame, now:)
       when Wire::Frame::MaxData then @streams.receive_max_data(frame, now:)
       when Wire::Frame::MaxStreamData then @streams.receive_max_stream_data(frame, now:)
@@ -910,6 +918,17 @@ module Raiha::Next::QUIC
         frames << Wire::Frame::HandshakeDone.new
         duties << Recovery::Duty::HandshakeDone.new
         room -= 1
+      end
+      new_token = @new_token
+      if eliciting && level == :one_rtt && @new_token_due && new_token
+        frame = Wire::Frame::NewToken.new(token: new_token)
+        size = Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
+        if size <= room
+          @new_token_due = false
+          frames << frame
+          duties << Recovery::Duty::NewToken.new
+          room -= size
+        end
       end
       while eliciting && room.positive? && (frame, duty = binding.next_crypto_frame(level, room))
         frames << frame

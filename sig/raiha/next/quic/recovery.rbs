@@ -226,10 +226,7 @@ module Raiha::Next::QUIC
       end
 
       class NewToken < Data
-        attr_reader path: Path
-
-        def self.new: (path: Path) -> instance
-                    | (Path path) -> instance
+        def self.new: () -> instance
       end
 
       class HandshakeDone < Data

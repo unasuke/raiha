@@ -37,6 +37,12 @@ module Raiha::Next::QUIC
     class SessionTicket < Data.define(:session)
     end
 
+    # A token the server gave in a NEW_TOKEN frame, for the Initials of a
+    # later connection to it (Endpoint#connect(token:)); keeping it is the
+    # application's.
+    class NewToken < Data.define(:token)
+    end
+
     # A TLS event the binding does not consume itself, passed on as it came.
     class TLSEvent < Data.define(:event)
     end

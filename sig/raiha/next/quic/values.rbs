@@ -168,6 +168,13 @@ module Raiha::Next::QUIC
                   | (Session session) -> instance
     end
 
+    class NewToken < Data
+      attr_reader token: String
+
+      def self.new: (token: String) -> instance
+                  | (String token) -> instance
+    end
+
     class TLSEvent < Data
       attr_reader event: ::Raiha::Next::TLS::Event::t
 
@@ -184,6 +191,6 @@ module Raiha::Next::QUIC
     end
 
     type t = Connected | StreamReadable | StreamWritable | StreamReset | StopSending | DatagramReceived
-           | PathValidated | KeyUpdated | SessionTicket | TLSEvent | Closed
+           | PathValidated | KeyUpdated | SessionTicket | NewToken | TLSEvent | Closed
   end
 end

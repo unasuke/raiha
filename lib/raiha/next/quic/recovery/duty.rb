@@ -43,8 +43,8 @@ module Raiha::Next::QUIC
 
       class RetireConnectionID < Data.define(:sequence_number); end
 
-      # The path the token was sent on.
-      class NewToken < Data.define(:path); end
+      # A NEW_TOKEN frame; the connection keeps its one token.
+      class NewToken < Data.define; end
 
       class HandshakeDone < Data.define; end
 

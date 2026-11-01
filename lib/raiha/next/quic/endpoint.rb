@@ -285,16 +285,19 @@ module Raiha::Next::QUIC
     # returns the Connection. It is given the datagrams the offer kept, and
     # is found from now on by its own connection ID, which the Endpoint
     # chooses and gives the stateless reset token of, and by the one the
-    # client chose.
+    # client chose. It sends the client a token of NEW_TOKEN for its later
+    # connections, once it confirms the handshake.
     def accept(handle, tls_config:, keyring:, now:, tracer: nil, keylog: nil)
       pending!(handle)
       accepted = handle.accepted or raise Error::StateError, "the ClientHello of the offer is not whole yet"
       scid = new_connection_id
       token = StatelessReset.token(key: @stateless_reset_key, connection_id: scid) unless scid.empty?
+      new_token = NewToken.mint(key: @new_token_key, address: handle.remote, version: handle.version.number, time: wall_clock(now),
+        random: @random)
       connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
-        source_connection_id: scid, stateless_reset_token: token)
+        source_connection_id: scid, stateless_reset_token: token, new_token:)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
