@@ -71,6 +71,7 @@ module Raiha::Next::TLS
       WRITE_BUFFER_LIMIT: Integer
       ALERT_LEVELS: Hash[Symbol, Integer]
       MAX_CONSECUTIVE_WARNING_ALERTS: Integer
+      MAX_HELD_TICKETS: Integer
 
       @machine: Handshake::Machine
       @config: Config
@@ -89,6 +90,7 @@ module Raiha::Next::TLS
       @record_size_limits_set: bool
       @change_cipher_spec_sent: bool
       @early_data_room: Integer
+      @tracer: Trace::_Tracer?
 
       def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
@@ -97,10 +99,10 @@ module Raiha::Next::TLS
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
                         ?anti_replay: AntiReplay::_AntiReplay?) -> Connection
       private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
-                             ?early_data_room: Integer) -> Connection
+                             ?early_data_room: Integer, ?tracer: Trace::_Tracer?) -> Connection
 
       def initialize: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
-                       ?early_data_room: Integer) -> void
+                       ?early_data_room: Integer, ?tracer: Trace::_Tracer?) -> void
       def receive: (String bytes, now: Time) -> nil
       def each_output: () { (String bytes) -> void } -> void
       def write: (String data) -> Integer
@@ -119,6 +121,7 @@ module Raiha::Next::TLS
       private def receive_alert: (String payload) -> nil
       private def close_read: () -> nil
       private def drain_machine: () -> void
+      private def make_room_for_a_ticket: () -> void
       private def send_alert: (epoch epoch, Symbol level, Symbol description) -> void
       private def send_record: (Record::content_type content_type, String payload, epoch epoch) -> void
       private def change_cipher_spec: () -> void

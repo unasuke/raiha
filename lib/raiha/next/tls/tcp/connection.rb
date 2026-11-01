@@ -5,6 +5,7 @@ require_relative "../event"
 require_relative "../iana"
 require_relative "../output"
 require_relative "../record"
+require_relative "../trace"
 require_relative "../handshake/machine"
 require_relative "event"
 
@@ -31,12 +32,17 @@ module Raiha::Next::TLS
       # kMaxWarningAlerts, which rustls uses too.
       MAX_CONSECUTIVE_WARNING_ALERTS = 4
 
+      # Event::NewSessionTickets held until taken: one past this drops the
+      # oldest, so that a server sending tickets without end cannot make a
+      # client keep them all.
+      MAX_HELD_TICKETS = 8
+
       # A client resumes `session` if it still may (Machine.client), and
       # with `early_data: true` sends 0-RTT through `write_early_data` when it
       # can.
       def self.client(config:, keyring:, server_name:, now:, extensions: [], tracer: nil, keylog: nil, session: nil, early_data: false)
         machine = Handshake::Machine.client(config:, keyring:, server_name:, now:, extensions:, tracer:, keylog:, session:, early_data:)
-        new(machine, config, early_data_room: session&.max_early_data_size || 0)
+        new(machine, config, early_data_room: session&.max_early_data_size || 0, tracer:)
       end
 
       # A server takes its ClientHello through `receive`, or from an
@@ -47,18 +53,20 @@ module Raiha::Next::TLS
       def self.server(config:, keyring:, now:, acceptor: nil, extensions: [], tracer: nil, keylog: nil, anti_replay: nil)
         raise ArgumentError, "a TCP::Connection needs a profile with a record layer, as Profile::TCP" unless config.profile.record_layer
         unless acceptor
-          return new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:, anti_replay:), config)
+          return new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:, anti_replay:), config, tracer:)
         end
         accepted, record = acceptor.hand_over
         machine = Handshake::Machine.server(config:, keyring:, client_hello: accepted, now:, extensions:, tracer:, keylog:, anti_replay:)
-        new(machine, config, record:, client_hello_received: true).tap { |connection| connection.receive("".b, now:) }
+        new(machine, config, record:, client_hello_received: true, tracer:).tap { |connection| connection.receive("".b, now:) }
       end
 
       private_class_method :new
 
-      def initialize(machine, config, record: Record::Layer.new(profile: config.profile), client_hello_received: false, early_data_room: 0)
+      def initialize(machine, config, record: Record::Layer.new(profile: config.profile), client_hello_received: false, early_data_room: 0,
+        tracer: nil)
         @machine = machine
         @config = config
+        @tracer = tracer
         @record = record
         # How much more 0-RTT the session lets a client send.
         @early_data_room = early_data_room
@@ -285,9 +293,18 @@ module Raiha::Next::TLS
           end
         end
         while (event = @machine.next_event)
+          make_room_for_a_ticket if event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket)
           @events << event
         end
         stop if @machine.failed?
+      end
+
+      private def make_room_for_a_ticket
+        held = @events.count { |event| event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket) }
+        return if held < MAX_HELD_TICKETS
+        oldest = @events.index { |event| event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket) } or return
+        @events.delete_at(oldest)
+        @tracer&.tls_trace(Trace::TicketIgnored.new(reason: :too_many_tickets))
       end
 
       private def send_alert(epoch, level, description)

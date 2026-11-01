@@ -18,6 +18,10 @@ module Raiha::Next::TLS
     class TicketNotIssued < Data.define(:reason)
     end
 
+    # A client dropped a ticket it had received but nobody had taken yet.
+    class TicketIgnored < Data.define(:reason)
+    end
+
     # A server extension of a type the client did not offer, dropped.
     class ExtensionDropped < Data.define(:type)
     end

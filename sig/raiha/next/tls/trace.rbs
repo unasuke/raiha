@@ -36,6 +36,13 @@ module Raiha::Next::TLS
                   | (Symbol reason) -> instance
     end
 
+    class TicketIgnored < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
     class ExtensionDropped < Data
       attr_reader type: Integer
 
@@ -85,7 +92,7 @@ module Raiha::Next::TLS
                   | (String transcript_hash) -> instance
     end
 
-    type t = TranscriptUpdated | PskRejected | EarlyDataRejected | TicketNotIssued | ExtensionDropped
+    type t = TranscriptUpdated | PskRejected | EarlyDataRejected | TicketNotIssued | TicketIgnored | ExtensionDropped
            | ServerNameIgnored | EarlyDataNotAttempted | PeerCertificateVerified | PeerSignatureVerified
            | BinderVerified | PeerFinishedVerified
   end
