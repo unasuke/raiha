@@ -17,8 +17,11 @@ module NextTCPPair
       session:, early_data:)
   end
 
-  def server(config: TLSPair.server_config, keyring: nil)
-    TLS::TCP::Connection.server(config:, keyring: keyring || TLSPair.server_keyring(config:), now: NOW)
+  # A server whose Config takes 0-RTT gets an anti-replay record of its own
+  # unless one is given, open from the start.
+  def server(config: TLSPair.server_config, keyring: nil, anti_replay: nil, now: NOW)
+    anti_replay ||= TLS::AntiReplay::Memory.new(now:, warmup: false) if config.max_early_data_size.positive?
+    TLS::TCP::Connection.server(config:, keyring: keyring || TLSPair.server_keyring(config:), now:, anti_replay:)
   end
 
   # A client and a server, run until neither has more to send.

@@ -41,14 +41,16 @@ module Raiha::Next::TLS
 
       # A server takes its ClientHello through `receive`, or from an
       # Acceptor that has offered one: then with the bytes that came after it,
-      # read before anything given to `receive`.
-      def self.server(config:, keyring:, now:, acceptor: nil, extensions: [], tracer: nil, keylog: nil)
+      # read before anything given to `receive`. `anti_replay` is the record
+      # of the 0-RTT taken (Machine.server), which a Config that takes 0-RTT
+      # needs.
+      def self.server(config:, keyring:, now:, acceptor: nil, extensions: [], tracer: nil, keylog: nil, anti_replay: nil)
         raise ArgumentError, "a TCP::Connection needs a profile with a record layer, as Profile::TCP" unless config.profile.record_layer
         unless acceptor
-          return new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:), config)
+          return new(Handshake::Machine.server(config:, keyring:, now:, extensions:, tracer:, keylog:, anti_replay:), config)
         end
         accepted, record = acceptor.hand_over
-        machine = Handshake::Machine.server(config:, keyring:, client_hello: accepted, now:, extensions:, tracer:, keylog:)
+        machine = Handshake::Machine.server(config:, keyring:, client_hello: accepted, now:, extensions:, tracer:, keylog:, anti_replay:)
         new(machine, config, record:, client_hello_received: true).tap { |connection| connection.receive("".b, now:) }
       end
 
@@ -63,6 +65,9 @@ module Raiha::Next::TLS
         @outgoing = "".b
         @unsent = "".b
         @received = "".b
+        # The client's 0-RTT a server took, until read, and how much came.
+        @early_received = "".b
+        @early_data_size = 0
         # @type var events: Array[event]
         events = []
         @events = events
@@ -129,11 +134,24 @@ module Raiha::Next::TLS
       end
 
       # Up to `max_bytes` of the peer's application data, "" when none has
-      # come, and nil once the peer has closed its side and all is read.
+      # come, and nil once the peer has closed its side and all is read. The
+      # client's 0-RTT is read first, by `read_early_data`.
       def read(max_bytes)
+        raise UsageError, "0-RTT is left to read_early_data" unless @early_received.empty?
         return nil if @read_closed && @received.empty?
         raise UsageError, "the connection failed" if @failed && @received.empty?
         @received.slice!(0, max_bytes).to_s
+      end
+
+      # Up to `max_bytes` of the client's 0-RTT that a server took, "" when
+      # none has come yet, and nil once it is over (EndOfEarlyData came and
+      # all is read) or there is none, not offered or not taken. It may be a
+      # replay of another connection's (RFC 9846 "Replay Attacks on 0-RTT"):
+      # `handshake_complete?` says when the client has proved it is live.
+      def read_early_data(max_bytes)
+        raise UsageError, "the connection failed" if @failed && @early_received.empty?
+        return @early_received.slice!(0, max_bytes).to_s unless @early_received.empty?
+        @machine.read_epoch == :early_data ? "".b : nil
       end
 
       # A KeyUpdate of our own, and of the peer's too with
@@ -187,6 +205,7 @@ module Raiha::Next::TLS
           receive_alert(record.payload)
         when :application_data
           return fail!(:unexpected_message, :interleaved_record) if @machine.partial_message?
+          return take_early_data(record.payload) if @machine.read_epoch == :early_data
           return fail!(:unexpected_message, :application_data_before_handshake) unless @machine.read_epoch == :application
           @received << record.payload
           # The peer's runs of KeyUpdates and of user_canceled end with data
@@ -196,6 +215,15 @@ module Raiha::Next::TLS
             @consecutive_warning_alerts = 0
           end
         end
+      end
+
+      # The client's 0-RTT, as far as the Config takes (RFC 9846 "Early Data
+      # Indication").
+      private def take_early_data(payload)
+        @early_data_size += payload.bytesize
+        return fail!(:unexpected_message, :too_much_early_data) if @early_data_size > @config.max_early_data_size
+        @early_received << payload
+        nil
       end
 
       # RFC 8449, once the Machine has seen the peer's record_size_limit and

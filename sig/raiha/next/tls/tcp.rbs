@@ -78,6 +78,8 @@ module Raiha::Next::TLS
       @outgoing: String
       @unsent: String
       @received: String
+      @early_received: String
+      @early_data_size: Integer
       @events: Array[event]
       @failed: bool
       @read_closed: bool
@@ -92,7 +94,8 @@ module Raiha::Next::TLS
                         ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
                         ?session: Session?, ?early_data: bool) -> Connection
       def self.server: (config: Config, keyring: Keyring, now: Time, ?acceptor: Acceptor?,
-                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?) -> Connection
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?anti_replay: AntiReplay::_AntiReplay?) -> Connection
       private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
                              ?early_data_room: Integer) -> Connection
 
@@ -103,6 +106,7 @@ module Raiha::Next::TLS
       def write: (String data) -> Integer
       def write_early_data: (String data) -> Integer?
       def read: (Integer max_bytes) -> String?
+      def read_early_data: (Integer max_bytes) -> String?
       def request_key_update: (?request_peer_update: bool) -> nil
       def close_notify: () -> nil
       def handshake_complete?: () -> bool
@@ -110,6 +114,7 @@ module Raiha::Next::TLS
       def next_event: () -> event?
 
       private def take: (Record::Plaintext record, Time now) -> void
+      private def take_early_data: (String payload) -> nil
       private def limit_record_sizes: () -> void
       private def receive_alert: (String payload) -> nil
       private def close_read: () -> nil
