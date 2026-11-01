@@ -60,14 +60,21 @@ module Raiha::Next::QUIC
     # an Endpoint routes by, or one of its own. `token` is one a server gave
     # in a NEW_TOKEN frame, which the Initials carry until a Retry's takes
     # its place (RFC 9000 "Address Validation for Future Connections").
-    # `session` is a QUIC::Session to resume, offered if TLS still may.
+    # `session` is a QUIC::Session to resume, offered if TLS still may. With
+    # `early_data: true` the client sends 0-RTT on it when TLS can and the
+    # session is of the connection's version: what streams and DATAGRAM
+    # frames carry before the handshake completes goes in 0-RTT packets, to
+    # the limits the session remembers (`zero_rtt_state`).
     def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil,
-      token: nil, session: nil)
+      token: nil, session: nil, early_data: false)
       raise ArgumentError, "a token is a String of one byte or more" unless token.nil? || (token.is_a?(String) && !token.empty?)
       raise ArgumentError, "session must be a QUIC::Session" unless session.nil? || session.is_a?(Session)
-      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:) do |connection, parameters|
+      raise ArgumentError, "early_data must be true or false" unless early_data == true || early_data == false
+      zero_rtt = early_data && !session.nil? && session.version == config.versions.fetch(0).number
+      new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:,
+        session:) do |connection, parameters|
         TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:,
-          session: session&.tls)
+          session: session&.tls, early_data: zero_rtt)
       end
     end
 
@@ -103,7 +110,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      new_token: nil, &start)
+      new_token: nil, session: nil, &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -166,6 +173,10 @@ module Raiha::Next::QUIC
       # handshake, and whether the frame is to go (again, if lost).
       @new_token = new_token
       @new_token_due = false
+      # A client's session to resume, and how its 0-RTT goes: :disabled,
+      # :pending while 0-RTT packets go, then :accepted or :rejected.
+      @session = session
+      @zero_rtt_state = :disabled #: :disabled | :pending | :accepted | :rejected
       # The connection IDs the peer issued, from its transport parameters
       # on.
       @peer_ids = nil #: PeerConnectionIDs?
@@ -252,7 +263,7 @@ module Raiha::Next::QUIC
     # datagram size each less what goes around it. nil while the peer has
     # not taken DATAGRAM frames, which may be for good.
     def datagram_max_size
-      peer = @peer_parameters or return nil
+      peer = @peer_parameters || zero_rtt_parameters or return nil
       frame = peer.max_datagram_frame_size
       return nil if frame.zero?
       packet = [@path.max_datagram_size, peer.max_udp_payload_size].min - SHORT_HEADER_OVERHEAD - @destination_connection_id.bytesize
@@ -409,7 +420,19 @@ module Raiha::Next::QUIC
     def install_keys(level, direction, secret:, suite:)
       @protection.install(level, direction, secret:, suite:)
       @recovery.handshake_keys_installed! if level == :handshake
+      start_zero_rtt if level == :zero_rtt && direction == :write
     end
+
+    # The server took no 0-RTT (RFC 9001 "Accepting and Rejecting 0-RTT"):
+    # no more 0-RTT packets go.
+    def zero_rtt_rejected(reason)
+      @zero_rtt_state = :rejected if @zero_rtt_state == :pending
+    end
+
+    # How a client's 0-RTT goes: :disabled when it sends none, :pending
+    # while it sends 0-RTT packets, :accepted or :rejected once the server
+    # says.
+    def zero_rtt_state = @zero_rtt_state
 
     # The peer's transport parameters: their connection IDs must be the ones
     # its Initial packets used, and its max_ack_delay and max_idle_timeout
@@ -429,6 +452,7 @@ module Raiha::Next::QUIC
     # A server confirms the handshake as it completes, and tells the client
     # with HANDSHAKE_DONE.
     def handshake_completed(event)
+      @zero_rtt_state = event.early_data_accepted ? :accepted : :rejected if @zero_rtt_state == :pending
       @handshake_complete = true
       @handshake_completed_at = @now
       @events << Event::Connected.new(handshake: event)
@@ -510,6 +534,16 @@ module Raiha::Next::QUIC
     end
 
     private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
+
+    # The session's remembered transport parameters while 0-RTT goes, the
+    # limits until the server's come.
+    private def zero_rtt_parameters = (@session&.transport_parameters if @zero_rtt_state == :pending)
+
+    private def start_zero_rtt
+      @zero_rtt_state = :pending
+      parameters = zero_rtt_parameters
+      @streams.peer_parameters = parameters if parameters && @peer_parameters.nil?
+    end
 
 
     # A connection closing or closed takes no more from the application.
@@ -795,6 +829,8 @@ module Raiha::Next::QUIC
       used = 0
       LEVELS.each do |level|
         next unless @protection.can_write?(level)
+        # 0-RTT only until the server says, and never once 1-RTT can go.
+        next if level == :zero_rtt && (@zero_rtt_state != :pending || @protection.can_write?(:one_rtt))
         header = header_for(level)
         room = limit - used - overhead(header)
         frames, duties = frames_for(level, room, eliciting, now)
@@ -921,7 +957,9 @@ module Raiha::Next::QUIC
       frames = [] #: Array[Wire::Frame::t]
       duties = [] #: Array[Recovery::Duty::t]
       space = SPACES.fetch(level)
-      ack = @recovery.ack_frame(space, now:) if @recovery.ack_owed?(space) || @recovery.ack_due?(space, now:)
+      # RFC 9000 "Frames and Frame Types": no ACK in a 0-RTT packet.
+      ack = @recovery.ack_frame(space, now:) if level != :zero_rtt && (@recovery.ack_owed?(space) || @recovery.ack_due?(space, now:))
+      application = level == :one_rtt || level == :zero_rtt
       room -= Wire::Frame.encode([ack], ack_delay_exponent: own_ack_delay_exponent(level)).bytesize if ack
       fill_probe(level) if eliciting && @probes.fetch(space, 0).positive?
       if eliciting && level == :one_rtt && @handshake_done_due && room.positive?
@@ -946,12 +984,12 @@ module Raiha::Next::QUIC
         duties << duty
         room -= Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
       end
-      while eliciting && level == :one_rtt && (credit, credit_duty = @streams.next_credit(room, now:, rtt: rtt_sample))
+      while eliciting && application && (credit, credit_duty = @streams.next_credit(room, now:, rtt: rtt_sample))
         frames << credit
         duties << credit_duty
         room -= Wire::Frame.encode([credit], ack_delay_exponent: 0).bytesize
       end
-      while eliciting && level == :one_rtt && (abandon, abandon_duty = @streams.next_abandon(room))
+      while eliciting && application && (abandon, abandon_duty = @streams.next_abandon(room))
         frames << abandon
         duties << abandon_duty
         room -= Wire::Frame.encode([abandon], ack_delay_exponent: 0).bytesize
@@ -961,12 +999,12 @@ module Raiha::Next::QUIC
         duties << retire_duty
         room -= Wire::Frame.encode([retire], ack_delay_exponent: 0).bytesize
       end
-      while eliciting && level == :one_rtt && (blocked, blocked_duty = @streams.next_blocked(room))
+      while eliciting && application && (blocked, blocked_duty = @streams.next_blocked(room))
         frames << blocked
         duties << blocked_duty
         room -= Wire::Frame.encode([blocked], ack_delay_exponent: 0).bytesize
       end
-      while eliciting && level == :one_rtt && room.positive? && (data, data_duty = next_application_frame(room, now))
+      while eliciting && application && room.positive? && (data, data_duty = next_application_frame(room, now))
         frames << data
         duties << data_duty if data_duty
         room -= Wire::Frame.encode([data], ack_delay_exponent: 0).bytesize

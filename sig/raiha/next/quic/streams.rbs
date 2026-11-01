@@ -1,4 +1,15 @@
 module Raiha::Next::QUIC
+  # The limits of the peer's transport parameters streams keep to: the
+  # server's, or a client's remembered ones for 0-RTT.
+  interface _PeerLimits
+    def initial_max_data: () -> Integer
+    def initial_max_streams_bidi: () -> Integer
+    def initial_max_streams_uni: () -> Integer
+    def initial_max_stream_data_uni: () -> Integer
+    def initial_max_stream_data_bidi_remote: () -> Integer
+    def initial_max_stream_data_bidi_local: () -> Integer
+  end
+
   class Streams
     SERVER_INITIATED: Integer
     UNIDIRECTIONAL: Integer
@@ -19,7 +30,7 @@ module Raiha::Next::QUIC
     @opened: Array[Integer]
     @gaps: Integer
     @max_gaps: Integer
-    @peer_parameters: TransportParameters?
+    @peer_parameters: _PeerLimits?
     @peer_max_data: Integer
     @written: Integer
     @buffered: Integer
@@ -43,7 +54,7 @@ module Raiha::Next::QUIC
     attr_reader blocked_received: Integer
 
     def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float, ?tracer: _Tracer?) -> void
-    def peer_parameters=: (TransportParameters parameters) -> TransportParameters
+    def peer_parameters=: (_PeerLimits parameters) -> _PeerLimits
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
     def read: (Integer stream_id, Integer max_bytes) -> String?
     def readable: () -> Array[Integer]

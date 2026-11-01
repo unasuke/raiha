@@ -134,10 +134,18 @@ module Raiha::Next::QUIC
 
     # The peer's transport parameters, which set the limits of what this
     # end sends.
+    # The peer's limits: a client's remembered ones first, for 0-RTT, then
+    # the server's, which raise those of the streams opened by then (RFC
+    # 9000 "Values of Transport Parameters for 0-RTT").
     def peer_parameters=(parameters)
       @peer_parameters = parameters
-      @peer_max_data = parameters.initial_max_data
+      @peer_max_data = [parameters.initial_max_data, @peer_max_data].max
       @peer_max_streams = { bidi: parameters.initial_max_streams_bidi, uni: parameters.initial_max_streams_uni }
+      own = @role == :server ? SERVER_INITIATED : 0
+      @senders.each do |stream_id, sender|
+        next unless stream_id & SERVER_INITIATED == own
+        sender.raise_limit(stream_id & UNIDIRECTIONAL == 0 ? parameters.initial_max_stream_data_bidi_remote : parameters.initial_max_stream_data_uni)
+      end
     end
 
     # Opens a stream of this end going `direction`, :bidi or :uni: its ID,

@@ -30,11 +30,12 @@ module Raiha::Next::QUIC
     # stream. `transport_parameters` are this end's; `time` is the wall
     # clock TLS takes. `tracer` is the connection's, which TLS is given only
     # when it takes TLS's traces with `tls_trace`.
-    def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil, session: nil)
+    def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil, session: nil,
+      early_data: false)
       check(config)
       machine = Raiha::Next::TLS::Handshake::Machine.client(
         config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:,
-        session:
+        session:, early_data:
       )
       new(connection, machine, config.profile).tap { |binding| binding.pump }
     end
@@ -126,6 +127,9 @@ module Raiha::Next::QUIC
         in Raiha::Next::TLS::Event::PeerExtension(type: TRANSPORT_PARAMETERS, data:) then @connection.peer_transport_parameters(data)
         in Raiha::Next::TLS::Event::HandshakeComplete then @connection.handshake_completed(event)
         in Raiha::Next::TLS::Event::NewSessionTicket(session:) then @connection.session_ticket(session)
+        in Raiha::Next::TLS::Event::EarlyDataRejected(reason:)
+          @connection.zero_rtt_rejected(reason)
+          @connection.tls_event(event)
         in Raiha::Next::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(TLSBinding.error_code(@profile, alert, reason), reason)
         else @connection.tls_event(event)
         end
