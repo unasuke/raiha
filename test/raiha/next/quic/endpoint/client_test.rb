@@ -7,16 +7,24 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
   include NextQUICPair
 
   CONFIG = QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32)
+  SEED = "\x1b".b * 32
 
   def server_endpoint = QUIC::Endpoint.server(config: CONFIG, random: Random.new(3), time: NOW, now: 0.0)
 
   def client_endpoint = QUIC::Endpoint.client(config: QUIC::Config.new, random: Random.new(4), time: NOW, now: 0.0)
 
-  def connect(endpoint)
+  # A connection's first Destination Connection ID comes from `random`.
+  def connect(endpoint, now: 0.0, random: Random.new(1), **options)
     tls_config = client_config
-    endpoint.connect(tls_config:, keyring: TLS::Keyring.client(config: tls_config, random: Random.new(1)), server_name: "localhost",
-      remote: SERVER, now: 0.0)
+    endpoint.connect(tls_config:, keyring: TLS::Keyring.client(config: tls_config, random:), server_name: "localhost", remote: SERVER,
+      now:, **options)
   end
+
+  # One TLS Config for all the server's connections, so that a ticket of
+  # one resumes another, and 0-RTT is taken.
+  def server_tls_config = @server_tls_config ||= server_config(ticket_key: SEED, max_early_data_size: 1)
+
+  def anti_replay = @anti_replay ||= TLS::AntiReplay::Memory.new(now: NOW, warmup: false)
 
   # An application that answers an offer with a Retry when `with_retry`
   # says so and its address is not validated, and takes the others.
@@ -25,8 +33,8 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     in QUIC::Route::Incoming(handle:, address_validated: false) if with_retry then endpoint.retry(handle, now:)
     in QUIC::Route::Incoming(handle:) then dispatch(endpoint, endpoint.admit(handle, now:), now, with_retry:)
     in QUIC::Route::ClientHello(handle:)
-      tls_config = server_config
-      endpoint.accept(handle, tls_config:, keyring: server_keyring(config: tls_config), now:)
+      tls_config = server_tls_config
+      endpoint.accept(handle, tls_config:, keyring: server_keyring(config: tls_config), anti_replay:, now:)
     else nil
     end
   end
@@ -34,10 +42,9 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
   # Passes datagrams between the two Endpoints until `connection` and a
   # connection of the server have completed the handshake; gives the
   # routes the client's Endpoint took, and the server's connection ID.
-  def exchange(client, server, connection, with_retry: false)
+  def exchange(client, server, connection, with_retry: false, now: 0.0)
     routes = []
     server_id = nil
-    now = 0.0
     20.times do
       client.each_transmit(now:) { dispatch(server, server.receive(_1.payload, from: CLIENT, to: SERVER, now:), now, with_retry:) }
       server.each_transmit(now:) do |transmit|
@@ -67,6 +74,21 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     connection = connect(client)
     exchange(client, server, connection, with_retry: true)
     assert connection.handshake_complete?
+  end
+
+  # A session and early_data: true go to the connection: it sends 0-RTT
+  # from the first Initial, and resumes.
+  def test_a_resumption
+    client = client_endpoint
+    server = server_endpoint
+    first = connect(client)
+    exchange(client, server, first)
+    tickets = [].tap { |all| first.each_event { all << _1 } }.grep(QUIC::Event::SessionTicket)
+    second = connect(client, now: 1.0, random: Random.new(5), session: tickets.first.session, early_data: true)
+    assert_equal :pending, second.zero_rtt_state
+    exchange(client, server, second, now: 1.0)
+    assert second.handshake_complete?
+    assert_equal :accepted, second.zero_rtt_state
   end
 
   # A Version Negotiation goes to the connection it is for, which abandons
