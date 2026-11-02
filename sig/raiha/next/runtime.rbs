@@ -574,8 +574,9 @@ module Raiha::Next::Runtime
       @server: Serving
       @exchange: Exchange
       @responded: bool
+      @early_data: bool
 
-      def initialize: (Serving server, Integer stream_id, Exchange exchange, Array[[String, String]] headers) -> void
+      def initialize: (Serving server, Integer stream_id, Exchange exchange, Array[[String, String]] headers, early_data: bool) -> void
 
       def trailers: () -> Array[[String, String]]
 

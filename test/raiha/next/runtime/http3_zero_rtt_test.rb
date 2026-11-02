@@ -109,4 +109,27 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
       assert_equal ["localhost"], authorities
     end
   end
+
+  # A request that came in 0-RTT is early data; one after the handshake on
+  # the same connection is not, and one a proxy marked with Early-Data is,
+  # whatever the value.
+  def test_early_data
+    Sync do
+      seen = {}
+      handler = lambda do |request|
+        seen[request.path] = request.early_data?
+        request.respond(200, [], "ok")
+      end
+      serving(handler, hold: 0.05) do |port|
+        ticket = h3_ticket(port)
+        h3_connect(port, session: ticket, early_data: true) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          client.get("/early")
+          client.get("/late")
+          client.get("/marked", headers: [["early-data", "0"]])
+        end
+      end
+      assert_equal({ "/early" => true, "/late" => false, "/marked" => true }, seen)
+    end
+  end
 end

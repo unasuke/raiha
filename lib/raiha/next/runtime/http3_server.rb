@@ -56,7 +56,7 @@ module Raiha::Next::Runtime
     class Request
       attr_reader :stream_id, :method, :path, :authority, :scheme, :protocol, :headers, :body
 
-      def initialize(server, stream_id, exchange, headers)
+      def initialize(server, stream_id, exchange, headers, early_data:)
         @server = server
         @stream_id = stream_id
         @exchange = exchange
@@ -69,13 +69,20 @@ module Raiha::Next::Runtime
         @headers = headers.reject { |name, _| name.start_with?(":") }
         @body = Body.new(server, stream_id)
         @responded = false
+        @early_data = early_data || @headers.any? { |name, _| name == "early-data" }
       end
 
       # The trailer fields, once the body has been read to its end.
       def trailers = @exchange.trailers
 
-      # 0-RTT comes with resumption, which this release does not have yet.
-      def early_data? = false
+      # Whether the request may be a replay of one on another connection: it
+      # came in 0-RTT, or with an Early-Data header field, which a proxy
+      # that forwarded it from early data adds, and which counts whatever
+      # its value and however many there are (RFC 8470 "The Early-Data
+      # Header Field"). Waiting for the handshake to complete makes 0-RTT on
+      # this connection no replay, but not a request a proxy marked.
+      # Answering 425 (Too Early) is the application's.
+      def early_data? = @early_data
 
       def responded? = @responded
 
@@ -268,7 +275,8 @@ module Raiha::Next::Runtime
         # over before Fiber.schedule returns: it is known as there before it
         # starts, and not kept once over.
         @fibers[stream_id] = nil
-        fiber = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
+        early_data = @session.connection.stream_early_data?(stream_id)
+        fiber = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers, early_data:)) }
         @fibers[stream_id] = fiber if @fibers.key?(stream_id)
       end
 
