@@ -16,6 +16,9 @@ class ServerProtocol(QuicConnectionProtocol):
     def quic_event_received(self, event):
         if isinstance(event, HandshakeCompleted):
             print("HANDSHAKE_COMPLETE", flush=True)
+            resumed = str(event.session_resumed).lower()
+            early = str(event.early_data_accepted).lower()
+            print(f"CONNECTION resumed={resumed} early={early}", flush=True)
         elif isinstance(event, StreamDataReceived):
             # The echo goes once the stream has ended, whatever number of
             # pieces its data came in.
@@ -33,12 +36,17 @@ class ServerProtocol(QuicConnectionProtocol):
 async def main(certfile, keyfile, port, alpn):
     config = QuicConfiguration(is_client=False, alpn_protocols=alpn)
     config.load_cert_chain(certfile, keyfile)
+    # The tickets it gives, by their bytes, so that a client may resume one
+    # and send 0-RTT.
+    tickets = {}
 
     server = await serve(
         "127.0.0.1",
         port,
         configuration=config,
         create_protocol=ServerProtocol,
+        session_ticket_fetcher=lambda ticket: tickets.pop(ticket, None),
+        session_ticket_handler=lambda ticket: tickets.__setitem__(ticket.ticket, ticket),
     )
     print(f"READY:{port}", flush=True)
     await asyncio.sleep(10)
