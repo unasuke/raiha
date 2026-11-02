@@ -29,4 +29,10 @@ class NextHTTP3Side
   end
 
   def of(type) = @events.grep(type)
+
+  # HTTP/3 starts over with `http3`, after a rejected 0-RTT.
+  def restart(http3)
+    @http3 = http3
+    @binding.restart(http3)
+  end
 end

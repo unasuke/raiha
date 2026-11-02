@@ -65,6 +65,18 @@ module Raiha::Next
       @http3.each_datagram_send { |data, urgency| @connection.datagram_send(data, urgency:) }
     end
 
+    # The server rejected the client's 0-RTT: the streams the client opened
+    # are gone, and with them HTTP/3's, and `http3` takes the place of the
+    # HTTP/3 they were of. Its streams open once the handshake has
+    # completed. The server's streams carry nothing until then, so `http3`
+    # reads them from their start.
+    def restart(http3)
+      @http3 = http3
+      @paused.clear
+      @started = false
+      @start_due = @connection.handshake_complete?
+    end
+
     # Leaves `stream_id` unread until `resume`, so that QUIC's flow control
     # holds the peer back.
     def pause(stream_id)

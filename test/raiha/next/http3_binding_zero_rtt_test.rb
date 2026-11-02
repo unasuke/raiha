@@ -61,4 +61,34 @@ class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
     [client, server].each { |side| assert_equal 1, side.of(HTTP3::Event::Settings).size }
     [client, server].each { |side| assert_empty side.quic_events.grep(QUIC::Event::Closed) }
   end
+
+  # A server that rejects 0-RTT drops the request and the SETTINGS that
+  # went in it. HTTP/3 starts over with a layer of no remembered SETTINGS,
+  # whose streams open once the handshake has completed.
+  def test_a_rejected_0rtt
+    session, settings = first
+    connection = client_connection(session:, early_data: true, now: LATER, time: NOW + LATER, random: Random.new(5))
+    client = NextHTTP3Side.new(connection, HTTP3::Connection.client(remembered: settings))
+    server = server(anti_replay: TLS::AntiReplay::Memory.new(now: NOW + LATER))
+    client.turn(LATER) { client.http3.send_request(connection.open_stream, GET, fin: true) }
+    restarted = false
+    10.times do |round|
+      now = LATER + (round * 0.001)
+      client.turn(now) do
+        next if restarted || client.quic_events.grep(QUIC::Event::ZeroRttRejected).empty?
+        connection.acknowledge_zero_rtt_rejection
+        client.restart(HTTP3::Connection.client)
+        restarted = true
+      end
+      connection.transmits(now:).each { |transmit| server.connection.receive(transmit.payload, from: CLIENT, now:) }
+      server.turn(now)
+      server.connection.transmits(now:).each { |transmit| connection.receive(transmit.payload, from: SERVER, now:) }
+    end
+    assert restarted
+    assert connection.handshake_complete?
+    assert_empty server.of(HTTP3::Event::Headers)
+    assert_equal 1, server.of(HTTP3::Event::Settings).size
+    refute_nil client.http3.peer_settings
+    [client, server].each { |side| assert_empty side.quic_events.grep(QUIC::Event::Closed) }
+  end
 end
