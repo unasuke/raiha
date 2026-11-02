@@ -200,9 +200,9 @@ module Raiha::Next::Runtime
 
     def turn: () -> void
 
-    def read: (Integer stream_id, Integer max_bytes, ?generation: Integer) -> String?
+    def read: (Integer stream_id, Integer max_bytes, generation: Integer) -> String?
 
-    def write: (Integer stream_id, String data, fin: bool, ?generation: Integer) -> Integer
+    def write: (Integer stream_id, String data, fin: bool, generation: Integer) -> Integer
 
     private def take_events: () -> void
 

@@ -246,8 +246,9 @@ module Raiha::Next::Runtime
     end
 
     # Up to `max_bytes` of `stream_id` once there are any, nil at its end,
-    # and after it. `generation` is that of the Stream.
-    def read(stream_id, max_bytes, generation: @generation)
+    # and after it. `generation` is that of the Stream, which tells a stream
+    # of rejected 0-RTT from one opened since under its ID.
+    def read(stream_id, max_bytes, generation:)
       current!(stream_id, generation)
       track = @tracks[stream_id]
       return nil unless track&.reading
@@ -265,8 +266,8 @@ module Raiha::Next::Runtime
     end
 
     # Writes all of `data` to `stream_id`, waiting for room as it goes, and
-    # ends it with `fin`. `generation` is that of the Stream.
-    def write(stream_id, data, fin:, generation: @generation)
+    # ends it with `fin`. `generation` is that of the Stream, as for `read`.
+    def write(stream_id, data, fin:, generation:)
       current!(stream_id, generation)
       track = @tracks[stream_id]
       raise Raiha::Next::QUIC::Error::StreamError, "stream #{stream_id} has ended" unless track&.writing
