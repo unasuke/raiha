@@ -24,6 +24,11 @@ module Raiha::Next::Runtime
   #
   # With `qlog_dir`, each connection has a qlog there, named by the
   # Destination Connection ID the client first chose.
+  #
+  # When the ticket keys of `tls_config` are a TicketKeys.ratchet, the
+  # server builds them again once their epoch is over, before the next
+  # connection it takes, with a Keyring to match. Keys of another kind are
+  # the application's to turn over, with `reconfigure`.
   class Server
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
@@ -113,6 +118,7 @@ module Raiha::Next::Runtime
         return endpoint.retry(route.handle, now:) if !route.address_validated && @sessions.size * 2 >= @max_connections
         hello = endpoint.admit(route.handle, now:) and route(hello, now)
       when Raiha::Next::QUIC::Route::ClientHello
+        advance_ticket_keys
         tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
         connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:)
         session = Session.new(connection, driver!, role: :server, tracer:)
@@ -149,6 +155,18 @@ module Raiha::Next::Runtime
     end
 
     private def driver! = @driver || raise(Error::Usage, "the server is not running")
+
+    # A ticket is sealed with the key of the epoch it is issued in, and keys
+    # of epochs long gone stop opening any. A Keyring of another Config is
+    # left for the handshake to refuse.
+    private def advance_ticket_keys
+      keys = @tls_config.ticket_keys or return
+      at = keys.next_advance_at or return
+      time = Time.now
+      return if time < at || !@keyring.config.equal?(@tls_config)
+      @keyring = @keyring.with_ticket_keys(keys.advance(now: time))
+      @tls_config = @keyring.config
+    end
 
     # Has the driver go round each time `stop` writes to the pipe.
     private def wake_on(reader, driver)

@@ -9,10 +9,10 @@ require "async"
 class RaihaNextRuntimeServerTest < Minitest::Test
   include NextRuntimeOwner
 
-  def connect(port, &)
+  def connect(port, **options, &)
     tls = client_config
     Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
-      server_name: "localhost", &)
+      server_name: "localhost", **options, &)
   end
 
   # What a stream of `session` answers to `data`.
@@ -28,8 +28,7 @@ class RaihaNextRuntimeServerTest < Minitest::Test
   # A server of the runtime on a free port running `handler` for each
   # session, for the block, which is given the port, the server and the
   # fiber that runs it; stopped after.
-  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS)
-    tls = server_config
+  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS, tls: server_config)
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
       port: 0, max_connections:)
     running = Fiber.schedule { server.run(&handler) }
@@ -125,6 +124,29 @@ class RaihaNextRuntimeServerTest < Minitest::Test
             error.errors.map { |_, closed| closed.error.code }
           assert_equal "ECHO:still", echo(first, "still")
         end
+      end
+    end
+  end
+
+  # Keys of a ratchet of one-second epochs: once the first is over, the
+  # server builds them again for the next connection, which resumes a
+  # ticket of the epoch before.
+  def test_ratchet_keys_advance
+    Sync do
+      origin = Time.now
+      keys = TLS::TicketKeys.ratchet(base: "\x1e".b * 32, base_epoch: -100, origin:, now: origin, epoch: 1)
+      tls = server_config(ticket_keys: keys, ticket_lifetime: 10)
+      serving(method(:echoes), tls:) do |port, server|
+        ticket = connect(port) do |session|
+          session.wait_for(deadline: Runtime::Driver.clock + 2) { session.tickets.first }
+          session.tickets.last
+        end
+        assert_same tls, server.instance_variable_get(:@tls_config)
+        sleep 0.01 until Time.now >= origin + 1
+        assert connect(port, session: ticket) { |session| session.handshake&.resumed }
+        advanced = server.instance_variable_get(:@tls_config)
+        assert_equal tls.ticket_keys.next_advance_at + 1, advanced.ticket_keys.next_advance_at
+        assert_same advanced, server.instance_variable_get(:@keyring).config
       end
     end
   end

@@ -336,6 +336,8 @@ module Raiha::Next::Runtime
 
     private def driver!: () -> Driver
 
+    private def advance_ticket_keys: () -> void
+
     private def start: (Session session) -> void
 
     private def wake_on: (IO reader, Driver driver) -> void
