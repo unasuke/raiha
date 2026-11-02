@@ -517,7 +517,7 @@ module Raiha::Next::Runtime
 
       def turn: (Float now) -> void
 
-      private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> Integer
+      private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> [Integer, Exchange]
 
       private def remembered: () -> Raiha::Next::HTTP3::Settings?
 

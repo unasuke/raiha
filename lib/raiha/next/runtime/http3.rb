@@ -174,8 +174,7 @@ module Raiha::Next::Runtime
       # response is read whole into a Response. A response the block left
       # unread is cancelled.
       def request(method, path, headers: [], body: nil, urgency: nil, incremental: nil)
-        stream_id = start(method, path, headers + priority(urgency, incremental), fin: body.nil?)
-        exchange = @exchanges.fetch(stream_id)
+        stream_id, exchange = start(method, path, headers + priority(urgency, incremental), fin: body.nil?)
         upload(stream_id, exchange, body) if body
         status = @session.wait_for(drain: true) do
           check(stream_id, exchange)
@@ -237,12 +236,14 @@ module Raiha::Next::Runtime
         @binding.flush(now:)
       end
 
-      # Sends the request on a new stream: its ID. A request HTTP/3 does not
-      # take, after the server's GOAWAY or with header fields it finds
-      # malformed, gives its stream up both ways.
+      # Sends the request on a new stream: its ID and the Exchange kept of it,
+      # which a rejected 0-RTT may have let go of by the time it is looked
+      # for. A request HTTP/3 does not take, after the server's GOAWAY or
+      # with header fields it finds malformed, gives its stream up both
+      # ways.
       private def start(method, path, headers, fin:)
         stream_id = @session.open_stream_id
-        @exchanges[stream_id] = Exchange.new
+        exchange = @exchanges[stream_id] = Exchange.new
         pseudo = [[":method", method], [":scheme", "https"], [":authority", @authority], [":path", path]] #: Array[[String, String]]
         begin
           @http3.send_request(stream_id, pseudo + headers, fin:)
@@ -254,7 +255,7 @@ module Raiha::Next::Runtime
           raise
         end
         flush
-        stream_id
+        [stream_id, exchange] #: [Integer, Exchange]
       end
 
       # While 0-RTT goes, the SETTINGS of the HTTP3::Session the connection
