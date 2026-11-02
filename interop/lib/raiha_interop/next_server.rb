@@ -8,6 +8,10 @@ module RaihaInterop
   # testcase, and answers each request, "GET /path\r\n" on a stream the
   # client opens, with the file of the path under WWW, ending the stream.
   # A path with no file gets nothing. It runs until the runner stops it.
+  #
+  # It gives tickets sealed with a key made at random as it starts, and
+  # takes 0-RTT from them. As no ticket opens from before the start, the
+  # record of 0-RTT taken needs no time to warm up.
   class NextServer
     include NextQUIC
 
@@ -28,8 +32,10 @@ module RaihaInterop
     end
 
     def run
-      @tls_config = TLS::Config.server(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
+      @tls_config = TLS::Config.server(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, ticket_key: SecureRandom.bytes(32),
+        max_early_data_size: 0xffff_ffff)
       @keyring = TLS::Keyring.server(config: @tls_config, identities: [identity])
+      @anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false)
       @keylog = keylog
       socket = udp_socket
       socket.bind("0.0.0.0", (@env["BIND_PORT"] || PORT).to_i)
@@ -59,7 +65,8 @@ module RaihaInterop
         return endpoint.retry(route.handle, now: mono) if @testcase == "retry" && !route.address_validated
         dispatch(endpoint, socket, endpoint.admit(route.handle, now: mono))
       when QUIC::Route::ClientHello
-        endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now: mono, tracer: qlog(:server), keylog: @keylog)
+        endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now: mono, tracer: qlog(:server), keylog: @keylog,
+          anti_replay: @anti_replay)
       when QUIC::Route::Respond then send_transmit(socket, route.transmit)
       end
     end

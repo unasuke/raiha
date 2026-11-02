@@ -13,8 +13,8 @@ module RaihaInterop
   # hq-interop for them, or of HTTP/3 for http3. Key updates come without
   # asking, after the first hundred packets.
   module NextRunner
-    CLIENT_TESTCASES = %w[handshake transfer retry chacha20 keyupdate versionnegotiation http3].freeze
-    SERVER_TESTCASES = %w[handshake transfer retry chacha20 versionnegotiation http3].freeze
+    CLIENT_TESTCASES = %w[handshake transfer retry chacha20 keyupdate versionnegotiation resumption zerortt http3].freeze
+    SERVER_TESTCASES = %w[handshake transfer retry chacha20 versionnegotiation resumption zerortt http3].freeze
     # What quic-interop-runner takes for a testcase not implemented.
     NOT_IMPLEMENTED = 127
 
