@@ -8,7 +8,10 @@ module Raiha::Next
   # which knows the other: what QUIC tells of its streams goes to HTTP/3,
   # and what HTTP/3 writes and asks of the transport goes to QUIC. It
   # decides nothing of its own beyond opening HTTP/3's three streams once
-  # QUIC has connected, and which streams to read.
+  # QUIC has connected, and which streams to read. A client's connection
+  # that sends 0-RTT carries HTTP/3 from the start: the streams open at the
+  # first `flush`, and the requests go with them before the handshake
+  # completes.
   #
   # The application gives it each event of the QUIC connection with
   # `receive`, then calls `flush`; HTTP/3's events are then the HTTP/3
@@ -29,6 +32,8 @@ module Raiha::Next
       @http3 = http3
       @paused = {} #: Hash[Integer, true]
       @closed = false
+      @started = false
+      @start_due = connection.zero_rtt_state == :pending
     end
 
     # Takes `event` of the QUIC connection: whether it was HTTP/3's alone.
@@ -36,7 +41,7 @@ module Raiha::Next
     # `flush`; both are for the application too.
     def receive(event, now:)
       case event
-      when QUIC::Event::Connected then start(now)
+      when QUIC::Event::Connected then connected(now)
       when QUIC::Event::Closed then @closed = true
       when QUIC::Event::StreamWritable then @http3.stream_writable(event.stream_id)
       when QUIC::Event::StreamReset then @http3.stream_reset(event.stream_id, error_code: event.error_code)
@@ -54,6 +59,7 @@ module Raiha::Next
     def flush(now:)
       @connection.readable_streams.each { |stream_id| read(stream_id) unless @paused.key?(stream_id) }
       return if @closed
+      start(now) if @start_due
       @http3.each_action { |action| perform(action, now) }
       @http3.each_send { |stream_id, data, fin| @connection.stream_write(stream_id, data, fin:) }
       @http3.each_datagram_send { |data, urgency| @connection.datagram_send(data, urgency:) }
@@ -70,10 +76,20 @@ module Raiha::Next
       @paused.delete(stream_id)
     end
 
+    # The handshake has completed: HTTP/3's streams open unless 0-RTT opened
+    # them, and DATAGRAMs go to the peer's own limit, not the one 0-RTT
+    # remembered.
+    private def connected(now)
+      return start(now) unless @started
+      @http3.datagram_max_size = @connection.datagram_max_size
+    end
+
     # The control and QPACK streams, three of this end's going one way,
     # which RFC 9114 "Unidirectional Streams" has the peer allow; without
     # them the connection closes with H3_GENERAL_PROTOCOL_ERROR.
     private def start(now)
+      @started = true
+      @start_due = false
       @http3.datagram_max_size = @connection.datagram_max_size
       control, encoder, decoder = Array.new(3) { @connection.open_stream(direction: :uni) }
       if control && encoder && decoder
