@@ -1,10 +1,10 @@
 package main
 
 // A client that resumes, for the tests of resumption: it connects twice,
-// the second time with the session the first was given, sending what it
-// is given on a stream at once, in 0-RTT when the session allows it. For
-// each connection it prints whether it resumed and the server took
-// 0-RTT, with what came back.
+// the second time with the session and the NEW_TOKEN token the first was
+// given, sending what it is given on a stream at once, in 0-RTT when the
+// session allows it. For each connection it prints whether it resumed
+// and the server took 0-RTT, with what came back.
 
 import (
 	"context"
@@ -33,18 +33,19 @@ func main() {
 		NextProtos:         []string{"quic-echo"},
 		ClientSessionCache: tls.NewLRUClientSessionCache(4),
 	}
+	quicConfig := &quic.Config{TokenStore: quic.NewLRUTokenStore(4, 4)}
 	for i := 0; i < 2; i++ {
-		if err := connect(os.Args[1], tlsConfig, data); err != nil {
+		if err := connect(os.Args[1], tlsConfig, quicConfig, data); err != nil {
 			fmt.Fprintf(os.Stderr, "Connection %d: %v\n", i+1, err)
 			os.Exit(1)
 		}
 	}
 }
 
-func connect(addr string, tlsConfig *tls.Config, data []byte) error {
+func connect(addr string, tlsConfig *tls.Config, quicConfig *quic.Config, data []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := quic.DialAddrEarly(ctx, addr, tlsConfig, &quic.Config{})
+	conn, err := quic.DialAddrEarly(ctx, addr, tlsConfig, quicConfig)
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,8 @@ func connect(addr string, tlsConfig *tls.Config, data []byte) error {
 	<-conn.HandshakeComplete()
 	state := conn.ConnectionState()
 	fmt.Printf("CONNECTION resumed=%v early=%v data=%x\n", state.TLS.DidResume, state.Used0RTT, response)
-	// The tickets come after the handshake: a moment for them to be kept.
+	// The tickets and the token come after the handshake: a moment for
+	// them to be kept.
 	time.Sleep(200 * time.Millisecond)
 	return nil
 }

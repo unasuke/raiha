@@ -100,10 +100,17 @@ class NextQUICQuicgoInteropTest < Minitest::Test
     end
   end
 
-  # quic-go's client resumes a ticket of ours, and its 0-RTT is taken.
+  # quic-go's client resumes a ticket of ours, and its 0-RTT is taken; its
+  # second Initial carries the NEW_TOKEN token of the first connection,
+  # which validates its address.
   def test_resumption_and_0rtt_to_quicgo_client
     skip "quic-go resumption client not found" unless File.executable?(RESUME_CLIENT)
     server(alpn: ALPN, resumption: true) do |socket, server|
+      validated = []
+      server.define_singleton_method(:dispatch) do |route, now|
+        validated << route.address_validated if route.is_a?(QUIC::Route::Incoming)
+        super(route, now)
+      end
       echo = EchoServer.new(server)
       peer(RESUME_CLIENT, "127.0.0.1:#{socket.addr[1]}", PAYLOAD.unpack1("H*")) do |output|
         done = drive(socket, server, seconds: 20) do
@@ -114,6 +121,7 @@ class NextQUICQuicgoInteropTest < Minitest::Test
         connections = output.lines.grep(/\ACONNECTION /)
         assert_equal ["resumed=false early=false", "resumed=true early=true"], connections.map { _1[/resumed=\S+ early=\S+/] }, output
         assert(connections.all? { _1.include?("data=#{("ECHO:".b + PAYLOAD).unpack1("H*")}") }, output)
+        assert_equal [false, true], validated
       end
     end
   end
