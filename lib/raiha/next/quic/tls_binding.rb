@@ -127,9 +127,7 @@ module Raiha::Next::QUIC
         in Raiha::Next::TLS::Event::PeerExtension(type: TRANSPORT_PARAMETERS, data:) then @connection.peer_transport_parameters(data)
         in Raiha::Next::TLS::Event::HandshakeComplete then @connection.handshake_completed(event)
         in Raiha::Next::TLS::Event::NewSessionTicket(session:) then @connection.session_ticket(session)
-        in Raiha::Next::TLS::Event::EarlyDataRejected(reason:)
-          @connection.zero_rtt_rejected(reason)
-          @connection.tls_event(event)
+        in Raiha::Next::TLS::Event::EarlyDataRejected(reason:) then @connection.zero_rtt_rejected(reason)
         in Raiha::Next::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(TLSBinding.error_code(@profile, alert, reason), reason)
         else @connection.tls_event(event)
         end

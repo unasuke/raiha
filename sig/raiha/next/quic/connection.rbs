@@ -61,6 +61,7 @@ module Raiha::Next::QUIC
     @session: Session?
     @zero_rtt_state: :disabled | :pending | :accepted | :rejected
     @early_data_streams: Set[Integer]
+    @zero_rtt_rejection_unacknowledged: bool
     @peer_ids: PeerConnectionIDs?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
@@ -97,6 +98,7 @@ module Raiha::Next::QUIC
                      ?new_token: String?, ?session: Session?) { (Connection, TransportParameters) -> TLSBinding } -> void
     def zero_rtt_state: () -> (:disabled | :pending | :accepted | :rejected)
     def stream_early_data?: (Integer stream_id) -> bool
+    def acknowledge_zero_rtt_rejection: () -> nil
     def handshake_complete?: () -> bool
     def handshake_confirmed?: () -> bool
     def closing?: () -> bool
@@ -129,6 +131,7 @@ module Raiha::Next::QUIC
     private def remote: () -> address
     private def zero_rtt_parameters: () -> RememberedTransportParameters?
     private def start_zero_rtt: () -> void
+    private def zero_rtt_settled!: (?Integer? stream_id) -> void
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil

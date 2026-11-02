@@ -11,6 +11,9 @@ module Raiha::Next::QUIC
 
     class StreamError < Usage
     end
+
+    class ZeroRttRejected < Usage
+    end
   end
 
   class Violation < StandardError
@@ -168,6 +171,13 @@ module Raiha::Next::QUIC
                   | (Session session) -> instance
     end
 
+    class ZeroRttRejected < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
     class NewToken < Data
       attr_reader token: String
 
@@ -191,6 +201,6 @@ module Raiha::Next::QUIC
     end
 
     type t = Connected | StreamReadable | StreamWritable | StreamReset | StopSending | DatagramReceived
-           | PathValidated | KeyUpdated | SessionTicket | NewToken | TLSEvent | Closed
+           | PathValidated | KeyUpdated | SessionTicket | ZeroRttRejected | NewToken | TLSEvent | Closed
   end
 end

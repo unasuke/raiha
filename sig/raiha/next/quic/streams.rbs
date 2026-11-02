@@ -55,6 +55,7 @@ module Raiha::Next::QUIC
 
     def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float, ?tracer: _Tracer?) -> void
     def peer_parameters=: (_PeerLimits parameters) -> _PeerLimits
+    def roll_back_own_streams: () -> nil
     def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
     def read: (Integer stream_id, Integer max_bytes) -> String?
     def readable: () -> Array[Integer]

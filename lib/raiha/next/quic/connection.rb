@@ -179,6 +179,7 @@ module Raiha::Next::QUIC
       @zero_rtt_state = :disabled #: :disabled | :pending | :accepted | :rejected
       # The streams a server received data of in 0-RTT packets.
       @early_data_streams = Set.new #: Set[Integer]
+      @zero_rtt_rejection_unacknowledged = false
       # The connection IDs the peer issued, from its transport parameters
       # on.
       @peer_ids = nil #: PeerConnectionIDs?
@@ -226,7 +227,10 @@ module Raiha::Next::QUIC
     # Up to `max_bytes` received on `stream_id`, read by the application:
     # "" when nothing is there yet, nil once the stream has ended, as
     # IO#read gives. What is read goes back to the peer as credit.
-    def stream_read(stream_id, max_bytes) = @streams.read(stream_id, max_bytes)
+    def stream_read(stream_id, max_bytes)
+      zero_rtt_settled!(stream_id)
+      @streams.read(stream_id, max_bytes)
+    end
 
     # The streams a read would give something on.
     def readable_streams = @streams.readable.each
@@ -236,6 +240,7 @@ module Raiha::Next::QUIC
     def open_stream(direction: :bidi)
       raise ArgumentError, "a stream goes :bidi or :uni, not #{direction.inspect}" unless %i[bidi uni].include?(direction)
       open!
+      zero_rtt_settled!
       @streams.open(direction, now: @now)
     end
 
@@ -246,6 +251,7 @@ module Raiha::Next::QUIC
     # can take more.
     def stream_write(stream_id, data, fin: false)
       open!
+      zero_rtt_settled!(stream_id)
       @streams.write(stream_id, data, fin:, now: @now)
     end
 
@@ -274,12 +280,16 @@ module Raiha::Next::QUIC
     end
 
     # How many bytes a write to `stream_id` would take now.
-    def stream_writable_bytes(stream_id) = @streams.writable_bytes(stream_id)
+    def stream_writable_bytes(stream_id)
+      zero_rtt_settled!(stream_id)
+      @streams.writable_bytes(stream_id)
+    end
 
     # Abandons sending on `stream_id`: RESET_STREAM goes with
     # `error_code`, and what was written and not acknowledged goes nowhere.
     def stream_reset(stream_id, error_code:)
       open!
+      zero_rtt_settled!(stream_id)
       @streams.reset(stream_id, error_code)
     end
 
@@ -287,6 +297,7 @@ module Raiha::Next::QUIC
     # `error_code` to stop sending, and what comes is let go.
     def stream_stop_sending(stream_id, error_code:)
       open!
+      zero_rtt_settled!(stream_id)
       @streams.stop_sending(stream_id, error_code)
     end
 
@@ -297,6 +308,7 @@ module Raiha::Next::QUIC
     # incremental.
     def stream_priority(stream_id, urgency:, incremental:)
       open!
+      zero_rtt_settled!(stream_id)
       raise ArgumentError, "urgency is 0 to 7, not #{urgency.inspect}" unless urgency.is_a?(Integer) && urgency.between?(0, 7)
       raise ArgumentError, "incremental is true or false, not #{incremental.inspect}" unless incremental == true || incremental == false
       @streams.prioritize(stream_id, urgency:, incremental:)
@@ -426,9 +438,28 @@ module Raiha::Next::QUIC
     end
 
     # The server took no 0-RTT (RFC 9001 "Accepting and Rejecting 0-RTT"):
-    # no more 0-RTT packets go.
+    # no more 0-RTT packets go, and none that went is sent again. The
+    # streams this client opened are gone and their IDs start over, the
+    # DATAGRAMs waiting are dropped, and Event::ZeroRttRejected says so;
+    # until the application acknowledges it, its streams and open_stream
+    # raise Error::ZeroRttRejected, so that an old ID cannot name a new
+    # stream. What to send again is the application's.
     def zero_rtt_rejected(reason)
-      @zero_rtt_state = :rejected if @zero_rtt_state == :pending
+      return unless @zero_rtt_state == :pending
+      @zero_rtt_state = :rejected
+      @recovery.on_zero_rtt_rejected(now: @now)
+      @streams.roll_back_own_streams
+      @datagrams.drop_queued
+      @protection.discard(:zero_rtt)
+      @zero_rtt_rejection_unacknowledged = true
+      @events << Event::ZeroRttRejected.new(reason:)
+    end
+
+    # The application knows its 0-RTT was rejected (Event::ZeroRttRejected),
+    # and opens streams again from here.
+    def acknowledge_zero_rtt_rejection
+      @zero_rtt_rejection_unacknowledged = false
+      nil
     end
 
     # Whether a STREAM frame of `stream_id` came in a 0-RTT packet, which
@@ -548,6 +579,14 @@ module Raiha::Next::QUIC
     # The session's remembered transport parameters while 0-RTT goes, the
     # limits until the server's come.
     private def zero_rtt_parameters = (@session&.transport_parameters if @zero_rtt_state == :pending)
+
+    # Until the application acknowledges a rejected 0-RTT, nothing may name a
+    # stream this client opened, nor open one.
+    private def zero_rtt_settled!(stream_id = nil)
+      return unless @zero_rtt_rejection_unacknowledged
+      return if stream_id && stream_id & Streams::SERVER_INITIATED != 0
+      raise Error::ZeroRttRejected, "0-RTT was rejected; call acknowledge_zero_rtt_rejection first"
+    end
 
     private def start_zero_rtt
       @zero_rtt_state = :pending

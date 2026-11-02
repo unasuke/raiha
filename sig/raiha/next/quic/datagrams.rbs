@@ -24,6 +24,7 @@ module Raiha::Next::QUIC
     def send: (String data, expires_at: Float?, urgency: Integer, max_size: Integer?) -> bool
     def urgency: (now: Float) -> Integer?
     def next_frame: (Integer room, now: Float) -> Wire::Frame::Datagram?
+    def drop_queued: () -> void
     def receive: (Wire::Frame::Datagram frame) -> void
     def taken: (Event::t event) -> void
     private def drop_expired: (Float now) -> void

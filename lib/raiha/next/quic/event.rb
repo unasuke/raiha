@@ -37,6 +37,12 @@ module Raiha::Next::QUIC
     class SessionTicket < Data.define(:session)
     end
 
+    # The server took no 0-RTT, for `reason` as TLS has it: the streams the
+    # client opened are gone, and what to send again is the application's
+    # (Connection#zero_rtt_rejected).
+    class ZeroRttRejected < Data.define(:reason)
+    end
+
     # A token the server gave in a NEW_TOKEN frame, for the Initials of a
     # later connection to it (Endpoint#connect(token:)); keeping it is the
     # application's.

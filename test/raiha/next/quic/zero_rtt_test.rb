@@ -88,6 +88,29 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     assert_empty server.readable_streams.to_a
   end
 
+  # A rejected 0-RTT rolls the client back (RFC 9001 "Accepting and
+  # Rejecting 0-RTT"): its streams are gone and nothing of them goes again;
+  # until it says it knows, its streams and open_stream raise; then IDs
+  # start over from 0.
+  def test_a_client_rolled_back
+    client = client(session:, early_data: true)
+    stream = client.open_stream
+    client.stream_write(stream, "early", fin: true)
+    server = server(app_early_data_context: "other".b)
+    exchange(client, server, now: LATER)
+    assert client.handshake_complete?
+    assert_equal [QUIC::Event::ZeroRttRejected.new(reason: :rejected_by_server)], events(client).grep(QUIC::Event::ZeroRttRejected)
+    assert_raises(QUIC::Error::ZeroRttRejected) { client.open_stream }
+    assert_raises(QUIC::Error::ZeroRttRejected) { client.stream_write(stream, "again") }
+    assert_empty server.readable_streams.to_a
+    client.acknowledge_zero_rtt_rejection
+    assert_equal stream, client.open_stream
+    client.stream_write(stream, "again", fin: true)
+    exchange(client, server, now: LATER + 0.1)
+    assert_equal "again", server.stream_read(stream, 100)
+    refute server.stream_early_data?(stream)
+  end
+
   # A server that takes no 0-RTT: the client learns it, and sends no more
   # 0-RTT packets.
   def test_0rtt_a_server_does_not_take

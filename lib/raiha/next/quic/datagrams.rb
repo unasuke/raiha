@@ -63,6 +63,10 @@ module Raiha::Next::QUIC
     end
 
     # Takes a DATAGRAM frame from the peer.
+    # A client's 0-RTT was rejected: what waits to go was written for it,
+    # and goes no more (RFC 9001 "Accepting and Rejecting 0-RTT").
+    def drop_queued = @queue.clear
+
     def receive(frame)
       size = frame.data.bytesize
       raise Violation.new("a DATAGRAM frame, which this end did not take", frame_type: FRAME_TYPE) if @max_frame_size.zero?

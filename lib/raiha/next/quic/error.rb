@@ -17,6 +17,11 @@ module Raiha::Next::QUIC
 
     # A call on a stream that does not exist or does not allow it.
     class StreamError < Usage; end
+
+    # A client's 0-RTT was rejected and the application has not said it
+    # knows (Connection#acknowledge_zero_rtt_rejection): the streams it
+    # opened are gone, and an ID of one could name a new stream.
+    class ZeroRttRejected < Usage; end
   end
 
   # The peer broke a rule of the protocol. `code` is the transport error to

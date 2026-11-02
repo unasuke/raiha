@@ -148,6 +148,32 @@ module Raiha::Next::QUIC
       end
     end
 
+    # A client's 0-RTT was rejected (RFC 9001 "Accepting and Rejecting
+    # 0-RTT"): the streams this end opened are gone with what they wrote,
+    # which went in 0-RTT packets, and their IDs are given again from 0.
+    # The peer opened none yet.
+    def roll_back_own_streams
+      own = @role == :server ? SERVER_INITIATED : 0
+      gone = (@senders.keys | @receivers.keys).select { |stream_id| stream_id & SERVER_INITIATED == own }
+      gone.each do |stream_id|
+        @senders.delete(stream_id)
+        @receivers.delete(stream_id)
+        @scheduler.forget(stream_id)
+        @wanting.delete(stream_id)
+        @flow_blocked.delete(stream_id)
+      end
+      @opened[own] = 0
+      @opened[own | UNIDIRECTIONAL] = 0
+      @written = 0
+      @buffered = 0
+      @connection_blocked = false
+      @data_blocked_at = nil
+      @data_blocked_due = false
+      @streams_blocked_at = { bidi: nil, uni: nil }
+      @streams_blocked_due = { bidi: false, uni: false }
+      nil
+    end
+
     # Opens a stream of this end going `direction`, :bidi or :uni: its ID,
     # or nil when the peer allows no more.
     def open(direction, now:)
