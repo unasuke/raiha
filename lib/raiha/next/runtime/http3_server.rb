@@ -56,7 +56,7 @@ module Raiha::Next::Runtime
     class Request
       attr_reader :stream_id, :method, :path, :authority, :scheme, :protocol, :headers, :body
 
-      def initialize(server, stream_id, exchange, headers, early_data:)
+      def initialize(server, stream_id, exchange, headers)
         @server = server
         @stream_id = stream_id
         @exchange = exchange
@@ -69,7 +69,7 @@ module Raiha::Next::Runtime
         @headers = headers.reject { |name, _| name.start_with?(":") }
         @body = Body.new(server, stream_id)
         @responded = false
-        @early_data = early_data || @headers.any? { |name, _| name == "early-data" }
+        @marked_early = @headers.any? { |name, _| name == "early-data" }
       end
 
       # The trailer fields, once the body has been read to its end.
@@ -81,8 +81,10 @@ module Raiha::Next::Runtime
       # its value and however many there are (RFC 8470 "The Early-Data
       # Header Field"). Waiting for the handshake to complete makes 0-RTT on
       # this connection no replay, but not a request a proxy marked.
-      # Answering 425 (Too Early) is the application's.
-      def early_data? = @early_data
+      # Answering 425 (Too Early) is the application's. A part of the
+      # request that comes in a 0-RTT packet late, after the header section
+      # came in 1-RTT, makes it true from then on.
+      def early_data? = @marked_early || @server.stream_early_data?(@stream_id)
 
       def responded? = @responded
 
@@ -248,6 +250,9 @@ module Raiha::Next::Runtime
         write(stream_id, exchange, data, fin: false)
       end
 
+      # Whether a part of `stream_id` came in a 0-RTT packet; for Request.
+      def stream_early_data?(stream_id) = @session.connection.stream_early_data?(stream_id)
+
       # For Request#priority=.
       def prioritize(stream_id, urgency:, incremental:)
         @http3.update_priority(stream_id, urgency:, incremental:)
@@ -275,8 +280,7 @@ module Raiha::Next::Runtime
         # over before Fiber.schedule returns: it is known as there before it
         # starts, and not kept once over.
         @fibers[stream_id] = nil
-        early_data = @session.connection.stream_early_data?(stream_id)
-        fiber = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers, early_data:)) }
+        fiber = Fiber.schedule { handle(handler, Request.new(self, stream_id, exchange, headers)) }
         @fibers[stream_id] = fiber if @fibers.key?(stream_id)
       end
 

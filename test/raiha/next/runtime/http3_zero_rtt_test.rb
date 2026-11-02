@@ -155,4 +155,22 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
       assert_equal ["/again"], seen
     end
   end
+
+  # What a Request asks of the server it came to.
+  class Serving
+    attr_writer :early
+
+    def stream_early_data?(_stream_id) = @early
+  end
+
+  # A request whose header section came in 1-RTT, then a part of it in a
+  # 0-RTT packet that came late: early data from then on.
+  def test_early_data_that_comes_late
+    serving = Serving.new
+    serving.early = false
+    request = Runtime::HTTP3::Request.new(serving, 0, Runtime::HTTP3::Exchange.new, [[":method", "GET"], [":path", "/"]])
+    refute request.early_data?
+    serving.early = true
+    assert request.early_data?
+  end
 end

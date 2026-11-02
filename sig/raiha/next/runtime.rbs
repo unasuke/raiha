@@ -582,9 +582,9 @@ module Raiha::Next::Runtime
       @server: Serving
       @exchange: Exchange
       @responded: bool
-      @early_data: bool
+      @marked_early: bool
 
-      def initialize: (Serving server, Integer stream_id, Exchange exchange, Array[[String, String]] headers, early_data: bool) -> void
+      def initialize: (Serving server, Integer stream_id, Exchange exchange, Array[[String, String]] headers) -> void
 
       def trailers: () -> Array[[String, String]]
 
@@ -640,6 +640,8 @@ module Raiha::Next::Runtime
       def finish_body: (Integer stream_id, Exchange exchange, Array[[String, String]] trailers) -> void
 
       def write_body: (Integer stream_id, Exchange exchange, String data) -> void
+
+      def stream_early_data?: (Integer stream_id) -> bool
 
       def prioritize: (Integer stream_id, urgency: Integer?, incremental: bool?) -> void
 
