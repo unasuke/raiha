@@ -40,12 +40,21 @@ module Raiha::Next::Runtime
   # Session#tokens, its Initials carry it, so that the server need not
   # validate the address again. Each is for one connection; once used, the
   # application drops it.
+  #
+  # With `early_data` true as well, and a ticket that allows it, the
+  # connection sends what the block writes before its handshake completes,
+  # in 0-RTT: the block is given the Session at once. A connection given to
+  # the block is not tried at another address, as what it sent in 0-RTT is
+  # not to be sent again unless the application says so (RFC 9846 "Replay
+  # Attacks on 0-RTT"): one that fails raises QUIC::ClosedError in the
+  # block. An attacker may replay 0-RTT, so only what is safe to repeat
+  # goes before Session#wait_handshake.
   class Client
     CONNECT_TIMEOUT = 5.0
 
     def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil,
-      session: nil, token: nil, &)
-      new(config:, tls_config:, keyring:, connect_timeout:, qlog_dir:).connect(host, port, server_name:, session:, token:, &)
+      session: nil, token: nil, early_data: false, &)
+      new(config:, tls_config:, keyring:, connect_timeout:, qlog_dir:).connect(host, port, server_name:, session:, token:, early_data:, &)
     end
 
     def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil)
@@ -59,7 +68,7 @@ module Raiha::Next::Runtime
       @trace = nil #: Qlog::Pending?
     end
 
-    def connect(host, port, server_name: host, session: nil, token: nil)
+    def connect(host, port, server_name: host, session: nil, token: nil, early_data: false)
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
       errors = [] #: Array[[UDP::address | String, StandardError]]
       addresses = begin
@@ -68,11 +77,11 @@ module Raiha::Next::Runtime
         raise ConnectError.new(host, port, [[host, error]])
       end
       addresses.each do |address|
-        driver, opened = attempt(address, server_name, session:, token:)
+        driver, opened = attempt(address, server_name, session:, token:, early_data:)
         connected = false
         begin
           driver.start
-          opened.wait_handshake
+          opened.wait_ready
           connected = true
         rescue Raiha::Next::QUIC::ClosedError => error
           errors << [address, error]
@@ -136,14 +145,14 @@ module Raiha::Next::Runtime
 
     # A connection to `address` on a socket of its own, its handshake to
     # begin once the driver starts: [driver, session].
-    private def attempt(address, server_name, session:, token:)
+    private def attempt(address, server_name, session:, token:, early_data:)
       made = false
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:,
-        session:, token:)
+        session:, token:, early_data:)
       opened = @session = Session.new(connection, driver, role: :client, tracer:)
       @deadline = Driver.clock + @connect_timeout
       made = true

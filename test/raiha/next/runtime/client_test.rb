@@ -57,13 +57,18 @@ class RaihaNextRuntimeClientTest < Minitest::Test
 
   SEED = "\x1d".b * 32
 
-  # A server's Owner that gives tickets, and the address_validated of each
-  # first Initial it takes.
-  def resuming_server
-    server = server_owner(tls: server_config(ticket_key: SEED))
+  # A server's Owner that gives tickets, which allow `max_early_data_size`
+  # of 0-RTT, and the address_validated of each first Initial it takes.
+  # It takes `hold` seconds over each ClientHello, so that on the loopback
+  # interface a client's 0-RTT goes before the server's flight comes, and
+  # with it the keys of 1-RTT.
+  def resuming_server(max_early_data_size: 0, hold: 0)
+    anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false) if max_early_data_size.positive?
+    server = server_owner(tls: server_config(ticket_key: SEED, max_early_data_size:), anti_replay:)
     validated = []
     server.define_singleton_method(:route) do |route, now|
       validated << route.address_validated if route.is_a?(QUIC::Route::Incoming)
+      sleep hold if route.is_a?(QUIC::Route::ClientHello)
       super(route, now)
     end
     [server, validated]
@@ -88,6 +93,59 @@ class RaihaNextRuntimeClientTest < Minitest::Test
       end
       assert resumed
       assert_equal [false, true], validated
+    ensure
+      server&.driver&.stop
+    end
+  end
+
+  # Echoes each stream of the server's `index`th connection, and gives
+  # whether each came in 0-RTT.
+  def echo_early(server, index)
+    early = []
+    Fiber.schedule do
+      sleep 0.01 until (accepted = server.sessions[index])
+      accepted.each_stream do |stream|
+        early << accepted.connection.stream_early_data?(stream.id)
+        stream << stream.read
+        stream.close_write
+      end
+    end
+    early
+  end
+
+  # With early_data: true, the block is given the Session before the
+  # handshake completes, and what it writes first goes in 0-RTT.
+  def test_0rtt
+    Sync do
+      server, = resuming_server(max_early_data_size: 16_384, hold: 0.05)
+      ticket, = ticket_and_token(server.port)
+      early = echo_early(server, 1)
+      echoed = Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", session: ticket, early_data: true,
+        **options) do |session|
+        refute session.connection.handshake_complete?
+        stream = session.open_stream
+        stream << "early"
+        stream.close_write
+        [stream.read, session.connection.zero_rtt_state]
+      end
+      assert_equal ["early", :accepted], echoed
+      assert_equal [true], early
+    ensure
+      server&.driver&.stop
+    end
+  end
+
+  # A ticket that allows no 0-RTT: the block waits for the handshake.
+  def test_early_data_a_ticket_does_not_allow
+    Sync do
+      server, = resuming_server
+      ticket, = ticket_and_token(server.port)
+      state = Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", session: ticket, early_data: true,
+        **options) do |session|
+        assert session.connection.handshake_complete?
+        session.connection.zero_rtt_state
+      end
+      assert_equal :disabled, state
     ensure
       server&.driver&.stop
     end

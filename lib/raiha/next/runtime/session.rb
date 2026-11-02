@@ -153,6 +153,13 @@ module Raiha::Next::Runtime
       nil
     end
 
+    # Waits until the application may send: until the handshake has
+    # completed, or not at all while 0-RTT goes.
+    def wait_ready
+      wait { @connection.handshake_complete? || @connection.zero_rtt_state == :pending || nil }
+      nil
+    end
+
     # The next stream the peer opens; nil once the connection has closed, or
     # the server is stopping and none has come.
     def accept_stream
