@@ -34,11 +34,18 @@ module Raiha::Next::Runtime
   #
   # With `qlog_dir`, each connection tried has a qlog there, named by the
   # time it began.
+  #
+  # With `session`, a ticket an earlier connection's Session#tickets gave,
+  # each connection tried resumes it, and with `token`, one of its
+  # Session#tokens, its Initials carry it, so that the server need not
+  # validate the address again. Each is for one connection; once used, the
+  # application drops it.
   class Client
     CONNECT_TIMEOUT = 5.0
 
-    def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil, &)
-      new(config:, tls_config:, keyring:, connect_timeout:, qlog_dir:).connect(host, port, server_name:, &)
+    def self.connect(host, port, config:, tls_config:, keyring:, server_name: host, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil,
+      session: nil, token: nil, &)
+      new(config:, tls_config:, keyring:, connect_timeout:, qlog_dir:).connect(host, port, server_name:, session:, token:, &)
     end
 
     def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil)
@@ -52,7 +59,7 @@ module Raiha::Next::Runtime
       @trace = nil #: Qlog::Pending?
     end
 
-    def connect(host, port, server_name: host)
+    def connect(host, port, server_name: host, session: nil, token: nil)
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
       errors = [] #: Array[[UDP::address | String, StandardError]]
       addresses = begin
@@ -61,11 +68,11 @@ module Raiha::Next::Runtime
         raise ConnectError.new(host, port, [[host, error]])
       end
       addresses.each do |address|
-        driver, session = attempt(address, server_name)
+        driver, opened = attempt(address, server_name, session:, token:)
         connected = false
         begin
           driver.start
-          session.wait_handshake
+          opened.wait_handshake
           connected = true
         rescue Raiha::Next::QUIC::ClosedError => error
           errors << [address, error]
@@ -75,9 +82,9 @@ module Raiha::Next::Runtime
           driver.stop unless connected
         end
         begin
-          return yield session
+          return yield opened
         ensure
-          finish(driver, session)
+          finish(driver, opened)
         end
       end
       raise ConnectError.new(host, port, errors)
@@ -129,17 +136,18 @@ module Raiha::Next::Runtime
 
     # A connection to `address` on a socket of its own, its handshake to
     # begin once the driver starts: [driver, session].
-    private def attempt(address, server_name)
+    private def attempt(address, server_name, session:, token:)
       made = false
       udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
-      connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:)
-      session = @session = Session.new(connection, driver, role: :client, tracer:)
+      connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:,
+        session:, token:)
+      opened = @session = Session.new(connection, driver, role: :client, tracer:)
       @deadline = Driver.clock + @connect_timeout
       made = true
-      [driver, session] #: [Driver, Session]
+      [driver, opened] #: [Driver, Session]
     ensure
       # A connection that cannot be made, a Keyring for another Config say,
       # leaves no socket behind.

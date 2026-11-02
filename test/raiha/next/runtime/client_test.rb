@@ -55,6 +55,44 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     end
   end
 
+  SEED = "\x1d".b * 32
+
+  # A server's Owner that gives tickets, and the address_validated of each
+  # first Initial it takes.
+  def resuming_server
+    server = server_owner(tls: server_config(ticket_key: SEED))
+    validated = []
+    server.define_singleton_method(:route) do |route, now|
+      validated << route.address_validated if route.is_a?(QUIC::Route::Incoming)
+      super(route, now)
+    end
+    [server, validated]
+  end
+
+  # A ticket and a token a first connection was given, once it has them.
+  def ticket_and_token(port)
+    Runtime::Client.connect("127.0.0.1", port, server_name: "localhost", **options) do |session|
+      session.wait_for(deadline: Runtime::Driver.clock + 2) { session.tokens.first && session.tickets.first }
+      [session.tickets.last, session.tokens.last]
+    end
+  end
+
+  # A second connection resumes the ticket of the first, and with its
+  # token comes from an address the server need not validate.
+  def test_a_resumption
+    Sync do
+      server, validated = resuming_server
+      ticket, token = ticket_and_token(server.port)
+      resumed = Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", session: ticket, token:, **options) do |session|
+        session.handshake&.resumed
+      end
+      assert resumed
+      assert_equal [false, true], validated
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   # What the block wrote last is acknowledged before the connection closes,
   # and the connection closes with the application's error 0, not by
   # running out of idle time.
