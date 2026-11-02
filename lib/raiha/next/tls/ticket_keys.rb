@@ -150,12 +150,26 @@ module Raiha::Next::TLS
 
       def next_advance_at = resolved! && (origin + (@built_epoch + 1) * epoch)
 
-      def advance(now:) = rebuild(retain: retain!, now:)
+      # A build walks at most MAX_STEPS seeds from its base, which is
+      # `retain` epochs before the epoch it is built in, so keys built
+      # further back than that from `now` get there through builds in
+      # between: a server that took no connection for months, or whose
+      # clock leapt, goes on sealing.
+      def advance(now:)
+        reach = MAX_STEPS - retain! - horizon
+        keys = self
+        built = @built_epoch
+        while reach.positive? && epoch_at(now) - built > reach
+          built += reach
+          keys = rebuild(retain: retain!, now: origin + built * epoch, from: keys)
+        end
+        rebuild(retain: retain!, now:, from: keys)
+      end
 
       def inspect = "#<#{self.class.name} base_epoch=#{base_epoch} epochs=#{@by_epoch.keys.minmax.inspect}>"
 
-      private def rebuild(retain:, now:)
-        Ratchet.new(base:, base_epoch:, origin:, epoch:, retain:, horizon:, now:)
+      private def rebuild(retain:, now:, from: self)
+        Ratchet.new(base: from.base, base_epoch: from.base_epoch, origin:, epoch:, retain:, horizon:, now:)
       end
 
       # The Entries from `retain` epochs before the current to `horizon`

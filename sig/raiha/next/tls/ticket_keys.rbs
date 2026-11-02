@@ -56,7 +56,7 @@ module Raiha::Next::TLS
       def issuing_until: () -> Time
       def next_advance_at: () -> Time
       def advance: (now: Time) -> Ratchet
-      private def rebuild: (retain: Integer, now: Time) -> Ratchet
+      private def rebuild: (retain: Integer, now: Time, ?from: Ratchet) -> Ratchet
       private def chain: (Integer retain) -> Array[Entry]
       private def step: (String seed) -> String
       private def epoch_at: (Time time) -> Integer

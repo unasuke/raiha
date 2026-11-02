@@ -106,6 +106,16 @@ class RaihaNextTLSTicketKeysRatchetTest < Minitest::Test
     refute_nil keys.advance(now: keys.issuing_until).sealing(keys.issuing_until)
   end
 
+  # Keys built further back than a build can walk from, a server that took
+  # no connection for over a year say, get there through builds in between.
+  def test_advance_far_ahead
+    now = ORIGIN + 100 * HOUR
+    later = now + 10_000 * HOUR
+    advanced = ratchet(now).advance(now: later)
+    assert_equal TicketKeys.derive(seed(10_100), 10_100), advanced.sealing(later)
+    assert_equal ORIGIN + 10_101 * HOUR, advanced.next_advance_at
+  end
+
   def test_which_tickets_open
     now = ORIGIN + 100 * HOUR
     keys = ratchet(now)
