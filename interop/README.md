@@ -207,10 +207,10 @@ docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest 
 #   }
 PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
   interop/run_interop_runner.sh -c raiha-next -s raiha-next \
-  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3 -d
+  -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3,resumption,zerortt -d
 ```
 
-The CI job `next-interop-runner` runs these seven. versionnegotiation is
+The CI job `next-interop-runner` runs these nine. versionnegotiation is
 implemented on both sides but left out, as the runner cannot run it
 yet: `testcases_quic.py` defines `TestCaseVersionNegotiation` but
 leaves it out of `TESTCASES_QUIC`, so `-t` does not take it, and its
@@ -229,6 +229,8 @@ issue on this.
 | `keyupdate` | updates keys after the first hundred packets, as it always does | as for `transfer` |
 | `versionnegotiation` | elicits a Version Negotiation packet with an Initial of draft-29, which Wireshark reads the long header of, unlike a version reserved for negotiation | answers a version it does not take with a Version Negotiation packet |
 | `http3` | a GET over HTTP/3 for each request, on a stream of its own | the file of each path under `WWW` with 200, over HTTP/3 |
+| `resumption` | the first request on a connection that waits for a ticket, the rest on a second that resumes it | gives tickets sealed with a key made at random as it starts |
+| `zerortt` | as for `resumption`, with the rest in 0-RTT, asked again in 1-RTT if the server rejects it | as for `resumption`, and takes 0-RTT, recorded with no time to warm up |
 
 Everything else returns exit status 127.
 
