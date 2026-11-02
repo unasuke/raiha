@@ -153,7 +153,8 @@ module Raiha::Next::QUIC::Test
     def add: [N < _Node] (N node, address: ::Raiha::Next::QUIC::address) -> N
     def address_of: (_Node node) -> ::Raiha::Next::QUIC::address
     def add_server: (config: ::Raiha::Next::QUIC::Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
-                     time: Time, address: ::Raiha::Next::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?) -> Server
+                     time: Time, address: ::Raiha::Next::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> Server
     def link: (_Node a, _Node b, ?model: model?, ?forward: model?, ?reverse: model?) -> self
     def run_until: (?within: Float) { () -> boolish } -> bool
     def advance: (Float seconds) -> void
@@ -265,12 +266,14 @@ module Raiha::Next::QUIC::Test
     @keyring: ::Raiha::Next::TLS::Keyring
     @retry_unvalidated: bool
     @tracer: ::Raiha::Next::QUIC::_Tracer?
+    @anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?
     @transmits: Array[::Raiha::Next::QUIC::Transmit]
 
     attr_reader endpoint: ::Raiha::Next::QUIC::Endpoint
 
     def initialize: (::Raiha::Next::QUIC::Endpoint endpoint, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
-                     ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?) -> void
+                     ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> void
     def receive: (String payload, from: ::Raiha::Next::QUIC::address, to: ::Raiha::Next::QUIC::address?,
                   ecn: ::Raiha::Next::QUIC::ecn | :ce, now: Float) -> void
     def each_transmit: (now: Float) { (::Raiha::Next::QUIC::Transmit) -> void } -> void

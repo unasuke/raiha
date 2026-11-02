@@ -12,12 +12,12 @@ class RaihaNextQUICTestServerTest < Minitest::Test
   # A network with a client and a server on it, linked by `model` both
   # ways or by `forward` and `reverse`; the network, the client and the
   # server.
-  def network(seed: 1, model: nil, forward: model, reverse: model, **server)
+  def network(seed: 1, model: nil, forward: model, reverse: model, client: client_connection(random: Random.new(seed)), tls_config: server_config,
+    time: NOW, **server)
     net = Test::Network.new(seed:)
-    client = net.add(client_connection(random: Random.new(seed)), address: CLIENT)
-    tls_config = server_config
+    client = net.add(client, address: CLIENT)
     keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(seed + 1))
-    host = net.add_server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, address: SERVER, **server)
+    host = net.add_server(config: QUIC::Config.new, tls_config:, keyring:, time:, address: SERVER, **server)
     net.link(client, host, forward:, reverse:)
     [net, client, host]
   end
@@ -59,5 +59,19 @@ class RaihaNextQUICTestServerTest < Minitest::Test
     net, client, host = network(retry_unvalidated: true, model: Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.01, queue: 100_000))
     assert net.run_until { handshaken?(client, host) }
     assert_nil client.close_reason
+  end
+
+  # A server of a Config that takes 0-RTT, given a record of it, takes the
+  # 0-RTT of a client resuming a ticket it issued, a second later.
+  def test_0rtt
+    tls_config = server_config(ticket_key: "\x23".b * 32, max_early_data_size: 1)
+    anti_replay = TLS::AntiReplay::Memory.new(now: NOW, warmup: false)
+    net, client, host = network(tls_config:, anti_replay:)
+    tickets = []
+    assert net.run_until { client.each_event { tickets << _1.session if _1.is_a?(QUIC::Event::SessionTicket) } || (handshaken?(client, host) && tickets.any?) }
+    second = client_connection(random: Random.new(9), session: tickets.first, early_data: true, time: NOW + 1)
+    net, client, host = network(client: second, tls_config:, anti_replay:, time: NOW + 1)
+    assert net.run_until { handshaken?(client, host) }
+    assert_equal :accepted, client.zero_rtt_state
   end
 end

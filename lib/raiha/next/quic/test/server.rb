@@ -5,16 +5,18 @@ module Raiha::Next::QUIC::Test
   # every offer would run it: each offer is admitted and each ClientHello
   # accepted with one TLS Config and Keyring, and what the Endpoint answers
   # itself is sent. With `retry_unvalidated`, an offer whose address is not
-  # validated gets a Retry instead.
+  # validated gets a Retry instead. A Config that takes 0-RTT needs
+  # `anti_replay`, given to each connection.
   class Server
     attr_reader :endpoint
 
-    def initialize(endpoint, tls_config:, keyring:, retry_unvalidated: false, tracer: nil)
+    def initialize(endpoint, tls_config:, keyring:, retry_unvalidated: false, tracer: nil, anti_replay: nil)
       @endpoint = endpoint
       @tls_config = tls_config
       @keyring = keyring
       @retry_unvalidated = retry_unvalidated
       @tracer = tracer
+      @anti_replay = anti_replay
       @transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
     end
 
@@ -44,7 +46,7 @@ module Raiha::Next::QUIC::Test
         return @endpoint.retry(route.handle, now:) if @retry_unvalidated && !route.address_validated
         dispatch(@endpoint.admit(route.handle, now:), now)
       when Raiha::Next::QUIC::Route::ClientHello
-        @endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer: @tracer)
+        @endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer: @tracer, anti_replay: @anti_replay)
       when Raiha::Next::QUIC::Route::Respond then @transmits << route.transmit
       end
     end
