@@ -115,6 +115,8 @@ namespace :interop do
       Dir.chdir("test/support/quicgo") do
         sh "go build -o client_bin client.go"
         sh "go build -o server_bin server.go"
+        sh "go build -o resume_client_bin resume_client.go"
+        sh "go build -o resume_server_bin resume_server.go"
       end
     end
 

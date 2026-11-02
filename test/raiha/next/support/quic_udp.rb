@@ -13,26 +13,30 @@ module NextQUICUDP
   TMP = File.expand_path("../../../../tmp", __dir__)
   TICK = 0.05
 
-  # A client's application that, once the handshake is confirmed, sends
-  # `payload` on a stream of its own and ends it, and reads what comes back
-  # to its end.
+  # A client's application that, once the handshake is confirmed, or with
+  # `early` while 0-RTT goes, sends `payload` on a stream of its own and
+  # ends it, and reads what comes back to its end. It keeps the tickets the
+  # server gives, and what the handshake came to.
   class EchoClient
-    attr_reader :received
+    attr_reader :received, :tickets, :handshake
 
-    def initialize(connection, payload)
+    def initialize(connection, payload, early: false)
       @connection = connection
       @payload = payload
+      @early = early
       @written = 0
       @received = "".b
       @ended = false
+      @tickets = []
+      @handshake = nil
     end
 
     # A turn of the application: whether what came back has ended, or the
     # connection with it.
     def step
-      @connection.each_event { nil }
+      @connection.each_event { |event| take(event) }
       return true if @ended || @connection.closing? || @connection.draining? || @connection.closed?
-      return false unless @connection.handshake_confirmed?
+      return false unless @connection.handshake_confirmed? || (@early && @connection.zero_rtt_state == :pending)
       stream_id = (@stream_id ||= @connection.open_stream) or return false
       if @written < @payload.bytesize
         @written += @connection.stream_write(stream_id, @payload.byteslice(@written..) || "".b, fin: true)
@@ -42,6 +46,13 @@ module NextQUICUDP
         @received << chunk
       end
       @ended = true
+    end
+
+    private def take(event)
+      case event
+      when Raiha::Next::QUIC::Event::SessionTicket then @tickets << event.session
+      when Raiha::Next::QUIC::Event::Connected then @handshake = event.handshake
+      end
     end
   end
 
@@ -139,13 +150,14 @@ module NextQUICUDP
   end
 
   # A client connection with `alpn` to the server at `port`, on a socket
-  # of its own, for the block. The connection closes after.
-  def client(port, alpn:)
+  # of its own, for the block, with `options` of Connection.client
+  # (session:, early_data:). The connection closes after.
+  def client(port, alpn:, **options)
     tls_config = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
     socket = UDPSocket.new
     socket.bind("127.0.0.1", 0)
     connection = QUIC::Connection.client(config: QUIC::Config.new, tls_config:, keyring: TLS::Keyring.client(config: tls_config),
-      server_name: "localhost", remote: ["127.0.0.1", port], time: Time.now, now: mono)
+      server_name: "localhost", remote: ["127.0.0.1", port], time: Time.now, now: mono, **options)
     yield socket, connection
   ensure
     if connection
@@ -156,14 +168,18 @@ module NextQUICUDP
   end
 
   # A server's Endpoint that takes every client with `alpn`, on a socket of
-  # its own at a free port, for the block, as a QUIC::Test::Server.
-  def server(alpn:)
-    tls_config = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
+  # its own at a free port, for the block, as a QUIC::Test::Server. With
+  # `resumption`, it gives tickets of a key made at random and takes 0-RTT
+  # from them, so its record needs no time to warm up.
+  def server(alpn:, resumption: false)
+    tickets = resumption ? { ticket_key: SecureRandom.bytes(32), max_early_data_size: 1 } : {}
+    tls_config = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, **tickets)
     keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity])
+    anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false) if resumption
     socket = UDPSocket.new
     socket.bind("127.0.0.1", 0)
     endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: SecureRandom, time: Time.now, now: mono)
-    yield socket, QUIC::Test::Server.new(endpoint, tls_config:, keyring:)
+    yield socket, QUIC::Test::Server.new(endpoint, tls_config:, keyring:, anti_replay:)
   ensure
     socket&.close
   end
