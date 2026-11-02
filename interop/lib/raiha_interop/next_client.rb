@@ -110,7 +110,7 @@ module RaihaInterop
     # lets more open, in 0-RTT while it goes, and what came back saved once
     # a stream has ended.
     private def step(connection)
-      connection.each_event { |event| take(connection, event) }
+      connection.each_event { |event| take_quic(connection, event) }
       return unless connection.handshake_complete? || connection.zero_rtt_state == :pending
       return if connection.closing? || connection.draining? || connection.closed?
       while !@queue.empty? && (stream_id = connection.open_stream)
@@ -125,7 +125,7 @@ module RaihaInterop
       connection.readable_streams.to_a.each { |stream_id| take_response(connection, stream_id) }
     end
 
-    private def take(connection, event)
+    private def take_quic(connection, event)
       case event
       when QUIC::Event::Closed then log("closed: #{event.error.inspect}")
       when QUIC::Event::SessionTicket then @tickets << event.session

@@ -13,7 +13,7 @@ module RaihaInterop
 
     def alpn = ["h3"]
 
-    private def connect(server_name, remote)
+    private def connect(server_name, remote, **)
       @authority = server_name
       connection = super
       @http3 = HTTP3::Connection.client
