@@ -117,9 +117,9 @@ module NextRuntimeHTTP3
   end
 
   # A Session of a client connected to `port` with "h3", for the block.
-  def h3_connect(port, &)
+  def h3_connect(port, **options, &)
     tls = h3_client_config
     Raiha::Next::Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
-      server_name: "localhost", &)
+      server_name: "localhost", **options, &)
   end
 end

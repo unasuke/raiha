@@ -35,17 +35,20 @@ module Raiha::Next::Runtime
   # server has a TLS::AntiReplay::Memory of its own, which takes none for
   # its first seconds (RFC 9846 "Client Hello Recording"). Servers of
   # other processes that open the same tickets record apart, so each may
-  # take a ClientHello's 0-RTT once.
+  # take a ClientHello's 0-RTT once. `app_early_data_context` is what of
+  # the application its 0-RTT relies on, so that the 0-RTT of a ticket
+  # issued with other settings is rejected (Endpoint#accept).
   class Server
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
 
     def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
-      anti_replay: nil)
+      anti_replay: nil, app_early_data_context: "".b)
       @config = config
       @tls_config = tls_config
       @keyring = keyring
       @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
+      @app_early_data_context = app_early_data_context
       @host = host
       @port = port
       @max_connections = max_connections
@@ -129,7 +132,8 @@ module Raiha::Next::Runtime
       when Raiha::Next::QUIC::Route::ClientHello
         advance_ticket_keys
         tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
-        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:, anti_replay: @anti_replay)
+        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:, anti_replay: @anti_replay,
+          app_early_data_context: @app_early_data_context)
         session = Session.new(connection, driver!, role: :server, tracer:)
         @sessions << session
         @traces[session] = pending if pending

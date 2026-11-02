@@ -121,11 +121,16 @@ module Raiha::Next::Runtime
     # Extended CONNECT (RFC 9220) is not offered unless `settings` offers
     # it: the runtime has no way yet to read or write the capsules of such a
     # stream, and a body of capsules would never read as data.
+    #
+    # 0-RTT is taken only from a ticket issued with the same `settings`
+    # (RFC 9114 "Initialization"), and recorded in `anti_replay` as
+    # Runtime::Server has it.
     class Server
       def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
-        settings: Raiha::Next::HTTP3::Settings.new)
+        settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil)
         @settings = settings
-        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:)
+        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:, anti_replay:,
+          app_early_data_context: settings.early_data_context)
       end
 
       def run(&handler)
