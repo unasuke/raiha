@@ -16,6 +16,7 @@ module Raiha::Next::QUIC
     AMPLIFICATION_FACTOR: Integer
     MAX_EVENTS: Integer
     MAX_HELD_TICKETS: Integer
+    ZERO_RTT_LIMITS: Array[Symbol]
 
     class Pending < Data
       attr_reader level: PacketProtection::level
@@ -132,6 +133,7 @@ module Raiha::Next::QUIC
     private def zero_rtt_parameters: () -> RememberedTransportParameters?
     private def start_zero_rtt: () -> void
     private def zero_rtt_settled!: (?Integer? stream_id) -> void
+    private def check_zero_rtt_limits: (TransportParameters parameters) -> void
     private def binding: () -> TLSBinding
     private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil

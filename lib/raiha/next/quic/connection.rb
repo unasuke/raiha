@@ -48,6 +48,15 @@ module Raiha::Next::QUIC
     MAX_EVENTS = 4096
     # Event::SessionTicket held until taken (session_ticket).
     MAX_HELD_TICKETS = 8
+    # The limits 0-RTT may have used, which a server that took it must not
+    # lower (RFC 9000 "Values of Transport Parameters for 0-RTT"), nor
+    # max_datagram_frame_size (RFC 9221). They come with EncryptedExtensions,
+    # after which 0-RTT still pending was taken (check_zero_rtt_limits).
+    ZERO_RTT_LIMITS = %i[
+      active_connection_id_limit initial_max_data initial_max_stream_data_bidi_local initial_max_stream_data_bidi_remote
+      initial_max_stream_data_uni initial_max_streams_bidi initial_max_streams_uni max_datagram_frame_size
+    ].freeze
+
 
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
@@ -481,6 +490,7 @@ module Raiha::Next::QUIC
     def peer_transport_parameters(data)
       parameters = TransportParameters.decode(data, sender: @role == :client ? :server : :client)
       authenticate_connection_ids(parameters)
+      check_zero_rtt_limits(parameters)
       @peer_ids = PeerConnectionIDs.new(@destination_connection_id, stateless_reset_token: parameters.stateless_reset_token,
         limit: @config.active_connection_id_limit)
       @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
@@ -582,6 +592,14 @@ module Raiha::Next::QUIC
 
     # Until the application acknowledges a rejected 0-RTT, nothing may name a
     # stream this client opened, nor open one.
+    private def check_zero_rtt_limits(parameters)
+      remembered = zero_rtt_parameters or return
+      lowered = ZERO_RTT_LIMITS.select { |name| parameters.public_send(name) < remembered.public_send(name) }
+      return if lowered.empty?
+      raise Violation.new("#{lowered.join(" and ")} lower than 0-RTT used", code: ErrorCode::PROTOCOL_VIOLATION,
+        frame_type: CryptoStream::FRAME_TYPE)
+    end
+
     private def zero_rtt_settled!(stream_id = nil)
       return unless @zero_rtt_rejection_unacknowledged
       return if stream_id && stream_id & Streams::SERVER_INITIATED != 0

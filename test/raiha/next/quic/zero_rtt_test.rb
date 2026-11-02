@@ -111,6 +111,35 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     refute server.stream_early_data?(stream)
   end
 
+  # A server that took 0-RTT may not lower the limits it used (RFC 9000
+  # "Values of Transport Parameters for 0-RTT"); its transport parameters,
+  # which come with EncryptedExtensions, are checked against the session's.
+  def test_limits_a_server_that_took_0rtt_lowers
+    lowered = { initial_max_data: 1, initial_max_streams_bidi: 1, initial_max_stream_data_uni: 1 }
+    lowered.each do |name, value|
+      client, parameters = client_at_the_server_initial
+      error = assert_raises(QUIC::Violation, name.to_s) { client.peer_transport_parameters(parameters.with(name => value).encode) }
+      assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, error.code
+      assert_includes error.message, name.to_s
+    end
+    client, parameters = client_at_the_server_initial
+    client.peer_transport_parameters(parameters.with(initial_max_data: parameters.initial_max_data * 2).encode)
+  end
+
+  # A client sending 0-RTT that has taken the server's Initial and nothing
+  # after, and transport parameters with the connection IDs it expects.
+  def client_at_the_server_initial
+    client = client(session:, early_data: true)
+    sent = client.transmits(now: LATER)
+    odcid = QUIC::Wire::Packet.parse(sent.first.payload, dcid_length: 8).header.dcid
+    server = server()
+    sent.each { |transmit| server.receive(transmit.payload, from: CLIENT, now: LATER) }
+    datagram = server.transmits(now: LATER).first.payload
+    initial = QUIC::Wire::Packet.parse(datagram, dcid_length: 8)
+    client.receive(datagram.byteslice(0, initial.end_offset), from: SERVER, now: LATER)
+    [client, QUIC::Config.new.transport_parameters(initial_source_connection_id: initial.header.scid, original_destination_connection_id: odcid)]
+  end
+
   # A server that takes no 0-RTT: the client learns it, and sends no more
   # 0-RTT packets.
   def test_0rtt_a_server_does_not_take
