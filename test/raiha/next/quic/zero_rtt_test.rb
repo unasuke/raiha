@@ -140,6 +140,39 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     [client, QUIC::Config.new.transport_parameters(initial_source_connection_id: initial.header.scid, original_destination_connection_id: odcid)]
   end
 
+  # A Retry is no rejection of 0-RTT (RFC 9001 "Accepting and Rejecting
+  # 0-RTT"): the client sends it again after the Initial with the Retry's
+  # token, and the server takes it.
+  def test_0rtt_across_a_retry
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW + LATER, now: LATER)
+    anti_replay = TLS::AntiReplay::Memory.new(now: NOW, warmup: false)
+    accepted = nil
+    dispatch = lambda do |route, now|
+      case route
+      in QUIC::Route::Incoming(handle:, address_validated: false) then endpoint.retry(handle, now:)
+      in QUIC::Route::Incoming(handle:) then dispatch.(endpoint.admit(handle, now:), now)
+      in QUIC::Route::ClientHello(handle:)
+        config = tls_config
+        accepted = endpoint.accept(handle, tls_config: config, keyring: server_keyring(config:), now:, anti_replay:,
+          app_early_data_context: "app".b)
+      else nil
+      end
+    end
+    client = client(session:, early_data: true)
+    stream = client.open_stream
+    client.stream_write(stream, "early", fin: true)
+    now = LATER
+    40.times do
+      break if client.handshake_complete? && accepted&.handshake_complete?
+      client.transmits(now:).each { dispatch.(endpoint.receive(_1.payload, from: CLIENT, to: SERVER, now:), now) }
+      endpoint.each_transmit(now:) { client.receive(_1.payload, from: SERVER, now:) }
+      now += 0.001
+    end
+    assert_equal :accepted, client.zero_rtt_state
+    assert_equal "early", accepted.stream_read(stream, 100)
+    assert accepted.stream_early_data?(stream)
+  end
+
   # A server that takes no 0-RTT: the client learns it, and sends no more
   # 0-RTT packets.
   def test_0rtt_a_server_does_not_take
