@@ -10,9 +10,9 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
   include NextRuntimeOwner
 
   # A client's Session and the server's Owner, connected, for the block.
-  def connected(server: QUIC::Config.new, client: QUIC::Config.new)
+  def connected(server: QUIC::Config.new, client: QUIC::Config.new, server_tls: server_config)
     Sync do
-      server_owner = server_owner(server)
+      server_owner = server_owner(server, tls: server_tls)
       endpoint, client_owner = owner(:client, client)
       tls = client_config
       client_owner.add(endpoint.connect(tls_config: tls, keyring: client_keyring(config: tls), server_name: "localhost",
@@ -217,5 +217,45 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
       assert client.closed?
       assert_nil server.accept_stream
     end
+  end
+
+  # The tickets and the token the server gives once the handshake is over
+  # are kept, for later connections.
+  def test_tickets_and_tokens
+    connected(server_tls: server_config(ticket_key: "\x1c".b * 32)) do |client, _server_owner|
+      client.wait_for(deadline: Runtime::Driver.clock + 2) { client.tokens.first && client.tickets[1] }
+      assert_equal [QUIC::Session, QUIC::Session], client.tickets.map(&:class)
+      assert_equal 1, client.tokens.size
+    end
+  end
+
+  # A connection that gives the events it is made with.
+  class Events
+    def initialize(events) = @events = events
+
+    def each_event(&) = @events.shift(@events.size).each(&)
+  end
+
+  class Recorder
+    attr_reader :values
+
+    def initialize = @values = []
+
+    def tls_trace(value) = @values << value
+  end
+
+  # A server that gives more tickets and tokens than are kept: the oldest
+  # go, and each ticket dropped is traced.
+  def test_the_newest_tickets_and_tokens_are_kept
+    count = Runtime::Session::MAX_HELD + 2
+    sessions = Array.new(count) { QUIC::Session.new(tls: nil, transport_parameters: nil, alpn: nil, version: _1) }
+    tokens = Array.new(count) { "token#{_1}" }
+    events = sessions.map { QUIC::Event::SessionTicket.new(session: _1) } + tokens.map { QUIC::Event::NewToken.new(token: _1) }
+    tracer = Recorder.new
+    session = Runtime::Session.new(Events.new(events), nil, role: :client, tracer:)
+    session.turn
+    assert_equal sessions.last(Runtime::Session::MAX_HELD), session.tickets
+    assert_equal tokens.last(Runtime::Session::MAX_HELD), session.tokens
+    assert_equal [TLS::Trace::TicketIgnored.new(reason: :too_many_tickets)] * 2, tracer.values
   end
 end

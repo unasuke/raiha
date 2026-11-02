@@ -126,6 +126,7 @@ module Raiha::Next::Runtime
     end
 
     MAX_ACK_DELAY: Float
+    MAX_HELD: Integer
 
     attr_reader connection: Raiha::Next::QUIC::Connection
     attr_reader tracer: Raiha::Next::QUIC::Qlog::Tracer?
@@ -144,10 +145,16 @@ module Raiha::Next::Runtime
     @connected: Raiha::Next::QUIC::Event::Connected?
     @protocol: _Protocol?
     @close_code: Integer
+    @tickets: Array[Raiha::Next::QUIC::Session]
+    @tokens: Array[String]
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?) -> void
 
     def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
+
+    def tickets: () -> Array[Raiha::Next::QUIC::Session]
+
+    def tokens: () -> Array[String]
 
     def attach: (_Protocol protocol, ?close_code: Integer) -> void
 
@@ -193,6 +200,8 @@ module Raiha::Next::Runtime
     private def take_events: () -> void
 
     private def take: (Raiha::Next::QUIC::Event::t event) -> void
+
+    private def ticket: (Raiha::Next::QUIC::Session session) -> void
 
     private def arrived: (Integer stream_id) -> void
 

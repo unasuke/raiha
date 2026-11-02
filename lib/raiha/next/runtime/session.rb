@@ -30,6 +30,10 @@ module Raiha::Next::Runtime
   # A protocol over the connection, HTTP/3, is attached to the Session: it
   # takes each event first, keeping those of its own, and takes its turn
   # after them, and the streams it opens are its own to keep.
+  #
+  # A client's Session keeps the tickets and the NEW_TOKEN tokens the
+  # server gives, for later connections; storing them is the
+  # application's.
   class Session
     # What the application has yet to hear of a stream: how the peer reset
     # its sending part or stopped ours, and whether each part is still in
@@ -38,6 +42,9 @@ module Raiha::Next::Runtime
     # The peer's max_ack_delay when it says none (RFC 9000 "Transport
     # Parameter Definitions"), for a PTO of the connection.
     MAX_ACK_DELAY = 0.025
+    # The most tickets and tokens kept: one more drops the oldest, so that a
+    # server sending them without end cannot make the client keep them all.
+    MAX_HELD = 8
 
     # The connection, and the qlog tracer of it, if it has one, which a
     # protocol records its own events with.
@@ -63,11 +70,26 @@ module Raiha::Next::Runtime
       @protocol = nil #: _Protocol?
       # The application's error code a close with none given closes with.
       @close_code = 0
+      @tickets = [] #: Array[Raiha::Next::QUIC::Session]
+      @tokens = [] #: Array[String]
     end
 
     # What the handshake came to (TLS::Event::HandshakeComplete), once it
     # has completed.
     def handshake = @connected&.handshake
+
+    # The tickets the server gave, each a QUIC::Session for
+    # Client.connect(session:), the newest MAX_HELD of them, newest last. A
+    # ticket is for one connection: once used, the application drops it,
+    # as one used again links the connections for those who watch (RFC 9846
+    # "Client and Server Tracking Prevention").
+    def tickets = @tickets.dup
+
+    # The tokens the server gave in NEW_TOKEN frames, for
+    # Client.connect(token:), the newest MAX_HELD of them, newest last. A
+    # token is for one connection too (RFC 9000 "Address Validation for
+    # Future Connections").
+    def tokens = @tokens.dup
 
     # Puts `protocol` over the connection, which then closes with its
     # `close_code` when no other is given: H3_NO_ERROR for HTTP/3, say. A
@@ -253,7 +275,19 @@ module Raiha::Next::Runtime
         @tracks[event.stream_id]&.reset = event.error_code
         forget_reset(event.stream_id)
       when Raiha::Next::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
+      when Raiha::Next::QUIC::Event::SessionTicket then ticket(event.session)
+      when Raiha::Next::QUIC::Event::NewToken
+        @tokens.shift if @tokens.size >= MAX_HELD
+        @tokens << event.token
       end
+    end
+
+    private def ticket(session)
+      if @tickets.size >= MAX_HELD
+        @tickets.shift
+        @tracer&.tls_trace(Raiha::Next::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets))
+      end
+      @tickets << session
     end
 
     # A stream the peer opened comes to be known from its first event, and

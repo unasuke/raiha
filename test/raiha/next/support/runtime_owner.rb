@@ -19,11 +19,12 @@ module NextRuntimeOwner
     attr_reader :sessions, :turns
     attr_accessor :driver
 
-    def initialize(endpoint, role, tls_config: nil, keyring: nil)
+    def initialize(endpoint, role, tls_config: nil, keyring: nil, anti_replay: nil)
       @endpoint = endpoint
       @role = role
       @tls_config = tls_config
       @keyring = keyring
+      @anti_replay = anti_replay
       @sessions = []
       @turns = 0
     end
@@ -36,7 +37,8 @@ module NextRuntimeOwner
     def route(route, now)
       case route
       when QUIC::Route::Incoming then (hello = @endpoint.admit(route.handle, now:)) && route(hello, now)
-      when QUIC::Route::ClientHello then add(@endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:))
+      when QUIC::Route::ClientHello
+        add(@endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, anti_replay: @anti_replay, now:))
       end
     end
 
@@ -60,9 +62,8 @@ module NextRuntimeOwner
   end
 
   # A server's Owner with the test certificate, its driver started.
-  def server_owner(config = QUIC::Config.new)
-    tls = server_config
-    _, owner = owner(:server, config, tls_config: tls, keyring: server_keyring(config: tls))
+  def server_owner(config = QUIC::Config.new, tls: server_config, anti_replay: nil)
+    _, owner = owner(:server, config, tls_config: tls, keyring: server_keyring(config: tls), anti_replay:)
     owner.driver.start
     owner
   end
