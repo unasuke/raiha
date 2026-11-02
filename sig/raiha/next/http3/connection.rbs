@@ -233,6 +233,7 @@ module Raiha::Next::HTTP3
     @closed: bool
     @control_reader: FrameReader
     @peer_settings: Settings?
+    @remembered: Settings?
     @events: Array[Event::t]
     @decoder: QPACK::Decoder
     @encoder: QPACK::Encoder
@@ -253,10 +254,12 @@ module Raiha::Next::HTTP3
     attr_reader settings: Settings
     attr_reader peer_settings: Settings?
 
-    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?) -> Connection
+    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?,
+                      ?remembered: Settings?) -> Connection
     def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?) -> Connection
 
-    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer, ?tracer: _Tracer?) -> void
+    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer, ?tracer: _Tracer?,
+                     ?remembered: Settings?) -> void
     def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
@@ -281,6 +284,8 @@ module Raiha::Next::HTTP3
     def each_event: () { (Event::t event) -> void } -> void
     private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void
     private def open_unidirectional: (Integer stream_id, Integer type) -> void
+    private def peer_limits: () -> Settings?
+    private def check_remembered: (Settings settings, Settings remembered) -> void
     private def control_item: (FrameReader::item item) -> void
     private def goaway_received: (Integer id) -> void
     private def priority_update_received: (Frame::PriorityUpdate frame) -> void

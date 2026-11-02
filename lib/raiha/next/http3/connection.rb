@@ -81,8 +81,13 @@ module Raiha::Next::HTTP3
     # whether the transport orders the bytes of different streams, :global,
     # or not, :per_stream as QUIC does, and `max_send_buffer` the bytes of
     # data a stream holds for the transport at most.
-    def self.client(settings: Settings.new, transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER, tracer: nil)
-      new(role: :client, settings:, transport_ordering:, max_send_buffer:, tracer:)
+    # A client's. `remembered` are the server's SETTINGS of an HTTP3::Session
+    # whose 0-RTT this layer is sent in: they stand for the server's until
+    # those come, which must then be compatible with them.
+    def self.client(settings: Settings.new, transport_ordering: :per_stream, max_send_buffer: DEFAULT_MAX_SEND_BUFFER, tracer: nil,
+      remembered: nil)
+      raise ArgumentError, "remembered must be Settings" unless remembered.nil? || remembered.is_a?(Settings)
+      new(role: :client, settings:, transport_ordering:, max_send_buffer:, tracer:, remembered:)
     end
 
     # A server's, which takes Extended CONNECT by default (RFC 9220).
@@ -90,7 +95,7 @@ module Raiha::Next::HTTP3
       new(role: :server, settings:, transport_ordering:, max_send_buffer:, tracer:)
     end
 
-    def initialize(role:, settings:, transport_ordering:, max_send_buffer:, tracer: nil)
+    def initialize(role:, settings:, transport_ordering:, max_send_buffer:, tracer: nil, remembered: nil)
       limit = settings.max_field_section_size or raise ArgumentError, "a field section needs a limit, not nil"
       raise ArgumentError, "transport_ordering is :per_stream or :global, not #{transport_ordering.inspect}" unless TRANSPORT_ORDERINGS.include?(transport_ordering)
       raise ArgumentError, "max_send_buffer is a positive Integer, not #{max_send_buffer.inspect}" unless max_send_buffer.is_a?(Integer) && max_send_buffer.positive?
@@ -114,6 +119,7 @@ module Raiha::Next::HTTP3
       # The frames of the peer's control stream, and the settings they gave.
       @control_reader = FrameReader.new(max_payload: MAX_CONTROL_FRAME)
       @peer_settings = nil #: Settings?
+      @remembered = remembered
       @events = [] #: Array[Event::t]
       # QPACK: this end's decoder takes the peer's encoder stream and field
       # sections, by this end's settings; its encoder writes field sections
@@ -211,7 +217,7 @@ module Raiha::Next::HTTP3
         raise ArgumentError, "stream #{stream_id.inspect} is not a client's going both ways"
       end
       raise Error::Usage, "stream #{stream_id} has a request already" if @receiving.key?(stream_id) || @sending.key?(stream_id)
-      checked { Message.request(headers, extended_connect: @peer_settings&.enable_connect_protocol || false) }
+      checked { Message.request(headers, extended_connect: peer_limits&.enable_connect_protocol || false) }
       receiving = @receiving[stream_id] = Receiving.new(max_payload: @max_section)
       receiving.surfaced = true
       receiving.no_content = headers.include?([":method", "HEAD"])
@@ -299,7 +305,7 @@ module Raiha::Next::HTTP3
     # fits in the transport's DATAGRAM frame; the stream's urgency goes
     # with it for the transport to order it by.
     def datagram_send(stream_id, payload)
-      return false if @closed || !@settings.h3_datagram || !@peer_settings&.h3_datagram
+      return false if @closed || !@settings.h3_datagram || !peer_limits&.h3_datagram
       return false unless (max_size = @datagram_max_size) && @sending[stream_id]&.datagrams && @datagrams.size < MAX_DATAGRAMS
       data = Varint.encode(stream_id / 4) << payload.b
       return false if data.bytesize > max_size
@@ -496,6 +502,24 @@ module Raiha::Next::HTTP3
     # What the peer's control stream holds: its SETTINGS first and once,
     # and only the frames a control stream carries (RFC 9114 "Control
     # Streams", "HTTP Framing Layer").
+    # The peer's SETTINGS, or until they come, those remembered for 0-RTT.
+    private def peer_limits = @peer_settings || @remembered
+
+    # The server's SETTINGS after 0-RTT sent by remembered ones: a QPACK
+    # capacity remembered, not 0, must come again as it was, which the
+    # encoder takes as QPACK_DECODER_STREAM_ERROR otherwise (RFC 9204
+    # "Maximum Dynamic Table Capacity"), and H3_DATAGRAM remembered must stay
+    # (RFC 9297 "The SETTINGS_H3_DATAGRAM HTTP/3 Setting").
+    private def check_remembered(settings, remembered)
+      capacity = remembered.qpack_max_table_capacity
+      if !capacity.zero? && settings.qpack_max_table_capacity != capacity
+        raise Violation.new("a QPACK capacity of #{settings.qpack_max_table_capacity} where 0-RTT remembered #{capacity}",
+          code: QPACK::ErrorCode::DECODER_STREAM_ERROR)
+      end
+      return unless remembered.h3_datagram && !settings.h3_datagram
+      raise Violation.new("no H3_DATAGRAM where 0-RTT remembered it", code: ErrorCode::SETTINGS_ERROR)
+    end
+
     private def control_item(item)
       trace_parsed(@critical.fetch(CONTROL_STREAM), item)
       case item
@@ -512,6 +536,9 @@ module Raiha::Next::HTTP3
       when Frame::Settings
         settings = Settings.from_frame(item)
         @tracer&.parameters_set(initiator: :remote, settings:)
+        remembered = @remembered
+        check_remembered(settings, remembered) if remembered
+        @remembered = nil
         @peer_settings = settings
         @events << Event::Settings.new(settings:)
       when Frame::GoAway then goaway_received(item.id)

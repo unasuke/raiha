@@ -19,6 +19,8 @@ module Raiha::Next::HTTP3
     def initialize: (?qpack_max_table_capacity: Integer, ?qpack_blocked_streams: Integer, ?max_field_section_size: Integer?, ?h3_datagram: bool, ?enable_connect_protocol: bool) -> void
 
     def self.from_frame: (Frame::Settings frame) -> Settings
+    def self.members: () -> Array[Symbol]
+    def early_data_context: () -> String
     def to_frame: () -> Frame::Settings
   end
 end

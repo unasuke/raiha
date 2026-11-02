@@ -59,6 +59,14 @@ module Raiha::Next::HTTP3
       )
     end
 
+    # What a server's 0-RTT is taken only if the same of (RFC 9114
+    # "Initialization"): each setting its frame tells, in the order of its
+    # identifier, as a varint identifier and a varint value. The frame has
+    # no GREASE, which could change from one connection to the next.
+    def early_data_context
+      to_frame.settings.sort_by(&:first).map { |identifier, value| Varint.encode(identifier) + Varint.encode(value) }.join.b
+    end
+
     # The SETTINGS frame that tells these.
     def to_frame
       settings = [] #: Array[[Integer, Integer]]
