@@ -19,9 +19,10 @@ module Raiha::Next::Runtime
 
     # What the client keeps of a request until its response is read: the
     # response as it comes, its body as far as the application has not read
-    # it, and how the peer reset the response or stopped the request. The
-    # server keeps the same of a request's body until the request is over,
-    # and whether its response has gone whole.
+    # it, how the peer reset the response or stopped the request, and
+    # whether the server rejected the 0-RTT it went in. The server keeps the
+    # same of a request's body until the request is over, and whether its
+    # response has gone whole.
     class Exchange
       # The most of a body kept unread before its stream is read no more,
       # so that the peer's flow control holds the rest back. What one read
@@ -30,7 +31,7 @@ module Raiha::Next::Runtime
       # String, however small the DATA frames it came in.
       MAX_UNREAD = 256 * 1024
 
-      attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused, :answered
+      attr_accessor :status, :headers, :trailers, :reset, :stopped, :paused, :answered, :rejected
       attr_reader :unread
 
       def initialize
@@ -43,6 +44,7 @@ module Raiha::Next::Runtime
         @stopped = nil #: Integer?
         @paused = false
         @answered = false
+        @rejected = false
         @ended = false
       end
 
@@ -128,14 +130,20 @@ module Raiha::Next::Runtime
     # as an IO does, and goes as the peer's flow control lets it; the body
     # of a response is read no further than MAX_UNREAD bytes ahead of the
     # application.
+    #
+    # When the server rejects 0-RTT, each request that went in it raises
+    # QUIC::Error::ZeroRttRejected, and HTTP/3 starts over with no SETTINGS
+    # remembered. Sending one again is the application's (RFC 9846 "Replay
+    # Attacks on 0-RTT").
     class Client
       # The most of a request's body read from it at a time.
       PIECE = 64 * 1024
 
       def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
         @session = session
-        tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
-        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer:, remembered:)
+        @settings = settings
+        @tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
+        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer: @tracer, remembered:)
         @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
@@ -167,13 +175,13 @@ module Raiha::Next::Runtime
         exchange = @exchanges.fetch(stream_id)
         upload(stream_id, exchange, body) if body
         status = @session.wait_for(drain: true) do
-          reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+          check(stream_id, exchange)
           exchange.status
         end
         return yield ResponseStream.new(self, stream_id, exchange, status) if block_given?
         Response.new(status:, headers: exchange.headers, body: Body.new(self, stream_id).read, trailers: exchange.trailers)
       ensure
-        finish(stream_id) if stream_id
+        finish(stream_id, exchange) if stream_id && exchange
       end
 
       # The next chunk of the response on `stream_id` once there is one, nil
@@ -181,7 +189,7 @@ module Raiha::Next::Runtime
       def read_chunk(stream_id)
         exchange = @exchanges[stream_id] or return nil
         chunk = @session.wait_for(drain: true) do
-          reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+          check(stream_id, exchange)
           exchange.shift || (:end if exchange.ended?)
         end
         resume(stream_id, exchange) if exchange.paused && !exchange.full?
@@ -200,7 +208,10 @@ module Raiha::Next::Runtime
       end
 
       # The Session's protocol: the events of QUIC that are HTTP/3's.
-      def take(event, now) = @binding.receive(event, now:)
+      def take(event, now)
+        zero_rtt_rejected if event.is_a?(Raiha::Next::QUIC::Event::ZeroRttRejected)
+        @binding.receive(event, now:)
+      end
 
       # The Session's protocol: a client's session runs out of no server's
       # time.
@@ -257,7 +268,7 @@ module Raiha::Next::Runtime
           written = 0
           until written == piece.bytesize
             written += @session.wait_for do
-              reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+              check(stream_id, exchange)
               stopped = exchange.stopped and return check_stopped(stream_id, stopped)
               taken = @http3.send_data(stream_id, piece.byteslice(written..) || "".b)
               # Nothing taken, nothing to send: waking the driver would wake
@@ -276,11 +287,29 @@ module Raiha::Next::Runtime
         raise StreamReset.new(stream_id, error_code) unless error_code == Raiha::Next::HTTP3::ErrorCode::NO_ERROR
       end
 
+      # What the server did to the request, raised where the fiber that made
+      # it waits.
+      private def check(stream_id, exchange)
+        raise Raiha::Next::QUIC::Error::ZeroRttRejected, "the request on stream #{stream_id} went in rejected 0-RTT" if exchange.rejected
+        reset = exchange.reset and raise StreamReset.new(stream_id, reset)
+      end
+
       # Lets go of what was kept of the request; a response not read to its
-      # end is cancelled.
-      private def finish(stream_id)
+      # end is cancelled. A request of rejected 0-RTT has nothing kept, and
+      # its stream's ID may be another's now.
+      private def finish(stream_id, exchange)
+        return unless @exchanges[stream_id].equal?(exchange)
         cancel(stream_id)
         @exchanges.delete(stream_id)
+      end
+
+      # The server rejected 0-RTT: the streams of the requests are gone, and
+      # HTTP/3's, and it starts over with a layer that remembers nothing.
+      private def zero_rtt_rejected
+        @exchanges.each_value { |exchange| exchange.rejected = true }
+        @exchanges.clear
+        @http3 = Raiha::Next::HTTP3::Connection.client(settings: @settings, tracer: @tracer)
+        @binding.restart(@http3)
       end
 
       private def resume(stream_id, exchange)

@@ -429,6 +429,7 @@ module Raiha::Next::Runtime
       attr_accessor stopped: Integer?
       attr_accessor paused: bool
       attr_accessor answered: bool
+      attr_accessor rejected: bool
       attr_reader unread: Integer
 
       @data: String
@@ -489,6 +490,8 @@ module Raiha::Next::Runtime
       PIECE: Integer
 
       @session: Session
+      @settings: Raiha::Next::HTTP3::Settings
+      @tracer: Raiha::Next::HTTP3::Qlog::Tracer?
       @http3: Raiha::Next::HTTP3::Connection
       @binding: Raiha::Next::HTTP3Binding
       @exchanges: Hash[Integer, Exchange]
@@ -523,7 +526,11 @@ module Raiha::Next::Runtime
 
       private def check_stopped: (Integer stream_id, Integer error_code) -> void
 
-      private def finish: (Integer stream_id) -> void
+      private def check: (Integer stream_id, Exchange exchange) -> void
+
+      private def finish: (Integer stream_id, Exchange exchange) -> void
+
+      private def zero_rtt_rejected: () -> void
 
       private def resume: (Integer stream_id, Exchange exchange) -> void
 

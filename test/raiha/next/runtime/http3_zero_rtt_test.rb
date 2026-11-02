@@ -132,4 +132,27 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
       assert_equal({ "/early" => true, "/late" => false, "/marked" => true }, seen)
     end
   end
+
+  # A server that rejects 0-RTT, its record warming up: the request that
+  # went in it raises QUIC::Error::ZeroRttRejected, and one after goes in
+  # 1-RTT on the stream of the same ID, HTTP/3 started over.
+  def test_a_rejected_0rtt
+    Sync do
+      seen = []
+      handler = lambda do |request|
+        seen << request.path
+        request.respond(200, [], "ok")
+      end
+      result = serving(handler, hold: 0.05, anti_replay: TLS::AntiReplay::Memory.new(now: Time.now)) do |port|
+        ticket = h3_ticket(port)
+        h3_connect(port, session: ticket, early_data: true) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          assert_raises(QUIC::Error::ZeroRttRejected) { client.get("/early") }
+          [client.get("/again").body, session.connection.zero_rtt_state]
+        end
+      end
+      assert_equal ["ok", :rejected], result
+      assert_equal ["/again"], seen
+    end
+  end
 end
