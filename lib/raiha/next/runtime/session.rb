@@ -57,9 +57,17 @@ module Raiha::Next::Runtime
     # protocol records its own events with.
     attr_reader :connection, :tracer
 
-    def initialize(connection, driver, role:, tracer: nil)
+    # At a client, the name of the server the connection is to, and what
+    # Client.connect was given to resume: a QUIC::Session, or an
+    # HTTP3::Session whose SETTINGS a protocol over the connection keeps to
+    # while 0-RTT goes. Both are nil at a server.
+    attr_reader :server_name, :resumed
+
+    def initialize(connection, driver, role:, tracer: nil, server_name: nil, resumed: nil)
       @connection = connection
       @tracer = tracer
+      @server_name = server_name
+      @resumed = resumed
       @driver = driver
       @role = role
       @lock = Thread::Mutex.new

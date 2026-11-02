@@ -149,7 +149,11 @@ module Raiha::Next::Runtime
     @tokens: Array[String]
     @generation: Integer
 
-    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?) -> void
+    attr_reader server_name: String?
+    attr_reader resumed: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil
+
+    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?,
+                     ?server_name: String?, ?resumed: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil) -> void
 
     def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
 
@@ -265,13 +269,15 @@ module Raiha::Next::Runtime
 
     def self.connect: [T] (String host, Integer port, config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config,
                            keyring: Raiha::Next::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer,
-                           ?qlog_dir: String?, ?session: Raiha::Next::QUIC::Session?, ?token: String?, ?early_data: bool)
+                           ?qlog_dir: String?, ?session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil, ?token: String?,
+                           ?early_data: bool)
                          { (Session session) -> T } -> T
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
                      ?connect_timeout: Float | Integer, ?qlog_dir: String?) -> void
 
-    def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::Next::QUIC::Session?, ?token: String?,
+    def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil,
+                      ?token: String?,
                       ?early_data: bool) { (Session session) -> T } -> T
 
     def route: (Raiha::Next::QUIC::Route::t route, Float now) -> nil
@@ -286,7 +292,8 @@ module Raiha::Next::Runtime
 
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 
-    private def attempt: (UDP::address address, String server_name, session: Raiha::Next::QUIC::Session?, token: String?,
+    private def attempt: (UDP::address address, String server_name, session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil,
+                          token: String?,
                           early_data: bool) -> [Driver, Session]
   end
 end
@@ -507,6 +514,8 @@ module Raiha::Next::Runtime
       def turn: (Float now) -> void
 
       private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> Integer
+
+      private def remembered: () -> Raiha::Next::HTTP3::Settings?
 
       private def priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
 

@@ -14,11 +14,18 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
   def tls = @tls ||= NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY, ticket_key: SEED, max_early_data_size: 16_384)
 
   # A server of HTTP/3 on a free port answering each request with
-  # `handler`, for the block, which is given its port; stopped after.
+  # `handler`, for the block, which is given its port; stopped after. It
+  # takes `hold` seconds over each ClientHello, so that on the loopback
+  # interface a client's 0-RTT goes before the server's flight comes, and
+  # with it the keys of 1-RTT.
   def serving(handler = ->(request) { request.respond(200, [], "ok") }, settings: HTTP3::Settings.new,
-    anti_replay: TLS::AntiReplay::Memory.new(now: Time.now, warmup: false))
+    anti_replay: TLS::AntiReplay::Memory.new(now: Time.now, warmup: false), hold: 0)
     server = Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
       port: 0, settings:, anti_replay:)
+    server.instance_variable_get(:@server).define_singleton_method(:route) do |route, now|
+      sleep hold if route.is_a?(QUIC::Route::ClientHello)
+      super(route, now)
+    end
     running = Fiber.schedule { server.run(&handler) }
     sleep 0.01 until server.local_address
     yield server.local_address.fetch(1)
@@ -68,6 +75,38 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
         end
       end
       assert_equal [[true, :accepted], [true, :rejected]], states
+    end
+  end
+
+  # A ticket of the client of HTTP/3 the server on `port` gives, once it has
+  # one.
+  def h3_ticket(port)
+    h3_connect(port) do |session|
+      client = Runtime::HTTP3::Client.new(session)
+      session.wait_for(deadline: Runtime::Driver.clock + 2) { client.tickets.first }
+      client.tickets.last
+    end
+  end
+
+  # With a ticket of the client of HTTP/3, a request goes before the
+  # handshake completes, to the authority of the server's name.
+  def test_a_request_in_0rtt
+    Sync do
+      authorities = []
+      handler = lambda do |request|
+        authorities << request.authority
+        request.respond(200, [], "ok")
+      end
+      answer = serving(handler, hold: 0.05) do |port|
+        ticket = h3_ticket(port)
+        h3_connect(port, session: ticket, early_data: true) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          refute session.connection.handshake_complete?
+          [client.get("/").body, session.connection.zero_rtt_state]
+        end
+      end
+      assert_equal ["ok", :accepted], answer
+      assert_equal ["localhost"], authorities
     end
   end
 end

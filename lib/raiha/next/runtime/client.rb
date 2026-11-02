@@ -2,6 +2,7 @@
 
 require "socket"
 require "securerandom"
+require_relative "../http3/session"
 
 module Raiha::Next::Runtime
   # No address of a host took a connection. `errors` has, for each address
@@ -39,7 +40,9 @@ module Raiha::Next::Runtime
   # each connection tried resumes it, and with `token`, one of its
   # Session#tokens, its Initials carry it, so that the server need not
   # validate the address again. Each is for one connection; once used, the
-  # application drops it.
+  # application drops it. A ticket of HTTP3::Client#tickets, an
+  # HTTP3::Session, resumes its QUIC::Session, and HTTP/3 keeps to its
+  # SETTINGS while 0-RTT goes.
   #
   # With `early_data` true as well, and a ticket that allows it, the
   # connection sends what the block writes before its handshake completes,
@@ -151,9 +154,10 @@ module Raiha::Next::Runtime
       endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
+      quic = session.is_a?(Raiha::Next::HTTP3::Session) ? session.quic : session
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:,
-        session:, token:, early_data:)
-      opened = @session = Session.new(connection, driver, role: :client, tracer:)
+        session: quic, token:, early_data:)
+      opened = @session = Session.new(connection, driver, role: :client, tracer:, server_name:, resumed: session)
       @deadline = Driver.clock + @connect_timeout
       made = true
       [driver, opened] #: [Driver, Session]

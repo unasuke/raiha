@@ -135,11 +135,11 @@ module Raiha::Next::Runtime
       def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
         @session = session
         tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
-        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer:)
+        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer:, remembered:)
         @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
-        @authority = authority || session.handshake&.server_name || raise(Error::Usage, "no authority to request from")
+        @authority = authority || session.server_name || raise(Error::Usage, "no authority to request from")
       end
 
       # The tickets the server gave, each an HTTP3::Session with the server's
@@ -232,6 +232,13 @@ module Raiha::Next::Runtime
         end
         flush
         stream_id
+      end
+
+      # While 0-RTT goes, the SETTINGS of the HTTP3::Session the connection
+      # resumes, which the requests keep to until the server's come.
+      private def remembered
+        resumed = @session.resumed
+        resumed.settings if resumed.is_a?(Raiha::Next::HTTP3::Session) && @session.connection.zero_rtt_state == :pending
       end
 
       private def priority(urgency, incremental)
