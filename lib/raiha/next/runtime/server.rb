@@ -29,14 +29,23 @@ module Raiha::Next::Runtime
   # server builds them again once their epoch is over, before the next
   # connection it takes, with a Keyring to match. Keys of another kind are
   # the application's to turn over, with `reconfigure`.
+  #
+  # The 0-RTT a `tls_config` takes is recorded in `anti_replay`, so that
+  # the server takes each ClientHello's at most once; without one, the
+  # server has a TLS::AntiReplay::Memory of its own, which takes none for
+  # its first seconds (RFC 9846 "Client Hello Recording"). Servers of
+  # other processes that open the same tickets record apart, so each may
+  # take a ClientHello's 0-RTT once.
   class Server
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
 
-    def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil)
+    def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
+      anti_replay: nil)
       @config = config
       @tls_config = tls_config
       @keyring = keyring
+      @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
       @host = host
       @port = port
       @max_connections = max_connections
@@ -120,7 +129,7 @@ module Raiha::Next::Runtime
       when Raiha::Next::QUIC::Route::ClientHello
         advance_ticket_keys
         tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
-        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:)
+        connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:, anti_replay: @anti_replay)
         session = Session.new(connection, driver!, role: :server, tracer:)
         @sessions << session
         @traces[session] = pending if pending

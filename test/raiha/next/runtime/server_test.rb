@@ -28,9 +28,9 @@ class RaihaNextRuntimeServerTest < Minitest::Test
   # A server of the runtime on a free port running `handler` for each
   # session, for the block, which is given the port, the server and the
   # fiber that runs it; stopped after.
-  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS, tls: server_config)
+  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS, tls: server_config, **options)
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
-      port: 0, max_connections:)
+      port: 0, max_connections:, **options)
     running = Fiber.schedule { server.run(&handler) }
     sleep 0.01 until server.local_address
     yield server.local_address.fetch(1), server, running
@@ -149,6 +149,34 @@ class RaihaNextRuntimeServerTest < Minitest::Test
         assert_same advanced, server.instance_variable_get(:@keyring).config
       end
     end
+  end
+
+  # How a client's 0-RTT on a second connection to a server of `options`
+  # that allows it goes.
+  def zero_rtt_state(**options)
+    Sync do
+      serving(method(:echoes), tls: server_config(ticket_key: "\x1f".b * 32, max_early_data_size: 16_384), **options) do |port|
+        ticket = connect(port) do |session|
+          session.wait_for(deadline: Runtime::Driver.clock + 2) { session.tickets.first }
+          session.tickets.last
+        end
+        connect(port, session: ticket, early_data: true) do |session|
+          session.wait_handshake
+          session.connection.zero_rtt_state
+        end
+      end
+    end
+  end
+
+  # A server given no record of the 0-RTT it takes has one of its own,
+  # which takes none for its first seconds, in case it took some before a
+  # restart.
+  def test_a_record_of_its_own
+    assert_equal :rejected, zero_rtt_state
+  end
+
+  def test_a_record_given
+    assert_equal :accepted, zero_rtt_state(anti_replay: TLS::AntiReplay::Memory.new(now: Time.now, warmup: false))
   end
 
   # A server asked to stop takes no new connection, tells each session it

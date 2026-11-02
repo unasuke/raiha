@@ -299,6 +299,7 @@ module Raiha::Next::Runtime
     @config: Raiha::Next::QUIC::Config
     @tls_config: Raiha::Next::TLS::Config
     @keyring: Raiha::Next::TLS::Keyring
+    @anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay
     @host: String
     @port: Integer
     @max_connections: Integer
@@ -316,7 +317,8 @@ module Raiha::Next::Runtime
     @wake: IO?
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                     ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?) -> void
+                     ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?,
+                     ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> void
 
     def run: () { (Session session) -> void } -> nil
 
