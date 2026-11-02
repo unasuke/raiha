@@ -219,6 +219,20 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     end
   end
 
+  # A ticket and a token are for one connection: the address after one
+  # that does not answer is tried without them.
+  def test_the_next_address_resumes_nothing
+    Sync do
+      server, validated = resuming_server
+      ticket, token = ticket_and_token(server.port)
+      client = Addressed.new([["127.0.0.1", free_port], ["127.0.0.1", server.port]], connect_timeout: 0.2, **options)
+      resumed = client.connect("example.test", 443, server_name: "localhost", session: ticket, token:) { |session| session.handshake&.resumed }
+      assert_equal [false, false], [resumed, validated.last]
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   def test_no_address_answers
     addresses = [["127.0.0.1", free_port], ["127.0.0.1", free_port]]
     Sync do

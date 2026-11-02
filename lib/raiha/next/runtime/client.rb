@@ -37,10 +37,12 @@ module Raiha::Next::Runtime
   # time it began.
   #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
-  # each connection tried resumes it, and with `token`, one of its
+  # the first connection tried resumes it, and with `token`, one of its
   # Session#tokens, its Initials carry it, so that the server need not
-  # validate the address again. Each is for one connection; once used, the
-  # application drops it. A ticket of HTTP3::Client#tickets, an
+  # validate the address again. Each is for one connection, which those
+  # tried after the first do not reuse (RFC 9846 "Client and Server
+  # Tracking Prevention", RFC 9000 "Address Validation for Future
+  # Connections"); once used, the application drops it. A ticket of HTTP3::Client#tickets, an
   # HTTP3::Session, resumes its QUIC::Session, and HTTP/3 keeps to its
   # SETTINGS while 0-RTT goes.
   #
@@ -81,6 +83,7 @@ module Raiha::Next::Runtime
       end
       addresses.each do |address|
         driver, opened = attempt(address, server_name, session:, token:, early_data:)
+        session = token = nil
         connected = false
         begin
           driver.start
