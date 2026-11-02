@@ -121,6 +121,23 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
     end
   end
 
+  # A client offering more than "h3", given another: HTTP/3 does not go
+  # over it.
+  def test_another_alpn
+    Sync do
+      server = server_owner
+      tls = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn: ["h3", *ALPN], registry: REGISTRY)
+      error = Runtime::Client.connect("127.0.0.1", server.port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
+        server_name: "localhost") do |session|
+        assert_equal ALPN.first, session.handshake&.alpn
+        assert_raises(QUIC::ClosedError) { Runtime::HTTP3::Client.new(session).get("/hello") }
+      end
+      assert_equal [HTTP3::ErrorCode::GENERAL_PROTOCOL_ERROR, true], [error.error.code, error.error.application]
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   # A connection of HTTP/3 closes with H3_NO_ERROR once the block is over.
   def test_the_connection_closes_with_h3_no_error
     Sync do

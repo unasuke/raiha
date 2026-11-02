@@ -488,6 +488,7 @@ module Raiha::Next::Runtime
 
     class Client
       PIECE: Integer
+      ALPN: String
 
       @session: Session
       @settings: Raiha::Next::HTTP3::Settings

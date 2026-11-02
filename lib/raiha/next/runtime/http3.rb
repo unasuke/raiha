@@ -134,10 +134,13 @@ module Raiha::Next::Runtime
     # When the server rejects 0-RTT, each request that went in it raises
     # QUIC::Error::ZeroRttRejected, and HTTP/3 starts over with no SETTINGS
     # remembered. Sending one again is the application's (RFC 9846 "Replay
-    # Attacks on 0-RTT").
+    # Attacks on 0-RTT"). A connection whose handshake chose another ALPN
+    # than "h3", which a client offering more may be given once its 0-RTT
+    # of "h3" was rejected, closes with H3_GENERAL_PROTOCOL_ERROR.
     class Client
       # The most of a request's body read from it at a time.
       PIECE = 64 * 1024
+      ALPN = "h3"
 
       def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
         @session = session
@@ -209,7 +212,16 @@ module Raiha::Next::Runtime
 
       # The Session's protocol: the events of QUIC that are HTTP/3's.
       def take(event, now)
-        zero_rtt_rejected if event.is_a?(Raiha::Next::QUIC::Event::ZeroRttRejected)
+        case event
+        when Raiha::Next::QUIC::Event::ZeroRttRejected then zero_rtt_rejected
+        when Raiha::Next::QUIC::Event::Connected
+          alpn = event.handshake.alpn
+          unless alpn == ALPN
+            @session.connection.close(error_code: Raiha::Next::HTTP3::ErrorCode::GENERAL_PROTOCOL_ERROR, reason: "ALPN #{alpn.inspect}, not h3",
+              now:)
+            return false
+          end
+        end
         @binding.receive(event, now:)
       end
 
