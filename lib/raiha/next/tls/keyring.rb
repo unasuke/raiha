@@ -72,6 +72,19 @@ module Raiha::Next::TLS
     # as well as for TLS, so that a seeded one makes a test repeatable.
     attr_reader :random
 
+    # A Keyring of this one's Config with `ticket_keys` in place of its
+    # own: the certificates, keys, verifier and random source are this
+    # one's, not parsed again. A server that turns a TicketKeys.ratchet
+    # over builds a Config for each epoch, and a handshake takes only the
+    # Keyring of its own Config.
+    def with_ticket_keys(ticket_keys) = dup.bind(@config.with(ticket_keys:))
+
+    # A copy made by `with_ticket_keys` takes its Config.
+    protected def bind(config)
+      @config = config
+      freeze
+    end
+
     def random_bytes(length) = @random.bytes(length)
 
     # False for Verifier::None, so the application can tell that the peer

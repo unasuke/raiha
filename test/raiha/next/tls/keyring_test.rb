@@ -82,6 +82,23 @@ class RaihaNextTLSKeyringTest < Minitest::Test
     refute_match(/PKey|credentials/, keyring.inspect)
     assert_includes identity.inspect, "key_der=[#{leaf.key_der.bytesize} bytes]"
   end
+
+  # A Keyring of the Config with other ticket keys shares what was parsed,
+  # and a handshake takes it with that Config, not with the first.
+  def test_with_ticket_keys
+    config = server_config(ticket_key: "\x01".b * 32)
+    keyring = Keyring.server(config:, identities: [identity])
+    keys = TLS::TicketKeys.static(current: "\x02".b * 32)
+    other = keyring.with_ticket_keys(keys)
+    assert_same keys, other.config.ticket_keys
+    assert_equal config.with(ticket_keys: keys).alpn, other.config.alpn
+    assert_same config, keyring.config
+    assert_same keyring.credentials, other.credentials
+    assert_same keyring.verifier, other.verifier
+    assert other.frozen?
+    TLS::Handshake::Machine.server(config: other.config, keyring: other, now: Time.now)
+    assert_raises(ArgumentError) { TLS::Handshake::Machine.server(config:, keyring: other, now: Time.now) }
+  end
 end
 
 # Choosing an identity to answer with (RFC 9846 "Certificate Selection").

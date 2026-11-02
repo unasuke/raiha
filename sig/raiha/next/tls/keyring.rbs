@@ -43,6 +43,11 @@ module Raiha::Next::TLS
                      verifier: Verifier::_Verifier?) -> void
     attr_reader random: _Random
 
+    def with_ticket_keys: (TicketKeys ticket_keys) -> Keyring
+
+    # protected
+    def bind: (Config config) -> self
+
     def random_bytes: (Integer length) -> String
     def peer_verified?: () -> bool
     def client_credential: (signature_algorithms: Array[Integer], certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?
