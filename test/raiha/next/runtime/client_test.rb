@@ -61,9 +61,9 @@ class RaihaNextRuntimeClientTest < Minitest::Test
   # of 0-RTT, and the address_validated of each first Initial it takes.
   # It takes `hold` seconds over each ClientHello, so that on the loopback
   # interface a client's 0-RTT goes before the server's flight comes, and
-  # with it the keys of 1-RTT.
-  def resuming_server(max_early_data_size: 0, hold: 0)
-    anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false) if max_early_data_size.positive?
+  # with it the keys of 1-RTT. With `warmup`, it rejects all 0-RTT.
+  def resuming_server(max_early_data_size: 0, hold: 0, warmup: false)
+    anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup:) if max_early_data_size.positive?
     server = server_owner(tls: server_config(ticket_key: SEED, max_early_data_size:), anti_replay:)
     validated = []
     server.define_singleton_method(:route) do |route, now|
@@ -130,6 +130,40 @@ class RaihaNextRuntimeClientTest < Minitest::Test
       end
       assert_equal ["early", :accepted], echoed
       assert_equal [true], early
+    ensure
+      server&.driver&.stop
+    end
+  end
+
+  # A server that takes no 0-RTT: a stream the block opened in it raises
+  # Error::ZeroRttRejected from then on, in a read that waited on it as
+  # well, and one opened after takes the same ID and goes in 1-RTT.
+  def test_0rtt_rejected
+    Sync do
+      server, = resuming_server(max_early_data_size: 16_384, hold: 0.05, warmup: true)
+      ticket, = ticket_and_token(server.port)
+      early = echo_early(server, 1)
+      result = Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", session: ticket, early_data: true,
+        **options) do |session|
+        stream = session.open_stream
+        stream << "early"
+        woken = nil
+        Fiber.schedule do
+          stream.read
+        rescue QUIC::Error::ZeroRttRejected => error
+          woken = error
+        end
+        session.wait_handshake
+        Timeout.timeout(1) { sleep 0.01 until woken }
+        assert_raises(QUIC::Error::ZeroRttRejected) { stream.read }
+        assert_raises(QUIC::Error::ZeroRttRejected) { stream.close_write }
+        again = session.open_stream
+        again << "again"
+        again.close_write
+        [again.id == stream.id, again.read, session.connection.zero_rtt_state]
+      end
+      assert_equal [true, "again", :rejected], result
+      assert_equal [false], early
     ensure
       server&.driver&.stop
     end

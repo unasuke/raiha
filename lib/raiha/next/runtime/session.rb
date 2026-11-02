@@ -34,6 +34,13 @@ module Raiha::Next::Runtime
   # A client's Session keeps the tickets and the NEW_TOKEN tokens the
   # server gives, for later connections; storing them is the
   # application's.
+  #
+  # When the server takes no 0-RTT, the streams the client opened are gone
+  # and their IDs start over (QUIC::Connection#zero_rtt_rejected): each
+  # Stream of them raises QUIC::Error::ZeroRttRejected from then on, so
+  # that it cannot reach a stream opened since under the same ID, and the
+  # Session tells the connection the application knows. What to send
+  # again is the application's.
   class Session
     # What the application has yet to hear of a stream: how the peer reset
     # its sending part or stopped ours, and whether each part is still in
@@ -72,6 +79,9 @@ module Raiha::Next::Runtime
       @close_code = 0
       @tickets = [] #: Array[Raiha::Next::QUIC::Session]
       @tokens = [] #: Array[String]
+      # One more each time the server rejects 0-RTT; the Streams of this
+      # client opened before are of an earlier one.
+      @generation = 0
     end
 
     # What the handshake came to (TLS::Event::HandshakeComplete), once it
@@ -127,7 +137,7 @@ module Raiha::Next::Runtime
       stream_id = wait { @connection.open_stream(direction:) }
       @tracks[stream_id] = Track.new(nil, nil, direction == :bidi, true)
       @driver.changed
-      Stream.new(self, stream_id)
+      Stream.new(self, stream_id, @generation)
     end
 
     # Waits, for `seconds` at most, until all the streams have sent has been
@@ -164,7 +174,7 @@ module Raiha::Next::Runtime
     # the server is stopping and none has come.
     def accept_stream
       stream_id = wait(drain: true) { @incoming.shift || (:stopping if @stopping) }
-      Stream.new(self, stream_id) unless stream_id == :stopping
+      Stream.new(self, stream_id, @generation) unless stream_id == :stopping
     rescue Raiha::Next::QUIC::ClosedError
       nil
     end
@@ -228,11 +238,13 @@ module Raiha::Next::Runtime
     end
 
     # Up to `max_bytes` of `stream_id` once there are any, nil at its end,
-    # and after it.
-    def read(stream_id, max_bytes)
+    # and after it. `generation` is that of the Stream.
+    def read(stream_id, max_bytes, generation: @generation)
+      current!(stream_id, generation)
       track = @tracks[stream_id]
       return nil unless track&.reading
       data = wait(drain: true) do
+        current!(stream_id, generation)
         if (reset = track.reset)
           over(stream_id, :reading)
           raise StreamReset.new(stream_id, reset)
@@ -245,12 +257,14 @@ module Raiha::Next::Runtime
     end
 
     # Writes all of `data` to `stream_id`, waiting for room as it goes, and
-    # ends it with `fin`.
-    def write(stream_id, data, fin:)
+    # ends it with `fin`. `generation` is that of the Stream.
+    def write(stream_id, data, fin:, generation: @generation)
+      current!(stream_id, generation)
       track = @tracks[stream_id]
       raise Raiha::Next::QUIC::Error::StreamError, "stream #{stream_id} has ended" unless track&.writing
       written = 0
       wait do
+        current!(stream_id, generation)
         if (stopped = track.stop)
           over(stream_id, :writing)
           raise StreamReset.new(stream_id, stopped)
@@ -269,8 +283,27 @@ module Raiha::Next::Runtime
     private def take_events
       protocol = @protocol
       now = Driver.clock
-      @connection.each_event { |event| take(event) unless protocol&.take(event, now) }
+      @connection.each_event do |event|
+        # Before the protocol, which opens its streams again, sees it.
+        zero_rtt_rejected if event.is_a?(Raiha::Next::QUIC::Event::ZeroRttRejected)
+        take(event) unless protocol&.take(event, now)
+      end
       protocol&.turn(now)
+    end
+
+    # The server took no 0-RTT: the streams this client opened are gone, and
+    # their Streams are of an earlier generation from here on.
+    private def zero_rtt_rejected
+      @generation += 1
+      @tracks.delete_if { |stream_id, _| local?(stream_id) }
+      @connection.acknowledge_zero_rtt_rejection
+    end
+
+    # A stream this client opened before the server rejected its 0-RTT is
+    # gone, and its ID may now be another's.
+    private def current!(stream_id, generation)
+      return if generation == @generation || !local?(stream_id)
+      raise Raiha::Next::QUIC::Error::ZeroRttRejected, "stream #{stream_id} went in 0-RTT, which the server rejected"
     end
 
     private def take(event)
@@ -360,24 +393,27 @@ module Raiha::Next::Runtime
     end
   end
 
-  # A stream of a Session, read and written as an IO would be.
+  # A stream of a Session, read and written as an IO would be. A stream
+  # the client opened in 0-RTT that the server rejected raises
+  # QUIC::Error::ZeroRttRejected.
   class Stream
     # The most a read with no length asks for at a time.
     PIECE = 65_536
 
     attr_reader :id
 
-    def initialize(session, id)
+    def initialize(session, id, generation)
       @session = session
       @id = id
+      @generation = generation
     end
 
     # With `length`, up to that many bytes once there are any, nil at the
     # end; without, all until the end, "" when it has ended.
     def read(length = nil)
-      return @session.read(@id, length) if length
+      return @session.read(@id, length, generation: @generation) if length
       data = "".b
-      while (chunk = @session.read(@id, PIECE))
+      while (chunk = @session.read(@id, PIECE, generation: @generation))
         data << chunk
       end
       data
@@ -386,7 +422,7 @@ module Raiha::Next::Runtime
     # Writes all of `data`, waiting while the peer's flow control holds it
     # back; its length.
     def write(data)
-      @session.write(@id, data.b, fin: false)
+      @session.write(@id, data.b, fin: false, generation: @generation)
       data.bytesize
     end
 
@@ -397,7 +433,7 @@ module Raiha::Next::Runtime
 
     # Ends the sending part.
     def close_write
-      @session.write(@id, "".b, fin: true)
+      @session.write(@id, "".b, fin: true, generation: @generation)
       nil
     end
   end

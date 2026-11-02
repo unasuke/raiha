@@ -147,6 +147,7 @@ module Raiha::Next::Runtime
     @close_code: Integer
     @tickets: Array[Raiha::Next::QUIC::Session]
     @tokens: Array[String]
+    @generation: Integer
 
     def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?) -> void
 
@@ -195,11 +196,15 @@ module Raiha::Next::Runtime
 
     def turn: () -> void
 
-    def read: (Integer stream_id, Integer max_bytes) -> String?
+    def read: (Integer stream_id, Integer max_bytes, ?generation: Integer) -> String?
 
-    def write: (Integer stream_id, String data, fin: bool) -> Integer
+    def write: (Integer stream_id, String data, fin: bool, ?generation: Integer) -> Integer
 
     private def take_events: () -> void
+
+    private def zero_rtt_rejected: () -> void
+
+    private def current!: (Integer stream_id, Integer generation) -> void
 
     private def take: (Raiha::Next::QUIC::Event::t event) -> void
 
@@ -225,8 +230,9 @@ module Raiha::Next::Runtime
     attr_reader id: Integer
 
     @session: Session
+    @generation: Integer
 
-    def initialize: (Session session, Integer id) -> void
+    def initialize: (Session session, Integer id, Integer generation) -> void
 
     def read: (?Integer? length) -> String?
 
