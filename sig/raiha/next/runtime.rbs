@@ -489,6 +489,8 @@ module Raiha::Next::Runtime
 
       def initialize: (Session session, ?authority: String?, ?settings: Raiha::Next::HTTP3::Settings) -> void
 
+      def tickets: () -> Array[Raiha::Next::HTTP3::Session]
+
       def get: (String path, ?headers: Array[[String, String]]) -> Response
 
       def request: (String method, String path, ?headers: Array[[String, String]], ?body: String | (_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) -> Response

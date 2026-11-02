@@ -2,6 +2,7 @@
 
 require "stringio"
 require_relative "../http3_binding"
+require_relative "../http3/session"
 
 module Raiha::Next::Runtime
   # The HTTP/3 the applications of the runtime use: a client over a Session
@@ -139,6 +140,15 @@ module Raiha::Next::Runtime
         @exchanges = {} #: Hash[Integer, Exchange]
         session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
         @authority = authority || session.handshake&.server_name || raise(Error::Usage, "no authority to request from")
+      end
+
+      # The tickets the server gave, each an HTTP3::Session with the server's
+      # SETTINGS, for Client.connect(session:); none until the SETTINGS have
+      # come, which may be after the tickets (RFC 9114 "Initialization"). As
+      # Session#tickets, the newest last.
+      def tickets
+        settings = @http3.peer_settings or return []
+        @session.tickets.map { |quic| Raiha::Next::HTTP3::Session.new(quic:, settings:) }
       end
 
       # The response to a GET of `path`, its body read whole.

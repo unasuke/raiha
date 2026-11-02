@@ -35,6 +35,24 @@ class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
     end
   end
 
+  # The tickets of the client of HTTP/3 come with the server's SETTINGS.
+  def test_tickets_with_the_servers_settings
+    Sync do
+      settings = HTTP3::Settings.new(max_field_section_size: 1000)
+      tickets = serving(settings:) do |port|
+        h3_connect(port) do |session|
+          client = Runtime::HTTP3::Client.new(session)
+          assert_equal "ok", client.get("/").body
+          session.wait_for(deadline: Runtime::Driver.clock + 2) { client.tickets.first }
+          client.tickets
+        end
+      end
+      refute_empty tickets
+      assert_equal [settings], tickets.map(&:settings).uniq
+      assert_equal [QUIC::Session], tickets.map { _1.quic.class }.uniq
+    end
+  end
+
   # A server's SETTINGS are part of what its 0-RTT is taken with: the
   # ticket of a server of other SETTINGS resumes, but its 0-RTT is
   # rejected (RFC 9114 "Initialization").
