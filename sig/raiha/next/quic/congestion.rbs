@@ -34,6 +34,13 @@ module Raiha::Next::QUIC
 
     ALGORITHMS: Hash[Symbol, _Algorithm]
 
+    module Pacing
+      SLOW_START: Float
+      OTHERWISE: Float
+
+      def self.rate: (Integer | Float window, Float smoothed_rtt, slow_start: bool) -> Float?
+    end
+
     def self.resolve: (Symbol | _Algorithm name) -> _Algorithm
 
     class NewReno
@@ -50,6 +57,7 @@ module Raiha::Next::QUIC
       @initial: bool
       @state: Symbol
       @tracer: _Tracer?
+      @smoothed_rtt: Float?
 
       def self.requires_rate_sample?: () -> bool
 
@@ -64,7 +72,7 @@ module Raiha::Next::QUIC
       def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
       def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
       def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
-      def pacing_rate: () -> nil
+      def pacing_rate: () -> Float?
       def metrics: () -> Hash[Symbol, Integer]
 
       private def slow_start?: () -> bool
@@ -98,6 +106,7 @@ module Raiha::Next::QUIC
       @after_timeout: bool
       @state: Symbol
       @tracer: _Tracer?
+      @smoothed_rtt: Float?
 
       def self.requires_rate_sample?: () -> bool
 
@@ -112,7 +121,7 @@ module Raiha::Next::QUIC
       def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
       def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
       def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
-      def pacing_rate: () -> nil
+      def pacing_rate: () -> Float?
       def metrics: () -> Hash[Symbol, Integer]
 
       private def slow_start?: () -> bool

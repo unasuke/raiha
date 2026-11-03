@@ -131,8 +131,8 @@ class RaihaNextQUICRecoveryAckTest < Minitest::Test
     recovery.on_ack_received(packet_type: :initial, ack: ack(1..1), now: 0.1)
     first, second = tracer.of(:metrics_updated)
     assert_equal({ now: 0.1, latest_rtt: 0.1, smoothed_rtt: 0.1, min_rtt: 0.1, rtt_variance: 0.05, pto_count: 0, bytes_in_flight: 1200,
-                   packets_in_flight: 1, congestion_window: 13_200 }, first)
+                   packets_in_flight: 1, congestion_window: 13_200, pacing_rate: 2_112_000 }, first)
     assert_in_delta 0.0375, second.delete(:rtt_variance)
-    assert_equal({ now: 0.1, bytes_in_flight: 0, packets_in_flight: 0, congestion_window: 14_400 }, second)
+    assert_equal({ now: 0.1, bytes_in_flight: 0, packets_in_flight: 0, congestion_window: 14_400, pacing_rate: 2_304_000 }, second)
   end
 end

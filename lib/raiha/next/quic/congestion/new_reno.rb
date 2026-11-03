@@ -39,6 +39,9 @@ module Raiha::Next::QUIC
         @initial = true
         @state = :slow_start
         @tracer = tracer
+        # The smoothed RTT once there is an RTT sample, which pacing waits
+        # for.
+        @smoothed_rtt = nil #: Float?
       end
 
       def minimum_window = 2 * @max_datagram_size
@@ -46,6 +49,7 @@ module Raiha::Next::QUIC
       def on_packet_sent(bytes:, now:) = nil
 
       def on_ack(acked_bytes:, largest_acked_sent_at:, latest_rtt:, smoothed_rtt:, min_rtt:, app_limited:, now:, rate_sample: nil)
+        @smoothed_rtt = smoothed_rtt if min_rtt
         start = @recovery_start
         @in_recovery = false if start && largest_acked_sent_at > start
         @app_limited = app_limited
@@ -82,8 +86,9 @@ module Raiha::Next::QUIC
         @window = [@window, minimum_window].max
       end
 
-      # No pacing of its own.
-      def pacing_rate = nil
+      # Bytes a second (Pacing), nil until there is an RTT sample: the
+      # initial window may go at once before then (RFC 9002 "Pacing").
+      def pacing_rate = (rtt = @smoothed_rtt) && Pacing.rate(@window, rtt, slow_start: slow_start?)
 
       # :slow_start, :congestion_avoidance, :recovery or :application_limited.
       attr_reader :state
@@ -91,6 +96,9 @@ module Raiha::Next::QUIC
       def metrics
         metrics = { congestion_window: @window } #: Hash[Symbol, Integer]
         metrics[:ssthresh] = @ssthresh if @ssthresh # steep:ignore
+        rate = pacing_rate
+        # qlog has it in bits a second.
+        metrics[:pacing_rate] = (rate * 8).to_i if rate
         metrics
       end
 

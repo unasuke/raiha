@@ -162,4 +162,22 @@ class RaihaNextQUICCongestionCubicTest < Minitest::Test
     round_trips(jumped, from: 2.0, to: 3.0)
     assert_operator round_trips(jumped, from: 23.0, to: 23.1).last[1], :>=, before * 1.4
   end
+
+  # RFC 9002 "Pacing": twice the window over the smoothed RTT in slow
+  # start, 1.25 times after, and none before an RTT sample; qlog has the
+  # rate in bits a second.
+  def test_pacing_rate
+    cc = cubic
+    cc.on_ack(acked_bytes: MDS, largest_acked_sent_at: 0.0, latest_rtt: nil, smoothed_rtt: 0.333, min_rtt: nil, app_limited: false, now: 0.1)
+    assert_nil cc.pacing_rate
+    refute cc.metrics.key?(:pacing_rate)
+    ack(cc, MDS, sent_at: 0.0, now: 0.2)
+    assert_in_delta 2.0 * cc.window / 0.1, cc.pacing_rate
+    assert_equal (cc.pacing_rate * 8).to_i, cc.metrics[:pacing_rate]
+    lose(cc, sent_at: 0.1, now: 0.3)
+    assert_in_delta 1.25 * cc.window / 0.1, cc.pacing_rate
+    # A path with no delay paces nothing.
+    cc.on_ack(acked_bytes: MDS, largest_acked_sent_at: 0.4, latest_rtt: 0.0, smoothed_rtt: 0.0, min_rtt: 0.0, app_limited: false, now: 0.4)
+    assert_nil cc.pacing_rate
+  end
 end
