@@ -1,0 +1,61 @@
+require "raiha/next/test_helper"
+require "raiha/next/quic"
+
+# The token bucket a path paces with: a burst of its capacity, then a
+# datagram at a time as the rate fills it, the wait rounded up to the
+# granularity, and no saving up past one burst.
+class RaihaNextQUICPacerTest < Minitest::Test
+  Pacer = Raiha::Next::QUIC::Pacer
+  MDS = 1200
+  # 1,200 bytes a millisecond.
+  RATE = 1_200_000.0
+
+  # A full bucket at 0.0.
+  def full_pacer = Pacer.new(capacity: 10 * MDS, granularity: 0.001).tap { _1.ready?(MDS, RATE, 0.0) }
+
+  def test_a_burst_of_its_capacity
+    pacer = full_pacer
+    10.times do
+      assert pacer.ready?(MDS, RATE, 0.0)
+      pacer.sent(MDS)
+    end
+    refute pacer.ready?(MDS, RATE, 0.0)
+    assert pacer.ready?(MDS, RATE, 0.001)
+  end
+
+  # The wait for the tokens of a datagram, rounded up to the granularity:
+  # 2.5 ms at 480,000 bytes a second is 3.
+  def test_when_a_datagram_may_go
+    pacer = full_pacer
+    pacer.sent(10 * MDS)
+    assert_in_delta 0.001, pacer.release_at(MDS, RATE, 0.0), 1e-9
+    assert_in_delta 0.003, pacer.release_at(MDS, 480_000.0, 0.0), 1e-9
+    assert_nil pacer.release_at(MDS, RATE, 0.001)
+  end
+
+  # An idle path saves up one burst, no more.
+  def test_no_more_than_one_burst_after_idling
+    pacer = full_pacer
+    pacer.sent(10 * MDS)
+    assert pacer.ready?(MDS, RATE, 10.0)
+    sent = 0
+    sent += MDS while pacer.ready?(MDS, RATE, 10.0) && pacer.sent(MDS)
+    assert_equal 10 * MDS, sent
+  end
+
+  # No rate, before an RTT sample, is no pacing: the bucket is full again.
+  def test_no_rate
+    pacer = full_pacer
+    pacer.sent(20 * MDS)
+    assert pacer.ready?(MDS, nil, 0.0)
+    assert_nil pacer.release_at(MDS, nil, 0.0)
+  end
+
+  # A datagram that went without waiting still takes its bytes.
+  def test_what_went_without_waiting
+    pacer = full_pacer
+    pacer.sent(12 * MDS)
+    refute pacer.ready?(MDS, RATE, 0.0)
+    assert_in_delta 0.003, pacer.release_at(MDS, RATE, 0.0), 1e-9
+  end
+end
