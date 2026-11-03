@@ -15,6 +15,7 @@ module Raiha::Next::QUIC
     @ecn_testing_lost: Integer
     @pacer: Pacer
     @pacing_release_at: Float?
+    @rate_meter: Recovery::RateMeter
 
     attr_reader ecn_state: :testing | :capable | :failed
 
@@ -23,9 +24,11 @@ module Raiha::Next::QUIC
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
     def paced?: (Integer size, Float now) -> bool
     attr_reader pacing_release_at: Float?
+    def delivered: (Integer bytes, largest: Integer, now: Float) -> void
+    def delivery_rate: () -> Float?
     def remove_in_flight: (sent_bytes: Integer, ack_eliciting: bool) -> void
     def app_limited?: () -> bool
-    def transmission_stopped: (Symbol reason) -> bool
+    def transmission_stopped: (Symbol reason, waiting: bool, next_packet_number: Integer) -> bool
     def update_max_datagram_size: (Integer max_datagram_size, now: Float) -> void
     def window_packets: () -> Integer
     def abandon: () -> void

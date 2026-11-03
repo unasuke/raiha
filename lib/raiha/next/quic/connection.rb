@@ -888,7 +888,7 @@ module Raiha::Next::QUIC
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
-      return stopped(:amplification) if limit < MIN_INITIAL_DATAGRAM
+      return stopped(:amplification, now) if limit < MIN_INITIAL_DATAGRAM
       fits = @path.bytes_in_flight + limit <= @path.congestion.window
       paced = fits && @path.paced?(limit, now)
       eliciting = paced || @probes.values.any?(&:positive?)
@@ -913,7 +913,7 @@ module Raiha::Next::QUIC
         pending << Pending.new(level:, header:, packet_number:, packet_number_length: length, frames:, duties:)
         used += overhead(header) + Wire::Frame.encode(frames, ack_delay_exponent: own_ack_delay_exponent(level)).bytesize
       end
-      return stopped(eliciting ? :drained : (fits ? :pacing : :congestion)) if pending.empty?
+      return stopped(eliciting ? :drained : (fits ? :pacing : :congestion), now) if pending.empty?
       datagram = seal(pending, now)
       @sent_unvalidated += datagram.bytesize unless @address_validated
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
@@ -922,10 +922,12 @@ module Raiha::Next::QUIC
 
     # Sending stops for `reason`: the path keeps whether the congestion
     # window went unused, which loss recovery tells the congestion
-    # controller (RFC 9002 "Underutilizing the Congestion Window"). With
+    # controller (RFC 9002 "Underutilizing the Congestion Window"), and
+    # hears whether stream data or DATAGRAMs wait, for its rate meter. With
     # the window too full for a datagram more, what is left waits on it.
-    private def stopped(reason)
-      @path.transmission_stopped(reason)
+    private def stopped(reason, now)
+      waiting = !@streams.urgency.nil? || !@datagrams.urgency(now:).nil?
+      @path.transmission_stopped(reason, waiting:, next_packet_number: @recovery.upcoming_packet_number(:one_rtt))
       nil
     end
 

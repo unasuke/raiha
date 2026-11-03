@@ -217,6 +217,10 @@ module Raiha::Next::QUIC
       space.next_packet_number
     end
 
+    # The least number the next packet of `packet_type` will have, without
+    # taking it.
+    def upcoming_packet_number(packet_type) = space_of(packet_type).upcoming_packet_number
+
     # How many bytes the packet number of the packet of `packet_type`
     # numbered `packet_number` goes in, by what the peer has acknowledged
     # (RFC 9000 "Packet Number Encoding and Decoding").
@@ -268,7 +272,7 @@ module Raiha::Next::QUIC
       process_ecn(space, ack, acked, now) if largest_before.nil? || ack.largest > largest_before
       lost = detect_lost(space, now)
       on_lost(lost, now)
-      on_acked(acked, sampled, now)
+      on_acked(space, acked, sampled, now)
       @pto_count = 0 if peer_completed_address_validation?
       space.forget_lost(before: now - 3 * @path.rtt.pto_period)
       set_loss_detection_timer(now)
@@ -532,14 +536,17 @@ module Raiha::Next::QUIC
 
     # Each path that sent packets acknowledged takes them out of flight and
     # tells its congestion controller once (RFC 9002 "On Packet
-    # Acknowledgment"); a path abandoned does neither.
-    private def on_acked(acked, sampled, now)
+    # Acknowledgment"), and its rate meter those of Application Data; a
+    # path abandoned does none of it.
+    private def on_acked(space, acked, sampled, now)
       acked.select(&:in_flight).group_by(&:path).each do |path, packets|
         next if path.abandoned?
         packets.each { |packet| path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting) }
+        acked_bytes = packets.sum(&:sent_bytes)
+        path.delivered(acked_bytes, largest: packets.fetch(-1).packet_number, now:) if space.name == :application_data
         rtt = path.rtt
         path.congestion.on_ack(
-          acked_bytes: packets.sum(&:sent_bytes), largest_acked_sent_at: packets.map(&:time_sent).max || now,
+          acked_bytes:, largest_acked_sent_at: packets.map(&:time_sent).max || now,
           latest_rtt: path.equal?(sampled) ? rtt.latest_rtt : nil, smoothed_rtt: rtt.smoothed_rtt, min_rtt: rtt.min_rtt,
           app_limited: path.app_limited?, now:
         )
@@ -547,7 +554,8 @@ module Raiha::Next::QUIC
     end
 
     # The values of the current path that changed since last told, at once
-    # (loss recovery's design, "metrics_updated").
+    # (loss recovery's design, "metrics_updated"); the delivery rate once
+    # there is one, in bits a second as pacing_rate is.
     private def trace_metrics(now)
       return unless @tracer
       rtt = @path.rtt
@@ -556,6 +564,8 @@ module Raiha::Next::QUIC
         pto_count: @pto_count, bytes_in_flight: @path.bytes_in_flight, packets_in_flight: @path.packets_in_flight,
         **@path.congestion.metrics
       } #: Hash[Symbol, metric]
+      rate = @path.delivery_rate
+      metrics[:delivery_rate] = (rate * 8).to_i if rate
       changed = metrics.reject { |name, value| @metrics[name] == value }
       return if changed.empty?
       @metrics = metrics

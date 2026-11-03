@@ -152,7 +152,7 @@ module Raiha::Next::QUIC
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
-    private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason) -> nil
+    private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
     private def amplification_budget: (Float now) -> Integer
     private def count_received: (String datagram, Float now) -> void
     private def validate_address: (Float now) -> void

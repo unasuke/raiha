@@ -74,7 +74,7 @@ class RaihaNextQUICRecoveryAckTest < Minitest::Test
     recovery = spied
     send_packet(recovery, :initial, now: 1.0)
     send_packet(recovery, :initial, now: 1.1, sent_bytes: 300)
-    recovery.path.transmission_stopped(:drained)
+    recovery.path.transmission_stopped(:drained, waiting: false, next_packet_number: 0)
     recovery.on_ack_received(packet_type: :initial, ack: ack(0..1), now: 1.3)
     send_packet(recovery, :initial, now: 1.4)
     recovery.on_ack_received(packet_type: :initial, ack: ack(2..2, 0..0), now: 1.5)

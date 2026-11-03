@@ -27,20 +27,39 @@ class RaihaNextQUICPathTest < Minitest::Test
   def test_application_limited
     path = path()
     refute path.app_limited?
-    path.transmission_stopped(:drained)
+    path.transmission_stopped(:drained, waiting: true, next_packet_number: 0)
     assert path.app_limited?
-    path.transmission_stopped(:congestion)
+    path.transmission_stopped(:congestion, waiting: true, next_packet_number: 0)
     refute path.app_limited?
-    path.transmission_stopped(:flow_control)
+    path.transmission_stopped(:flow_control, waiting: true, next_packet_number: 0)
     assert path.app_limited?
-    path.transmission_stopped(:pacing)
+    path.transmission_stopped(:pacing, waiting: true, next_packet_number: 0)
     refute path.app_limited?
-    path.transmission_stopped(:amplification)
+    path.transmission_stopped(:amplification, waiting: true, next_packet_number: 0)
     assert path.app_limited?
     10.times { path.add_in_flight(sent_bytes: 1200, ack_eliciting: true, now: 0.0) }
-    path.transmission_stopped(:drained)
+    path.transmission_stopped(:drained, waiting: true, next_packet_number: 0)
     refute path.app_limited?
-    assert_raises(ArgumentError) { path.transmission_stopped(:bored) }
+    assert_raises(ArgumentError) { path.transmission_stopped(:bored, waiting: false, next_packet_number: 0) }
+  end
+
+  # Held back by the window or pacing with data waiting, what is
+  # acknowledged makes the delivery rate; with nothing waiting, or once no
+  # longer held back, it does not.
+  def test_delivery_rate
+    path = path()
+    path.transmission_stopped(:congestion, waiting: false, next_packet_number: 0)
+    path.delivered(1200, largest: 0, now: 0.0)
+    path.delivered(12_000, largest: 10, now: 0.0625)
+    assert_nil path.delivery_rate
+    path.transmission_stopped(:pacing, waiting: true, next_packet_number: 11)
+    path.delivered(1200, largest: 11, now: 0.125)
+    path.delivered(12_000, largest: 21, now: 0.1875)
+    assert_in_delta 192_000.0, path.delivery_rate
+    path.transmission_stopped(:drained, waiting: false, next_packet_number: 30)
+    path.delivered(12_000, largest: 31, now: 0.25)
+    path.delivered(12_000, largest: 41, now: 0.3125)
+    assert_in_delta 192_000.0, path.delivery_rate
   end
 
   def test_max_datagram_size

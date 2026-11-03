@@ -194,6 +194,10 @@ module Raiha::Next::QUIC
 
       NO_ECN_COUNTS = Wire::Frame::Ack::ECNCounts.new(ect0: 0, ect1: 0, ce: 0)
 
+      # The least number the next packet will have, one more when a number
+      # is left out first; not taken.
+      def upcoming_packet_number = @next_packet_number
+
       # The packet number for the next packet. After `skip_after`'s count
       # of packets, one number is left out first.
       def next_packet_number

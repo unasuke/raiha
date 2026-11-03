@@ -5,9 +5,9 @@ module Raiha::Next::QUIC
   # the congestion controller made from the Config, the bytes and
   # ack-eliciting packets in flight on it, and its Pacer, whose bucket
   # holds RFC 9002's initial window whatever the Config's is, or what the
-  # pacing rate gives in one granularity when that is more. A new path
-  # starts them all over (RFC 9000 "Connection Migration"); packets sent on
-  # a path that is gone count for nothing.
+  # pacing rate gives in one granularity when that is more, and its
+  # RateMeter. A new path starts them all over (RFC 9000 "Connection
+  # Migration"); packets sent on a path that is gone count for nothing.
   class Path
     attr_reader :rtt
     attr_reader :congestion
@@ -40,6 +40,7 @@ module Raiha::Next::QUIC
       @app_limited = false
       @pacer = Pacer.new(capacity: Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size), granularity: @config.pacing_granularity)
       @pacing_release_at = nil #: Float?
+      @rate_meter = Recovery::RateMeter.new
     end
 
     # :testing, :capable or :failed (loss recovery's design, "Marking").
@@ -93,6 +94,14 @@ module Raiha::Next::QUIC
     # it.
     attr_reader :pacing_release_at
 
+    # Bytes in flight of Application Data on this path were acknowledged at
+    # `now`, the largest packet newly acknowledged numbered `largest`.
+    def delivered(bytes, largest:, now:) = @rate_meter.on_ack(bytes, largest:, now:)
+
+    # The rate the path delivers at by its RateMeter, bytes a second; nil
+    # before a sample.
+    def delivery_rate = @rate_meter.rate
+
     # No longer counts a packet acknowledged, lost or discarded.
     def remove_in_flight(sent_bytes:, ack_eliciting:)
       @bytes_in_flight -= sent_bytes
@@ -109,9 +118,13 @@ module Raiha::Next::QUIC
     # :flow_control, :amplification (the server's limit before the client's
     # address is validated), :congestion (the window is full) or :pacing.
     # Only the window filled up, or pacing holding back what would have
-    # filled it, leaves the window used.
-    def transmission_stopped(reason)
+    # filled it, leaves the window used. With stream data or DATAGRAMs
+    # `waiting` and the window or pacing holding them back, the rate meter
+    # counts what goes from `next_packet_number`, the least the next 1-RTT
+    # packet will be numbered.
+    def transmission_stopped(reason, waiting:, next_packet_number:)
       @pacing_release_at = nil unless reason == :pacing
+      @rate_meter.sending_stopped(limited: waiting && (reason == :congestion || reason == :pacing), next_packet_number:)
       @app_limited = case reason
         when :drained then @bytes_in_flight < @congestion.window
         when :flow_control, :amplification then true

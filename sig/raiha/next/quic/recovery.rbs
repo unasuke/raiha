@@ -66,6 +66,7 @@ module Raiha::Next::QUIC
     def next_timeout: () -> Float?
     def on_timeout: (now: Float) -> Outcome
     def next_packet_number: (packet_type packet_type) -> Integer
+    def upcoming_packet_number: (packet_type packet_type) -> Integer
     def packet_number_length: (packet_type packet_type, Integer packet_number) -> Integer
     def largest_received: (packet_type packet_type) -> Integer?
     def oldest_ack_eliciting: (space space) -> SentPacket?
@@ -99,7 +100,7 @@ module Raiha::Next::QUIC
     private def process_ecn: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float now) -> void
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
     private def persistent_congestion?: (Path path, Array[SentPacket] lost) -> bool
-    private def on_acked: (Array[SentPacket] acked, Path? sampled, Float now) -> void
+    private def on_acked: (PacketNumberSpace space, Array[SentPacket] acked, Path? sampled, Float now) -> void
     private def trace_metrics: (Float now) -> void
     private def skip_interval: () -> Integer
     private def random_below: (Integer bound) -> Integer
@@ -320,6 +321,7 @@ module Raiha::Next::QUIC
       @skip_after: Integer?
 
       def initialize: (space name) -> void
+      def upcoming_packet_number: () -> Integer
       def next_packet_number: () -> Integer
       def skipping?: () -> bool
       def acks_alone?: () -> bool
