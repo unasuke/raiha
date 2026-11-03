@@ -10,7 +10,6 @@ module Raiha::Next::QUIC
   # Migration"); packets sent on a path that is gone count for nothing.
   class Path
     attr_reader :rtt
-    attr_reader :congestion
     attr_reader :bytes_in_flight
     attr_reader :ack_eliciting_in_flight
     attr_reader :packets_in_flight
@@ -32,8 +31,10 @@ module Raiha::Next::QUIC
     # Packets").
     def start_over
       @rtt = Recovery::RttEstimator.new
-      @congestion = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, config: @config,
+      cc = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, config: @config,
         tracer: @tracer)
+      @startup = @config.startup&.new(cc, max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, tracer: @tracer)
+      @congestion = @startup || cc
       @bytes_in_flight = 0
       @ack_eliciting_in_flight = 0
       @packets_in_flight = 0
@@ -41,6 +42,18 @@ module Raiha::Next::QUIC
       @pacer = Pacer.new(capacity: Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size), granularity: @config.pacing_granularity)
       @pacing_release_at = nil #: Float?
       @rate_meter = Recovery::RateMeter.new
+    end
+
+    # The congestion controller, or the Config's startup wrapping it until
+    # the startup is done: then the path takes the controller back, so that
+    # what comes after goes to it with nothing in between.
+    def congestion
+      startup = @startup
+      if startup&.done?
+        @congestion = startup.handover
+        @startup = nil
+      end
+      @congestion
     end
 
     # :testing, :capable or :failed (loss recovery's design, "Marking").

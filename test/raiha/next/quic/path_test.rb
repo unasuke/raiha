@@ -66,6 +66,22 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_in_delta 192_000.0, path.delivery_rate
   end
 
+  # The Config's startup wraps the controller until it is done, and the
+  # path takes the controller back then.
+  def test_startup
+    path = path(startup: QUIC::Congestion::Startup::RapidStart)
+    startup = path.congestion
+    assert_kind_of QUIC::Congestion::Startup::RapidStart, startup
+    startup.on_ack(acked_bytes: 12_000, largest_acked_sent_at: 0.5, latest_rtt: 0.05, smoothed_rtt: 0.05, min_rtt: 0.05, app_limited: false,
+      now: 0.55)
+    startup.on_loss(lost_bytes: 1200, largest_lost_sent_at: 0.5, persistent: false, now: 0.6)
+    assert_same startup, path.congestion
+    startup.on_ack(acked_bytes: 1200, largest_acked_sent_at: 0.7, latest_rtt: 0.05, smoothed_rtt: 0.05, min_rtt: 0.05, app_limited: false,
+      now: 0.75)
+    assert_kind_of QUIC::Congestion::Cubic, path.congestion
+    assert_same path.congestion, path.congestion
+  end
+
   def test_max_datagram_size
     path = path()
     path.update_max_datagram_size(1500, now: 1.0)

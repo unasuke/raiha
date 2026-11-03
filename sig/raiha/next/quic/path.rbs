@@ -1,13 +1,14 @@
 module Raiha::Next::QUIC
   class Path
     attr_reader rtt: Recovery::RttEstimator
-    attr_reader congestion: Congestion::_Controller
     attr_reader bytes_in_flight: Integer
     attr_reader ack_eliciting_in_flight: Integer
     attr_reader packets_in_flight: Integer
     attr_reader max_datagram_size: Integer
 
     @config: Config
+    @congestion: Congestion::_Controller
+    @startup: Congestion::_StartupController?
     @app_limited: bool
     @abandoned: bool
     @tracer: _Tracer?
@@ -21,6 +22,7 @@ module Raiha::Next::QUIC
 
     def initialize: (config: Config, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
     def start_over: () -> void
+    def congestion: () -> Congestion::_Controller
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
     def paced?: (Integer size, Float now) -> bool
     attr_reader pacing_release_at: Float?
