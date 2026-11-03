@@ -32,6 +32,7 @@ module Raiha::Next::QUIC
     def app_limited?: () -> bool
     def transmission_stopped: (Symbol reason, waiting: bool, next_packet_number: Integer) -> bool
     def update_max_datagram_size: (Integer max_datagram_size, now: Float) -> void
+    def window: () -> Integer
     def window_packets: () -> Integer
     def abandon: () -> void
     def abandoned?: () -> bool

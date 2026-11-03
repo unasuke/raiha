@@ -140,8 +140,8 @@ module Raiha::Next::QUIC
       @pacing_release_at = nil unless reason == :pacing
       @rate_meter.sending_stopped(limited: waiting && (reason == :congestion || reason == :pacing), next_packet_number:)
       @app_limited = case reason
-        when :drained then @bytes_in_flight < @congestion.window
-        when :pacing then !waiting && @bytes_in_flight < @congestion.window
+        when :drained then @bytes_in_flight < window
+        when :pacing then !waiting && @bytes_in_flight < window
         when :flow_control, :amplification then true
         when :congestion then false
         else raise ArgumentError, "unknown reason to stop sending: #{reason.inspect}"
@@ -152,6 +152,16 @@ module Raiha::Next::QUIC
     def update_max_datagram_size(max_datagram_size, now:)
       @max_datagram_size = max_datagram_size
       @congestion.on_mtu_updated(max_datagram_size:, now:)
+    end
+
+    # The window sending goes by: the congestion controller's, but before
+    # the path's first RTT sample, when nothing is paced, no more than RFC
+    # 9002's initial window, however large the Config's, as RFC 9002
+    # "Pacing" keeps a burst to it.
+    def window
+      window = @congestion.window
+      return window if @rtt.first_sample_at
+      [window, Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size)].min
     end
 
     # The congestion window in datagrams.

@@ -913,7 +913,7 @@ module Raiha::Next::QUIC
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
       return stopped(:amplification, now) if limit < MIN_INITIAL_DATAGRAM
-      fits = @path.bytes_in_flight + limit <= @path.congestion.window
+      fits = @path.bytes_in_flight + limit <= @path.window
       paced = fits && @path.paced?(limit, now)
       eliciting = paced || @probes.values.any?(&:positive?)
       begin
