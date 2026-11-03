@@ -40,6 +40,13 @@ module Raiha::Next::Runtime
     # What GSO refuses with; the first two say it never works here.
     GSO_REFUSED = [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].freeze
     GSO_UNAVAILABLE = [Errno::EIO, Errno::ENOPROTOOPT].freeze
+    # The most a Transmit carries for GSO: the largest UDP payload over
+    # IPv4, a Config's max_transmit_size when the application leaves it.
+    MAX_TRANSMIT = 65_507
+
+    # `config` with MAX_TRANSMIT for max_transmit_size, unless it has one:
+    # a socket here sends the datagrams of a Transmit as they are cut.
+    def self.batching(config) = config.max_transmit_size ? config : config.with(max_transmit_size: MAX_TRANSMIT)
 
     # A socket bound to `host` and `port` (0 for one the OS chooses).
     def self.bind(host, port)

@@ -25,6 +25,9 @@ module Raiha::Next::Runtime
   # With `qlog_dir`, each connection has a qlog there, named by the
   # Destination Connection ID the client first chose.
   #
+  # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
+  # socket sends the datagrams of a Transmit with GSO (UDP.batching).
+  #
   # When the ticket keys of `tls_config` are a TicketKeys.ratchet, the
   # server builds them again once their epoch is over, before the next
   # connection it takes, with a Keyring to match. Keys of another kind are
@@ -44,7 +47,7 @@ module Raiha::Next::Runtime
 
     def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
       anti_replay: nil, app_early_data_context: "".b)
-      @config = config
+      @config = UDP.batching(config)
       @tls_config = tls_config
       @keyring = keyring
       @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)

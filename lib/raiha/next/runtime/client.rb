@@ -36,6 +36,9 @@ module Raiha::Next::Runtime
   # With `qlog_dir`, each connection tried has a qlog there, named by the
   # time it began.
   #
+  # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
+  # socket sends the datagrams of a Transmit with GSO (UDP.batching).
+  #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
   # the first connection tried resumes it, and with `token`, one of its
   # Session#tokens, its Initials carry it, so that the server need not
@@ -63,7 +66,7 @@ module Raiha::Next::Runtime
     end
 
     def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil)
-      @config = config
+      @config = UDP.batching(config)
       @tls_config = tls_config
       @keyring = keyring
       @connect_timeout = connect_timeout

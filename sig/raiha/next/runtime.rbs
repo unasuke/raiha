@@ -80,12 +80,14 @@ module Raiha::Next::Runtime
     UDP_SEGMENT: Integer
     GSO_REFUSED: Array[singleton(SystemCallError)]
     GSO_UNAVAILABLE: Array[singleton(SystemCallError)]
+    MAX_TRANSMIT: Integer
 
     @socket: UDPSocket
     @family: Integer
     @gso: bool
 
     def self.bind: (String host, Integer port) -> UDP
+    def self.batching: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
 
     def initialize: (UDPSocket socket) -> void
 
