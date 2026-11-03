@@ -118,17 +118,19 @@ module Raiha::Next::QUIC
     # :flow_control, :amplification (the server's limit before the client's
     # address is validated), :congestion (the window is full) or :pacing.
     # Only the window filled up, or pacing holding back what would have
-    # filled it, leaves the window used. With stream data or DATAGRAMs
-    # `waiting` and the window or pacing holding them back, the rate meter
-    # counts what goes from `next_packet_number`, the least the next 1-RTT
-    # packet will be numbered.
+    # filled it, leaves the window used; pacing with no stream data or
+    # DATAGRAMs `waiting` holds back nothing, and is as nothing left to
+    # send. With them waiting and the window or pacing holding them back,
+    # the rate meter counts what goes from `next_packet_number`, the least
+    # the next 1-RTT packet will be numbered.
     def transmission_stopped(reason, waiting:, next_packet_number:)
       @pacing_release_at = nil unless reason == :pacing
       @rate_meter.sending_stopped(limited: waiting && (reason == :congestion || reason == :pacing), next_packet_number:)
       @app_limited = case reason
         when :drained then @bytes_in_flight < @congestion.window
+        when :pacing then !waiting && @bytes_in_flight < @congestion.window
         when :flow_control, :amplification then true
-        when :congestion, :pacing then false
+        when :congestion then false
         else raise ArgumentError, "unknown reason to stop sending: #{reason.inspect}"
         end
     end

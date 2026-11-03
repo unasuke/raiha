@@ -23,7 +23,9 @@ class RaihaNextQUICPathTest < Minitest::Test
   end
 
   # Loss recovery's design, "app_limited:": only a full window, or pacing
-  # holding back what would fill it, leaves the window used.
+  # holding back what would fill it, leaves the window used. Pacing with
+  # nothing waiting holds back nothing (RFC 9002 "Underutilizing the
+  # Congestion Window").
   def test_application_limited
     path = path()
     refute path.app_limited?
@@ -35,6 +37,8 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert path.app_limited?
     path.transmission_stopped(:pacing, waiting: true, next_packet_number: 0)
     refute path.app_limited?
+    path.transmission_stopped(:pacing, waiting: false, next_packet_number: 0)
+    assert path.app_limited?
     path.transmission_stopped(:amplification, waiting: true, next_packet_number: 0)
     assert path.app_limited?
     10.times { path.add_in_flight(sent_bytes: 1200, ack_eliciting: true, now: 0.0) }
