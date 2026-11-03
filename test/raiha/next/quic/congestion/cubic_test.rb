@@ -22,6 +22,24 @@ class RaihaNextQUICCongestionCubicTest < Minitest::Test
     cc.on_loss(lost_bytes: MDS, largest_lost_sent_at: sent_at, persistent:, now:)
   end
 
+  # What a startup asks of the controller it wraps: β_cubic, or the
+  # Config's beta_ecn for an ECN-CE; and the hand-over. W_max is twice the
+  # BDP the startup came to, 240,000 bytes for 120,000: K is 6.9 s from a
+  # window of 84,000, and four seconds of a window acknowledged each round
+  # trip take the window to 228,000 or so, where W_max of the BDP alone
+  # would have stopped it at 120,000. A loss of a packet sent before the
+  # recovery period began is no new congestion event.
+  def test_startup_exit
+    cc = cubic(beta_ecn: 0.85)
+    assert_equal [0.7, 0.85, 0.7], [cc.beta(ecn: false), cc.beta(ecn: true), cubic.beta(ecn: true)]
+    cc.on_startup_exit(window: 84_000, full_bdp: 120_000.0, recovery_start: 1.0, now: 1.5)
+    assert_equal [84_000, 84_000, :concave], [cc.window, cc.metrics[:ssthresh], cc.state]
+    lose(cc, sent_at: 0.9, now: 1.6)
+    assert_equal 84_000, cc.window
+    40.times { |round| ack(cc, cc.window, sent_at: 1.6 + 0.1 * round, now: 1.7 + 0.1 * round) }
+    assert_in_delta 228_000, cc.window, 5000
+  end
+
   def test_slow_start_grows_by_the_bytes_acknowledged
     cc = cubic
     assert_equal [12_000, :slow_start], [cc.window, cc.state]

@@ -131,6 +131,33 @@ module Raiha::Next::QUIC
       # initial window may go at once before then (RFC 9002 "Pacing").
       def pacing_rate = (rtt = @smoothed_rtt) && Pacing.rate(@cwnd, rtt, slow_start: slow_start?)
 
+      # β_cubic, or the Config's beta_ecn for a congestion event an ECN-CE
+      # alone started when `ecn`; a startup works its recovery out from it.
+      def beta(ecn:) = (@beta_ecn if ecn) || BETA
+
+      # A startup that wrapped this controller is done with the first
+      # recovery period, which began at `recovery_start`: its window goes on
+      # in congestion avoidance, and a loss of a packet sent before the
+      # period began is no new congestion event. W_max, and the window before
+      # the reduction, are twice `full_bdp`, the BDP and queue the startup
+      # came to: the W_max after a classic slow start, which overshoots the
+      # BDP twice, as quicly has it. The stage begins with the first ACK in
+      # congestion avoidance, K from W_max and the window then, without fast
+      # convergence, as the startup reduced the window itself.
+      def on_startup_exit(window:, full_bdp:, recovery_start:, now:)
+        @cwnd = [window.to_f, minimum_window.to_f].max
+        @ssthresh = @cwnd
+        @w_max = 2 * full_bdp
+        @cwnd_prior = @w_max
+        @recovery_start = recovery_start
+        @in_recovery = false
+        @initial = false
+        @epoch_start = nil
+        @alpha = ALPHA
+        @after_timeout = false
+        update_state(now)
+      end
+
       def metrics
         metrics = { congestion_window: window } #: Hash[Symbol, Integer]
         ssthresh = @ssthresh

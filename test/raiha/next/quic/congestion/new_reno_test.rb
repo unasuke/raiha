@@ -29,6 +29,21 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
     cc.on_loss(lost_bytes: MDS, largest_lost_sent_at: sent_at, persistent:, now:)
   end
 
+  # What a startup asks of the controller it wraps: beta, half or the
+  # Config's beta_ecn for an ECN-CE; and the hand-over, after which the
+  # window goes on in congestion avoidance, and a loss of a packet sent
+  # before the recovery period it ended began is no new congestion event.
+  def test_startup_exit
+    cc = new_reno(beta_ecn: 0.8)
+    assert_equal [0.5, 0.8, 0.5], [cc.beta(ecn: false), cc.beta(ecn: true), new_reno.beta(ecn: true)]
+    cc.on_startup_exit(window: 60_000, full_bdp: 120_000.0, recovery_start: 1.0, now: 1.5)
+    assert_equal [60_000, :congestion_avoidance], [cc.window, cc.state]
+    lose(cc, sent_at: 0.9, now: 1.6)
+    assert_equal 60_000, cc.window
+    ack(cc, 6000, sent_at: 1.2, now: 1.7)
+    assert_equal 60_000 + MDS * 6000 / 60_000, cc.window
+  end
+
   def test_initial_and_minimum_windows
     cc = new_reno
     assert_equal [12_000, 2400], [cc.window, cc.minimum_window]

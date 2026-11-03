@@ -90,6 +90,25 @@ module Raiha::Next::QUIC
       # initial window may go at once before then (RFC 9002 "Pacing").
       def pacing_rate = (rtt = @smoothed_rtt) && Pacing.rate(@window, rtt, slow_start: slow_start?)
 
+      # The factor a congestion event multiplies the window by, for one an
+      # ECN-CE alone started when `ecn`; a startup works its recovery out
+      # from it.
+      def beta(ecn:) = (@beta_ecn if ecn) || 1.0 / LOSS_REDUCTION_DIVISOR
+
+      # A startup that wrapped this controller is done with the first
+      # recovery period, which began at `recovery_start`: its window goes on
+      # in congestion avoidance, and a loss of a packet sent before the
+      # period began is no new congestion event. `full_bdp`, the BDP and
+      # queue it came to, says nothing to NewReno.
+      def on_startup_exit(window:, full_bdp:, recovery_start:, now:)
+        @window = [window, minimum_window].max
+        @ssthresh = @window
+        @recovery_start = recovery_start
+        @in_recovery = false
+        @initial = false
+        update_state(now)
+      end
+
       # :slow_start, :congestion_avoidance, :recovery or :application_limited.
       attr_reader :state
 
