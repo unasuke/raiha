@@ -92,6 +92,7 @@ module Raiha::Next::QUIC
 
   class Transmit < Data
     ECN: Array[ecn]
+    MAX_SEGMENTS: Integer
 
     attr_reader payload: String
     attr_reader destination: address

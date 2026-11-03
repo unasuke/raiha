@@ -95,6 +95,12 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert_raises(ArgumentError) { Config.new(pacing_granularity: 0.0) }
   end
 
+  def test_max_transmit_size
+    assert_nil Config.new.max_transmit_size
+    assert_equal 65_507, Config.new(max_transmit_size: 65_507).max_transmit_size
+    assert_raises(ArgumentError) { Config.new(max_transmit_size: 0) }
+  end
+
   def test_fast_convergence_and_beta_ecn
     config = Config.new
     assert_equal [true, nil], [config.fast_convergence, config.beta_ecn]

@@ -394,11 +394,35 @@ module Raiha::Next::QUIC
       true
     end
 
-    # Each datagram there is to send now.
+    # Each datagram there is to send now. With the Config's
+    # max_transmit_size, those that follow the first and are as large, the
+    # last of them possibly shorter, go with it in one Transmit, as many as
+    # fit and Transmit::MAX_SEGMENTS at most (GSO); seeing whether the next
+    # one fits builds it, and one that does not starts the next Transmit.
     def each_transmit(now:)
       @now = now
-      while (datagram = next_datagram(now))
-        yield Transmit.new(payload: datagram, destination: remote, source: nil, ecn: @path.ecn, segment_size: nil)
+      limit = @config.max_transmit_size
+      unless limit
+        while (datagram = next_datagram(now))
+          yield Transmit.new(payload: datagram, destination: remote, source: nil, ecn: @path.ecn, segment_size: nil)
+        end
+        return
+      end
+      datagram = next_datagram(now)
+      while datagram
+        payload = datagram
+        size = datagram.bytesize
+        count = 1
+        datagram = next_datagram(now)
+        while datagram && count < Transmit::MAX_SEGMENTS && datagram.bytesize <= size && payload.bytesize + datagram.bytesize <= limit
+          payload = payload.b if count == 1
+          payload << datagram
+          count += 1
+          last = datagram.bytesize < size
+          datagram = next_datagram(now)
+          break if last
+        end
+        yield Transmit.new(payload:, destination: remote, source: nil, ecn: @path.ecn, segment_size: count > 1 ? size : nil)
       end
     end
 
