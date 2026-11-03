@@ -117,6 +117,29 @@ module Raiha::Next::QUIC
       def pto_period: () -> Float
     end
 
+    class RateMeter
+      PERIOD: Float
+      SAMPLES: Integer
+
+      @samples: Array[[Float, Integer]]
+      @limited_from: Integer?
+      @limited_until: Integer?
+      @acked: Integer
+      @started_at: Float?
+      @started_acked: Integer
+      @elapsed: Float
+      @bytes: Integer
+
+      def initialize: () -> void
+      def sending_stopped: (limited: bool, next_packet_number: Integer) -> void
+      def on_ack: (Integer bytes, largest: Integer, now: Float) -> void
+      def rate: () -> Float?
+      private def limited?: () -> bool
+      private def take: (Float now) -> void
+      private def start: (Float now) -> void
+      private def commit: () -> void
+    end
+
     module Duty
       type t = Stream | Crypto | Ack | ResetStream | StopSending | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked | NewConnectionID | RetireConnectionID | NewToken | HandshakeDone
 

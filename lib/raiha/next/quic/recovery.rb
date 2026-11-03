@@ -577,6 +577,7 @@ module Raiha::Next::QUIC
 end
 
 require_relative "recovery/rtt_estimator"
+require_relative "recovery/rate_meter"
 require_relative "recovery/duty"
 require_relative "recovery/sent_packet"
 require_relative "recovery/packet_number_space"
