@@ -2,20 +2,22 @@ require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
 
 # Pacing what goes in flight (RFC 9002 "Pacing"): with a window far above
-# RFC 9002's initial window, a burst of that initial window goes at once,
-# and the rest as the pacer's bucket fills, the connection's next timeout
-# saying when.
+# RFC 9002's initial window, and an RTT long enough that the pacing rate
+# gives less than that in a millisecond, a burst of that initial window
+# goes at once, and the rest as the pacer's bucket fills, the connection's
+# next timeout saying when.
 class RaihaNextQUICConnectionPacingTest < Minitest::Test
   include NextQUICPair
 
   # A window of a hundred datagrams, ten times the pacer's bucket.
   WIDE = QUIC::Config.new(initial_window: Ractor.shareable_lambda { |max_datagram_size| 100 * max_datagram_size })
 
-  # A client and a server done with the handshake, and the time then.
+  # A client and a server done with the handshake 100 ms a round, and the
+  # time then.
   def connected
     client = client_connection
     server = server_connection(config: WIDE)
-    now = handshake(client, server)
+    now = handshake(client, server, step: 0.1)
     [client, server].each { |connection| connection.each_event { nil } }
     [client, server, now]
   end

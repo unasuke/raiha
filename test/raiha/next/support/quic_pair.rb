@@ -64,14 +64,15 @@ module NextQUICPair
     [unmasked.header.key_phase, unmasked.packet_number, QUIC::Wire::Frame.parse(payload, packet_type: :one_rtt, ack_delay_exponent: 3)]
   end
 
-  # Passes datagrams each way, a millisecond apart, until both have
-  # completed the handshake or `rounds` have gone; gives the time then.
-  def handshake(client, server, now: 0.0, rounds: 20)
+  # Passes datagrams each way, `step` seconds apart, a millisecond unless
+  # told, until both have completed the handshake or `rounds` have gone;
+  # gives the time then.
+  def handshake(client, server, now: 0.0, rounds: 20, step: 0.001)
     rounds.times do
       break if client.handshake_complete? && server.handshake_complete?
       client.transmits(now:).each { |transmit| server.receive(transmit.payload, from: CLIENT, now:) }
       server.transmits(now:).each { |transmit| client.receive(transmit.payload, from: SERVER, now:) }
-      now += 0.001
+      now += step
     end
     now
   end

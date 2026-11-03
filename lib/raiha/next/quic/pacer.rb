@@ -3,13 +3,14 @@
 module Raiha::Next::QUIC
   # The pacer of a path (RFC 9002 "Pacing"): a token bucket that fills at
   # the congestion controller's pacing rate, up to `capacity`, the most RFC
-  # 9002 lets go in a burst. A datagram goes while the bucket holds its
-  # worth, and takes what it sends from it; as the bucket holds no more than
-  # `capacity`, an idle path saves up no more than one burst. When a
-  # datagram has to wait, `release_at` is when it may go, rounded up to
-  # `granularity` seconds, so that the loop that sends wakes no more often
-  # than that. No rate, before an RTT sample or on a path of no delay, is no
-  # pacing.
+  # 9002 lets go in a burst, or up to what the rate gives in `granularity`
+  # seconds when that is more, as quicly's burst window is, so that waking
+  # no more often than that does not slow the rate down. A datagram goes
+  # while the bucket holds its worth, and takes what it sends from it; an
+  # idle path saves up no more than one burst. When a datagram has to wait,
+  # `release_at` is when it may go, rounded up to `granularity`, so that the
+  # loop that sends wakes no more often than that. No rate, before an RTT
+  # sample or on a path of no delay, is no pacing.
   class Pacer
     def initialize(capacity:, granularity:)
       @capacity = capacity
@@ -41,7 +42,7 @@ module Raiha::Next::QUIC
       filled_at = @filled_at
       @filled_at = now
       return @tokens = @capacity.to_f if rate.nil?
-      @tokens = [@tokens + rate * (now - filled_at), @capacity.to_f].min if filled_at && now > filled_at
+      @tokens = [@tokens + rate * (now - filled_at), [@capacity.to_f, rate * @granularity].max].min if filled_at && now > filled_at
     end
   end
 end

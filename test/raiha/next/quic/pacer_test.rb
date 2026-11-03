@@ -3,7 +3,8 @@ require "raiha/next/quic"
 
 # The token bucket a path paces with: a burst of its capacity, then a
 # datagram at a time as the rate fills it, the wait rounded up to the
-# granularity, and no saving up past one burst.
+# granularity, and no saving up past one burst, a burst being what the
+# rate gives in one granularity when that is more than the capacity.
 class RaihaNextQUICPacerTest < Minitest::Test
   Pacer = Raiha::Next::QUIC::Pacer
   MDS = 1200
@@ -41,6 +42,20 @@ class RaihaNextQUICPacerTest < Minitest::Test
     sent = 0
     sent += MDS while pacer.ready?(MDS, RATE, 10.0) && pacer.sent(MDS)
     assert_equal 10 * MDS, sent
+  end
+
+  # At 24,000 bytes a millisecond the rate gives twenty datagrams in one
+  # granularity, twice the capacity: the bucket holds those twenty, so that
+  # waking once a millisecond does not slow the rate down, and no more after
+  # idling.
+  def test_a_granularity_of_the_rate_above_the_capacity
+    pacer = full_pacer
+    pacer.sent(10 * MDS)
+    [0.001, 10.0].each do |now|
+      sent = 0
+      sent += MDS while pacer.ready?(MDS, 24_000_000.0, now) && pacer.sent(MDS)
+      assert_equal 20 * MDS, sent
+    end
   end
 
   # No rate, before an RTT sample, is no pacing: the bucket is full again.

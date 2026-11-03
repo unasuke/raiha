@@ -4,7 +4,8 @@ module Raiha::Next::QUIC
   # One path of a connection, with what loss recovery keeps for it: the RTT,
   # the congestion controller made from the Config, the bytes and
   # ack-eliciting packets in flight on it, and its Pacer, whose bucket
-  # holds RFC 9002's initial window whatever the Config's is. A new path
+  # holds RFC 9002's initial window whatever the Config's is, or what the
+  # pacing rate gives in one granularity when that is more. A new path
   # starts them all over (RFC 9000 "Connection Migration"); packets sent on
   # a path that is gone count for nothing.
   class Path
