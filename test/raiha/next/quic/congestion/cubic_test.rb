@@ -32,8 +32,9 @@ class RaihaNextQUICCongestionCubicTest < Minitest::Test
   def test_startup_exit
     cc = cubic(beta_ecn: 0.85)
     assert_equal [0.7, 0.85, 0.7], [cc.beta(ecn: false), cc.beta(ecn: true), cubic.beta(ecn: true)]
-    cc.on_startup_exit(window: 84_000, full_bdp: 120_000.0, recovery_start: 1.0, now: 1.5)
+    cc.on_startup_exit(window: 84_000, full_bdp: 120_000.0, recovery_start: 1.0, smoothed_rtt: 0.05, now: 1.5)
     assert_equal [84_000, 84_000, :concave], [cc.window, cc.metrics[:ssthresh], cc.state]
+    assert_in_delta 1.25 * 84_000 / 0.05, cc.pacing_rate
     lose(cc, sent_at: 0.9, now: 1.6)
     assert_equal 84_000, cc.window
     40.times { |round| ack(cc, cc.window, sent_at: 1.6 + 0.1 * round, now: 1.7 + 0.1 * round) }

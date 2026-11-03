@@ -138,13 +138,15 @@ module Raiha::Next::QUIC
       # A startup that wrapped this controller is done with the first
       # recovery period, which began at `recovery_start`: its window goes on
       # in congestion avoidance, and a loss of a packet sent before the
-      # period began is no new congestion event. W_max, and the window before
+      # period began is no new congestion event. The smoothed RTT, when the
+      # startup had one, paces at once, though no ACK has come yet; the
+      # startup tells the tracer of the change of state. W_max, and the window before
       # the reduction, are twice `full_bdp`, the BDP and queue the startup
       # came to: the W_max after a classic slow start, which overshoots the
       # BDP twice, as quicly has it. The stage begins with the first ACK in
       # congestion avoidance, K from W_max and the window then, without fast
       # convergence, as the startup reduced the window itself.
-      def on_startup_exit(window:, full_bdp:, recovery_start:, now:)
+      def on_startup_exit(window:, full_bdp:, recovery_start:, smoothed_rtt:, now:)
         @cwnd = [window.to_f, minimum_window.to_f].max
         @ssthresh = @cwnd
         @w_max = 2 * full_bdp
@@ -155,7 +157,8 @@ module Raiha::Next::QUIC
         @epoch_start = nil
         @alpha = ALPHA
         @after_timeout = false
-        update_state(now)
+        @smoothed_rtt = smoothed_rtt if smoothed_rtt
+        @state = current_state(now)
       end
 
       def metrics
@@ -234,14 +237,18 @@ module Raiha::Next::QUIC
         @alpha = ALPHA
       end
 
+      private def current_state(now)
+        if @in_recovery then :recovery
+        elsif @app_limited then :application_limited
+        elsif slow_start? then :slow_start
+        elsif @epoch_start && w_cubic(now - (@epoch_start || now)) < @w_est then :reno_friendly
+        elsif @cwnd < @w_max then :concave
+        else :convex
+        end
+      end
+
       private def update_state(now)
-        state = if @in_recovery then :recovery
-          elsif @app_limited then :application_limited
-          elsif slow_start? then :slow_start
-          elsif @epoch_start && w_cubic(now - (@epoch_start || now)) < @w_est then :reno_friendly
-          elsif @cwnd < @w_max then :concave
-          else :convex
-          end
+        state = current_state(now)
         return if state == @state
         @tracer.congestion_state_updated(old: @state, new: state, now:) if @tracer # steep:ignore
         @state = state

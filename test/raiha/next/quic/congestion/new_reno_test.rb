@@ -31,13 +31,18 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
 
   # What a startup asks of the controller it wraps: beta, half or the
   # Config's beta_ecn for an ECN-CE; and the hand-over, after which the
-  # window goes on in congestion avoidance, and a loss of a packet sent
-  # before the recovery period it ended began is no new congestion event.
+  # window goes on in congestion avoidance, paced by the startup's
+  # smoothed RTT before any ACK, the startup telling the tracer, and a loss
+  # of a packet sent before the recovery period it ended began is no new
+  # congestion event.
   def test_startup_exit
-    cc = new_reno(beta_ecn: 0.8)
+    tracer = Recorder.new
+    cc = new_reno(beta_ecn: 0.8, tracer:)
     assert_equal [0.5, 0.8, 0.5], [cc.beta(ecn: false), cc.beta(ecn: true), new_reno.beta(ecn: true)]
-    cc.on_startup_exit(window: 60_000, full_bdp: 120_000.0, recovery_start: 1.0, now: 1.5)
+    cc.on_startup_exit(window: 60_000, full_bdp: 120_000.0, recovery_start: 1.0, smoothed_rtt: 0.05, now: 1.5)
     assert_equal [60_000, :congestion_avoidance], [cc.window, cc.state]
+    assert_in_delta 1.25 * 60_000 / 0.05, cc.pacing_rate
+    assert_empty tracer.states
     lose(cc, sent_at: 0.9, now: 1.6)
     assert_equal 60_000, cc.window
     ack(cc, 6000, sent_at: 1.2, now: 1.7)

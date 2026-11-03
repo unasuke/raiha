@@ -11,4 +11,5 @@ end
 require_relative "congestion/pacing"
 require_relative "congestion/new_reno"
 require_relative "congestion/cubic"
+require_relative "congestion/startup"
 require_relative "congestion/algorithms"

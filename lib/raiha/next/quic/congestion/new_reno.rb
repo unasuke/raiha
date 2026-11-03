@@ -98,15 +98,18 @@ module Raiha::Next::QUIC
       # A startup that wrapped this controller is done with the first
       # recovery period, which began at `recovery_start`: its window goes on
       # in congestion avoidance, and a loss of a packet sent before the
-      # period began is no new congestion event. `full_bdp`, the BDP and
-      # queue it came to, says nothing to NewReno.
-      def on_startup_exit(window:, full_bdp:, recovery_start:, now:)
+      # period began is no new congestion event. The smoothed RTT, when the
+      # startup had one, paces at once, though no ACK has come yet; the
+      # startup tells the tracer of the change of state. `full_bdp`, the BDP
+      # and queue it came to, says nothing to NewReno.
+      def on_startup_exit(window:, full_bdp:, recovery_start:, smoothed_rtt:, now:)
         @window = [window, minimum_window].max
         @ssthresh = @window
         @recovery_start = recovery_start
         @in_recovery = false
         @initial = false
-        update_state(now)
+        @smoothed_rtt = smoothed_rtt if smoothed_rtt
+        @state = current_state(now)
       end
 
       # :slow_start, :congestion_avoidance, :recovery or :application_limited.
@@ -139,12 +142,16 @@ module Raiha::Next::QUIC
         @window = [ssthresh, minimum_window].max
       end
 
+      private def current_state(now)
+        if @in_recovery then :recovery
+        elsif @app_limited then :application_limited
+        elsif slow_start? then :slow_start
+        else :congestion_avoidance
+        end
+      end
+
       private def update_state(now)
-        state = if @in_recovery then :recovery
-          elsif @app_limited then :application_limited
-          elsif slow_start? then :slow_start
-          else :congestion_avoidance
-          end
+        state = current_state(now)
         return if state == @state
         @tracer.congestion_state_updated(old: @state, new: state, now:) if @tracer # steep:ignore
         @state = state
