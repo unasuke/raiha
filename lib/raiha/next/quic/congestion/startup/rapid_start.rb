@@ -19,6 +19,11 @@ module Raiha::Next::QUIC
       # no faster than slow start's first, twice RFC 9002's initial window a
       # smoothed RTT (Full-RTT Pacing).
       #
+      # Before the first RTT sample, as for 0-RTT, there is nothing to pace
+      # over a full RTT with: no more than RFC 9002's initial window goes in
+      # flight, however large the Config's, and nothing is paced, as RFC
+      # 9002 lets that window go at once.
+      #
       # The first loss or ECN-CE starts the recovery period (Congestion
       # Handling): the window is multiplied by the silence factor, which
       # stops sending until the bytes in flight come under it, then lessened
@@ -89,7 +94,11 @@ module Raiha::Next::QUIC
         # done?.
         def handover = @cc
 
-        def window = done? ? @cc.window : @cwnd.to_i
+        def window
+          return @cc.window if done?
+          return @cwnd.to_i if @smoothed_rtt
+          [@cwnd.to_i, Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size)].min
+        end
 
         def minimum_window = @cc.minimum_window
 

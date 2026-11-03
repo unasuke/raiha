@@ -91,6 +91,16 @@ class RaihaNextQUICCongestionRapidStartTest < Minitest::Test
     assert_equal 72_000, cc.window
   end
 
+  # Before the first RTT sample, no more than RFC 9002's initial window,
+  # whatever the Config's, nor any pacing; from it, the window of the
+  # Config's initial window, grown by the ACK of the sample.
+  def test_rfc_9002s_initial_window_before_a_sample
+    cc = rapid_start(initial_window: ->(mds) { 20 * mds })
+    assert_equal [12_000, nil], [cc.window, cc.pacing_rate]
+    ack(cc, 1200, sent_at: 0.95, now: 1.0)
+    assert_equal 26_400, cc.window
+  end
+
   # No pacing before an RTT sample. The first full flight after it, until
   # the bytes sent in flight since come to the window, goes over a full
   # RTT, at the window a smoothed RTT, and no faster than slow start's

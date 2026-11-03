@@ -76,6 +76,20 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     refute client.stream_early_data?(stream)
   end
 
+  # With Rapid Start and an initial window of twenty datagrams, a client in
+  # 0-RTT, with no RTT sample yet, sends its Initial and 0-RTT packets to
+  # no more than RFC 9002's initial window, ten datagrams.
+  def test_0rtt_with_rapid_start_waits_for_an_rtt_sample
+    config = QUIC::Config.new(startup: QUIC::Congestion::Startup::RapidStart,
+      initial_window: Ractor.shareable_lambda { |max_datagram_size| 20 * max_datagram_size })
+    client = client(session:, early_data: true, config:)
+    stream = client.open_stream
+    client.stream_write(stream, "x" * 100_000, fin: true)
+    sent = client.transmits(now: LATER).sum { _1.payload.bytesize }
+    assert_operator sent, :>, 10_000
+    assert_operator sent, :<=, QUIC::Config::DEFAULT_INITIAL_WINDOW.call(1200)
+  end
+
   # Without early_data: true, or with a session of another version, the
   # data waits for 1-RTT.
   def test_no_0rtt_unless_asked
