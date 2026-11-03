@@ -85,17 +85,13 @@ module Raiha::Next::QUIC
 
     private def space_of: (packet_type packet_type) -> PacketNumberSpace
     private def ack_eliciting_in_flight?: () -> bool
-    class Deadline < Data
-      attr_reader time: Float
-      attr_reader space: space
-
-      def self.new: (time: Float, space: space) -> instance
-                  | (Float time, space space) -> instance
-    end
-
-    private def loss_deadline: () -> Deadline?
+    private def earliest_space: () { (PacketNumberSpace) -> Float? } -> PacketNumberSpace?
+    private def loss_space: () -> PacketNumberSpace?
+    private def pto_space: () -> PacketNumberSpace?
+    private def pto_duration: () -> Float
+    private def pto_time: (PacketNumberSpace space) -> Float?
+    private def lone_probe_space: () -> space
     private def set_loss_detection_timer: (Float now) -> void
-    private def pto_deadline: (Float now) -> Deadline?
     private def trace_timer: (Symbol event_type, space? space, Float? delta, Float now) -> void
     private def take_rtt_sample: (PacketNumberSpace space, Wire::Frame::Ack ack, Array[SentPacket] acked, Float received_at) -> Path?
     private def detect_lost: (PacketNumberSpace space, Float now) -> Array[SentPacket]

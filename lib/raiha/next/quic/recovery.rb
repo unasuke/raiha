@@ -185,11 +185,11 @@ module Raiha::Next::QUIC
     def on_timeout(now:)
       timer = @loss_detection_timer
       return Outcome::NONE unless timer && now >= timer
-      loss = loss_deadline
-      pto = pto_deadline(now)
-      trace_timer(:expired, (loss || pto)&.space, nil, now)
+      loss = loss_space
+      pto = pto_space
+      trace_timer(:expired, (loss || pto)&.name || (lone_probe_space unless ack_eliciting_in_flight?), nil, now)
       if loss
-        lost = detect_lost(@spaces.fetch(loss.space), now)
+        lost = detect_lost(loss, now)
         on_lost(lost, now)
         set_loss_detection_timer(now)
         trace_metrics(now)
@@ -197,9 +197,9 @@ module Raiha::Next::QUIC
       end
       probe =
         if ack_eliciting_in_flight?
-          Probe.new(space: pto&.space || :initial, packets: 2)
+          Probe.new(space: pto&.name || :initial, packets: 2)
         else
-          Probe.new(space: @handshake_keys ? :handshake : :initial, packets: 1)
+          Probe.new(space: lone_probe_space, packets: 1)
         end
       @pto_count += 1
       set_loss_detection_timer(now)
@@ -343,52 +343,73 @@ module Raiha::Next::QUIC
 
     private def space_of(packet_type) = @spaces.fetch(SPACES.fetch(packet_type))
 
-    private def ack_eliciting_in_flight? = @spaces.each_value.any? { |space| space.ack_eliciting_in_flight.positive? }
+    # A Hash#any? block of two parameters takes the key and value without
+    # an Array for the pair.
+    private def ack_eliciting_in_flight? = @spaces.any? { |_name, space| space.ack_eliciting_in_flight.positive? }
 
-    # When the loss detection timer runs out, and in which space.
-    class Deadline < Data.define(:time, :space); end
-
-    # The earliest time a packet can be lost by time, and its space.
-    private def loss_deadline
-      @spaces.each_value.filter_map { |space| (time = space.loss_time) && Deadline.new(time:, space: space.name) }.min_by(&:time)
+    # The space the block gives the earliest time for, nil when it gives
+    # none; the first of those that tie. The loss detection timer is set
+    # again on every packet sent and every ACK, so the spaces are walked
+    # with a block and the earliest kept in locals: no Enumerator, Array or
+    # record of a time.
+    private def earliest_space
+      earliest = nil #: PacketNumberSpace?
+      earliest_time = Float::INFINITY
+      @spaces.each_value do |space|
+        time = yield(space)
+        next unless time && time < earliest_time
+        earliest = space
+        earliest_time = time
+      end
+      earliest
     end
 
-    # RFC 9002 "Setting the Loss Detection Timer".
+    # The space whose packets can be lost by time the earliest.
+    private def loss_space = earliest_space(&:loss_time)
+
+    # RFC 9002 "Computing PTO": the space with ack-eliciting packets in
+    # flight whose PTO runs out the earliest, Application Data only once the
+    # handshake is confirmed.
+    private def pto_space = earliest_space { pto_time(_1) }
+
+    # The PTO period of the current path, backed off by the PTO count.
+    private def pto_duration = @path.rtt.pto_period * (1 << @pto_count)
+
+    # When the PTO of `space` runs out: the PTO duration from its last
+    # ack-eliciting packet, with the peer's max_ack_delay backed off for
+    # Application Data. nil with none of them in flight, or for Application
+    # Data before the handshake is confirmed.
+    private def pto_time(space)
+      sent_at = space.time_of_last_ack_eliciting_packet
+      return nil unless space.ack_eliciting_in_flight.positive? && sent_at
+      return sent_at + pto_duration unless space.name == :application_data
+      sent_at + pto_duration + @peer_max_ack_delay * (1 << @pto_count) if @handshake_confirmed
+    end
+
+    # Where a probe goes with nothing in flight, to keep the server from
+    # being stuck at its amplification limit.
+    private def lone_probe_space = @handshake_keys ? :handshake : :initial
+
+    # RFC 9002 "Setting the Loss Detection Timer": the earliest loss time;
+    # else, unless the amplification limit leaves nothing to send, the
+    # earliest PTO; else, with nothing in flight and the address not yet
+    # validated by the peer, a PTO from now.
     private def set_loss_detection_timer(now)
-      deadline =
-        if (loss = loss_deadline) then loss
-        elsif @amplification_limited then nil
-        elsif !ack_eliciting_in_flight? && peer_completed_address_validation? then nil
-        else pto_deadline(now)
-        end
+      loss = loss_space
+      pto = pto_space unless loss || @amplification_limited
       before = @loss_detection_timer
-      timer = @loss_detection_timer = deadline&.time
-      if deadline && timer
-        trace_timer(:set, deadline.space, timer - now, now) unless timer == before
+      timer = @loss_detection_timer =
+        if loss then loss.loss_time
+        elsif @amplification_limited then nil
+        elsif pto then pto_time(pto)
+        elsif ack_eliciting_in_flight? || peer_completed_address_validation? then nil
+        else now + pto_duration
+        end
+      if timer
+        trace_timer(:set, (loss || pto)&.name || lone_probe_space, timer - now, now) unless timer == before
       elsif before
         trace_timer(:cancelled, nil, nil, now)
       end
-    end
-
-    # RFC 9002 "Computing PTO": the earliest PTO of the spaces with
-    # ack-eliciting packets in flight, Application Data only once the
-    # handshake is confirmed and with the peer's max_ack_delay, by the RTT of
-    # the current path and backed off by the PTO count. With nothing in
-    # flight, a PTO from now. nil when none applies.
-    private def pto_deadline(now)
-      backoff = 1 << @pto_count
-      duration = @path.rtt.pto_period * backoff
-      return Deadline.new(time: now + duration, space: @handshake_keys ? :handshake : :initial) unless ack_eliciting_in_flight?
-      @spaces.each_value.filter_map do |space|
-        sent_at = space.time_of_last_ack_eliciting_packet
-        next unless space.ack_eliciting_in_flight.positive? && sent_at
-        if space.name == :application_data
-          next unless @handshake_confirmed
-          Deadline.new(time: sent_at + duration + @peer_max_ack_delay * backoff, space: space.name)
-        else
-          Deadline.new(time: sent_at + duration, space: space.name)
-        end
-      end.min_by(&:time)
     end
 
     private def trace_timer(event_type, space, delta, now)
