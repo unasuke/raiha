@@ -1,22 +1,23 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
+require "raiha/next/support/quic_recovery"
 
 # Pacing what goes in flight (RFC 9002 "Pacing"): with a window far above
 # RFC 9002's initial window, and an RTT long enough that the pacing rate
 # gives less than that in a millisecond, a burst of that initial window
 # goes at once, and the rest as the pacer's bucket fills, the connection's
-# next timeout saying when.
+# next timeout saying when. A datagram of ACKs alone waits on nothing.
 class RaihaNextQUICConnectionPacingTest < Minitest::Test
   include NextQUICPair
 
   # A window of a hundred datagrams, ten times the pacer's bucket.
   WIDE = QUIC::Config.new(initial_window: Ractor.shareable_lambda { |max_datagram_size| 100 * max_datagram_size })
 
-  # A client and a server done with the handshake 100 ms a round, and the
-  # time then.
-  def connected
+  # A client and a server done with the handshake 100 ms a round, the
+  # server's packets traced by `tracer`, and the time then.
+  def connected(tracer: nil)
     client = client_connection
-    server = server_connection(config: WIDE)
+    server = server_connection(config: WIDE, tracer:)
     now = handshake(client, server, step: 0.1)
     [client, server].each { |connection| connection.each_event { nil } }
     [client, server, now]
@@ -43,5 +44,23 @@ class RaihaNextQUICConnectionPacingTest < Minitest::Test
     assert_operator release, :>, now
     assert_operator release, :<=, now + 0.002
     assert_operator sent(server, release), :>, 0
+  end
+
+  # While pacing holds back the rest of a response, the ACK of three
+  # datagrams of the client goes at once (RFC 9002 "Pacing"), and nothing
+  # of the response with it.
+  def test_an_ack_alone_is_not_paced
+    tracer = NextQUICRecovery::RecordingTracer.new
+    client, server, now = connected(tracer:)
+    server.stream_write(server.open_stream, "y".b * 60_000, fin: true)
+    sent(server, now)
+    assert_equal 0, sent(server, now)
+    client.stream_write(client.open_stream, "x" * 3_000, fin: true)
+    client.transmits(now:).each { |transmit| server.receive(transmit.payload, from: CLIENT, now:) }
+    from = tracer.of(:packet_sent).size
+    assert_operator sent(server, now), :>, 0
+    frames = tracer.of(:packet_sent).drop(from).flat_map { _1[:frames] }
+    refute_empty frames
+    assert frames.all?(QUIC::Wire::Frame::Ack), frames.map(&:class).inspect
   end
 end
