@@ -77,9 +77,13 @@ module Raiha::Next::Runtime
     ECN: Hash[Integer, ecn]
     MARKS: Hash[Symbol, Integer]
     DROPPED: Array[singleton(SystemCallError)]
+    UDP_SEGMENT: Integer
+    GSO_REFUSED: Array[singleton(SystemCallError)]
+    GSO_UNAVAILABLE: Array[singleton(SystemCallError)]
 
     @socket: UDPSocket
     @family: Integer
+    @gso: bool
 
     def self.bind: (String host, Integer port) -> UDP
 
@@ -97,6 +101,8 @@ module Raiha::Next::Runtime
 
     def closed?: () -> bool
 
+    private def send_segments: (String payload, Integer size, String destination, Socket::AncillaryData? mark) -> (bool | SystemCallError)
+    private def send_datagram: (String datagram, String destination, Socket::AncillaryData? mark) -> bool
     private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]
 
     private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?

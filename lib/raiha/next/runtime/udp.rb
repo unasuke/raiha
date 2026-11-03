@@ -3,11 +3,19 @@
 require "socket"
 
 module Raiha::Next::Runtime
-  # A UDP socket that carries QUIC: each datagram of a Transmit goes out
-  # with its own `sendmsg`, marked with its ECN codepoint, and each datagram
-  # that comes in is read with `recvmsg` along with the codepoint it was
-  # marked with. Bound to "::", one socket takes IPv4 as well, and the peers
-  # of IPv4 have IPv4-mapped addresses ("::ffff:192.0.2.1").
+  # A UDP socket that carries QUIC: the datagrams of a Transmit go out, on
+  # Linux, in one `sendmsg` that the kernel cuts at the segment size (GSO,
+  # UDP_SEGMENT), elsewhere each with its own, marked with its ECN
+  # codepoint; each datagram that comes in is read with `recvmsg` along with
+  # the codepoint it was marked with. Bound to "::", one socket takes IPv4
+  # as well, and the peers of IPv4 have IPv4-mapped addresses
+  # ("::ffff:192.0.2.1").
+  #
+  # Where the kernel will not cut them, a path with no checksum offload
+  # (EIO, as ns-3's simulator has it) or a kernel without UDP_SEGMENT
+  # (ENOPROTOOPT), the datagrams go one by one and the socket no longer
+  # tries; it gives up on EINVAL or EMSGSIZE too, unless one by one they
+  # fail all the same, when the destination is at fault, not GSO.
   class UDP
     # The most datagrams taken from the socket at once.
     RECEIVE_BATCH = 64
@@ -26,6 +34,12 @@ module Raiha::Next::Runtime
     # kernel short of buffers (ENOBUFS) loses one datagram.
     DROPPED = [Errno::ECONNREFUSED, Errno::EMSGSIZE, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::EADDRNOTAVAIL,
       Errno::EINVAL, Errno::EACCES, Errno::EPERM, Errno::ENOBUFS].freeze
+    # Linux's UDP_SEGMENT, a control message at the level of UDP, which
+    # Socket does not name.
+    UDP_SEGMENT = 103
+    # What GSO refuses with; the first two say it never works here.
+    GSO_REFUSED = [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].freeze
+    GSO_UNAVAILABLE = [Errno::EIO, Errno::ENOPROTOOPT].freeze
 
     # A socket bound to `host` and `port` (0 for one the OS chooses).
     def self.bind(host, port)
@@ -45,6 +59,7 @@ module Raiha::Next::Runtime
       # datagram the IPv4 way.
       @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_RECVTOS, 1)
       @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVTCLASS, 1) if @family == Socket::AF_INET6
+      @gso = RUBY_PLATFORM.include?("linux")
     end
 
     # [address, port] the socket is bound to.
@@ -60,12 +75,14 @@ module Raiha::Next::Runtime
       host, port = transmit.destination
       destination = Socket.sockaddr_in(port, host)
       mark = mark(transmit.ecn, host)
-      datagrams(transmit).all? do |datagram|
-        mark ? @socket.sendmsg(datagram, 0, destination, mark) : @socket.sendmsg(datagram, 0, destination)
-        true
-      rescue *DROPPED
-        false
+      size = transmit.segment_size
+      if @gso && size && size < transmit.payload.bytesize
+        refused = send_segments(transmit.payload, size, destination, mark)
+        return refused unless refused.is_a?(Exception)
       end
+      sent = datagrams(transmit).all? { |datagram| send_datagram(datagram, destination, mark) }
+      @gso = false if refused && (sent || GSO_UNAVAILABLE.any? { refused.is_a?(_1) })
+      sent
     end
 
     # The datagrams there now, RECEIVE_BATCH at most, each as [data,
@@ -94,6 +111,25 @@ module Raiha::Next::Runtime
     def close = @socket.close
 
     def closed? = @socket.closed?
+
+    # All the datagrams in one sendmsg: whether they went, or what GSO
+    # refused them with.
+    private def send_segments(payload, size, destination, mark)
+      segment = Socket::AncillaryData.new(@family, Socket::IPPROTO_UDP, UDP_SEGMENT, [size].pack("S"))
+      mark ? @socket.sendmsg(payload, 0, destination, mark, segment) : @socket.sendmsg(payload, 0, destination, segment)
+      true
+    rescue *GSO_REFUSED => error
+      error
+    rescue *DROPPED
+      false
+    end
+
+    private def send_datagram(datagram, destination, mark)
+      mark ? @socket.sendmsg(datagram, 0, destination, mark) : @socket.sendmsg(datagram, 0, destination)
+      true
+    rescue *DROPPED
+      false
+    end
 
     private def datagrams(transmit)
       payload = transmit.payload

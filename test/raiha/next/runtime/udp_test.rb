@@ -3,7 +3,8 @@ require "raiha/next/runtime"
 
 # The UDP socket of the runtime on the loopback interface: each datagram
 # goes with its ECN mark, IPv4 into a socket bound to "::" included, and
-# comes out with the codepoint it was marked with.
+# comes out with the codepoint it was marked with; the datagrams of a
+# Transmit go in one with GSO, and one by one where it is refused.
 class RaihaNextRuntimeUDPTest < Minitest::Test
   UDP = Raiha::Next::Runtime::UDP
   QUIC = Raiha::Next::QUIC
@@ -76,6 +77,64 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     sender = bind("127.0.0.1")
     sender.send(transmit("a".b * 1200 + "b".b * 1200 + "c".b * 500, receiver.local_address, segment_size: 1200))
     assert_equal ["a" * 1200, "b" * 1200, "c" * 500], received(receiver).map(&:first)
+  end
+
+  # The datagrams of a Transmit, cut by the kernel, each marked.
+  def test_a_transmit_of_several_datagrams_marked
+    receiver = bind("::")
+    sender = bind("::")
+    assert sender.send(transmit("a".b * 1200 + "b".b * 600, ["::ffff:127.0.0.1", receiver.local_address[1]], ecn: :ect0, segment_size: 1200))
+    assert_equal [["a" * 1200, :ect0], ["b" * 600, :ect0]], received(receiver).map { [_1.first, _1.last] }
+  end
+
+  # A socket that refuses the datagrams of a Transmit in one with `error`,
+  # and each of them too when `everything`, counting what it was asked.
+  class RefusingSocket
+    attr_reader :segmented, :datagrams
+
+    def initialize(error, everything: false)
+      @error = error
+      @everything = everything
+      @segmented = 0
+      @datagrams = []
+    end
+
+    def local_address = Addrinfo.udp("127.0.0.1", 4433)
+
+    def setsockopt(*) = nil
+
+    def sendmsg(data, _flags, _destination, *controls)
+      if controls.any? { _1.level == Socket::IPPROTO_UDP }
+        @segmented += 1
+        raise @error
+      end
+      raise @error if @everything
+      @datagrams << data
+      data.bytesize
+    end
+  end
+
+  # Where GSO is refused, as with no checksum offload (EIO), the datagrams
+  # go one by one, and the socket does not try it again.
+  def test_gso_refused
+    skip "GSO is Linux's" unless RUBY_PLATFORM.include?("linux")
+    payload = "a".b * 1200 + "b".b * 1200 + "c".b * 500
+    [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].each do |error|
+      socket = RefusingSocket.new(error)
+      udp = UDP.new(socket)
+      2.times { assert udp.send(transmit(payload, ["127.0.0.1", 4434], segment_size: 1200)) }
+      assert_equal [1, ["a" * 1200, "b" * 1200, "c" * 500] * 2], [socket.segmented, socket.datagrams], error.name
+    end
+  end
+
+  # EINVAL that comes one by one all the same is the destination's, a port
+  # of 0 say: the datagrams are dropped, and GSO is tried again next time.
+  def test_einval_of_the_destination
+    skip "GSO is Linux's" unless RUBY_PLATFORM.include?("linux")
+    socket = RefusingSocket.new(Errno::EINVAL, everything: true)
+    udp = UDP.new(socket)
+    2.times { refute udp.send(transmit("x".b * 2400, ["127.0.0.1", 0], segment_size: 1200)) }
+    assert_equal 2, socket.segmented
   end
 
   def test_a_batch_has_a_limit
