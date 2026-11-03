@@ -13,12 +13,16 @@ module Raiha::Next::QUIC
     @tracer: _Tracer?
     @ecn_testing_sent: Integer
     @ecn_testing_lost: Integer
+    @pacer: Pacer
+    @pacing_release_at: Float?
 
     attr_reader ecn_state: :testing | :capable | :failed
 
     def initialize: (config: Config, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
     def start_over: () -> void
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
+    def paced?: (Integer size, Float now) -> bool
+    attr_reader pacing_release_at: Float?
     def remove_in_flight: (sent_bytes: Integer, ack_eliciting: bool) -> void
     def app_limited?: () -> bool
     def transmission_stopped: (Symbol reason) -> bool

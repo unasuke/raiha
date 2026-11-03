@@ -409,15 +409,15 @@ module Raiha::Next::QUIC
     end
 
     # When something is to be done next: a timer of loss recovery, the
-    # idle timeout or the end of the previous 1-RTT keys while open, the end
-    # of closing or draining after.
+    # idle timeout, the end of the previous 1-RTT keys or when pacing lets
+    # what it held back go while open, the end of closing or draining after.
     def next_timeout
       case @state
       when :open
         # A server at its amplification limit cannot send an ACK either, so
         # an ACK's deadline would only come round again and again.
         [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline,
-          @protection.next_timeout].compact.min
+          @protection.next_timeout, @path.pacing_release_at].compact.min
       when :closing, :draining then @close_deadline
       end
     end
@@ -878,7 +878,9 @@ module Raiha::Next::QUIC
 
     # The next datagram to send, nil when there is nothing. What elicits an
     # ACK goes only while the congestion window has room for a datagram
-    # more, or a probe is due. The 1-RTT keys change first when a key update
+    # more and pacing lets it go, or a probe is due, which waits on neither
+    # (RFC 9002 "Probe Timeout"); a datagram of ACKs alone waits on nothing
+    # (RFC 9002 "Pacing"). The 1-RTT keys change first when a key update
     # is due; when they cannot and are at their confidentiality limit, the
     # connection closes. While closing, only the CONNECTION_CLOSE frame, when
     # due. When nothing goes, the path hears why.
@@ -887,7 +889,9 @@ module Raiha::Next::QUIC
       limit = @path.max_datagram_size
       limit = [limit, amplification_budget(now)].min unless @address_validated
       return stopped(:amplification) if limit < MIN_INITIAL_DATAGRAM
-      eliciting = @path.bytes_in_flight + limit <= @path.congestion.window || @probes.values.any?(&:positive?)
+      fits = @path.bytes_in_flight + limit <= @path.congestion.window
+      paced = fits && @path.paced?(limit, now)
+      eliciting = paced || @probes.values.any?(&:positive?)
       begin
         @protection.update_keys_if_due
       rescue Violation => error
@@ -909,7 +913,7 @@ module Raiha::Next::QUIC
         pending << Pending.new(level:, header:, packet_number:, packet_number_length: length, frames:, duties:)
         used += overhead(header) + Wire::Frame.encode(frames, ack_delay_exponent: own_ack_delay_exponent(level)).bytesize
       end
-      return stopped(eliciting ? :drained : :congestion) if pending.empty?
+      return stopped(eliciting ? :drained : (fits ? :pacing : :congestion)) if pending.empty?
       datagram = seal(pending, now)
       @sent_unvalidated += datagram.bytesize unless @address_validated
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }

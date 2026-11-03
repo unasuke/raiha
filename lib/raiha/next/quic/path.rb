@@ -2,10 +2,11 @@
 
 module Raiha::Next::QUIC
   # One path of a connection, with what loss recovery keeps for it: the RTT,
-  # the congestion controller made from the Config, and the bytes and
-  # ack-eliciting packets in flight on it. A new path starts them all over
-  # (RFC 9000 "Connection Migration"); packets sent on a path that is gone
-  # count for nothing.
+  # the congestion controller made from the Config, the bytes and
+  # ack-eliciting packets in flight on it, and its Pacer, whose bucket
+  # holds RFC 9002's initial window whatever the Config's is. A new path
+  # starts them all over (RFC 9000 "Connection Migration"); packets sent on
+  # a path that is gone count for nothing.
   class Path
     attr_reader :rtt
     attr_reader :congestion
@@ -36,6 +37,8 @@ module Raiha::Next::QUIC
       @ack_eliciting_in_flight = 0
       @packets_in_flight = 0
       @app_limited = false
+      @pacer = Pacer.new(capacity: Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size), granularity: @config.pacing_granularity)
+      @pacing_release_at = nil #: Float?
     end
 
     # :testing, :capable or :failed (loss recovery's design, "Marking").
@@ -73,8 +76,21 @@ module Raiha::Next::QUIC
       @bytes_in_flight += sent_bytes
       @packets_in_flight += 1
       @ack_eliciting_in_flight += 1 if ack_eliciting
+      @pacer.sent(sent_bytes)
       @congestion.on_packet_sent(bytes: sent_bytes, now:)
     end
+
+    # Whether pacing lets a datagram of `size` bytes go in flight now, at
+    # the congestion controller's rate; when it does not, `pacing_release_at`
+    # is when it will.
+    def paced?(size, now)
+      @pacing_release_at = @pacer.release_at(size, @congestion.pacing_rate, now)
+      @pacing_release_at.nil?
+    end
+
+    # When pacing lets what is held back go, while sending is stopped for
+    # it.
+    attr_reader :pacing_release_at
 
     # No longer counts a packet acknowledged, lost or discarded.
     def remove_in_flight(sent_bytes:, ack_eliciting:)
@@ -94,6 +110,7 @@ module Raiha::Next::QUIC
     # Only the window filled up, or pacing holding back what would have
     # filled it, leaves the window used.
     def transmission_stopped(reason)
+      @pacing_release_at = nil unless reason == :pacing
       @app_limited = case reason
         when :drained then @bytes_in_flight < @congestion.window
         when :flow_control, :amplification then true
