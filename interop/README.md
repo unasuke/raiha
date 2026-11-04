@@ -288,6 +288,11 @@ The runner leaves the log directory and the networks of a run behind;
 give each run a `--log-dir` of its own, and take the networks on
 `193.167.x.x` down before the next.
 
+Built with `--build-arg RAIHA_STARTUP=rapid_start` as well, the image
+starts its paths with Rapid Start (`Congestion::Startup::RapidStart`);
+under a tag and a name of its own in `implementations_quic.json`, the
+goodput of the two can be set side by side.
+
 ## Environment variables
 
 | variable | purpose |

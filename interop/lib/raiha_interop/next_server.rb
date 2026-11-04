@@ -39,7 +39,7 @@ module RaihaInterop
       @keylog = keylog
       socket = udp_socket
       socket.bind("0.0.0.0", (@env["BIND_PORT"] || PORT).to_i)
-      endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: SecureRandom, time: Time.now, now: mono)
+      endpoint = QUIC::Endpoint.server(config: quic_config, random: SecureRandom, time: Time.now, now: mono)
       log("listening on port #{socket.addr[1]} testcase=#{@testcase}")
       loop do
         endpoint.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }

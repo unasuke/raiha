@@ -10,7 +10,8 @@ module RaihaInterop
   # What the client and the server of the next release of raiha share:
   # the TLS extensions with the QUIC transport parameters, hq-interop
   # (HTTP/0.9 over QUIC) for ALPN, a UDP socket with room for bursts, and
-  # the keylog and the qlog quic-interop-runner asks for.
+  # the keylog and the qlog quic-interop-runner asks for. With
+  # RAIHA_STARTUP=rapid_start, the paths start with Rapid Start.
   module NextQUIC
     QUIC = Raiha::Next::QUIC
     TLS = Raiha::Next::TLS
@@ -23,7 +24,15 @@ module RaihaInterop
     # The most datagrams taken from the socket before the application runs.
     RECEIVE_BATCH = 64
 
+    STARTUPS = { "" => nil, "rapid_start" => QUIC::Congestion::Startup::RapidStart }.freeze
+
     def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    # The QUIC Config of a connection, with the startup RAIHA_STARTUP names.
+    def quic_config
+      name = @env["RAIHA_STARTUP"] || ""
+      QUIC::Config.new(startup: STARTUPS.fetch(name) { raise ArgumentError, "unknown RAIHA_STARTUP #{name.inspect}" })
+    end
 
     # The protocol offered and taken with ALPN.
     def alpn = ALPN
