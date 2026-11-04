@@ -241,6 +241,53 @@ testcases another's name: `blackhole`, `amplificationlimit`,
 `handshake`, and `handshakeloss` and `handshakecorruption` are
 `multiconnect`.
 
+### With the ns-3 simulator
+
+The testcases of loss, corruption, delay and bandwidth need the
+runner's own `docker-compose.yml`, with the ns-3 simulator between the
+client and the server. That takes Docker Engine 28.1 or later, for its
+`interface_name:`, and Wireshark 4.4 or later for the runner's `tshark`;
+under podman the simulator passes nothing on (see above), and CI stays
+on the sim-less compose.
+
+`run_endpoint.sh` does what the simulator's endpoint image does in its
+`setup.sh`: the routes to `193.167.0.0/16` and `fd00:cafe:cafe::/48` go
+through the simulator, `.2` of the endpoint's network, the direct ones
+go, and the checksum offload is turned off, as the simulator passes on
+only datagrams whose checksums are valid; the client waits for the
+simulator to listen on port 57832. The sim-less compose sets
+`NETWORK_SIMULATOR=none`, which leaves all of that out and has the
+endpoints capture the trace themselves instead. With the offload off the
+kernel refuses GSO (EIO), and the runtime's socket sends the datagrams
+of a Transmit one by one.
+
+The upstream compose raises the endpoints' locked memory to 64 MiB. Where
+the hard limit is lower, as in an LXD container (8 MiB), the containers
+do not start; raiha locks no memory, so an override that lowers it is
+enough:
+
+```yaml
+# memlock.yml, next to the runner's docker-compose.yml
+services:
+  server:
+    ulimits:
+      memlock: 8388608
+  client:
+    ulimits:
+      memlock: 8388608
+```
+
+```sh
+docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+cd tmp/quic-interop-runner
+COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
+  -t handshakeloss,transferloss,handshakecorruption,transfercorruption,longrtt,blackhole,amplificationlimit,ecn,goodput,crosstraffic
+```
+
+The runner leaves the log directory and the networks of a run behind;
+give each run a `--log-dir` of its own, and take the networks on
+`193.167.x.x` down before the next.
+
 ## Environment variables
 
 | variable | purpose |

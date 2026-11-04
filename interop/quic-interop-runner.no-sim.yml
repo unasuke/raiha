@@ -10,7 +10,8 @@
 # _get_versions returns [].
 #
 # /logs is a named volume shared between client, server and sim. The
-# client and server containers run tcpdump on their own eth0 (see
+# client and server containers, told NETWORK_SIMULATOR=none, set up no
+# routes through a simulator and run tcpdump on their own eth0 (see
 # interop/run_endpoint.sh) and write trace_node_left.pcap /
 # trace_node_right.pcap into the volume; the no-op sim service
 # exposes the same /logs so quic-interop-runner's `docker cp sim:/logs/.`
@@ -50,6 +51,7 @@ services:
     environment:
       - CRON=$CRON
       - ROLE=server
+      - NETWORK_SIMULATOR=none
       - SERVER_PARAMS=$SERVER_PARAMS
       - SSLKEYLOGFILE=/logs/keys.log
       - QLOGDIR=/logs/qlog/
@@ -79,6 +81,7 @@ services:
     environment:
       - CRON=$CRON
       - ROLE=client
+      - NETWORK_SIMULATOR=none
       - CLIENT_PARAMS=$CLIENT_PARAMS
       - SSLKEYLOGFILE=/logs/keys.log
       - QLOGDIR=/logs/qlog/

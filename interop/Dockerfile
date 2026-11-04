@@ -8,6 +8,9 @@
 #
 # Built with --build-arg RAIHA_IMPL=next, the image runs the next
 # release of raiha with hq-interop instead.
+#
+# iproute2 and ethtool set up the routes through the ns-3 simulator and
+# turn the checksum offload off (run_endpoint.sh).
 
 FROM ruby:4.0-slim AS builder
 ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
@@ -27,7 +30,7 @@ ARG RAIHA_IMPL=current
 ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle RAIHA_IMPL=$RAIHA_IMPL
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libssl3 ca-certificates iproute2 tcpdump \
+      libssl3 ca-certificates iproute2 ethtool tcpdump \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

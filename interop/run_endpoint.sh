@@ -6,16 +6,54 @@
 # all this script has to do is hand control to the Ruby entry point
 # and propagate its exit status.
 #
-# In the sim-less compose layout (interop/quic-interop-runner.no-sim.yml)
-# we capture pcap on eth0 here, since the no-op alpine sim cannot
-# observe traffic between client and server. The Dockerfile sets
-# `cap_net_raw,cap_net_admin+eip` on /usr/bin/tcpdump so we can run
-# tcpdump as the existing root user without auto-dropping privileges
-# to the "tcpdump" account — the cross-user-namespace signal that
-# rootless podman blocks then never has to happen.
+# With the ns-3 simulator, quic-interop-runner's own compose, the
+# datagrams to the other side go through the simulator, .2 of each
+# network, as the endpoint image of quic-network-simulator sets up in its
+# setup.sh: the routes to 193.167.0.0/16 and fd00:cafe:cafe::/48 go
+# through it, the direct ones of the endpoint's own network go, and the
+# checksums are computed here, with the offload off, as the simulator
+# passes on only datagrams whose checksums are valid. The client waits
+# for the simulator to listen on port 57832 first.
+#
+# In the sim-less compose layout (interop/quic-interop-runner.no-sim.yml,
+# which sets NETWORK_SIMULATOR=none) we capture pcap on eth0 here, since
+# the no-op alpine sim cannot observe traffic between client and server.
+# The Dockerfile sets `cap_net_raw,cap_net_admin+eip` on /usr/bin/tcpdump
+# so we can run tcpdump as the existing root user without auto-dropping
+# privileges to the "tcpdump" account — the cross-user-namespace signal
+# that rootless podman blocks then never has to happen.
 set -eu
 
 mkdir -p /logs
+
+if [ "${NETWORK_SIMULATOR:-ns3}" != none ]; then
+  ethtool -K eth0 tx off >/dev/null
+  # The IPv4 address comes first, and the IPv6 one, when there is one,
+  # second.
+  ip4=$(hostname -I | cut -d " " -f 1)
+  ip6=$(hostname -I | cut -s -d " " -f 2)
+  ip route add 193.167.0.0/16 via "${ip4%.*}.2"
+  ip route del "${ip4%.*}.0/24"
+  case "$ip6" in
+    *:*)
+      ip -6 route add fd00:cafe:cafe::/48 via "${ip6%:*}:2"
+      ip -6 route del "${ip6%:*}:/64"
+      ;;
+  esac
+  if [ "${ROLE:-}" = client ]; then
+    ruby -rsocket -e '
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 30
+      begin
+        Socket.tcp("sim", 57832, connect_timeout: 1).close
+      rescue SystemCallError, SocketError
+        raise if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+        sleep 0.2
+        retry
+      end'
+  fi
+  exec raiha-interop "$@"
+fi
+
 case "${ROLE:-}" in
   client) PCAP=/logs/trace_node_left.pcap ;;
   server) PCAP=/logs/trace_node_right.pcap ;;
