@@ -8,13 +8,21 @@ require_relative "next_server"
 module RaihaInterop
   # The entry point of the next release of raiha, which the image built
   # with RAIHA_IMPL=next runs: the testcases it takes in each role, by the
-  # names the runner gives them there (multiplexing is a transfer to both,
-  # keyupdate a transfer to the server), and the client or the server of
+  # names the runner gives them there, and the client or the server of
   # hq-interop for them, or of HTTP/3 for http3. Key updates come without
   # asking, after the first hundred packets.
+  #
+  # The runner gives several testcases another's name: multiplexing,
+  # blackhole, amplificationlimit, transferloss, transfercorruption and the
+  # goodput and crosstraffic measurements are a transfer, keyupdate is one
+  # to the server, longrtt is a handshake, and handshakeloss and
+  # handshakecorruption are multiconnect, a connection for each request.
+  # ecn goes as a handshake does, its packets marked ECT(0) as any are.
   module NextRunner
-    CLIENT_TESTCASES = %w[handshake transfer retry chacha20 keyupdate versionnegotiation resumption zerortt http3].freeze
-    SERVER_TESTCASES = %w[handshake transfer retry chacha20 versionnegotiation resumption zerortt http3].freeze
+    CLIENT_TESTCASES = %w[
+      handshake transfer retry chacha20 keyupdate versionnegotiation resumption zerortt http3 multiconnect ecn
+    ].freeze
+    SERVER_TESTCASES = %w[handshake transfer retry chacha20 versionnegotiation resumption zerortt http3 multiconnect ecn].freeze
     # What quic-interop-runner takes for a testcase not implemented.
     NOT_IMPLEMENTED = 127
 

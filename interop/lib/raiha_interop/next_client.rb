@@ -9,9 +9,10 @@ module RaihaInterop
   # "GET /path\r\n" on it, and what comes back saved under DOWNLOADS by the
   # name of the path. The chacha20 testcase offers ChaCha20-Poly1305 alone,
   # without GREASE; versionnegotiation only elicits a Version Negotiation
-  # packet. For resumption and zerortt, the first path is fetched on a
-  # connection of its own, which waits for a ticket, and the rest on a
-  # second that resumes it, in 0-RTT for zerortt; what a rejected 0-RTT
+  # packet; multiconnect fetches each path on a connection of its own, one
+  # after another. For resumption and zerortt, the first path is fetched
+  # on a connection of its own, which waits for a ticket, and the rest on
+  # a second that resumes it, in 0-RTT for zerortt; what a rejected 0-RTT
   # asked for is asked again.
   class NextClient
     include NextQUIC
@@ -49,6 +50,7 @@ module RaihaInterop
       remote = resolve(uri)
       return probe_version_negotiation(remote) if @testcase == "versionnegotiation"
       paths = urls.map { |url| URI(url).path }
+      return paths.map { |path| fetch(uri.host, remote, [path]).first }.all? ? 0 : 1 if @testcase == "multiconnect"
       return fetch(uri.host, remote, paths).first ? 0 : 1 unless RESUMING.include?(@testcase)
       first, *rest = paths
       fetched, ticket = fetch(uri.host, remote, [first], wait_for_ticket: true)

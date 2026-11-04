@@ -231,8 +231,15 @@ issue on this.
 | `http3` | a GET over HTTP/3 for each request, on a stream of its own | the file of each path under `WWW` with 200, over HTTP/3 |
 | `resumption` | the first request on a connection that waits for a ticket, the rest on a second that resumes it | gives tickets sealed with a key made at random as it starts |
 | `zerortt` | as for `resumption`, with the rest in 0-RTT, asked again in 1-RTT if the server rejects it | as for `resumption`, and takes 0-RTT, recorded with no time to warm up |
+| `multiconnect` | each request on a connection of its own, one after another | as for `handshake` |
+| `ecn` | as for `handshake`; its packets are marked ECT(0), as all are | as for `handshake` |
 
-Everything else returns exit status 127.
+Everything else returns exit status 127. The runner gives several
+testcases another's name: `blackhole`, `amplificationlimit`,
+`transferloss`, `transfercorruption` and the `goodput` and
+`crosstraffic` measurements are `transfer` to both, `longrtt` is
+`handshake`, and `handshakeloss` and `handshakecorruption` are
+`multiconnect`.
 
 ## Environment variables
 
