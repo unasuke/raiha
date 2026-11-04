@@ -8,7 +8,7 @@
 # recovery: the duties, the peer and its ACK frames only. Allocations come
 # out the same each run; time is for reference.
 #
-# Usage: bundle exec ruby script/next/recovery_bench.rb [--yjit]
+# Usage: bundle exec ruby [--yjit] script/next/recovery_bench.rb
 
 $LOAD_PATH.unshift(File.expand_path("../../lib", __dir__))
 
