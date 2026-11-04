@@ -32,6 +32,37 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
     refute_empty server.transmits(now:)
   end
 
+  # The types of the packets coalesced in `datagram`.
+  def packet_types(datagram)
+    types = []
+    offset = 0
+    while offset < datagram.bytesize
+      packet = QUIC::Wire::Packet.parse(datagram, offset:, dcid_length: 8)
+      types << (packet.header.is_a?(QUIC::Wire::LongHeader) ? packet.header.type : :one_rtt)
+      offset = packet.end_offset
+    end
+    types
+  end
+
+  # A server whose first flight is lost: at the PTO of its Initial space it
+  # probes its Handshake space too, each probe datagram carrying both, as
+  # the client may have the keys of only one (RFC 9002 "Sending Probe
+  # Packets"); one of them is enough for the client to go on.
+  def test_the_server_probes_initial_and_handshake_together
+    client = client_connection
+    server = server_connection
+    now = 0.0
+    client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+    server.transmits(now:)
+    now = server.next_timeout
+    server.handle_timeout(now:)
+    probes = server.transmits(now:)
+    assert_equal 2, probes.size
+    probes.each { |probe| assert_equal %i[initial handshake], packet_types(probe.payload).uniq }
+    client.receive(probes.last.payload, from: SERVER, now:)
+    assert client.handshake_complete?
+  end
+
   # The client's last flight lost on the way: its PTO sends Finished
   # again, and the server completes.
   def test_a_lost_finished

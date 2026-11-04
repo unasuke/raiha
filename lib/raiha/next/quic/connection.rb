@@ -14,6 +14,8 @@ module Raiha::Next::QUIC
     LEVELS = %i[initial zero_rtt handshake one_rtt].freeze
     # The packet number space of each level.
     SPACES = { initial: :initial, zero_rtt: :application_data, handshake: :handshake, one_rtt: :application_data }.freeze
+    # The spaces a PTO may probe.
+    PROBED_SPACES = SPACES.values.uniq.freeze
     # RFC 9000 "Datagram Size": a datagram with an Initial packet in it
     # from a client, or with an ack-eliciting one from a server, is padded
     # to this.
@@ -985,9 +987,16 @@ module Raiha::Next::QUIC
     end
 
     # A PTO asks for `probe.packets` packets that elicit an ACK in
-    # `probe.space`.
+    # `probe.space`, and as many in each other space with ack-eliciting
+    # packets in flight, coalesced with them where they fit (RFC 9002
+    # "Sending Probe Packets"): a server's Initial and Handshake probes go
+    # together, as the client may have the keys of only one, and a loss of
+    # a burst takes no one space's probes alone.
     private def probe(probe)
-      @probes[probe.space] = @probes.fetch(probe.space, 0) + probe.packets
+      PROBED_SPACES.each do |space|
+        next unless space == probe.space || @recovery.oldest_ack_eliciting(space)
+        @probes[space] = @probes.fetch(space, 0) + probe.packets
+      end
     end
 
     # A probe of `level` carries what is new when there is some, else the

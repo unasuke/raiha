@@ -5,6 +5,7 @@ module Raiha::Next::QUIC
 
     LEVELS: Array[PacketProtection::level]
     SPACES: Hash[PacketProtection::level, space]
+    PROBED_SPACES: Array[space]
     MIN_INITIAL_DATAGRAM: Integer
     INITIAL_DCID_LENGTH: Integer
     DEFAULT_ACK_DELAY_EXPONENT: Integer
