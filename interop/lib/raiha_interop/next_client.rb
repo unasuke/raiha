@@ -75,11 +75,18 @@ module RaihaInterop
       connection = connect(server_name, remote, session:, early_data:)
       log("connecting to #{remote.inspect} testcase=#{@testcase} requests=#{paths.size} resuming=#{!session.nil?} 0-RTT=#{connection.zero_rtt_state}")
       limit = mono + DEADLINE
+      done = lambda do
+        (@saved == paths.size && (!wait_for_ticket || !@tickets.empty?)) || connection.closed? || connection.draining? || mono > limit
+      end
       # The application's turn comes first, so that requests in 0-RTT go
-      # with the first Initial rather than after the server's flight.
-      until (@saved == paths.size && (!wait_for_ticket || !@tickets.empty?)) || connection.closed? || connection.draining? || mono > limit
+      # with the first Initial rather than after the server's flight. Once
+      # the turn has all that was asked for, the loop ends there, rather
+      # than waiting for the next datagram or timer, which may be the idle
+      # timeout's.
+      until done.call
         step(connection)
         connection.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
+        next if done.call
         receive_datagrams(socket, [connection.next_timeout, limit].compact.min).each do |data, from|
           connection.receive(data, from:, now: mono)
         end
