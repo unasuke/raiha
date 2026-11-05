@@ -21,6 +21,8 @@ TLS = Raiha::Next::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 ALPN = ["hq-interop"].freeze
 HANDSHAKES = 50
+# YJIT compiles a method once it has been called 30 times, by default.
+WARM_UP = 30
 TRANSFER = 20_000_000
 CLIENT = ["192.0.2.1", 50_000].freeze
 SERVER = ["192.0.2.2", 443].freeze
@@ -97,9 +99,9 @@ def measure(name, per)
 end
 
 puts RUBY_DESCRIPTION
-# Warm up the code paths, so that the first handshake's loading counts for
-# nothing.
-handshake
+# Warm up the code paths, so that neither loading nor YJIT's compiling of
+# the handshake counts.
+WARM_UP.times { handshake }
 measure("handshake", "connection") do
   HANDSHAKES.times { handshake }
   HANDSHAKES
