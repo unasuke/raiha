@@ -37,14 +37,13 @@ module RaihaInterop
       @keyring = TLS::Keyring.server(config: @tls_config, identities: [identity])
       @anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false)
       @keylog = keylog
-      socket = udp_socket
-      socket.bind("0.0.0.0", (@env["BIND_PORT"] || PORT).to_i)
+      socket = udp_socket("0.0.0.0", (@env["BIND_PORT"] || PORT).to_i)
       endpoint = QUIC::Endpoint.server(config: quic_config, random: SecureRandom, time: Time.now, now: mono)
-      log("listening on port #{socket.addr[1]} testcase=#{@testcase}")
+      log("listening on port #{socket.local_address[1]} testcase=#{@testcase}")
       loop do
         endpoint.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
-        receive_datagrams(socket, endpoint.next_timeout).each do |data, from|
-          dispatch(endpoint, socket, endpoint.receive(data, from:, now: mono))
+        receive_datagrams(socket, endpoint.next_timeout).each do |data, from, ecn|
+          dispatch(endpoint, socket, endpoint.receive(data, from:, ecn:, now: mono))
         end
         deadline = endpoint.next_timeout
         endpoint.handle_timeout(now: mono) if deadline && deadline <= mono

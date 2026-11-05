@@ -5,24 +5,19 @@ require "openssl"
 require "securerandom"
 require "socket"
 require "raiha/next/quic"
+require "raiha/next/runtime"
 
 module RaihaInterop
   # What the client and the server of the next release of raiha share:
   # the TLS extensions with the QUIC transport parameters, hq-interop
-  # (HTTP/0.9 over QUIC) for ALPN, a UDP socket with room for bursts, and
-  # the keylog and the qlog quic-interop-runner asks for. With
+  # (HTTP/0.9 over QUIC) for ALPN, the runtime's UDP socket, and the keylog
+  # and the qlog quic-interop-runner asks for. With
   # RAIHA_STARTUP=rapid_start, the paths start with Rapid Start.
   module NextQUIC
     QUIC = Raiha::Next::QUIC
     TLS = Raiha::Next::TLS
     REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
     ALPN = ["hq-interop"].freeze
-    # The Linux default for the receive buffer (about 212 KB) is too small
-    # for a burst of several MB: the kernel drops what overflows before it
-    # is read.
-    SOCKET_BUFFER = 8 * 1024 * 1024
-    # The most datagrams taken from the socket before the application runs.
-    RECEIVE_BATCH = 64
 
     STARTUPS = { "" => nil, "rapid_start" => QUIC::Congestion::Startup::RapidStart }.freeze
 
@@ -37,36 +32,25 @@ module RaihaInterop
     # The protocol offered and taken with ALPN.
     def alpn = ALPN
 
-    def udp_socket
-      socket = UDPSocket.new
-      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, SOCKET_BUFFER)
-      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, SOCKET_BUFFER)
-      socket
-    end
+    # The runtime's UDP socket bound to `host` and `port`: it marks each
+    # datagram with the ECN codepoint of its Transmit and reads the one each
+    # that comes in was marked with, which ECN validation and the runner's
+    # ecn testcase need, with buffers large enough for a burst.
+    def udp_socket(host, port) = Raiha::Next::Runtime::UDP.bind(host, port)
 
-    # Sends a datagram the connection or the Endpoint put out. A peer gone
-    # away is no reason to stop.
+    # Sends what the connection or the Endpoint put out. A peer gone away is
+    # no reason to stop: what does not go is dropped.
     def send_transmit(socket, transmit)
-      socket.send(transmit.payload, 0, *transmit.destination)
-    rescue Errno::ECONNREFUSED, Errno::EMSGSIZE => error
-      log("dropped a datagram of #{transmit.payload.bytesize} bytes to #{transmit.destination.inspect}: #{error.class}")
+      return if socket.send(transmit)
+      log("dropped a datagram of #{transmit.payload.bytesize} bytes to #{transmit.destination.inspect}")
     end
 
-    # The datagrams on `socket` as [data, [address, port]]: waits for the
-    # first until `deadline` (forever when nil), then takes those there
-    # already, RECEIVE_BATCH at most.
+    # The datagrams on `socket` as [data, [address, port], ecn]: waits for
+    # the first until `deadline` (forever when nil), then takes those there
+    # already, as many as the socket takes at once.
     def receive_datagrams(socket, deadline)
       timeout = deadline && [deadline - mono, 0].max
-      return [] unless IO.select([socket], nil, nil, timeout)
-      datagrams = []
-      while datagrams.size < RECEIVE_BATCH
-        data, address = socket.recvfrom_nonblock(65_535, exception: false)
-        break if data == :wait_readable || data.nil?
-        datagrams << [data, [address[3], address[1]]]
-      end
-      datagrams
-    rescue Errno::ECONNREFUSED
-      datagrams || []
+      socket.wait_readable(timeout) ? socket.receive : []
     end
 
     # The keylog of SSLKEYLOGFILE, nil when it is not set.

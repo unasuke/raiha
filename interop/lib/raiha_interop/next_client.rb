@@ -72,8 +72,7 @@ module RaihaInterop
       @bodies = {}
       @saved = 0
       @tickets = []
-      socket = udp_socket
-      socket.bind("0.0.0.0", 0)
+      socket = udp_socket("0.0.0.0", 0)
       connection = connect(server_name, remote, session:, early_data:)
       log("connecting to #{remote.inspect} testcase=#{@testcase} requests=#{paths.size} resuming=#{!session.nil?} 0-RTT=#{connection.zero_rtt_state}")
       limit = mono + DEADLINE
@@ -89,8 +88,8 @@ module RaihaInterop
         step(connection)
         connection.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
         next if done.call
-        receive_datagrams(socket, [connection.next_timeout, limit].compact.min).each do |data, from|
-          connection.receive(data, from:, now: mono)
+        receive_datagrams(socket, [connection.next_timeout, limit].compact.min).each do |data, from, ecn|
+          connection.receive(data, from:, ecn:, now: mono)
         end
         deadline = connection.next_timeout
         connection.handle_timeout(now: mono) if deadline && deadline <= mono
@@ -171,16 +170,16 @@ module RaihaInterop
     # packet that echoes its connection IDs (RFC 9000 "Version
     # Negotiation"); the rest of the packet is never read.
     private def probe_version_negotiation(remote)
-      socket = udp_socket
-      socket.bind("0.0.0.0", 0)
+      socket = udp_socket("0.0.0.0", 0)
       dcid = SecureRandom.bytes(8)
       scid = SecureRandom.bytes(8)
       header = [0xc0, PROBE_VERSION, dcid.bytesize].pack("CNC") + dcid + [scid.bytesize].pack("C") + scid + [0, 0x44b0].pack("Cn")
       probe = header + SecureRandom.bytes(1200 - header.bytesize)
       limit = mono + DEADLINE
+      transmit = QUIC::Transmit.new(payload: probe, destination: remote, source: nil, ecn: :not_ect, segment_size: nil)
       until mono > limit
-        socket.send(probe, 0, *remote)
-        receive_datagrams(socket, mono + PROBE_INTERVAL).each do |data, _|
+        send_transmit(socket, transmit)
+        receive_datagrams(socket, mono + PROBE_INTERVAL).each do |data, *|
           packet = QUIC::Wire::Packet.parse(data, dcid_length: scid.bytesize)
           next unless packet.is_a?(QUIC::Wire::VersionNegotiation) && packet.dcid == scid && packet.scid == dcid
           log("versions the server takes: #{packet.versions.map { |version| format("0x%08x", version) }.join(", ")}")
