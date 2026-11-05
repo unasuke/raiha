@@ -6,6 +6,7 @@ module Raiha::Next::QUIC
     LEVELS: Array[PacketProtection::level]
     SPACES: Hash[PacketProtection::level, space]
     PROBED_SPACES: Array[space]
+    SEND_AGAIN_AT_ONCE: Integer
     MIN_INITIAL_DATAGRAM: Integer
     INITIAL_DCID_LENGTH: Integer
     DEFAULT_ACK_DELAY_EXPONENT: Integer
@@ -78,6 +79,7 @@ module Raiha::Next::QUIC
     @sent_unvalidated: Integer
     @amplification_limited: bool
     @probes: Hash[space, Integer]
+    @sent_again_at_once: Integer
     @start_binding: ^(Connection, TransportParameters) -> TLSBinding
     @binding: TLSBinding?
 
@@ -157,6 +159,7 @@ module Raiha::Next::QUIC
     private def amplification_budget: (Float now) -> Integer
     private def count_received: (String datagram, Float now) -> void
     private def validate_address: (Float now) -> void
+    private def send_again_at_once: () -> void
     private def probe: (Recovery::Probe probe) -> void
     private def fill_probe: (PacketProtection::level level) -> void
     private def discard_level: (:initial | :handshake level, Float now) -> void

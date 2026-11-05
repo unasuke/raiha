@@ -97,18 +97,19 @@ module Raiha::Next::QUIC
 
     def complete? = @machine.complete?
 
-    # A CRYPTO frame of `level` received. Bytes of a finished level past what
-    # it had received are PROTOCOL_VIOLATION; a frame without bytes carries
-    # none.
+    # A CRYPTO frame of `level` received: whether its bytes had all been
+    # read before. Bytes of a finished level past what it had received are
+    # PROTOCOL_VIOLATION; a frame without bytes carries none.
     def receive_crypto(level, frame, time:)
-      return if frame.data.empty?
-      stream = @streams[level] or return
+      return false if frame.data.empty?
+      stream = @streams[level] or return false
       finish = frame.offset + frame.data.bytesize
       if RANK.fetch(level) < RANK.fetch(read_level) && finish > stream.received_end
         raise Violation.new("CRYPTO data past the end of the #{level} level, which TLS has left", frame_type: CryptoStream::FRAME_TYPE)
       end
-      stream.receive(frame.offset, frame.data, limit: [MIN_CRYPTO_BUFFER, @machine.max_flight_size(EPOCH.fetch(level))].max)
+      again = stream.receive(frame.offset, frame.data, limit: [MIN_CRYPTO_BUFFER, @machine.max_flight_size(EPOCH.fetch(level))].max)
       feed(time) if level == read_level
+      again
     end
 
     # Tells the connection what the Machine has put out. A message of a

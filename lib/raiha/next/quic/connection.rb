@@ -42,6 +42,10 @@ module Raiha::Next::QUIC
     # RFC 9000 "Address Validation": until it has validated the client's
     # address, a server sends at most this many times what it received.
     AMPLIFICATION_FACTOR = 3
+    # How many times a server sends its Initial flight again at once on a
+    # ClientHello that comes again (RFC 9002 "Speeding up Handshake
+    # Completion"): once is enough for one loss, and twice for a burst.
+    SEND_AGAIN_AT_ONCE = 2
 
     # The most events the application may leave untaken: past it, the peer
     # makes the connection hold what nobody takes, and it closes with
@@ -170,6 +174,7 @@ module Raiha::Next::QUIC
       @amplification_limited = false
       # How many packets that elicit an ACK a PTO asks for in each space.
       @probes = {} #: Hash[space, Integer]
+      @sent_again_at_once = 0
       restart_idle(now)
       @start_binding = start
       @binding = nil #: TLSBinding?
@@ -809,7 +814,9 @@ module Raiha::Next::QUIC
     private def receive_frame(level, frame, now)
       return unless @state == :open
       case frame
-      when Wire::Frame::Crypto then binding.receive_crypto(level, frame, time: tls_time(now))
+      when Wire::Frame::Crypto
+        again = binding.receive_crypto(level, frame, time: tls_time(now))
+        send_again_at_once if again && level == :initial && @role == :server
       when Wire::Frame::Ack
         Recovery::Duty.dispatch(@recovery.on_ack_received(packet_type: level, ack: frame, now:), to: self)
         @protection.acknowledged(frame.largest) if level == :one_rtt
@@ -984,6 +991,23 @@ module Raiha::Next::QUIC
       return unless @amplification_limited
       @amplification_limited = false
       @recovery.amplification_limited(false, now:)
+    end
+
+    # RFC 9002 "Speeding up Handshake Completion": a client whose Initial
+    # carries CRYPTO data again has not had all of the server's Initial
+    # packets, or takes its RTT for shorter than it is. What the server has
+    # in flight in them goes again at once, as a probe does, coalesced with
+    # its Handshake packets, without waiting for the PTO; SEND_AGAIN_AT_ONCE
+    # times a connection at most, so that the two ends do not answer each
+    # other for ever. The ClientHellos of one PTO of the client, which come
+    # together, count once: a probe asked for and not yet sent takes the
+    # others, so that the times left go to later rounds a loss in a burst
+    # does not reach. The amplification limit holds as ever.
+    private def send_again_at_once
+      return if @sent_again_at_once >= SEND_AGAIN_AT_ONCE || !@recovery.oldest_ack_eliciting(:initial)
+      return if @probes.fetch(:initial, 0).positive?
+      @sent_again_at_once += 1
+      probe(Recovery::Probe.new(space: :initial, packets: 1))
     end
 
     # A PTO asks for `probe.packets` packets that elicit an ACK in

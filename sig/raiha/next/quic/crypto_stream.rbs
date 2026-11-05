@@ -22,7 +22,7 @@ module Raiha::Next::QUIC
     def next_frame: (Integer room) -> [Wire::Frame::Crypto, Recovery::Duty::Crypto]?
     def acked: (Integer offset, Integer length) -> void
     def lost: (Integer offset, Integer length) -> void
-    def receive: (Integer offset, String data, limit: Integer) -> void
+    def receive: (Integer offset, String data, limit: Integer) -> bool
     def consumed: (Integer length) -> Integer
     def read: () -> String
     def buffered: () -> Integer

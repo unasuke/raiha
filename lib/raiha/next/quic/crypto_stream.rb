@@ -88,11 +88,13 @@ module Raiha::Next::QUIC
 
     # Bytes received at `offset`, kept until read; a Violation of
     # CRYPTO_BUFFER_EXCEEDED when more than `limit` bytes would wait or the
-    # bytes received would lie in more than MAX_RANGES pieces. A frame
-    # without bytes changes nothing.
+    # bytes received would lie in more than MAX_RANGES pieces. Whether all
+    # of them had been read before, as when the peer sends them again; a
+    # frame without bytes changes nothing.
     def receive(offset, data, limit:)
       finish = offset + data.bytesize
-      return if data.empty? || finish <= @read_offset
+      return false if data.empty?
+      return true if finish <= @read_offset
       exceeded("#{finish - @read_offset} CRYPTO bytes waiting, over #{limit}") if finish - @read_offset > limit
       if offset < @read_offset
         data = data.byteslice((@read_offset - offset)..) #: String
@@ -104,6 +106,7 @@ module Raiha::Next::QUIC
       fill(offset...finish)
       exceeded("CRYPTO bytes received in over #{MAX_RANGES} pieces") if @filled.size > MAX_RANGES
       @received_end = finish if finish > @received_end
+      false
     end
 
     # The first `length` bytes were received and read elsewhere: frames

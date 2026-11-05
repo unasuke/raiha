@@ -63,6 +63,30 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
     assert client.handshake_complete?
   end
 
+  # A server whose first flight is lost hears the ClientHello again, from
+  # the client's PTO: it sends its flight again at once, Initial and
+  # Handshake together, as a client that sends CRYPTO data again has not had
+  # all of it, twice a connection at most (RFC 9002 "Speeding up Handshake
+  # Completion"); the third time it acknowledges alone. The server's own
+  # timer is never run here.
+  def test_the_server_sends_again_at_once_on_a_client_hello_again
+    client = client_connection
+    server = server_connection
+    client.transmits(now: 0.0).each { server.receive(_1.payload, from: CLIENT, now: 0.1) }
+    server.transmits(now: 0.1)
+    [true, true, false].each do |again|
+      now = client.next_timeout
+      client.handle_timeout(now:)
+      client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+      sent = server.transmits(now:)
+      if again
+        assert sent.any? { packet_types(_1.payload).uniq == %i[initial handshake] }
+      else
+        assert sent.all? { _1.payload.bytesize < 100 }
+      end
+    end
+  end
+
   # The client's last flight lost on the way: its PTO sends Finished
   # again, and the server completes.
   def test_a_lost_finished

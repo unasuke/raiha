@@ -42,7 +42,7 @@ module Raiha::Next::QUIC
     def initialize: (_Connection connection, ::Raiha::Next::TLS::Handshake::Machine machine, ::Raiha::Next::TLS::Profile profile,
                      ?consumed: Integer) -> void
     def complete?: () -> bool
-    def receive_crypto: (PacketProtection::level level, Wire::Frame::Crypto frame, time: Time) -> void
+    def receive_crypto: (PacketProtection::level level, Wire::Frame::Crypto frame, time: Time) -> bool
     def pump: () -> void
     def crypto_pending?: (PacketProtection::level level) -> bool
     def next_crypto_frame: (PacketProtection::level level, Integer room) -> [Wire::Frame::Crypto, Recovery::Duty::Crypto]?
