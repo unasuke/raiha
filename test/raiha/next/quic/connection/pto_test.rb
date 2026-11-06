@@ -63,6 +63,30 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
     assert client.handshake_complete?
   end
 
+  # A PTO sends two datagrams, whatever spaces they carry (RFC 9002
+  # "Sending Probe Packets"): with an RSA certificate the Handshake probe
+  # fills each, and the 0.5-RTT data in flight, which does not fit, goes
+  # in no third. The client's ClientHello again lets the server send them.
+  def test_a_pto_sends_two_datagrams_whatever_spaces_fit
+    tls_config = server_config
+    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity(key: NextTestPKI.key(:rsa))], random: Random.new(2))
+    initial_window = Ractor.shareable_lambda { |max_datagram_size| 3 * max_datagram_size }
+    server = QUIC::Connection.server(config: QUIC::Config.new(initial_window:), tls_config:, keyring:, time: NOW, now: 0.0)
+    client = client_connection
+    client.transmits(now: 0.0).each { server.receive(_1.payload, from: CLIENT, now: 0.0) }
+    server.stream_write(server.open_stream, "x" * 20_000, fin: true)
+    server.transmits(now: 0.0)
+    now = client.next_timeout
+    client.handle_timeout(now:)
+    client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now: 0.001) }
+    server.transmits(now: 0.001)
+    now = server.next_timeout
+    server.handle_timeout(now:)
+    probes = server.transmits(now:)
+    assert_equal 2, probes.size
+    probes.each { |probe| assert_equal %i[initial handshake], packet_types(probe.payload).uniq }
+  end
+
   # A server whose first flight is lost hears the ClientHello again, from
   # the client's PTO: it sends its flight again at once, Initial and
   # Handshake together, as a client that sends CRYPTO data again has not had

@@ -172,8 +172,10 @@ module Raiha::Next::QUIC
       @received_unvalidated = 0
       @sent_unvalidated = 0
       @amplification_limited = false
-      # How many packets that elicit an ACK a PTO asks for in each space.
-      @probes = {} #: Hash[space, Integer]
+      # How many datagrams that elicit an ACK PTOs still ask for, and the
+      # spaces they probe.
+      @probe_datagrams = 0
+      @probed_spaces = [] #: Array[space]
       @sent_again_at_once = 0
       restart_idle(now)
       @start_binding = start
@@ -924,7 +926,7 @@ module Raiha::Next::QUIC
       return stopped(:amplification, now) if limit < MIN_INITIAL_DATAGRAM
       fits = @path.bytes_in_flight + limit <= @path.window
       paced = fits && @path.paced?(limit, now)
-      eliciting = paced || @probes.values.any?(&:positive?)
+      eliciting = paced || @probe_datagrams.positive?
       begin
         @protection.update_keys_if_due
       rescue Violation => error
@@ -948,6 +950,7 @@ module Raiha::Next::QUIC
       end
       return stopped(eliciting ? :drained : (fits ? :pacing : :congestion), now) if pending.empty?
       datagram = seal(pending, now)
+      @probe_datagrams -= 1 if @probe_datagrams.positive? && pending.any? { |packet| packet.frames.any?(&:ack_eliciting?) }
       @sent_unvalidated += datagram.bytesize unless @address_validated
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
       datagram
@@ -1013,18 +1016,23 @@ module Raiha::Next::QUIC
       fill_probe(:handshake)
     end
 
-    # A PTO asks for `probe.packets` packets that elicit an ACK in
-    # `probe.space`, and as many in each other space with ack-eliciting
-    # packets in flight, coalesced with them where they fit (RFC 9002
-    # "Sending Probe Packets"): a server's Initial and Handshake probes go
-    # together, as the client may have the keys of only one, and a loss of
-    # a burst takes no one space's probes alone.
+    # A PTO asks for `probe.packets` datagrams that elicit an ACK, each with
+    # a packet of `probe.space` and those of the other spaces with
+    # ack-eliciting packets in flight that fit (RFC 9002 "Sending Probe
+    # Packets"): a server's Initial and Handshake probes go together, as the
+    # client may have the keys of only one, and a loss of a burst takes no
+    # one space's probes alone. What does not fit goes in no more datagrams
+    # past the congestion window.
     private def probe(probe)
+      @probed_spaces.clear unless @probe_datagrams.positive?
       PROBED_SPACES.each do |space|
         next unless space == probe.space || @recovery.oldest_ack_eliciting(space)
-        @probes[space] = @probes.fetch(space, 0) + probe.packets
+        @probed_spaces << space unless @probed_spaces.include?(space)
       end
+      @probe_datagrams += probe.packets
     end
+
+    private def probing?(space) = @probe_datagrams.positive? && @probed_spaces.include?(space)
 
     # A probe of `level`, or what a server sends again at once, carries what
     # is new when there is some, else the duties of the oldest packet in
@@ -1042,7 +1050,7 @@ module Raiha::Next::QUIC
     # one.
     private def discard_level(level, now)
       return if @protection.discarded?(level)
-      @probes.delete(SPACES.fetch(level))
+      @probed_spaces.delete(SPACES.fetch(level))
       @protection.discard(level)
       binding.discard_level(level)
       @recovery.discard_space(level, now:)
@@ -1097,7 +1105,7 @@ module Raiha::Next::QUIC
       ack = @recovery.ack_frame(space, now:) if level != :zero_rtt && (@recovery.ack_owed?(space) || @recovery.ack_due?(space, now:))
       application = level == :one_rtt || level == :zero_rtt
       room -= Wire::Frame.encode([ack], ack_delay_exponent: own_ack_delay_exponent(level)).bytesize if ack
-      fill_probe(level) if eliciting && @probes.fetch(space, 0).positive?
+      fill_probe(level) if probing?(space)
       if eliciting && level == :one_rtt && @handshake_done_due && room.positive?
         @handshake_done_due = false
         frames << Wire::Frame::HandshakeDone.new
@@ -1145,7 +1153,7 @@ module Raiha::Next::QUIC
         duties << data_duty if data_duty
         room -= Wire::Frame.encode([data], ack_delay_exponent: 0).bytesize
       end
-      if eliciting && @probes.fetch(space, 0).positive? && frames.none?(&:ack_eliciting?) && room.positive?
+      if probing?(space) && frames.none?(&:ack_eliciting?) && room.positive?
         frames << Wire::Frame::Ping.new
         room -= 1
       end
@@ -1230,8 +1238,6 @@ module Raiha::Next::QUIC
         @eliciting_since_received = true
         restart_idle(now)
       end
-      space = SPACES.fetch(packet.level)
-      @probes[space] = @probes.fetch(space, 0) - 1 if ack_eliciting && @probes.fetch(space, 0).positive?
       @recovery.on_packet_sent(packet_type: packet.level, packet_number: packet.packet_number, sent_bytes: sealed.bytesize,
         ack_eliciting:, in_flight:, duties: packet.duties, now:)
       sealed
