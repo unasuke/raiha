@@ -137,6 +137,53 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     assert_equal 2, socket.segmented
   end
 
+  # A socket that raises the next of `errors` at each sendmsg, nil for
+  # none, and keeps what went: a GSO payload whole.
+  class ScriptedSocket
+    attr_reader :segmented, :sent
+
+    def initialize(*errors)
+      @errors = errors
+      @segmented = 0
+      @sent = []
+    end
+
+    def local_address = Addrinfo.udp("127.0.0.1", 4433)
+
+    def setsockopt(*) = nil
+
+    def sendmsg(data, _flags, _destination, *controls)
+      @segmented += 1 if controls.any? { _1.level == Socket::IPPROTO_UDP }
+      error = @errors.shift
+      raise error if error
+      @sent << data
+      data.bytesize
+    end
+  end
+
+  # A kernel short of buffers (ENOBUFS) for the whole of a GSO send: the
+  # datagrams go one by one, and the next Transmit tries GSO again.
+  def test_gso_short_of_buffers
+    skip "GSO is Linux's" unless RUBY_PLATFORM.include?("linux")
+    payload = "a".b * 1200 + "b".b * 1200 + "c".b * 500
+    socket = ScriptedSocket.new(Errno::ENOBUFS)
+    udp = UDP.new(socket)
+    2.times { assert udp.send(transmit(payload, ["127.0.0.1", 4434], segment_size: 1200)) }
+    assert_equal [2, ["a" * 1200, "b" * 1200, "c" * 500, payload]], [socket.segmented, socket.sent]
+  end
+
+  # One datagram lost one by one loses only itself; one that went shows the
+  # destination takes them, and GSO, refused, is not tried again.
+  def test_one_by_one_past_a_datagram_lost
+    skip "GSO is Linux's" unless RUBY_PLATFORM.include?("linux")
+    payload = "a".b * 1200 + "b".b * 1200 + "c".b * 500
+    socket = ScriptedSocket.new(Errno::EINVAL, nil, Errno::ENOBUFS)
+    udp = UDP.new(socket)
+    refute udp.send(transmit(payload, ["127.0.0.1", 4434], segment_size: 1200))
+    assert udp.send(transmit(payload, ["127.0.0.1", 4434], segment_size: 1200))
+    assert_equal [1, ["a" * 1200, "c" * 500, "a" * 1200, "b" * 1200, "c" * 500]], [socket.segmented, socket.sent]
+  end
+
   # The Config of a runtime: MAX_TRANSMIT for max_transmit_size, unless the
   # application chose one.
   def test_batching

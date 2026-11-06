@@ -77,19 +77,24 @@ module Raiha::Next::Runtime
 
     # Sends each datagram of `transmit`; whether all of them went. The ECN
     # mark of an IPv4 destination, IPv4-mapped included, goes as IP_TOS:
-    # Linux leaves IPV6_TCLASS off a datagram that leaves as IPv4.
+    # Linux leaves IPV6_TCLASS off a datagram that leaves as IPv4. When GSO
+    # fails, the datagrams go one by one, each lost alone; GSO goes for
+    # good when it is unavailable here, or when it refused what went one by
+    # one, so that the fault was not the destination's.
     def send(transmit)
       host, port = transmit.destination
       destination = Socket.sockaddr_in(port, host)
       mark = mark(transmit.ecn, host)
       size = transmit.segment_size
       if @gso && size && size < transmit.payload.bytesize
-        refused = send_segments(transmit.payload, size, destination, mark)
-        return refused unless refused.is_a?(Exception)
+        failed = send_segments(transmit.payload, size, destination, mark)
+        return true unless failed
       end
-      sent = datagrams(transmit).all? { |datagram| send_datagram(datagram, destination, mark) }
-      @gso = false if refused && (sent || GSO_UNAVAILABLE.any? { refused.is_a?(_1) })
-      sent
+      sent = datagrams(transmit).map { |datagram| send_datagram(datagram, destination, mark) }
+      if failed && GSO_REFUSED.any? { failed.is_a?(_1) }
+        @gso = false if sent.any? || GSO_UNAVAILABLE.any? { failed.is_a?(_1) }
+      end
+      sent.all?
     end
 
     # The datagrams there now, RECEIVE_BATCH at most, each as [data,
@@ -119,16 +124,14 @@ module Raiha::Next::Runtime
 
     def closed? = @socket.closed?
 
-    # All the datagrams in one sendmsg: whether they went, or what GSO
-    # refused them with.
+    # All the datagrams in one sendmsg: nil when they went, else what it
+    # failed with.
     private def send_segments(payload, size, destination, mark)
       segment = Socket::AncillaryData.new(@family, Socket::IPPROTO_UDP, UDP_SEGMENT, [size].pack("S"))
       mark ? @socket.sendmsg(payload, 0, destination, mark, segment) : @socket.sendmsg(payload, 0, destination, segment)
-      true
-    rescue *GSO_REFUSED => error
+      nil
+    rescue *GSO_REFUSED, *DROPPED => error
       error
-    rescue *DROPPED
-      false
     end
 
     private def send_datagram(datagram, destination, mark)

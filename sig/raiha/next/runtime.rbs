@@ -103,7 +103,7 @@ module Raiha::Next::Runtime
 
     def closed?: () -> bool
 
-    private def send_segments: (String payload, Integer size, String destination, Socket::AncillaryData? mark) -> (bool | SystemCallError)
+    private def send_segments: (String payload, Integer size, String destination, Socket::AncillaryData? mark) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Socket::AncillaryData? mark) -> bool
     private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]
 
