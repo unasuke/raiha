@@ -10,6 +10,7 @@ module Raiha::Next::QUIC
     @congestion: Congestion::_Controller
     @startup: Congestion::_StartupController?
     @app_limited: bool
+    @rtt_heard: bool
     @abandoned: bool
     @tracer: _Tracer?
     @ecn_testing_sent: Integer
@@ -28,6 +29,7 @@ module Raiha::Next::QUIC
     attr_reader pacing_release_at: Float?
     def delivered: (Integer bytes, largest: Integer, now: Float) -> void
     def delivery_rate: () -> Float?
+    def acked: (acked_bytes: Integer, largest_acked_sent_at: Float, sampled: bool, now: Float) -> void
     def remove_in_flight: (sent_bytes: Integer, ack_eliciting: bool) -> void
     def app_limited?: () -> bool
     def transmission_stopped: (Symbol reason, waiting: bool, next_packet_number: Integer) -> bool

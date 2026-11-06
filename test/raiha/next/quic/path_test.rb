@@ -85,11 +85,18 @@ class RaihaNextQUICPathTest < Minitest::Test
   # Before the path's first RTT sample, the window sending goes by is no
   # more than RFC 9002's initial window, however large the Config's; from
   # it, the controller's.
+  # The window keeps to RFC 9002's initial window until an ACK tells the
+  # congestion controller an RTT: a sample with no ACK, as a Retry's, does
+  # not lift it.
   def test_window_before_an_rtt_sample
     path = path(initial_window: Ractor.shareable_lambda { |max_datagram_size| 20 * max_datagram_size })
     assert_equal [12_000, 24_000], [path.window, path.congestion.window]
     path.rtt.update(latest_rtt: 0.05, ack_delay: 0.0, max_ack_delay: 0.025, handshake_confirmed: false, now: 1.0)
-    assert_equal 24_000, path.window
+    assert_equal 12_000, path.window
+    path.add_in_flight(sent_bytes: 1200, ack_eliciting: true, now: 1.0)
+    path.remove_in_flight(sent_bytes: 1200, ack_eliciting: true)
+    path.acked(acked_bytes: 1200, largest_acked_sent_at: 1.0, sampled: false, now: 1.05)
+    assert_equal [25_200, 25_200], [path.window, path.congestion.window]
   end
 
   def test_max_datagram_size

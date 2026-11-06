@@ -92,6 +92,28 @@ class RaihaNextQUICZeroRTTTest < Minitest::Test
     end
   end
 
+  # A Retry gives the client its first RTT sample, but no ACK has told the
+  # congestion controller of it, and so nothing is paced yet: what goes
+  # again after the Retry keeps to RFC 9002's initial window all the same.
+  def test_0rtt_after_a_retry_keeps_to_rfc_9002s_initial_window
+    initial_window = Ractor.shareable_lambda { |max_datagram_size| 20 * max_datagram_size }
+    [nil, QUIC::Congestion::Startup::RapidStart].each do |startup|
+      endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW + LATER, now: LATER)
+      client = client(session:, early_data: true, config: QUIC::Config.new(startup:, initial_window:))
+      stream = client.open_stream
+      client.stream_write(stream, "x" * 100_000, fin: true)
+      client.transmits(now: LATER).each do |transmit|
+        route = endpoint.receive(transmit.payload, from: CLIENT, to: SERVER, now: LATER)
+        endpoint.retry(route.handle, now: LATER) if route in QUIC::Route::Incoming(address_validated: false)
+      end
+      endpoint.each_transmit(now: LATER + 0.01) { client.receive(_1.payload, from: SERVER, now: LATER + 0.01) }
+      assert client.stats.rtt < QUIC::Recovery::INITIAL_RTT, "the Retry gave an RTT sample"
+      sent = client.transmits(now: LATER + 0.01).sum { _1.payload.bytesize }
+      assert_operator sent, :>, 10_000
+      assert_operator sent, :<=, QUIC::Config::DEFAULT_INITIAL_WINDOW.call(1200)
+    end
+  end
+
   # Without early_data: true, or with a session of another version, the
   # data waits for 1-RTT.
   def test_no_0rtt_unless_asked

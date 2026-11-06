@@ -39,6 +39,7 @@ module Raiha::Next::QUIC
       @ack_eliciting_in_flight = 0
       @packets_in_flight = 0
       @app_limited = false
+      @rtt_heard = false
       @pacer = Pacer.new(capacity: Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size), granularity: @config.pacing_granularity)
       @pacing_release_at = nil #: Float?
       @rate_meter = Recovery::RateMeter.new
@@ -115,6 +116,18 @@ module Raiha::Next::QUIC
     # before a sample.
     def delivery_rate = @rate_meter.rate
 
+    # Packets of `acked_bytes` in flight on this path were acknowledged,
+    # the latest of them sent at `largest_acked_sent_at`; the congestion
+    # controller hears of them with the path's RTT, and with its latest
+    # sample when the ACK's was the path's, `sampled`.
+    def acked(acked_bytes:, largest_acked_sent_at:, sampled:, now:)
+      rtt = @rtt
+      min_rtt = rtt.min_rtt
+      @rtt_heard = true if min_rtt
+      congestion.on_ack(acked_bytes:, largest_acked_sent_at:, latest_rtt: (rtt.latest_rtt if sampled), smoothed_rtt: rtt.smoothed_rtt,
+        min_rtt:, app_limited: @app_limited, now:)
+    end
+
     # No longer counts a packet acknowledged, lost or discarded.
     def remove_in_flight(sent_bytes:, ack_eliciting:)
       @bytes_in_flight -= sent_bytes
@@ -154,13 +167,14 @@ module Raiha::Next::QUIC
       @congestion.on_mtu_updated(max_datagram_size:, now:)
     end
 
-    # The window sending goes by: the congestion controller's, but before
-    # the path's first RTT sample, when nothing is paced, no more than RFC
-    # 9002's initial window, however large the Config's, as RFC 9002
-    # "Pacing" keeps a burst to it.
+    # The window sending goes by: the congestion controller's, but until
+    # an ACK tells the controller an RTT, when nothing is paced, no more
+    # than RFC 9002's initial window, however large the Config's, as RFC
+    # 9002 "Pacing" keeps a burst to it. A Retry's RTT sample tells the
+    # controller nothing.
     def window
       window = @congestion.window
-      return window if @rtt.first_sample_at
+      return window if @rtt_heard
       [window, Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size)].min
     end
 

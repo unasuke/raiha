@@ -544,12 +544,7 @@ module Raiha::Next::QUIC
         packets.each { |packet| path.remove_in_flight(sent_bytes: packet.sent_bytes, ack_eliciting: packet.ack_eliciting) }
         acked_bytes = packets.sum(&:sent_bytes)
         path.delivered(acked_bytes, largest: packets.fetch(-1).packet_number, now:) if space.name == :application_data
-        rtt = path.rtt
-        path.congestion.on_ack(
-          acked_bytes:, largest_acked_sent_at: packets.map(&:time_sent).max || now,
-          latest_rtt: path.equal?(sampled) ? rtt.latest_rtt : nil, smoothed_rtt: rtt.smoothed_rtt, min_rtt: rtt.min_rtt,
-          app_limited: path.app_limited?, now:
-        )
+        path.acked(acked_bytes:, largest_acked_sent_at: packets.map(&:time_sent).max || now, sampled: path.equal?(sampled), now:)
       end
     end
 
