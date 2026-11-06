@@ -995,19 +995,22 @@ module Raiha::Next::QUIC
 
     # RFC 9002 "Speeding up Handshake Completion": a client whose Initial
     # carries CRYPTO data again has not had all of the server's Initial
-    # packets, or takes its RTT for shorter than it is. What the server has
-    # in flight in them goes again at once, as a probe does, coalesced with
-    # its Handshake packets, without waiting for the PTO; SEND_AGAIN_AT_ONCE
-    # times a connection at most, so that the two ends do not answer each
-    # other for ever. The ClientHellos of one PTO of the client, which come
-    # together, count once: a probe asked for and not yet sent takes the
-    # others, so that the times left go to later rounds a loss in a burst
-    # does not reach. The amplification limit holds as ever.
+    # packets, or takes its RTT for shorter than it is. What the server's
+    # oldest Initial and Handshake packets in flight carry goes again
+    # without waiting for the PTO, coalesced, their records left as a
+    # probe's are; SEND_AGAIN_AT_ONCE times a connection at most, so that
+    # the two ends do not answer each other for ever. It is no probe: it
+    # waits on the congestion window and pacing as anything that elicits an
+    # ACK, and the amplification limit holds as ever. The ClientHellos of
+    # one PTO of the client, which come together, count once: CRYPTO data
+    # of Initial waiting to go takes the others, so that the times left go
+    # to later rounds a loss in a burst does not reach.
     private def send_again_at_once
       return if @sent_again_at_once >= SEND_AGAIN_AT_ONCE || !@recovery.oldest_ack_eliciting(:initial)
-      return if @probes.fetch(:initial, 0).positive?
+      return if binding.crypto_pending?(:initial)
       @sent_again_at_once += 1
-      probe(Recovery::Probe.new(space: :initial, packets: 1))
+      fill_probe(:initial)
+      fill_probe(:handshake)
     end
 
     # A PTO asks for `probe.packets` packets that elicit an ACK in
@@ -1023,9 +1026,10 @@ module Raiha::Next::QUIC
       end
     end
 
-    # A probe of `level` carries what is new when there is some, else the
-    # duties of the oldest packet in flight again, its record left as it is,
-    # else a PING (loss recovery's design, "Probes").
+    # A probe of `level`, or what a server sends again at once, carries what
+    # is new when there is some, else the duties of the oldest packet in
+    # flight again, its record left as it is, else (a probe) a PING (loss
+    # recovery's design, "Probes").
     private def fill_probe(level)
       return if binding.crypto_pending?(level) || (level == :one_rtt && @handshake_done_due)
       oldest = @recovery.oldest_ack_eliciting(SPACES.fetch(level)) or return

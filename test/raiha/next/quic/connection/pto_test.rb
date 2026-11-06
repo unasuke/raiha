@@ -87,6 +87,27 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
     end
   end
 
+  # What a server sends again at once is no probe: it waits on the
+  # congestion window as anything else that elicits an ACK (RFC 9002
+  # "Congestion Control"). With a window of two datagrams its first flight
+  # and 0.5-RTT data fill, the ClientHello again sends nothing more in
+  # flight.
+  def test_the_server_sends_again_at_once_within_its_window
+    initial_window = Ractor.shareable_lambda { |max_datagram_size| 2 * max_datagram_size }
+    client = client_connection
+    server = server_connection(config: QUIC::Config.new(initial_window:))
+    client.transmits(now: 0.0).each { server.receive(_1.payload, from: CLIENT, now: 0.1) }
+    server.stream_write(server.open_stream, "x" * 10_000, fin: true)
+    server.transmits(now: 0.1)
+    full = server.path.bytes_in_flight
+    assert_operator full + server.path.max_datagram_size, :>, server.path.window
+    now = client.next_timeout
+    client.handle_timeout(now:)
+    client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+    server.transmits(now:)
+    assert_equal full, server.path.bytes_in_flight
+  end
+
   # The client's last flight lost on the way: its PTO sends Finished
   # again, and the server completes.
   def test_a_lost_finished
