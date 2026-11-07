@@ -8,15 +8,33 @@ module Raiha::Next::QUIC
   # pacing rate gives in one granularity when that is more, and its
   # RateMeter. A new path starts them all over (RFC 9000 "Connection
   # Migration"); packets sent on a path that is gone count for nothing.
+  #
+  # A path goes between a local and a remote address, and keeps what came
+  # on it and what went until the remote address is validated, which the
+  # amplification limit goes by (RFC 9000 "Address Validation").
   class Path
+    # RFC 9000 "Address Validation": an endpoint sends no more than three
+    # times what it received to an address not validated.
+    AMPLIFICATION_FACTOR = 3
+
     attr_reader :rtt
     attr_reader :bytes_in_flight
     attr_reader :ack_eliciting_in_flight
     attr_reader :packets_in_flight
     attr_reader :max_datagram_size
 
-    def initialize(config:, max_datagram_size: config.initial_max_datagram_size, tracer: nil)
+    # The addresses the path goes between, [host, port] each; nil while not
+    # known yet.
+    attr_reader :local
+    attr_reader :remote
+
+    def initialize(config:, local: nil, remote: nil, validated: false, max_datagram_size: config.initial_max_datagram_size, tracer: nil)
       @config = config
+      @local = local
+      @remote = remote
+      @validated = validated
+      @received_unvalidated = 0
+      @sent_unvalidated = 0
       @max_datagram_size = max_datagram_size
       @tracer = tracer
       start_over
@@ -25,6 +43,37 @@ module Raiha::Next::QUIC
       @ecn_testing_sent = 0
       @ecn_testing_lost = 0
     end
+
+    # The addresses a datagram that came on the path names, `local` the one
+    # it came to and `remote` the one it came from, fill in those the path
+    # does not know yet: a server learns both from the client's first
+    # Initial, a client its own from the first datagram it takes.
+    def learn(local:, remote:)
+      @local ||= local
+      @remote ||= remote
+    end
+
+    # Whether the remote address is validated: a client's is from the
+    # start, a server's once the client shows it receives there.
+    def validated? = @validated
+
+    # The remote address is validated: the amplification limit is off.
+    def validate = @validated = true
+
+    # A datagram of `bytes` came on the path, which counts until the
+    # address is validated, each datagram once.
+    def datagram_received(bytes)
+      @received_unvalidated += bytes unless @validated
+    end
+
+    # A datagram of `bytes` went on the path.
+    def datagram_sent(bytes)
+      @sent_unvalidated += bytes unless @validated
+    end
+
+    # How many bytes may go on the path before the address is validated;
+    # nil once it is.
+    def amplification_budget = @validated ? nil : AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated
 
     # Takes the RTT, the congestion controller and the counts in flight back
     # to where a new path starts, as after a Retry (RFC 9002 "Handling Retry

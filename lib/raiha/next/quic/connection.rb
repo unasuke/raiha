@@ -39,9 +39,6 @@ module Raiha::Next::QUIC
     # The levels a CONNECTION_CLOSE frame goes in.
     CLOSE_LEVELS = %i[initial handshake one_rtt].freeze
 
-    # RFC 9000 "Address Validation": until it has validated the client's
-    # address, a server sends at most this many times what it received.
-    AMPLIFICATION_FACTOR = 3
     # How many times a server sends its Initial flight again at once on a
     # ClientHello that comes again (RFC 9002 "Speeding up Handshake
     # Completion"): once is enough for one loss, and twice for a burst.
@@ -131,9 +128,8 @@ module Raiha::Next::QUIC
       @version = config.versions.fetch(0)
       @created_at = now
       @time = time
-      @remote = remote
       @tracer = tracer
-      @path = Path.new(config:, tracer:)
+      @path = Path.new(config:, remote:, validated: address_validated, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
@@ -166,11 +162,8 @@ module Raiha::Next::QUIC
       @packets_received = 0
       @bytes_received = 0
       @handshake_completed_at = nil #: Float?
-      # What a server has received and sent while the client's address is
-      # not validated, and whether that has stopped it.
-      @address_validated = address_validated
-      @received_unvalidated = 0
-      @sent_unvalidated = 0
+      # Whether the amplification limit of the path, while the client's
+      # address is not validated, has stopped a server.
       @amplification_limited = false
       # How many datagrams that elicit an ACK PTOs still ask for, and the
       # spaces they probe.
@@ -373,12 +366,13 @@ module Raiha::Next::QUIC
         return
       else return
       end
-      count_received(datagram, now) unless @address_validated
+      @path.learn(local: to, remote: from) if @role == :client
+      count_received(datagram, now)
       processed = false
       offset = 0
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset, now) or break
-        processed = true if receive_packet(packet, from:, ecn:, now:)
+        processed = true if receive_packet(packet, from:, to:, ecn:, now:)
         offset = packet.end_offset
         break unless @state == :open
       end
@@ -617,7 +611,7 @@ module Raiha::Next::QUIC
       @handshake_done_due = true if @state == :open
     end
 
-    private def remote = @remote || raise(Error::StateError, "no packet has come from the client yet")
+    private def remote = @path.remote || raise(Error::StateError, "no packet has come from the client yet")
 
     # The session's remembered transport parameters while 0-RTT goes, the
     # limits until the server's come.
@@ -726,7 +720,7 @@ module Raiha::Next::QUIC
       nil
     end
 
-    private def receive_packet(packet, from:, ecn:, now:)
+    private def receive_packet(packet, from:, to:, ecn:, now:)
       header = packet.header
       level = header.type
       length = packet.end_offset - packet.offset
@@ -741,7 +735,7 @@ module Raiha::Next::QUIC
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period))
       return dropped(:decryption_failure, length, now) unless payload
-      accept_first_initial(header, from) if first && header.is_a?(Wire::LongHeader)
+      accept_first_initial(header, from, to) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       processed = @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
@@ -790,9 +784,10 @@ module Raiha::Next::QUIC
 
     # The server learns from the client's first Initial, once it has opened,
     # its connection ID, address and the Destination Connection ID its
-    # Initial keys come from. Until then anyone could have sent it.
-    private def accept_first_initial(header, from)
-      @remote = from
+    # Initial keys come from, and the addresses of the path. Until then
+    # anyone could have sent it.
+    private def accept_first_initial(header, from, to)
+      @path.learn(local: to, remote: from)
       @destination_connection_id = header.scid
       @peer_source_connection_id = header.scid
       @protection.install_initial(header.dcid)
@@ -922,7 +917,8 @@ module Raiha::Next::QUIC
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
       limit = @path.max_datagram_size
-      limit = [limit, amplification_budget(now)].min unless @address_validated
+      budget = amplification_budget(now)
+      limit = [limit, budget].min if budget
       return stopped(:amplification, now) if limit < MIN_INITIAL_DATAGRAM
       fits = @path.bytes_in_flight + limit <= @path.window
       paced = fits && @path.paced?(limit, now)
@@ -951,7 +947,7 @@ module Raiha::Next::QUIC
       return stopped(eliciting ? :drained : (fits ? :pacing : :congestion), now) if pending.empty?
       datagram = seal(pending, now)
       @probe_datagrams -= 1 if @probe_datagrams.positive? && pending.any? { |packet| packet.frames.any?(&:ack_eliciting?) }
-      @sent_unvalidated += datagram.bytesize unless @address_validated
+      @path.datagram_sent(datagram.bytesize)
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
       datagram
     end
@@ -967,11 +963,12 @@ module Raiha::Next::QUIC
       nil
     end
 
-    # How many bytes a server may still send before the client's address is
-    # validated. Under a datagram's worth, it stops, and loss recovery sets no
-    # timer meanwhile (RFC 9002 "Handling Anti-Amplification Limits").
+    # How many bytes a server may still send on the path before the
+    # client's address is validated, nil once it is. Under a datagram's
+    # worth, it stops, and loss recovery sets no timer meanwhile (RFC 9002
+    # "Handling Anti-Amplification Limits").
     private def amplification_budget(now)
-      budget = AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated
+      budget = @path.amplification_budget or return nil
       if budget < MIN_INITIAL_DATAGRAM && !@amplification_limited
         @amplification_limited = true
         @recovery.amplification_limited(true, now:)
@@ -980,17 +977,18 @@ module Raiha::Next::QUIC
     end
 
     private def count_received(datagram, now)
-      @received_unvalidated += datagram.bytesize
+      @path.datagram_received(datagram.bytesize)
       return unless @amplification_limited
-      return if AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated < MIN_INITIAL_DATAGRAM
+      budget = @path.amplification_budget
+      return if budget && budget < MIN_INITIAL_DATAGRAM
       @amplification_limited = false
       @recovery.amplification_limited(false, now:)
     end
 
     # A Handshake packet from the client proves its address.
     private def validate_address(now)
-      return if @address_validated
-      @address_validated = true
+      return if @path.validated?
+      @path.validate
       return unless @amplification_limited
       @amplification_limited = false
       @recovery.amplification_limited(false, now:)
@@ -1061,7 +1059,8 @@ module Raiha::Next::QUIC
     # Close during the Handshake").
     private def closing_datagram(now)
       return nil unless @state == :closing && @close_frame_due
-      return nil unless @address_validated || amplification_budget(now) >= MIN_INITIAL_DATAGRAM
+      budget = amplification_budget(now)
+      return nil if budget && budget < MIN_INITIAL_DATAGRAM
       @close_frame_due = false
       pending = CLOSE_LEVELS.filter_map do |level|
         next unless @protection.can_write?(level)
@@ -1071,7 +1070,7 @@ module Raiha::Next::QUIC
       end
       return nil if pending.empty?
       datagram = seal(pending, now)
-      @sent_unvalidated += datagram.bytesize unless @address_validated
+      @path.datagram_sent(datagram.bytesize)
       datagram
     end
 

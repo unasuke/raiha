@@ -15,7 +15,6 @@ module Raiha::Next::QUIC
     CLOSE_PTOS: Integer
     MAX_REASON_LENGTH: Integer
     CLOSE_LEVELS: Array[PacketProtection::level]
-    AMPLIFICATION_FACTOR: Integer
     MAX_EVENTS: Integer
     MAX_HELD_TICKETS: Integer
     ZERO_RTT_LIMITS: Array[Symbol]
@@ -36,7 +35,6 @@ module Raiha::Next::QUIC
     @version: Version
     @created_at: Float
     @time: Time
-    @remote: address?
     @tracer: _Tracer?
     @recovery: Recovery
     @protection: PacketProtection
@@ -74,9 +72,6 @@ module Raiha::Next::QUIC
     @idle_deadline: Float?
     @eliciting_since_received: bool
     @now: Float
-    @address_validated: bool
-    @received_unvalidated: Integer
-    @sent_unvalidated: Integer
     @amplification_limited: bool
     @probe_datagrams: Integer
     @probed_spaces: Array[space]
@@ -143,10 +138,10 @@ module Raiha::Next::QUIC
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
     private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
-    private def receive_packet: (Wire::Packet::Parsed packet, from: address, ecn: ecn | :ce, now: Float) -> bool?
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float) -> bool?
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
-    private def accept_first_initial: (Wire::LongHeader header, address from) -> void
+    private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
     private def confirm: (Float now) -> void
@@ -157,7 +152,7 @@ module Raiha::Next::QUIC
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> String?
     private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
-    private def amplification_budget: (Float now) -> Integer
+    private def amplification_budget: (Float now) -> Integer?
     private def count_received: (String datagram, Float now) -> void
     private def validate_address: (Float now) -> void
     private def send_again_at_once: () -> void

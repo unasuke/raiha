@@ -111,4 +111,29 @@ class RaihaNextQUICPathTest < Minitest::Test
     path.abandon
     assert path.abandoned?
   end
+
+  # A datagram on the path fills in the addresses the path does not know
+  # yet, and leaves those it knows.
+  def test_addresses
+    path = QUIC::Path.new(config: QUIC::Config.new, remote: ["192.0.2.1", 443])
+    assert_nil path.local
+    path.learn(local: ["198.51.100.1", 50_000], remote: ["203.0.113.9", 443])
+    assert_equal [["198.51.100.1", 50_000], ["192.0.2.1", 443]], [path.local, path.remote]
+  end
+
+  # Until the remote address is validated, three times what came on the
+  # path may go on it (RFC 9000 "Address Validation"); once it is, there is
+  # no limit.
+  def test_amplification_budget
+    path = path()
+    refute path.validated?
+    assert_equal 0, path.amplification_budget
+    path.datagram_received(1200)
+    path.datagram_sent(1000)
+    assert_equal 2600, path.amplification_budget
+    path.validate
+    path.datagram_sent(5000)
+    assert path.validated?
+    assert_nil path.amplification_budget
+  end
 end

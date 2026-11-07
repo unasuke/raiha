@@ -1,12 +1,19 @@
 module Raiha::Next::QUIC
   class Path
+    AMPLIFICATION_FACTOR: Integer
+
     attr_reader rtt: Recovery::RttEstimator
     attr_reader bytes_in_flight: Integer
     attr_reader ack_eliciting_in_flight: Integer
     attr_reader packets_in_flight: Integer
     attr_reader max_datagram_size: Integer
+    attr_reader local: address?
+    attr_reader remote: address?
 
     @config: Config
+    @validated: bool
+    @received_unvalidated: Integer
+    @sent_unvalidated: Integer
     @congestion: Congestion::_Controller
     @startup: Congestion::_StartupController?
     @app_limited: bool
@@ -21,7 +28,13 @@ module Raiha::Next::QUIC
 
     attr_reader ecn_state: :testing | :capable | :failed
 
-    def initialize: (config: Config, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
+    def initialize: (config: Config, ?local: address?, ?remote: address?, ?validated: bool, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
+    def learn: (local: address?, remote: address?) -> void
+    def validated?: () -> bool
+    def validate: () -> void
+    def datagram_received: (Integer bytes) -> void
+    def datagram_sent: (Integer bytes) -> void
+    def amplification_budget: () -> Integer?
     def start_over: () -> void
     def congestion: () -> Congestion::_Controller
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
