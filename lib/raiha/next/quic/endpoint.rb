@@ -181,13 +181,17 @@ module Raiha::Next::QUIC
     end
 
     # How a connection has its Endpoint make connection IDs that lead to
-    # it, each with its stateless reset token, for NEW_CONNECTION_ID frames.
+    # it, each with its stateless reset token, for NEW_CONNECTION_ID frames,
+    # and forget those the peer retired.
     class Issuer
-      def initialize(issue)
+      def initialize(issue, forget)
         @issue = issue
+        @forget = forget
       end
 
       def issue(connection) = @issue.call(connection)
+
+      def forget(connection_id) = @forget.call(connection_id)
     end
 
     # An Endpoint of a server. `random` is what it draws its own random
@@ -212,7 +216,7 @@ module Raiha::Next::QUIC
       @connection_ids = connection_ids
       # Zero-length connection IDs lead to no connection of their own, and
       # are never issued.
-      @issuer = config.connection_id_length.zero? ? nil : Issuer.new(->(connection) { issue_connection_id(connection) })
+      @issuer = config.connection_id_length.zero? ? nil : Issuer.new(->(connection) { issue_connection_id(connection) }, ->(id) { @connections.delete(id) })
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b

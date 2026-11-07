@@ -7,6 +7,7 @@ module Raiha::Next::QUIC
     SPACES: Hash[PacketProtection::level, space]
     PROBED_SPACES: Array[space]
     SEND_AGAIN_AT_ONCE: Integer
+    RETIRED_PTOS: Integer
     MIN_INITIAL_DATAGRAM: Integer
     INITIAL_DCID_LENGTH: Integer
     DEFAULT_ACK_DELAY_EXPONENT: Integer
@@ -144,7 +145,7 @@ module Raiha::Next::QUIC
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
-    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now) -> void
+    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now, String dcid) -> void
     private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void
     private def close_for: (Violation violation, Float now) -> void

@@ -70,8 +70,9 @@ module Raiha::Next::QUIC
       include _Issuer
 
       @issue: ^(Connection) -> [String, String]
+      @forget: ^(String) -> void
 
-      def initialize: (^(Connection) -> [String, String] issue) -> void
+      def initialize: (^(Connection) -> [String, String] issue, ^(String) -> void forget) -> void
     end
     @time: Time
     @created_at: Float

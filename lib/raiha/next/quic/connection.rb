@@ -39,6 +39,9 @@ module Raiha::Next::QUIC
     # The levels a CONNECTION_CLOSE frame goes in.
     CLOSE_LEVELS = %i[initial handshake one_rtt].freeze
 
+    # How many PTOs a connection ID the peer retired still leads to the
+    # connection.
+    RETIRED_PTOS = 3
     # How many times a server sends its Initial flight again at once on a
     # ClientHello that comes again (RFC 9002 "Speeding up Handshake
     # Completion"): once is enough for one loss, and twice for a burst.
@@ -452,7 +455,7 @@ module Raiha::Next::QUIC
         # A server at its amplification limit cannot send an ACK either, so
         # an ACK's deadline would only come round again and again.
         [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline,
-          @protection.next_timeout, @path.pacing_release_at].compact.min
+          @protection.next_timeout, @path.pacing_release_at, @issued.next_timeout].compact.min
       when :closing, :draining then @close_deadline
       end
     end
@@ -464,6 +467,7 @@ module Raiha::Next::QUIC
         idle = @idle_deadline
         return time_out_idly if idle && now >= idle
         @protection.handle_timeout(now:)
+        @issued.handle_timeout(now)
         outcome = @recovery.on_timeout(now:)
         Recovery::Duty.dispatch(outcome, to: self)
         probe(outcome.probe) if outcome.probe
@@ -758,7 +762,7 @@ module Raiha::Next::QUIC
       @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
-      frames.each { |frame| receive_frame(level, frame, now) }
+      frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid) }
       if @role == :server && level == :handshake
         validate_address(now)
         discard_level(:initial, now)
@@ -815,7 +819,7 @@ module Raiha::Next::QUIC
       @peer_source_connection_id = header.scid
     end
 
-    private def receive_frame(level, frame, now)
+    private def receive_frame(level, frame, now, dcid)
       return unless @state == :open
       case frame
       when Wire::Frame::Crypto
@@ -850,11 +854,7 @@ module Raiha::Next::QUIC
         ids = @peer_ids or raise Violation.new("NEW_CONNECTION_ID before the transport parameters", frame_type: PeerConnectionIDs::FRAME_TYPE)
         ids.receive(frame)
         @destination_connection_id = ids.current
-      # This end has issued no connection ID but the one the packet itself
-      # carries, which a RETIRE_CONNECTION_ID frame must not name (RFC 9000
-      # "RETIRE_CONNECTION_ID Frames").
-      when Wire::Frame::RetireConnectionID
-        raise Violation.new("RETIRE_CONNECTION_ID of #{frame.sequence_number}, which is the only one or was never issued", frame_type: 0x19)
+      when Wire::Frame::RetireConnectionID then @issued.retire(frame, dcid:, forget_at: now + RETIRED_PTOS * @path.rtt.pto_period)
       end
     end
 

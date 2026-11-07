@@ -130,4 +130,63 @@ class RaihaNextQUICKnownVulnerabilitiesTest < Minitest::Test
     assert client.handshake_complete?
     assert server.handshake_complete?
   end
+
+  # An issuer of connection IDs of a count, which keeps those it forgot.
+  class Issuer
+    attr_reader :forgotten
+
+    def initialize
+      @count = 0
+      @forgotten = []
+    end
+
+    def issue(_connection) = [format("%08d", @count += 1).b, "t".b * 16]
+
+    def forget(connection_id) = @forgotten << connection_id
+  end
+
+  # A server done with the handshake, its connection ID "s" * 8 and its
+  # IDs issued by `issuer`; the client's key log; and the time.
+  def issuing_server(issuer)
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection(source_connection_id: "s".b * 8, issuer:)
+    now = handshake(client, server)
+    [server, keylog, now]
+  end
+
+  # A client's 1-RTT packet to "s" * 8 that retires `sequence_number`.
+  def retire(keylog, sequence_number, packet_number:)
+    payload = QUIC::Wire::Frame.encode([QUIC::Wire::Frame::RetireConnectionID.new(sequence_number:)], ack_delay_exponent: 3)
+    client_one_rtt(keylog, dcid: "s".b * 8, payload:, packet_number:)
+  end
+
+  # RETIRE_CONNECTION_ID of the ID of its own packet is PROTOCOL_VIOLATION,
+  # so that the ends do not retire and replace for ever (CVE-2025-7054);
+  # so is a sequence number never issued, and one retired again is nothing.
+  def test_retire_connection_id_of_its_own_packet
+    server, keylog, now = issuing_server(Issuer.new)
+    server.receive(retire(keylog, 1, packet_number: 1000), from: CLIENT, now:)
+    server.receive(retire(keylog, 1, packet_number: 1001), from: CLIENT, now:)
+    assert_nil server.close_reason
+    server.receive(retire(keylog, 0, packet_number: 1002), from: CLIENT, now:)
+    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, server.close_reason&.code
+
+    server, keylog, now = issuing_server(Issuer.new)
+    server.receive(retire(keylog, 9, packet_number: 1000), from: CLIENT, now:)
+    assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, server.close_reason&.code
+  end
+
+  # A peer that retires each new ID straight away, a thousand times, piles
+  # up no more than MAX_RETIRED IDs waiting three PTOs to be forgotten: the
+  # oldest go at once, and the connection goes on (CVE-2024-1410).
+  def test_retired_connection_ids_pile_up_to_a_bound
+    issuer = Issuer.new
+    server, keylog, now = issuing_server(issuer)
+    [1, *(4..1002)].each_with_index do |sequence_number, index|
+      server.receive(retire(keylog, sequence_number, packet_number: 1000 + index), from: CLIENT, now:)
+    end
+    assert_nil server.close_reason
+    assert_equal 1000 - QUIC::IssuedConnectionIDs::MAX_RETIRED, issuer.forgotten.size
+  end
 end
