@@ -15,6 +15,12 @@ module Raiha::Next::QUIC
     @received_unvalidated: Integer
     @sent_unvalidated: Integer
     @challenge: String?
+    @destination_connection_id: String?
+    @challenge_due_at: Float?
+    @challenge_interval: Float?
+    @validation_deadline: Float?
+    @challenges_sent: Hash[String, bool]
+    @full_size_due: bool
     @congestion: Congestion::_Controller
     @startup: Congestion::_StartupController?
     @app_limited: bool
@@ -29,7 +35,7 @@ module Raiha::Next::QUIC
 
     attr_reader ecn_state: :testing | :capable | :failed
 
-    def initialize: (config: Config, ?local: address?, ?remote: address?, ?validated: bool, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
+    def initialize: (config: Config, ?local: address?, ?remote: address?, ?validated: bool, ?destination_connection_id: String?, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
     def learn: (local: address?, remote: address?) -> void
     def validated?: () -> bool
     def validate: () -> void
@@ -39,6 +45,16 @@ module Raiha::Next::QUIC
     def challenged: (String data) -> void
     attr_reader challenge: String?
     def answered: () -> void
+    attr_reader destination_connection_id: String?
+    def start_validation: (now: Float, interval: Float, deadline: Float) -> void
+    def validating?: () -> bool
+    def challenge_due?: (Float now) -> bool
+    def challenge_sent: (String data, full_size: bool, now: Float) -> void
+    def responded: (String data, now: Float) -> bool
+    def full_size_due?: () -> bool
+    def validation_timeout: () -> Float?
+    attr_reader validation_deadline: Float?
+    def validation_failed?: (Float now) -> bool
     def start_over: () -> void
     def congestion: () -> Congestion::_Controller
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void

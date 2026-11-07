@@ -28,7 +28,8 @@ module Raiha::Next::QUIC
     attr_reader :local
     attr_reader :remote
 
-    def initialize(config:, local: nil, remote: nil, validated: false, max_datagram_size: config.initial_max_datagram_size, tracer: nil)
+    def initialize(config:, local: nil, remote: nil, validated: false, destination_connection_id: nil,
+      max_datagram_size: config.initial_max_datagram_size, tracer: nil)
       @config = config
       @local = local
       @remote = remote
@@ -36,6 +37,12 @@ module Raiha::Next::QUIC
       @received_unvalidated = 0
       @sent_unvalidated = 0
       @challenge = nil #: String?
+      @destination_connection_id = destination_connection_id
+      @challenge_due_at = nil #: Float?
+      @challenge_interval = nil #: Float?
+      @validation_deadline = nil #: Float?
+      @challenges_sent = {} #: Hash[String, bool]
+      @full_size_due = false
       @max_datagram_size = max_datagram_size
       @tracer = tracer
       start_over
@@ -87,6 +94,77 @@ module Raiha::Next::QUIC
 
     # The challenge is answered: each is, once.
     def answered = @challenge = nil
+
+    # The peer's connection ID this end sends with on the path, when it is
+    # not the one in use; nil on the path in use, whose ID the connection
+    # keeps.
+    attr_reader :destination_connection_id
+
+    # Validation of the path starts at `now` (RFC 9000 "Path Validation"):
+    # a PATH_CHALLENGE goes at once and again each `interval`, twice as
+    # long each time, until `deadline`, when the path fails.
+    def start_validation(now:, interval:, deadline:)
+      @challenge_due_at = now
+      @challenge_interval = interval
+      @validation_deadline = deadline
+      @challenges_sent = {} #: Hash[String, bool]
+    end
+
+    # Whether the path is being validated.
+    def validating? = !@validation_deadline.nil?
+
+    # Whether a PATH_CHALLENGE is due on the path at `now`.
+    def challenge_due?(now)
+      due = @challenge_due_at
+      !due.nil? && due <= now
+    end
+
+    # A PATH_CHALLENGE with `data` went at `now` in a datagram that was
+    # `full_size` (MIN_INITIAL_DATAGRAM bytes or more) or not; the next is
+    # due an interval on, the interval doubled (RFC 9002 "Computing PTO").
+    def challenge_sent(data, full_size:, now:)
+      interval = @challenge_interval or return
+      @challenges_sent[data] = full_size
+      @challenge_due_at = now + interval
+      @challenge_interval = interval * 2
+    end
+
+    # A PATH_RESPONSE with `data` came: whether it answers a challenge sent
+    # on the path. The answer to one in a full-size datagram ends the
+    # validation; to a smaller one, it validates the address, and the
+    # next challenge, due at once, is to go in a full-size datagram
+    # (RFC 9000 "Initiating Path Validation").
+    def responded(data, now:)
+      full_size = @challenges_sent.fetch(data) { return false }
+      validate
+      if full_size
+        @challenge_due_at = @challenge_interval = @validation_deadline = nil
+        @full_size_due = false
+        @challenges_sent = {}
+      else
+        @full_size_due = true
+        @challenge_due_at = now
+      end
+      true
+    end
+
+    # Whether the next challenge must go in a full-size datagram, the
+    # address validated by an answer to a smaller one.
+    def full_size_due? = @full_size_due
+
+    # When something of the validation is due: the next challenge, or the
+    # deadline.
+    def validation_timeout = [@challenge_due_at, @validation_deadline].compact.min
+
+    # When the validation fails unless answered first; nil when there is
+    # none.
+    attr_reader :validation_deadline
+
+    # Whether the validation has failed by `now`.
+    def validation_failed?(now)
+      deadline = @validation_deadline
+      !deadline.nil? && deadline <= now
+    end
 
     # Takes the RTT, the congestion controller and the counts in flight back
     # to where a new path starts, as after a Retry (RFC 9002 "Handling Retry

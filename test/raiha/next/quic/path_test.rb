@@ -121,6 +121,33 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_equal [["198.51.100.1", 50_000], ["192.0.2.1", 443]], [path.local, path.remote]
   end
 
+  # RFC 9000 "Path Validation": a challenge is due at once, and again an
+  # interval on, the interval doubled each time, until the deadline; the
+  # answer to one in a datagram short of 1200 bytes validates the address
+  # and makes the next due at once, in a full one, whose answer ends it.
+  def test_validation
+    path = QUIC::Path.new(config: QUIC::Config.new, destination_connection_id: "c".b * 8)
+    path.start_validation(now: 1.0, interval: 0.5, deadline: 4.0)
+    assert_equal [true, true, "c".b * 8, 1.0], [path.validating?, path.challenge_due?(1.0), path.destination_connection_id, path.validation_timeout]
+    path.challenge_sent("a".b * 8, full_size: false, now: 1.0)
+    path.challenge_sent("b".b * 8, full_size: false, now: 1.5)
+    assert_equal [false, 2.5], [path.challenge_due?(2.4), path.validation_timeout]
+    refute path.responded("x".b * 8, now: 2.0)
+    assert path.responded("a".b * 8, now: 2.0)
+    assert_equal [true, true, true, nil], [path.validated?, path.full_size_due?, path.challenge_due?(2.0), path.amplification_budget]
+    path.challenge_sent("c".b * 8, full_size: true, now: 2.0)
+    assert path.responded("c".b * 8, now: 2.1)
+    assert_equal [false, false, nil], [path.validating?, path.full_size_due?, path.validation_timeout]
+  end
+
+  def test_validation_fails_at_the_deadline
+    path = path()
+    path.start_validation(now: 1.0, interval: 0.5, deadline: 4.0)
+    refute path.validation_failed?(3.9)
+    assert path.validation_failed?(4.0)
+    assert_equal 4.0, path.validation_deadline
+  end
+
   # Until the remote address is validated, three times what came on the
   # path may go on it (RFC 9000 "Address Validation"); once it is, there is
   # no limit.
