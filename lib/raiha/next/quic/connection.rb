@@ -173,6 +173,9 @@ module Raiha::Next::QUIC
       # Whether the amplification limit of the path, while the client's
       # address is not validated, has stopped a server.
       @amplification_limited = false
+      # Whether a packet that is no probe is to go, after a PATH_CHALLENGE
+      # on the path in use (RFC 9000 "Off-Path Packet Forwarding").
+      @non_probing_due = false
       # How many datagrams that elicit an ACK PTOs still ask for, and the
       # spaces they probe.
       @probe_datagrams = 0
@@ -855,6 +858,9 @@ module Raiha::Next::QUIC
         ids.receive(frame)
         @destination_connection_id = ids.current
       when Wire::Frame::RetireConnectionID then @issued.retire(frame, dcid:, forget_at: now + RETIRED_PTOS * @path.rtt.pto_period)
+      when Wire::Frame::PathChallenge
+        @path.challenged(frame.data)
+        @non_probing_due = true
       end
     end
 
@@ -925,6 +931,7 @@ module Raiha::Next::QUIC
     # due. When nothing goes, the path hears why.
     private def next_datagram(now)
       return closing_datagram(now) unless @state == :open
+      response = path_response_datagram(now) and return response
       limit = @path.max_datagram_size
       budget = amplification_budget(now)
       limit = [limit, budget].min if budget
@@ -1170,6 +1177,13 @@ module Raiha::Next::QUIC
         frames << Wire::Frame::Ping.new
         room -= 1
       end
+      if eliciting && level == :one_rtt && @non_probing_due && room.positive?
+        @non_probing_due = false
+        unless frames.any? { |frame| frame.ack_eliciting? && !frame.is_a?(Wire::Frame::NewConnectionID) }
+          frames << Wire::Frame::Ping.new
+          room -= 1
+        end
+      end
       if ack && eliciting && level == :one_rtt && frames.none?(&:ack_eliciting?) && room.positive? &&
           @recovery.ack_due?(space, now:) && @recovery.ping_with_ack?(space, now:)
         frames << Wire::Frame::Ping.new
@@ -1202,12 +1216,36 @@ module Raiha::Next::QUIC
       [frame, nil]
     end
 
+    # A datagram of PATH_RESPONSE alone, when a PATH_CHALLENGE waits for
+    # its answer (loss recovery's design, "Probes"): padded to
+    # MIN_INITIAL_DATAGRAM bytes as far as the amplification limit lets it
+    # (RFC 9000 "Path Validation Responses"), it waits on neither the
+    # congestion window nor pacing, and counts nothing in flight. Lost, it
+    # does not go again: the peer sends a new challenge.
+    private def path_response_datagram(now)
+      data = @path.challenge
+      return nil unless data && @protection.can_write?(:one_rtt)
+      header = header_for(:one_rtt)
+      frame = Wire::Frame::PathResponse.new(data:)
+      budget = amplification_budget(now)
+      return nil if budget && budget < overhead(header) + Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
+      @path.answered
+      packet_number = @recovery.next_packet_number(:one_rtt)
+      pending = Pending.new(level: :one_rtt, header:, packet_number:, packet_number_length: @recovery.packet_number_length(:one_rtt, packet_number),
+        frames: [frame], duties: [])
+      datagram = seal([pending], now, target: [MIN_INITIAL_DATAGRAM, budget].compact.min, probing: true)
+      @path.datagram_sent(datagram.bytesize)
+      datagram
+    end
+
     # Protects the packets of a datagram and records them as sent. The
-    # last is padded to make the datagram MIN_INITIAL_DATAGRAM bytes when
-    # it carries a client's Initial, or a server's that elicits an ACK, and
-    # every packet so that header protection has its sample.
-    private def seal(pending, now)
-      target = pending.any? { |packet| padded_initial?(packet) } ? MIN_INITIAL_DATAGRAM : 0
+    # last is padded to make the datagram `target` bytes; unless told, that
+    # is MIN_INITIAL_DATAGRAM when it carries a client's Initial, or a
+    # server's that elicits an ACK. Every packet is padded so that header
+    # protection has its sample. A `probing` datagram counts nothing in
+    # flight.
+    private def seal(pending, now, target: nil, probing: false)
+      target ||= pending.any? { |packet| padded_initial?(packet) } ? MIN_INITIAL_DATAGRAM : 0
       payloads = pending.map do |packet|
         payload = Wire::Frame.encode(packet.frames, ack_delay_exponent: own_ack_delay_exponent(packet.level))
         short = Wire::Packet::SAMPLE_OFFSET - packet.packet_number_length - payload.bytesize
@@ -1215,7 +1253,7 @@ module Raiha::Next::QUIC
       end
       size = pending.each_with_index.sum { |packet, index| sealed_size(packet, payloads.fetch(index).bytesize) }
       payloads[-1] = padded(pending.fetch(-1), payloads.fetch(-1), target - size) if target > size
-      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now) }.join
+      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now, probing:) }.join
     end
 
     # RFC 9000 "Datagram Size": every Initial of a client, and those of a
@@ -1231,7 +1269,7 @@ module Raiha::Next::QUIC
       payload + "\0".b * (missing - grown)
     end
 
-    private def protect(packet, payload, now)
+    private def protect(packet, payload, now, probing:)
       keys = @protection.write_keys(packet.level) or raise Error::StateError, "no keys to write #{packet.level}"
       sealed = Wire::Packet.seal(packet.header, packet_number: packet.packet_number, packet_number_length: packet.packet_number_length,
         payload:, keys:)
@@ -1246,7 +1284,7 @@ module Raiha::Next::QUIC
       @packets_sent += 1
       @bytes_sent += sealed.bytesize
       ack_eliciting = packet.frames.any?(&:ack_eliciting?)
-      in_flight = ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize
+      in_flight = !probing && (ack_eliciting || payload.bytesize > Wire::Frame.encode(packet.frames, ack_delay_exponent: 0).bytesize)
       if ack_eliciting && !@eliciting_since_received
         @eliciting_since_received = true
         restart_idle(now)

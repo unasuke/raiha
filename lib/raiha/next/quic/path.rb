@@ -35,6 +35,7 @@ module Raiha::Next::QUIC
       @validated = validated
       @received_unvalidated = 0
       @sent_unvalidated = 0
+      @challenge = nil #: String?
       @max_datagram_size = max_datagram_size
       @tracer = tracer
       start_over
@@ -74,6 +75,18 @@ module Raiha::Next::QUIC
     # How many bytes may go on the path before the address is validated;
     # nil once it is.
     def amplification_budget = @validated ? nil : AMPLIFICATION_FACTOR * @received_unvalidated - @sent_unvalidated
+
+    # A PATH_CHALLENGE with `data` came on the path. Only the last waits
+    # for an answer, a newer taking the place of one not answered yet, so
+    # that a peer that sends many piles up nothing (CVE-2023-49295,
+    # CVE-2023-6193).
+    def challenged(data) = @challenge = data
+
+    # The data of the challenge waiting for an answer; nil when none does.
+    attr_reader :challenge
+
+    # The challenge is answered: each is, once.
+    def answered = @challenge = nil
 
     # Takes the RTT, the congestion controller and the counts in flight back
     # to where a new path starts, as after a Retry (RFC 9002 "Handling Retry

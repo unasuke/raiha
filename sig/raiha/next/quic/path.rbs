@@ -14,6 +14,7 @@ module Raiha::Next::QUIC
     @validated: bool
     @received_unvalidated: Integer
     @sent_unvalidated: Integer
+    @challenge: String?
     @congestion: Congestion::_Controller
     @startup: Congestion::_StartupController?
     @app_limited: bool
@@ -35,6 +36,9 @@ module Raiha::Next::QUIC
     def datagram_received: (Integer bytes) -> void
     def datagram_sent: (Integer bytes) -> void
     def amplification_budget: () -> Integer?
+    def challenged: (String data) -> void
+    attr_reader challenge: String?
+    def answered: () -> void
     def start_over: () -> void
     def congestion: () -> Congestion::_Controller
     def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void

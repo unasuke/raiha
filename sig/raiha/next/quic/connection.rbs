@@ -75,6 +75,7 @@ module Raiha::Next::QUIC
     @eliciting_since_received: bool
     @now: Float
     @amplification_limited: bool
+    @non_probing_due: bool
     @probe_datagrams: Integer
     @probed_spaces: Array[space]
     @sent_again_at_once: Integer
@@ -167,10 +168,11 @@ module Raiha::Next::QUIC
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
     private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
     private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
-    private def seal: (Array[Pending] pending, Float now) -> String
+    private def path_response_datagram: (Float now) -> String?
+    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String
-    private def protect: (Pending packet, String payload, Float now) -> String
+    private def protect: (Pending packet, String payload, Float now, probing: bool) -> String
     private def header_for: (PacketProtection::level level) -> Wire::header
     private def overhead: (Wire::header header) -> Integer
     private def token_field: (Wire::LongHeader header) -> Integer
