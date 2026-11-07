@@ -39,6 +39,21 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
     assert_equal ["t".b * 16], peer.reset_tokens
   end
 
+  # A path besides the one in use claims an ID no path sends with, the
+  # lowest first, whose token then counts for a stateless reset; given
+  # back, the ID is retired. Zero-length IDs are the same for every path.
+  def test_claim_and_release
+    peer = ids
+    (1..2).each { peer.receive(new_id(_1)) }
+    assert_equal [new_id(1).connection_id, new_id(2).connection_id, nil], 3.times.map { peer.claim }
+    assert_equal ["t".b * 16, new_id(1).stateless_reset_token, new_id(2).stateless_reset_token], peer.reset_tokens
+    peer.release(new_id(1).connection_id)
+    peer.release(new_id(1).connection_id)
+    assert_equal [1], retirements(peer)
+    assert_equal ["t".b * 16, new_id(2).stateless_reset_token], peer.reset_tokens
+    assert_equal "".b, ids(first: "".b).claim
+  end
+
   # Retire Prior To retires the IDs below it, the one in use too, which
   # gives way to the lowest active.
   def test_retire_prior_to

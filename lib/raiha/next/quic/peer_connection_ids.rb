@@ -15,6 +15,11 @@ module Raiha::Next::QUIC
   # them pile up by not acknowledging them (CVE-2026-84784). An ID or a
   # sequence number that comes again with something else is
   # PROTOCOL_VIOLATION.
+  #
+  # Each path this end sends on has an ID of its own (RFC 9000 "Privacy
+  # Implications of Connection Migration"): a path other than the one in
+  # use claims an ID no path has sent with, and gives it back retired when
+  # the path goes. Zero-length IDs are the same on every path.
   class PeerConnectionIDs
     FRAME_TYPE = Wire::Frame::NewConnectionID::TYPES.fetch(0)
 
@@ -35,13 +40,33 @@ module Raiha::Next::QUIC
       # acknowledged.
       @to_retire = [] #: Array[Integer]
       @retiring = [] #: Array[Integer]
+      # The IDs paths other than the one in use claimed.
+      @claimed = [] #: Array[String]
     end
 
     # The stateless reset tokens a datagram that no packet of the
     # connection opens is compared with: those of the IDs this end sends
     # with, not of those active and not yet used, nor of those retired
     # (RFC 9000 "Detecting a Stateless Reset").
-    def reset_tokens = @active.select { |entry| entry.connection_id == @current }.filter_map(&:stateless_reset_token)
+    def reset_tokens = @active.select { |entry| in_use?(entry.connection_id) }.filter_map(&:stateless_reset_token)
+
+    # An ID for a path to send with that no path has sent with, the lowest
+    # first; nil when there is none. Zero-length IDs are always there.
+    def claim
+      return @current if @current.empty?
+      entry = @active.find { |each| !in_use?(each.connection_id) } or return nil
+      @claimed << entry.connection_id
+      entry.connection_id
+    end
+
+    # A path that claimed `connection_id` went: the ID is retired, as no
+    # other path sends with it.
+    def release(connection_id)
+      return unless @claimed.delete(connection_id)
+      entry = @active.find { |each| each.connection_id == connection_id } or return
+      @active.delete(entry)
+      retire(entry.sequence_number)
+    end
 
     # Takes a NEW_CONNECTION_ID frame.
     def receive(frame)
@@ -101,6 +126,8 @@ module Raiha::Next::QUIC
       return if @active.any? { |entry| entry.connection_id == @current }
       @current = @active.min_by(&:sequence_number)&.connection_id || @current
     end
+
+    private def in_use?(connection_id) = connection_id == @current || @claimed.include?(connection_id)
 
     private def retire(sequence_number)
       @to_retire << sequence_number unless @to_retire.include?(sequence_number) || @retiring.include?(sequence_number)

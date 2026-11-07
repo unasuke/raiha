@@ -17,11 +17,15 @@ module Raiha::Next::QUIC
     @retire_prior_to: Integer
     @to_retire: Array[Integer]
     @retiring: Array[Integer]
+    @claimed: Array[String]
 
     attr_reader current: String
 
     def initialize: (String connection_id, stateless_reset_token: String?, limit: Integer) -> void
     def reset_tokens: () -> Array[String]
+    def claim: () -> String?
+    def release: (String connection_id) -> void
+    private def in_use?: (String connection_id) -> bool
     def receive: (Wire::Frame::NewConnectionID frame) -> void
     def next_frame: (Integer room) -> [Wire::Frame::RetireConnectionID, Recovery::Duty::RetireConnectionID]?
     def retire_acked: (Recovery::Duty::RetireConnectionID duty) -> void
