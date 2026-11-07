@@ -138,6 +138,11 @@ module Raiha::Next::QUIC
       @tracer = tracer
       @path = Path.new(config:, remote:, validated: address_validated, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
+      # The paths besides the one in use, being validated or validated, the
+      # oldest first, and the one last validated, which the connection goes
+      # back to when a new one fails; the first is, by the handshake.
+      @validating = [] #: Array[Path]
+      @last_validated = @path
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
       @datagrams = Datagrams.new(config:, events: @events)
@@ -378,12 +383,13 @@ module Raiha::Next::QUIC
       else return
       end
       @path.learn(local: to, remote: from) if @role == :client
-      count_received(datagram, now)
+      path = path_of(to, from)
+      count_received(datagram, path, now) if path
       processed = false
       offset = 0
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset, now) or break
-        processed = true if receive_packet(packet, from:, to:, ecn:, now:)
+        processed = true if receive_packet(packet, from:, to:, ecn:, now:, path:)
         offset = packet.end_offset
         break unless @state == :open
       end
@@ -732,7 +738,9 @@ module Raiha::Next::QUIC
       nil
     end
 
-    private def receive_packet(packet, from:, to:, ecn:, now:)
+    # `path` is the one `from` and `to` name, nil when the connection does
+    # not know it.
+    private def receive_packet(packet, from:, to:, ecn:, now:, path:)
       header = packet.header
       level = header.type
       length = packet.end_offset - packet.offset
@@ -763,7 +771,8 @@ module Raiha::Next::QUIC
       @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
-      frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid) }
+      path ||= @path
+      frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid, path) }
       if @role == :server && level == :handshake
         validate_address(now)
         discard_level(:initial, now)
@@ -820,7 +829,7 @@ module Raiha::Next::QUIC
       @peer_source_connection_id = header.scid
     end
 
-    private def receive_frame(level, frame, now, dcid)
+    private def receive_frame(level, frame, now, dcid, path)
       return unless @state == :open
       case frame
       when Wire::Frame::Crypto
@@ -857,8 +866,12 @@ module Raiha::Next::QUIC
         @destination_connection_id = ids.current
       when Wire::Frame::RetireConnectionID then @issued.retire(frame, dcid:, forget_at: now + RETIRED_PTOS * @path.rtt.pto_period)
       when Wire::Frame::PathChallenge
-        @path.challenged(frame.data)
-        @non_probing_due = true
+        # A challenge on a path the connection takes no probe on goes
+        # unanswered.
+        if path
+          path.challenged(frame.data)
+          @non_probing_due = true if path.equal?(@path)
+        end
       end
     end
 
@@ -932,7 +945,7 @@ module Raiha::Next::QUIC
         closing = closing_datagram(now) or return nil
         return [closing, @path]
       end
-      response = path_response_datagram(now) and return response
+      probe = probing_datagram(now) and return probe
       limit = @path.max_datagram_size
       budget = amplification_budget(now)
       limit = [limit, budget].min if budget
@@ -994,9 +1007,9 @@ module Raiha::Next::QUIC
       budget
     end
 
-    private def count_received(datagram, now)
-      @path.datagram_received(datagram.bytesize)
-      return unless @amplification_limited
+    private def count_received(datagram, path, now)
+      path.datagram_received(datagram.bytesize)
+      return unless path.equal?(@path) && @amplification_limited
       budget = @path.amplification_budget
       return if budget && budget < MIN_INITIAL_DATAGRAM
       @amplification_limited = false
@@ -1218,26 +1231,32 @@ module Raiha::Next::QUIC
       [frame, nil]
     end
 
-    # A datagram of PATH_RESPONSE alone, when a PATH_CHALLENGE waits for
-    # its answer (loss recovery's design, "Probes"): padded to
-    # MIN_INITIAL_DATAGRAM bytes as far as the amplification limit lets it
-    # (RFC 9000 "Path Validation Responses"), it waits on neither the
-    # congestion window nor pacing, and counts nothing in flight. Lost, it
-    # does not go again: the peer sends a new challenge.
-    private def path_response_datagram(now)
-      data = @path.challenge
-      return nil unless data && @protection.can_write?(:one_rtt)
-      header = header_for(:one_rtt)
-      frame = Wire::Frame::PathResponse.new(data:)
-      budget = amplification_budget(now)
-      return nil if budget && budget < overhead(header) + Wire::Frame.encode([frame], ack_delay_exponent: 0).bytesize
-      @path.answered
-      packet_number = @recovery.next_packet_number(:one_rtt)
-      pending = Pending.new(level: :one_rtt, header:, packet_number:, packet_number_length: @recovery.packet_number_length(:one_rtt, packet_number),
-        frames: [frame], duties: [])
-      datagram = seal([pending], now, target: [MIN_INITIAL_DATAGRAM, budget].compact.min, probing: true)
-      @path.datagram_sent(datagram.bytesize)
-      [datagram, @path]
+    # A datagram of a path's probes alone (loss recovery's design,
+    # "Probes"): the PATH_RESPONSE to a PATH_CHALLENGE waiting for its
+    # answer, the paths in turn, the one in use first. Padded to
+    # MIN_INITIAL_DATAGRAM bytes as far as the path's amplification limit
+    # lets it (RFC 9000 "Path Validation Responses"), it waits on neither
+    # the congestion window nor pacing, and counts nothing in flight. Lost,
+    # it does not go again: the peer sends a new challenge.
+    private def probing_datagram(now)
+      return nil unless @protection.can_write?(:one_rtt)
+      [@path, *@validating].each do |path|
+        response = path.challenge or next
+        frames = [Wire::Frame::PathResponse.new(data: response)] #: Array[Wire::Frame::t]
+        current = path.equal?(@path)
+        header = Wire::ShortHeader.new(dcid: (current ? nil : path.destination_connection_id) || @destination_connection_id,
+          key_phase: @protection.key_phase_bit)
+        budget = current ? amplification_budget(now) : path.amplification_budget
+        next if budget && budget < overhead(header) + Wire::Frame.encode(frames, ack_delay_exponent: 0).bytesize
+        path.answered
+        packet_number = @recovery.next_packet_number(:one_rtt)
+        pending = Pending.new(level: :one_rtt, header:, packet_number:,
+          packet_number_length: @recovery.packet_number_length(:one_rtt, packet_number), frames:, duties: [])
+        datagram = seal([pending], now, target: [MIN_INITIAL_DATAGRAM, budget].compact.min, probing: true, path:)
+        path.datagram_sent(datagram.bytesize)
+        return [datagram, path]
+      end
+      nil
     end
 
     # A Transmit of `payload` on `path`: a server's from the address the
@@ -1246,6 +1265,17 @@ module Raiha::Next::QUIC
     private def transmit(payload, path, segment_size)
       destination = path.remote or raise Error::StateError, "no packet has come from the client yet"
       Transmit.new(payload:, destination:, source: (path.local if @role == :server), ecn: path.ecn, segment_size:)
+    end
+
+    # The path `local` and `remote` name of those the connection keeps;
+    # nil when it keeps none. An address not known on either side matches
+    # any, and a server knows nothing of the path before the client's
+    # first Initial.
+    private def path_of(local, remote)
+      return @path if @path.remote.nil?
+      [@path, *@validating, @last_validated].find do |path|
+        path.remote == remote && (local.nil? || path.local.nil? || path.local == local)
+      end
     end
 
     # Protects the packets of a datagram and records them as sent. The

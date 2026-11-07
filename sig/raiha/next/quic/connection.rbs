@@ -66,6 +66,8 @@ module Raiha::Next::QUIC
     @zero_rtt_rejection_unacknowledged: bool
     @peer_ids: PeerConnectionIDs?
     @issued: IssuedConnectionIDs
+    @validating: Array[Path]
+    @last_validated: Path
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -140,12 +142,12 @@ module Raiha::Next::QUIC
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
     private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
-    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float) -> bool?
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float, path: Path?) -> bool?
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
     private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
-    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now, String dcid) -> void
+    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now, String dcid, Path? path) -> void
     private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void
     private def close_for: (Violation violation, Float now) -> void
@@ -155,7 +157,7 @@ module Raiha::Next::QUIC
     private def next_datagram: (Float now) -> [String, Path]?
     private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
     private def amplification_budget: (Float now) -> Integer?
-    private def count_received: (String datagram, Float now) -> void
+    private def count_received: (String datagram, Path path, Float now) -> void
     private def validate_address: (Float now) -> void
     private def send_again_at_once: () -> void
     private def probe: (Recovery::Probe probe) -> void
@@ -167,8 +169,9 @@ module Raiha::Next::QUIC
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
     private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
     private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
-    private def path_response_datagram: (Float now) -> [String, Path]?
+    private def probing_datagram: (Float now) -> [String, Path]?
     private def transmit: (String payload, Path path, Integer? segment_size) -> Transmit
+    private def path_of: (address? local, address? remote) -> Path?
     private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?path: Path) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String
