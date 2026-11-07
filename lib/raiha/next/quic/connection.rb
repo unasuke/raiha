@@ -408,38 +408,38 @@ module Raiha::Next::QUIC
       true
     end
 
-    # Each datagram there is to send now, a server's from the address the
-    # path came to (a client leaves its own to the OS, which may change it
-    # under the connection). With the Config's
-    # max_transmit_size, those that follow the first and are as large, the
-    # last of them possibly shorter, go with it in one Transmit, as many as
-    # fit and Transmit::MAX_SEGMENTS at most (GSO); seeing whether the next
-    # one fits builds it, and one that does not starts the next Transmit.
+    # Each datagram there is to send now, on the path it goes on. With the
+    # Config's max_transmit_size, those that follow the first on the same
+    # path and are as large, the last of them possibly shorter, go with it
+    # in one Transmit, as many as fit and Transmit::MAX_SEGMENTS at most
+    # (GSO); seeing whether the next one fits builds it, and one that does
+    # not starts the next Transmit.
     def each_transmit(now:)
       @now = now
-      source = @path.local if @role == :server
       limit = @config.max_transmit_size
       unless limit
-        while (datagram = next_datagram(now))
-          yield Transmit.new(payload: datagram, destination: remote, source:, ecn: @path.ecn, segment_size: nil)
+        while (sent = next_datagram(now))
+          datagram, path = sent
+          yield transmit(datagram, path, nil)
         end
         return
       end
-      datagram = next_datagram(now)
-      while datagram
-        payload = datagram
-        size = datagram.bytesize
+      sent = next_datagram(now)
+      while sent
+        payload, path = sent
+        size = payload.bytesize
         count = 1
-        datagram = next_datagram(now)
-        while datagram && count < Transmit::MAX_SEGMENTS && datagram.bytesize <= size && payload.bytesize + datagram.bytesize <= limit
+        sent = next_datagram(now)
+        while sent && sent[1].equal?(path) && count < Transmit::MAX_SEGMENTS && sent[0].bytesize <= size &&
+            payload.bytesize + sent[0].bytesize <= limit
           payload = payload.b if count == 1
-          payload << datagram
+          payload << sent[0]
           count += 1
-          last = datagram.bytesize < size
-          datagram = next_datagram(now)
+          last = sent[0].bytesize < size
+          sent = next_datagram(now)
           break if last
         end
-        yield Transmit.new(payload:, destination: remote, source:, ecn: @path.ecn, segment_size: count > 1 ? size : nil)
+        yield transmit(payload, path, count > 1 ? size : nil)
       end
     end
 
@@ -624,8 +624,6 @@ module Raiha::Next::QUIC
     def handshake_done_lost
       @handshake_done_due = true if @state == :open
     end
-
-    private def remote = @path.remote || raise(Error::StateError, "no packet has come from the client yet")
 
     # The session's remembered transport parameters while 0-RTT goes, the
     # limits until the server's come.
@@ -930,7 +928,10 @@ module Raiha::Next::QUIC
     # connection closes. While closing, only the CONNECTION_CLOSE frame, when
     # due. When nothing goes, the path hears why.
     private def next_datagram(now)
-      return closing_datagram(now) unless @state == :open
+      unless @state == :open
+        closing = closing_datagram(now) or return nil
+        return [closing, @path]
+      end
       response = path_response_datagram(now) and return response
       limit = @path.max_datagram_size
       budget = amplification_budget(now)
@@ -943,7 +944,8 @@ module Raiha::Next::QUIC
         @protection.update_keys_if_due
       rescue Violation => error
         close_for(error, now)
-        return closing_datagram(now)
+        closing = closing_datagram(now) or return nil
+        return [closing, @path]
       end
       pending = [] #: Array[Pending]
       used = 0
@@ -965,7 +967,7 @@ module Raiha::Next::QUIC
       @probe_datagrams -= 1 if @probe_datagrams.positive? && pending.any? { |packet| packet.frames.any?(&:ack_eliciting?) }
       @path.datagram_sent(datagram.bytesize)
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
-      datagram
+      [datagram, @path]
     end
 
     # Sending stops for `reason`: the path keeps whether the congestion
@@ -1235,7 +1237,15 @@ module Raiha::Next::QUIC
         frames: [frame], duties: [])
       datagram = seal([pending], now, target: [MIN_INITIAL_DATAGRAM, budget].compact.min, probing: true)
       @path.datagram_sent(datagram.bytesize)
-      datagram
+      [datagram, @path]
+    end
+
+    # A Transmit of `payload` on `path`: a server's from the address the
+    # path came to, a client's from where the OS chooses, which may change
+    # under the connection.
+    private def transmit(payload, path, segment_size)
+      destination = path.remote or raise Error::StateError, "no packet has come from the client yet"
+      Transmit.new(payload:, destination:, source: (path.local if @role == :server), ecn: path.ecn, segment_size:)
     end
 
     # Protects the packets of a datagram and records them as sent. The
@@ -1244,7 +1254,7 @@ module Raiha::Next::QUIC
     # server's that elicits an ACK. Every packet is padded so that header
     # protection has its sample. A `probing` datagram counts nothing in
     # flight.
-    private def seal(pending, now, target: nil, probing: false)
+    private def seal(pending, now, target: nil, probing: false, path: @path)
       target ||= pending.any? { |packet| padded_initial?(packet) } ? MIN_INITIAL_DATAGRAM : 0
       payloads = pending.map do |packet|
         payload = Wire::Frame.encode(packet.frames, ack_delay_exponent: own_ack_delay_exponent(packet.level))
@@ -1253,7 +1263,7 @@ module Raiha::Next::QUIC
       end
       size = pending.each_with_index.sum { |packet, index| sealed_size(packet, payloads.fetch(index).bytesize) }
       payloads[-1] = padded(pending.fetch(-1), payloads.fetch(-1), target - size) if target > size
-      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now, probing:) }.join
+      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now, probing:, path:) }.join
     end
 
     # RFC 9000 "Datagram Size": every Initial of a client, and those of a
@@ -1269,7 +1279,7 @@ module Raiha::Next::QUIC
       payload + "\0".b * (missing - grown)
     end
 
-    private def protect(packet, payload, now, probing:)
+    private def protect(packet, payload, now, probing:, path:)
       keys = @protection.write_keys(packet.level) or raise Error::StateError, "no keys to write #{packet.level}"
       sealed = Wire::Packet.seal(packet.header, packet_number: packet.packet_number, packet_number_length: packet.packet_number_length,
         payload:, keys:)
@@ -1290,7 +1300,7 @@ module Raiha::Next::QUIC
         restart_idle(now)
       end
       @recovery.on_packet_sent(packet_type: packet.level, packet_number: packet.packet_number, sent_bytes: sealed.bytesize,
-        ack_eliciting:, in_flight:, duties: packet.duties, now:)
+        ack_eliciting:, in_flight:, duties: packet.duties, now:, path:)
       sealed
     end
 

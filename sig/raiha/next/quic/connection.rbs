@@ -131,7 +131,6 @@ module Raiha::Next::QUIC
     def take_stateless_reset: (String datagram, now: Float) -> bool
 
     private def keys_updated: (Integer phase) -> void
-    private def remote: () -> address
     private def zero_rtt_parameters: () -> RememberedTransportParameters?
     private def start_zero_rtt: () -> void
     private def zero_rtt_settled!: (?Integer? stream_id) -> void
@@ -153,7 +152,7 @@ module Raiha::Next::QUIC
     private def enter_draining: (ConnectionError error, Float now) -> void
     private def time_out_idly: () -> void
     private def restart_idle: (Float now) -> void
-    private def next_datagram: (Float now) -> String?
+    private def next_datagram: (Float now) -> [String, Path]?
     private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
     private def amplification_budget: (Float now) -> Integer?
     private def count_received: (String datagram, Float now) -> void
@@ -168,11 +167,12 @@ module Raiha::Next::QUIC
     private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
     private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
     private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
-    private def path_response_datagram: (Float now) -> String?
-    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool) -> String
+    private def path_response_datagram: (Float now) -> [String, Path]?
+    private def transmit: (String payload, Path path, Integer? segment_size) -> Transmit
+    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?path: Path) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String
-    private def protect: (Pending packet, String payload, Float now, probing: bool) -> String
+    private def protect: (Pending packet, String payload, Float now, probing: bool, path: Path) -> String
     private def header_for: (PacketProtection::level level) -> Wire::header
     private def overhead: (Wire::header header) -> Integer
     private def token_field: (Wire::LongHeader header) -> Integer

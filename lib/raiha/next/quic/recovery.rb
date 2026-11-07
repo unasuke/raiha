@@ -237,18 +237,18 @@ module Raiha::Next::QUIC
     # before any, which the packet number of the next is decoded against.
     def largest_received(packet_type) = space_of(packet_type).largest_received
 
-    # Records a packet sent at `now`, and counts it on the path when it is
-    # in flight.
-    def on_packet_sent(packet_type:, packet_number:, sent_bytes:, ack_eliciting:, in_flight:, duties:, now:, pmtu_probe: false)
-      ecn = @path.ecn
-      packet = SentPacket.new(packet_number:, time_sent: now, sent_bytes:, ack_eliciting:, in_flight:, path: @path,
+    # Records a packet sent at `now` on `path`, the current one unless
+    # told, and counts it on the path when it is in flight.
+    def on_packet_sent(packet_type:, packet_number:, sent_bytes:, ack_eliciting:, in_flight:, duties:, now:, pmtu_probe: false, path: @path)
+      ecn = path.ecn
+      packet = SentPacket.new(packet_number:, time_sent: now, sent_bytes:, ack_eliciting:, in_flight:, path:,
         duties: duties.frozen? ? duties : duties.dup.freeze, pmtu_probe:, ecn:)
       space_of(packet_type).add(packet)
       @first_initial_sent_at ||= now if packet_type == :initial
       @first_one_rtt_packet_number ||= packet_number if packet_type == :one_rtt
-      @path.ecn_sent if ecn == :ect0
+      path.ecn_sent if ecn == :ect0
       if in_flight
-        @path.add_in_flight(sent_bytes:, ack_eliciting:, now:)
+        path.add_in_flight(sent_bytes:, ack_eliciting:, now:)
         set_loss_detection_timer(now)
       end
       packet

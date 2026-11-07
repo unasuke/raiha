@@ -71,7 +71,7 @@ module Raiha::Next::QUIC
     def largest_received: (packet_type packet_type) -> Integer?
     def oldest_ack_eliciting: (space space) -> SentPacket?
     def on_packet_sent: (packet_type: packet_type, packet_number: Integer, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool,
-                         duties: Array[Duty::t], now: Float, ?pmtu_probe: bool) -> SentPacket
+                         duties: Array[Duty::t], now: Float, ?pmtu_probe: bool, ?path: Path) -> SentPacket
 
     def on_ack_received: (packet_type: packet_type, ack: Wire::Frame::Ack, now: Float, ?received_at: Float) -> Outcome
     def peer_completed_address_validation?: () -> bool
