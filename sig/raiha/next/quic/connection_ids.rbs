@@ -1,0 +1,14 @@
+module Raiha::Next::QUIC
+  # What makes the connection IDs an Endpoint issues.
+  interface _ConnectionIDs
+    def generate: (Integer length) -> String
+  end
+
+  class RandomConnectionIDs
+    include _ConnectionIDs
+
+    @random: Crypto::_Random
+
+    def initialize: (Crypto::_Random random) -> void
+  end
+end

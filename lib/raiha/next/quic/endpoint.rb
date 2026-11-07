@@ -182,18 +182,24 @@ module Raiha::Next::QUIC
 
     # An Endpoint of a server. `random` is what it draws its own random
     # bytes from, a seeded Random in tests, and its keys when `config` has
-    # none.
-    def self.server(config:, random:, time:, now:) = new(role: :server, config:, random:, time:, now:)
+    # none. `connection_ids` makes the connection IDs it issues
+    # (RandomConnectionIDs).
+    def self.server(config:, random:, time:, now:, connection_ids: RandomConnectionIDs.new(random))
+      new(role: :server, config:, random:, time:, now:, connection_ids:)
+    end
 
     # An Endpoint of a client.
-    def self.client(config:, random:, time:, now:) = new(role: :client, config:, random:, time:, now:)
+    def self.client(config:, random:, time:, now:, connection_ids: RandomConnectionIDs.new(random))
+      new(role: :client, config:, random:, time:, now:, connection_ids:)
+    end
 
     private_class_method :new
 
-    def initialize(role:, config:, random:, time:, now:)
+    def initialize(role:, config:, random:, time:, now:, connection_ids:)
       @role = role
       @config = config
       @random = random
+      @connection_ids = connection_ids
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
@@ -484,13 +490,17 @@ module Raiha::Next::QUIC
       Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
     end
 
-    # A connection ID of `config.connection_id_length` bytes that leads to
-    # nothing yet. With none found in CONNECTION_ID_ATTEMPTS draws, as with
-    # zero-length connection IDs, which only one connection can have, the
-    # Endpoint can take no more connections: Error::StateError.
+    # A connection ID of `config.connection_id_length` bytes, from the
+    # generator, that leads to nothing yet. With none found in
+    # CONNECTION_ID_ATTEMPTS draws, as with zero-length connection IDs,
+    # which only one connection can have, the Endpoint can take no more
+    # connections: Error::StateError. A generator that gives another length
+    # is misused: Error::Usage.
     private def new_connection_id
+      length = @config.connection_id_length
       CONNECTION_ID_ATTEMPTS.times do
-        id = @random.bytes(@config.connection_id_length).b
+        id = @connection_ids.generate(length)
+        raise Error::Usage, "the connection ID generator gave #{id.bytesize} bytes, not #{length}" unless id.bytesize == length
         return id unless @connections.key?(id) || @handles.key?(id)
       end
       raise Error::StateError, "no connection ID of #{@config.connection_id_length} bytes is free for another connection"

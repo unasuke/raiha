@@ -133,6 +133,32 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_equal token, remote.stateless_reset_token
   end
 
+  # A generator of connection IDs that gives `ids` in turn.
+  class Generator
+    def initialize(*ids) = @ids = ids
+
+    def generate(_length) = @ids.shift
+  end
+
+  # The connection IDs an Endpoint issues come from its generator, drawn
+  # again while one leads to a connection already; one of another length
+  # than the Config's is misuse.
+  def test_connection_ids_from_the_generator
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
+      connection_ids: Generator.new("g".b * 8, "g".b * 8, "h".b * 8))
+    issued = [Random.new(1), Random.new(4)].map do |random|
+      tracer = NextQUICRecovery::RecordingTracer.new
+      connect(endpoint, client_connection(tracer:, random:))
+      tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].initial_source_connection_id
+    end
+    assert_equal ["g".b * 8, "h".b * 8], issued
+
+    short = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
+      connection_ids: Generator.new("g".b * 4))
+    route = short.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, to: SERVER, now: 0.0)
+    assert_raises(QUIC::Error::Usage) { accept(short, short.admit(route.handle, now: 0.0).handle) }
+  end
+
   # A ClientHello that cannot be read is closed even when no connection ID
   # is free, which the CONNECTION_CLOSE needs none of.
   def test_a_close_with_no_free_connection_id
