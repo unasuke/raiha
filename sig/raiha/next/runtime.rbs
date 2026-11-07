@@ -112,6 +112,8 @@ module Raiha::Next::Runtime
 
     private def source: (address? source) -> Socket::AncillaryData?
     private def destination: (Array[Socket::AncillaryData] controls) -> address?
+    private def mapped: (String host) -> String
+    private def unmapped: (String host) -> String
     private def ecn: (Array[Socket::AncillaryData] controls) -> ecn
   end
 end

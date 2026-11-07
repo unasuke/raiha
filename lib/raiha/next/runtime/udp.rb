@@ -10,8 +10,9 @@ module Raiha::Next::Runtime
   # the codepoint it was marked with and the address it came to (IP_PKTINFO,
   # IPV6_PKTINFO), and one sent from an address of the Transmit's goes
   # from there by the same control message. Bound to "::", one socket takes IPv4
-  # as well, and the peers of IPv4 have IPv4-mapped addresses
-  # ("::ffff:192.0.2.1").
+  # as well; the addresses of IPv4 it tells are IPv4's ("192.0.2.1", not
+  # the IPv4-mapped "::ffff:192.0.2.1"), so that a peer is the same
+  # address whichever socket it came on, and it maps them back to send.
   #
   # Where the kernel will not cut them, a path with no checksum offload
   # (EIO, as ns-3's simulator has it) or a kernel without UDP_SEGMENT
@@ -70,13 +71,10 @@ module Raiha::Next::Runtime
       # datagram the IPv4 way.
       @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_RECVTOS, 1)
       @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVTCLASS, 1) if @family == Socket::AF_INET6
-      # The address a datagram came to; an IPv6 socket tells an IPv4
-      # datagram's IPv4-mapped.
-      if @family == Socket::AF_INET6
-        @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVPKTINFO, 1)
-      else
-        @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_PKTINFO, 1)
-      end
+      # The address a datagram came to, at both levels on a socket that
+      # takes both.
+      @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_PKTINFO, 1)
+      @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVPKTINFO, 1) if @family == Socket::AF_INET6
       @gso = RUBY_PLATFORM.include?("linux")
     end
 
@@ -96,6 +94,7 @@ module Raiha::Next::Runtime
     # one, so that the fault was not the destination's.
     def send(transmit)
       host, port = transmit.destination
+      host = mapped(host)
       destination = Socket.sockaddr_in(port, host)
       controls = [mark(transmit.ecn, host), source(transmit.source)].compact
       size = transmit.segment_size
@@ -123,7 +122,7 @@ module Raiha::Next::Runtime
         # The control messages follow the flags one by one, not as an Array
         # as the bundled declaration has it.
         controls = result.drop(3) #: Array[Socket::AncillaryData]
-        received << [data, [from.ip_address, from.ip_port], destination(controls), ecn(controls)]
+        received << [data, [unmapped(from.ip_address), from.ip_port], destination(controls), ecn(controls)]
       end
       received
     rescue *DROPPED
@@ -176,7 +175,7 @@ module Raiha::Next::Runtime
     # leave it to the OS.
     private def source(source)
       return nil unless source
-      address = Addrinfo.ip(source[0])
+      address = Addrinfo.ip(mapped(source[0]))
       return Socket::AncillaryData.ipv6_pktinfo(address, 0) if @family == Socket::AF_INET6
       Socket::AncillaryData.ip_pktinfo(address, 0, address)
     end
@@ -185,11 +184,18 @@ module Raiha::Next::Runtime
     # socket's port.
     private def destination(controls)
       controls.each do |control|
-        return [control.ipv6_pktinfo[0].ip_address, @port] if control.cmsg_is?(Socket::IPPROTO_IPV6, Socket::IPV6_PKTINFO)
+        return [unmapped(control.ipv6_pktinfo[0].ip_address), @port] if control.cmsg_is?(Socket::IPPROTO_IPV6, Socket::IPV6_PKTINFO)
         return [control.ip_pktinfo[0].ip_address, @port] if control.cmsg_is?(Socket::IPPROTO_IP, Socket::IP_PKTINFO)
       end
       nil
     end
+
+    # An IPv4 address as an IPv6 socket sends to or from it, IPv4-mapped,
+    # which also marks it the IPv4 way.
+    private def mapped(host) = @family == Socket::AF_INET6 && !host.include?(":") ? "::ffff:#{host}" : host
+
+    # An IPv4-mapped address as the IPv4 address it maps.
+    private def unmapped(host) = host.start_with?("::ffff:") && host.include?(".") ? host.delete_prefix("::ffff:") : host
 
     # The codepoint of a datagram from its control messages: IP_TOS is one
     # byte, IPV6_TCLASS an int.

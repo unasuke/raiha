@@ -4,8 +4,9 @@ require "raiha/next/runtime"
 # The UDP socket of the runtime on the loopback interface: each datagram
 # goes with its ECN mark, IPv4 into a socket bound to "::" included, and
 # comes out with the codepoint it was marked with and the address it came
-# to; a Transmit with a source goes from there; the datagrams of a
-# Transmit go in one with GSO, and one by one where it is refused.
+# to, IPv4's told as IPv4's; a Transmit with a source goes from there;
+# the datagrams of a Transmit go in one with GSO, and one by one where it
+# is refused.
 class RaihaNextRuntimeUDPTest < Minitest::Test
   UDP = Raiha::Next::Runtime::UDP
   QUIC = Raiha::Next::QUIC
@@ -52,15 +53,15 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     assert_equal [["ect0", from, to, :ect0], ["ect1", from, to, :ect1]], received(receiver)
   end
 
-  # A socket bound to "::" takes IPv4 from an IPv4-mapped address and
-  # answers it there, keeping the mark both ways.
+  # A socket bound to "::" takes IPv4, tells its addresses as IPv4's,
+  # which a socket of IPv4 alone would tell alike, and answers there,
+  # keeping the mark both ways.
   def test_ipv4_into_a_socket_for_both
     server = bind("::")
     client = bind("127.0.0.1")
     client.send(transmit("hello".b, ["127.0.0.1", server.local_address[1]], ecn: :ect0))
     data, from, to, ecn = received(server).first
-    assert_equal ["hello", ["::ffff:127.0.0.1", client.local_address[1]], ["::ffff:127.0.0.1", server.local_address[1]], :ect0],
-      [data, from, to, ecn]
+    assert_equal ["hello", client.local_address, ["127.0.0.1", server.local_address[1]], :ect0], [data, from, to, ecn]
 
     server.send(transmit("world".b, from, ecn: :ect1))
     assert_equal [["world", ["127.0.0.1", server.local_address[1]], client.local_address, :ect1]], received(client)
@@ -71,13 +72,13 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
   # included; the OS would answer the loopback's 127.0.0.1 from itself.
   def test_the_address_a_datagram_came_to_and_answers_from
     skip "127.0.0.2 is Linux's loopback" unless RUBY_PLATFORM.include?("linux")
-    { "0.0.0.0" => "127.0.0.2", "::" => "::ffff:127.0.0.2" }.each do |host, local|
+    %w[0.0.0.0 ::].each do |host|
       server = bind(host)
       client = bind("127.0.0.1")
       port = server.local_address[1]
       client.send(transmit("hello".b, ["127.0.0.2", port]))
       _, from, to, = received(server).first
-      assert_equal [local, port], to, host
+      assert_equal ["127.0.0.2", port], to, host
       server.send(transmit("world".b, from, source: to))
       assert_equal [["world", ["127.0.0.2", port], client.local_address, :not_ect]], received(client), host
     end
