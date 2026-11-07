@@ -1,0 +1,29 @@
+module Raiha::Next::QUIC
+  # What makes the connection IDs a connection issues: its Endpoint's.
+  interface _Issuer
+    def issue: (Connection connection) -> [String, String]
+  end
+
+  class IssuedConnectionIDs
+    MAX: Integer
+
+    class Entry < Data
+      attr_reader sequence_number: Integer
+      attr_reader connection_id: String
+      attr_reader frame: Wire::Frame::NewConnectionID?
+
+      def self.new: (sequence_number: Integer, connection_id: String, frame: Wire::Frame::NewConnectionID?) -> instance
+    end
+
+    @issuer: _Issuer?
+    @connection: Connection
+    @active: Array[Entry]
+    @next_sequence_number: Integer
+    @to_send: Array[Wire::Frame::NewConnectionID]
+
+    def initialize: (String first, issuer: _Issuer?, connection: Connection) -> void
+    def issue: (Integer limit) -> void
+    def next_frame: (Integer room) -> [Wire::Frame::NewConnectionID, Recovery::Duty::NewConnectionID]?
+    def lost: (Recovery::Duty::NewConnectionID duty) -> void
+  end
+end

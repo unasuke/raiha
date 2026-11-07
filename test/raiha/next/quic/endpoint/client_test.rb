@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_pair"
+require "raiha/next/support/quic_recovery"
 
 # A client's Endpoint, against a server's: what it routes to its
 # connections.
@@ -65,6 +66,30 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     assert connection.handshake_complete?
     assert_equal [QUIC::Route::Deliver.new(connection:)], routes.uniq
     assert_equal 1, client.connection_count
+  end
+
+  # Once the handshake is confirmed, each end issues connection IDs up to
+  # the other's active_connection_id_limit, with the stateless reset token
+  # of its Endpoint's key, and its Endpoint brings a packet to any of them
+  # to the connection.
+  def test_each_end_issues_connection_ids
+    client = client_endpoint
+    server = server_endpoint
+    tracer = NextQUICRecovery::RecordingTracer.new
+    connection = connect(client, tracer:)
+    exchange(client, server, connection)
+    frames = ->(event) { tracer.of(event).flat_map { _1[:frames] || [] }.grep(QUIC::Wire::Frame::NewConnectionID) }
+    to = ->(frame) { "\x40".b + frame.connection_id + "\0".b * 30 }
+
+    from_server = frames.(:packet_received)
+    assert_equal [[1, 0], [2, 0], [3, 0]], from_server.map { [_1.sequence_number, _1.retire_prior_to] }
+    from_server.each do |frame|
+      assert_equal QUIC::StatelessReset.token(key: CONFIG.stateless_reset_key, connection_id: frame.connection_id), frame.stateless_reset_token
+      assert_kind_of QUIC::Route::Deliver, server.receive(to.(frame), from: CLIENT, to: SERVER, now: 1.0)
+    end
+    from_client = frames.(:packet_sent)
+    assert_equal [1, 2, 3], from_client.map(&:sequence_number)
+    from_client.each { assert_equal QUIC::Route::Deliver.new(connection:), client.receive(to.(_1), from: SERVER, to: CLIENT, now: 1.0) }
   end
 
   # A Retry goes to the connection it is for, which takes it.

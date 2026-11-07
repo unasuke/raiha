@@ -64,6 +64,7 @@ module Raiha::Next::QUIC
     @early_data_streams: Set[Integer]
     @zero_rtt_rejection_unacknowledged: bool
     @peer_ids: PeerConnectionIDs?
+    @issued: IssuedConnectionIDs
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -84,18 +85,18 @@ module Raiha::Next::QUIC
 
     def self.client: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String,
                       remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?,
-                      ?source_connection_id: String?, ?token: String?, ?session: Session?, ?early_data: bool) -> Connection
+                      ?source_connection_id: String?, ?token: String?, ?session: Session?, ?early_data: bool, ?issuer: _Issuer?) -> Connection
     def self.server: (config: Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, time: Time, now: Float,
                       ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
                       ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool,
                       ?source_connection_id: String?, ?stateless_reset_token: String?, ?new_token: String?,
-                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> Connection
+                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?issuer: _Issuer?) -> Connection
 
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
                      random: ::Raiha::Next::TLS::Keyring::_Random, ?original_destination_connection_id: String?,
                      ?retry_source_connection_id: String?, ?address_validated: bool, ?source_connection_id: String?,
                      ?stateless_reset_token: String?, ?token: String?,
-                     ?new_token: String?, ?session: Session?) { (Connection, TransportParameters) -> TLSBinding } -> void
+                     ?new_token: String?, ?session: Session?, ?issuer: _Issuer?) { (Connection, TransportParameters) -> TLSBinding } -> void
     def zero_rtt_state: () -> (:disabled | :pending | :accepted | :rejected)
     def stream_early_data?: (Integer stream_id) -> bool
     def acknowledge_zero_rtt_rejection: () -> nil

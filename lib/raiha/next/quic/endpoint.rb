@@ -180,6 +180,16 @@ module Raiha::Next::QUIC
       private def instance_variables_to_inspect = %i[@remote @expires_at]
     end
 
+    # How a connection has its Endpoint make connection IDs that lead to
+    # it, each with its stateless reset token, for NEW_CONNECTION_ID frames.
+    class Issuer
+      def initialize(issue)
+        @issue = issue
+      end
+
+      def issue(connection) = @issue.call(connection)
+    end
+
     # An Endpoint of a server. `random` is what it draws its own random
     # bytes from, a seeded Random in tests, and its keys when `config` has
     # none. `connection_ids` makes the connection IDs it issues
@@ -200,6 +210,9 @@ module Raiha::Next::QUIC
       @config = config
       @random = random
       @connection_ids = connection_ids
+      # Zero-length connection IDs lead to no connection of their own, and
+      # are never issued.
+      @issuer = config.connection_id_length.zero? ? nil : Issuer.new(->(connection) { issue_connection_id(connection) })
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
@@ -246,7 +259,7 @@ module Raiha::Next::QUIC
       raise Error::Usage, "a server's Endpoint does not connect" unless @role == :client
       scid = new_connection_id
       connection = Connection.client(config: @config, tls_config:, keyring:, server_name:, remote:, time: wall_clock(now), now:, tracer:,
-        keylog:, source_connection_id: scid, token:, session:, early_data:)
+        keylog:, source_connection_id: scid, token:, session:, early_data:, issuer: @issuer)
       add(connection, [scid], remote)
     end
 
@@ -304,7 +317,7 @@ module Raiha::Next::QUIC
       connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
-        source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:)
+        source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:, issuer: @issuer)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
@@ -504,6 +517,14 @@ module Raiha::Next::QUIC
         return id unless @connections.key?(id) || @handles.key?(id)
       end
       raise Error::StateError, "no connection ID of #{@config.connection_id_length} bytes is free for another connection"
+    end
+
+    # A connection ID that leads to `connection`, and its stateless reset
+    # token.
+    private def issue_connection_id(connection)
+      id = new_connection_id
+      @connections[id] = connection
+      [id, StatelessReset.token(key: @stateless_reset_key, connection_id: id)]
     end
 
     private def pending!(handle)

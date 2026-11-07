@@ -76,15 +76,17 @@ module Raiha::Next::QUIC
     # `early_data: true` the client sends 0-RTT on it when TLS can and the
     # session is of the connection's version: what streams and DATAGRAM
     # frames carry before the handshake completes goes in 0-RTT packets, to
-    # the limits the session remembers (`zero_rtt_state`).
+    # the limits the session remembers (`zero_rtt_state`). An Endpoint's
+    # `issuer` makes the connection IDs it issues once the handshake is
+    # confirmed; with none, it issues none.
     def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil,
-      token: nil, session: nil, early_data: false)
+      token: nil, session: nil, early_data: false, issuer: nil)
       raise ArgumentError, "a token is a String of one byte or more" unless token.nil? || (token.is_a?(String) && !token.empty?)
       raise ArgumentError, "session must be a QUIC::Session" unless session.nil? || session.is_a?(Session)
       raise ArgumentError, "early_data must be true or false" unless early_data == true || early_data == false
       zero_rtt = early_data && !session.nil? && session.version == config.versions.fetch(0).number
       new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:,
-        session:) do |connection, parameters|
+        session:, issuer:) do |connection, parameters|
         TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:,
           session: session&.tls, early_data: zero_rtt)
       end
@@ -106,13 +108,15 @@ module Raiha::Next::QUIC
     # opens on none of it (RFC 9369 "TLS Resumption and NEW_TOKEN Tokens").
     # `anti_replay` is the record of the 0-RTT taken, which a TLS Config that
     # takes 0-RTT needs, and `app_early_data_context` what of the application
-    # 0-RTT is taken only if the same of (TLSBinding.server).
+    # 0-RTT is taken only if the same of (TLSBinding.server). `issuer` is
+    # as of a client.
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b)
+      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil)
       raise ArgumentError, "app_early_data_context must be a String" unless app_early_data_context.is_a?(String)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
-        retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:) do |connection, parameters|
+        retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:,
+        issuer:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:,
           version: config.versions.fetch(0), anti_replay:, app_early_data_context:)
       end
@@ -122,7 +126,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      new_token: nil, session: nil, &start)
+      new_token: nil, session: nil, issuer: nil, &start)
       @role = role
       @config = config
       @version = config.versions.fetch(0)
@@ -136,6 +140,7 @@ module Raiha::Next::QUIC
       @datagrams = Datagrams.new(config:, events: @events)
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
+      @issued = IssuedConnectionIDs.new(@source_connection_id, issuer:, connection: self)
       @stateless_reset_token = stateless_reset_token
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
@@ -601,10 +606,9 @@ module Raiha::Next::QUIC
 
     def retire_connection_id_lost(duty) = @peer_ids&.retire_lost(duty)
 
-    # Connection IDs and tokens are not sent yet, so their duties never
-    # come back.
+    # A NEW_CONNECTION_ID frame lost goes again.
+    def new_connection_id_lost(duty) = @issued.lost(duty)
 
-    def new_connection_id_lost(duty) = nil
     def new_token_lost(duty)
       @new_token_due = true if @state == :open && @new_token
     end
@@ -863,6 +867,8 @@ module Raiha::Next::QUIC
       @recovery.handshake_confirmed!(now:)
       @protection.handshake_confirmed!
       discard_level(:handshake, now)
+      peer = @peer_parameters
+      @issued.issue(peer.active_connection_id_limit) if peer
     end
 
     # RFC 9000 "Immediate Close": what was being sent stops, and only the
@@ -1144,6 +1150,11 @@ module Raiha::Next::QUIC
         frames << retire
         duties << retire_duty
         room -= Wire::Frame.encode([retire], ack_delay_exponent: 0).bytesize
+      end
+      while eliciting && level == :one_rtt && (issued, issued_duty = @issued.next_frame(room))
+        frames << issued
+        duties << issued_duty
+        room -= Wire::Frame.encode([issued], ack_delay_exponent: 0).bytesize
       end
       while eliciting && application && (blocked, blocked_duty = @streams.next_blocked(room))
         frames << blocked

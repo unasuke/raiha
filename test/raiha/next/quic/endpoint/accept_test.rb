@@ -142,16 +142,19 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
 
   # The connection IDs an Endpoint issues come from its generator, drawn
   # again while one leads to a connection already; one of another length
-  # than the Config's is misuse.
+  # than the Config's is misuse. The connections here go no further than
+  # the server's first flight, whose Initial packets carry the ID.
   def test_connection_ids_from_the_generator
     endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
       connection_ids: Generator.new("g".b * 8, "g".b * 8, "h".b * 8))
     issued = [Random.new(1), Random.new(4)].map do |random|
-      tracer = NextQUICRecovery::RecordingTracer.new
-      connect(endpoint, client_connection(tracer:, random:))
-      tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].initial_source_connection_id
+      route = endpoint.receive(client_connection(random:).transmits(now: 0.0).first.payload, from: CLIENT, to: SERVER, now: 0.0)
+      accept(endpoint, endpoint.admit(route.handle, now: 0.0).handle)
+      ids = []
+      endpoint.each_transmit(now: 0.0) { ids << QUIC::Wire::Packet.parse(_1.payload, dcid_length: 8).header.scid }
+      ids.uniq
     end
-    assert_equal ["g".b * 8, "h".b * 8], issued
+    assert_equal [["g".b * 8], ["h".b * 8]], issued
 
     short = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
       connection_ids: Generator.new("g".b * 4))

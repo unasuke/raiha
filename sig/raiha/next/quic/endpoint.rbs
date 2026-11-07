@@ -64,6 +64,15 @@ module Raiha::Next::QUIC
     @config: Config
     @random: Crypto::_Random
     @connection_ids: _ConnectionIDs
+    @issuer: Issuer?
+
+    class Issuer
+      include _Issuer
+
+      @issue: ^(Connection) -> [String, String]
+
+      def initialize: (^(Connection) -> [String, String] issue) -> void
+    end
     @time: Time
     @created_at: Float
     @retry_token_key: String
@@ -110,6 +119,7 @@ module Raiha::Next::QUIC
     private def close: (Handle handle, ConnectionError error) -> void
     private def close_packet: (Version version, client_dcid: String, client_scid: String, error: ConnectionError) -> String
     private def new_connection_id: () -> String
+    private def issue_connection_id: (Connection connection) -> [String, String]
     private def pending!: (Handle handle) -> void
     private def forget: (Handle handle) -> void
     private def negotiate: (Wire::UnsupportedVersion packet, String datagram, address from, address? to) -> Route::t
