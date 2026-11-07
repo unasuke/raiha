@@ -85,8 +85,8 @@ module Raiha::Next::Runtime
     # responses the Endpoint sends itself.
     private def take(datagrams, now)
       responses = [] #: Array[Raiha::Next::QUIC::Transmit]
-      datagrams.each do |data, from, ecn|
-        route = @endpoint.receive(data, from:, ecn:, now:)
+      datagrams.each do |data, from, to, ecn|
+        route = @endpoint.receive(data, from:, to:, ecn:, now:)
         route.is_a?(Raiha::Next::QUIC::Route::Respond) ? responses << route.transmit : (@owner.route(route, now) if route)
       end
       responses

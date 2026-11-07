@@ -397,17 +397,20 @@ module Raiha::Next::QUIC
       true
     end
 
-    # Each datagram there is to send now. With the Config's
+    # Each datagram there is to send now, a server's from the address the
+    # path came to (a client leaves its own to the OS, which may change it
+    # under the connection). With the Config's
     # max_transmit_size, those that follow the first and are as large, the
     # last of them possibly shorter, go with it in one Transmit, as many as
     # fit and Transmit::MAX_SEGMENTS at most (GSO); seeing whether the next
     # one fits builds it, and one that does not starts the next Transmit.
     def each_transmit(now:)
       @now = now
+      source = @path.local if @role == :server
       limit = @config.max_transmit_size
       unless limit
         while (datagram = next_datagram(now))
-          yield Transmit.new(payload: datagram, destination: remote, source: nil, ecn: @path.ecn, segment_size: nil)
+          yield Transmit.new(payload: datagram, destination: remote, source:, ecn: @path.ecn, segment_size: nil)
         end
         return
       end
@@ -425,7 +428,7 @@ module Raiha::Next::QUIC
           datagram = next_datagram(now)
           break if last
         end
-        yield Transmit.new(payload:, destination: remote, source: nil, ecn: @path.ecn, segment_size: count > 1 ? size : nil)
+        yield Transmit.new(payload:, destination: remote, source:, ecn: @path.ecn, segment_size: count > 1 ? size : nil)
       end
     end
 

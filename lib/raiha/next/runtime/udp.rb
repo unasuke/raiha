@@ -7,7 +7,9 @@ module Raiha::Next::Runtime
   # Linux, in one `sendmsg` that the kernel cuts at the segment size (GSO,
   # UDP_SEGMENT), elsewhere each with its own, marked with its ECN
   # codepoint; each datagram that comes in is read with `recvmsg` along with
-  # the codepoint it was marked with. Bound to "::", one socket takes IPv4
+  # the codepoint it was marked with and the address it came to (IP_PKTINFO,
+  # IPV6_PKTINFO), and one sent from an address of the Transmit's goes
+  # from there by the same control message. Bound to "::", one socket takes IPv4
   # as well, and the peers of IPv4 have IPv4-mapped addresses
   # ("::ffff:192.0.2.1").
   #
@@ -59,13 +61,22 @@ module Raiha::Next::Runtime
 
     def initialize(socket)
       @socket = socket
-      @family = socket.local_address.afamily
+      local = socket.local_address
+      @family = local.afamily
+      @port = local.ip_port
       @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, BUFFER)
       @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, BUFFER)
       # An IPv6 socket that takes IPv4 tells the codepoint of an IPv4
       # datagram the IPv4 way.
       @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_RECVTOS, 1)
       @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVTCLASS, 1) if @family == Socket::AF_INET6
+      # The address a datagram came to; an IPv6 socket tells an IPv4
+      # datagram's IPv4-mapped.
+      if @family == Socket::AF_INET6
+        @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVPKTINFO, 1)
+      else
+        @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_PKTINFO, 1)
+      end
       @gso = RUBY_PLATFORM.include?("linux")
     end
 
@@ -77,20 +88,22 @@ module Raiha::Next::Runtime
 
     # Sends each datagram of `transmit`; whether all of them went. The ECN
     # mark of an IPv4 destination, IPv4-mapped included, goes as IP_TOS:
-    # Linux leaves IPV6_TCLASS off a datagram that leaves as IPv4. When GSO
+    # Linux leaves IPV6_TCLASS off a datagram that leaves as IPv4. The
+    # Transmit's source, when it has one, is the address the datagrams go
+    # from; the port is the socket's. When GSO
     # fails, the datagrams go one by one, each lost alone; GSO goes for
     # good when it is unavailable here, or when it refused what went one by
     # one, so that the fault was not the destination's.
     def send(transmit)
       host, port = transmit.destination
       destination = Socket.sockaddr_in(port, host)
-      mark = mark(transmit.ecn, host)
+      controls = [mark(transmit.ecn, host), source(transmit.source)].compact
       size = transmit.segment_size
       if @gso && size && size < transmit.payload.bytesize
-        failed = send_segments(transmit.payload, size, destination, mark)
+        failed = send_segments(transmit.payload, size, destination, controls)
         return true unless failed
       end
-      sent = datagrams(transmit).map { |datagram| send_datagram(datagram, destination, mark) }
+      sent = datagrams(transmit).map { |datagram| send_datagram(datagram, destination, controls) }
       if failed && GSO_REFUSED.any? { failed.is_a?(_1) }
         @gso = false if sent.any? || GSO_UNAVAILABLE.any? { failed.is_a?(_1) }
       end
@@ -98,9 +111,11 @@ module Raiha::Next::Runtime
     end
 
     # The datagrams there now, RECEIVE_BATCH at most, each as [data,
-    # [address, port], ecn]; none when there are none.
+    # [address, port] it came from, [address, port] it came to, ecn]; the
+    # address it came to is nil where the OS does not tell it. None when
+    # there are none.
     def receive
-      received = [] #: Array[[String, address, ecn]]
+      received = [] #: Array[[String, address, address?, ecn]]
       while received.size < RECEIVE_BATCH
         result = @socket.recvmsg_nonblock(MAX_DATAGRAM, 0, exception: false)
         break unless result.is_a?(Array)
@@ -108,7 +123,7 @@ module Raiha::Next::Runtime
         # The control messages follow the flags one by one, not as an Array
         # as the bundled declaration has it.
         controls = result.drop(3) #: Array[Socket::AncillaryData]
-        received << [data, [from.ip_address, from.ip_port], ecn(controls)]
+        received << [data, [from.ip_address, from.ip_port], destination(controls), ecn(controls)]
       end
       received
     rescue *DROPPED
@@ -126,16 +141,16 @@ module Raiha::Next::Runtime
 
     # All the datagrams in one sendmsg: nil when they went, else what it
     # failed with.
-    private def send_segments(payload, size, destination, mark)
+    private def send_segments(payload, size, destination, controls)
       segment = Socket::AncillaryData.new(@family, Socket::IPPROTO_UDP, UDP_SEGMENT, [size].pack("S"))
-      mark ? @socket.sendmsg(payload, 0, destination, mark, segment) : @socket.sendmsg(payload, 0, destination, segment)
+      @socket.sendmsg(payload, 0, destination, *controls, segment)
       nil
     rescue *GSO_REFUSED, *DROPPED => error
       error
     end
 
-    private def send_datagram(datagram, destination, mark)
-      mark ? @socket.sendmsg(datagram, 0, destination, mark) : @socket.sendmsg(datagram, 0, destination)
+    private def send_datagram(datagram, destination, controls)
+      @socket.sendmsg(datagram, 0, destination, *controls)
       true
     rescue *DROPPED
       false
@@ -155,6 +170,25 @@ module Raiha::Next::Runtime
       else
         Socket::AncillaryData.int(:INET, :IP, :TOS, value)
       end
+    end
+
+    # The control message that sends from the address of `source`, none to
+    # leave it to the OS.
+    private def source(source)
+      return nil unless source
+      address = Addrinfo.ip(source[0])
+      return Socket::AncillaryData.ipv6_pktinfo(address, 0) if @family == Socket::AF_INET6
+      Socket::AncillaryData.ip_pktinfo(address, 0, address)
+    end
+
+    # The address a datagram came to, from its control messages, with the
+    # socket's port.
+    private def destination(controls)
+      controls.each do |control|
+        return [control.ipv6_pktinfo[0].ip_address, @port] if control.cmsg_is?(Socket::IPPROTO_IPV6, Socket::IPV6_PKTINFO)
+        return [control.ip_pktinfo[0].ip_address, @port] if control.cmsg_is?(Socket::IPPROTO_IP, Socket::IP_PKTINFO)
+      end
+      nil
     end
 
     # The codepoint of a datagram from its control messages: IP_TOS is one

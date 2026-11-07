@@ -18,6 +18,24 @@ class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
     end
   end
 
+  # A server answers from the address the client's first Initial came to,
+  # so that one with several addresses answers from the right one; a
+  # client leaves its own address to the OS, and to the server what it
+  # makes of a change.
+  def test_the_server_answers_from_the_address_it_was_reached_at
+    client = client_connection
+    server = server_connection
+    client.transmits(now: 0.0).each do |transmit|
+      assert_nil transmit.source
+      server.receive(transmit.payload, from: CLIENT, to: SERVER, now: 0.0)
+    end
+    transmits = server.transmits(now: 0.0)
+    refute_empty transmits
+    assert_equal [[CLIENT, SERVER]], transmits.map { [_1.destination, _1.source] }.uniq
+    transmits.each { client.receive(_1.payload, from: SERVER, to: CLIENT, now: 0.001) }
+    assert_equal [nil], client.transmits(now: 0.001).map(&:source).uniq
+  end
+
   # RFC 9000 "Datagram Size": a client's datagram with an Initial packet
   # in it is 1200 bytes at least.
   def test_the_client_initial_is_padded

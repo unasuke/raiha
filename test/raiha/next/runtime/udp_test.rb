@@ -3,7 +3,8 @@ require "raiha/next/runtime"
 
 # The UDP socket of the runtime on the loopback interface: each datagram
 # goes with its ECN mark, IPv4 into a socket bound to "::" included, and
-# comes out with the codepoint it was marked with; the datagrams of a
+# comes out with the codepoint it was marked with and the address it came
+# to; a Transmit with a source goes from there; the datagrams of a
 # Transmit go in one with GSO, and one by one where it is refused.
 class RaihaNextRuntimeUDPTest < Minitest::Test
   UDP = Raiha::Next::Runtime::UDP
@@ -23,8 +24,8 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     skip "#{host} cannot be bound here"
   end
 
-  def transmit(payload, to, ecn: :not_ect, segment_size: nil)
-    QUIC::Transmit.new(payload:, destination: to, source: nil, ecn:, segment_size:)
+  def transmit(payload, to, ecn: :not_ect, segment_size: nil, source: nil)
+    QUIC::Transmit.new(payload:, destination: to, source:, ecn:, segment_size:)
   end
 
   # What `socket` has received within a second.
@@ -38,14 +39,17 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     sender = bind("127.0.0.1")
     %i[not_ect ect0 ect1].each { |ecn| assert sender.send(transmit(ecn.to_s.b, receiver.local_address, ecn:)) }
     from = sender.local_address
-    assert_equal [["not_ect", from, :not_ect], ["ect0", from, :ect0], ["ect1", from, :ect1]], received(receiver)
+    to = receiver.local_address
+    assert_equal [["not_ect", from, to, :not_ect], ["ect0", from, to, :ect0], ["ect1", from, to, :ect1]], received(receiver)
   end
 
   def test_each_codepoint_on_ipv6
     receiver = bind("::1")
     sender = bind("::1")
     %i[ect0 ect1].each { |ecn| sender.send(transmit(ecn.to_s.b, receiver.local_address, ecn:)) }
-    assert_equal [["ect0", sender.local_address, :ect0], ["ect1", sender.local_address, :ect1]], received(receiver)
+    from = sender.local_address
+    to = receiver.local_address
+    assert_equal [["ect0", from, to, :ect0], ["ect1", from, to, :ect1]], received(receiver)
   end
 
   # A socket bound to "::" takes IPv4 from an IPv4-mapped address and
@@ -54,11 +58,29 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     server = bind("::")
     client = bind("127.0.0.1")
     client.send(transmit("hello".b, ["127.0.0.1", server.local_address[1]], ecn: :ect0))
-    data, from, ecn = received(server).first
-    assert_equal ["hello", ["::ffff:127.0.0.1", client.local_address[1]], :ect0], [data, from, ecn]
+    data, from, to, ecn = received(server).first
+    assert_equal ["hello", ["::ffff:127.0.0.1", client.local_address[1]], ["::ffff:127.0.0.1", server.local_address[1]], :ect0],
+      [data, from, to, ecn]
 
     server.send(transmit("world".b, from, ecn: :ect1))
-    assert_equal [["world", ["127.0.0.1", server.local_address[1]], :ect1]], received(client)
+    assert_equal [["world", ["127.0.0.1", server.local_address[1]], client.local_address, :ect1]], received(client)
+  end
+
+  # A socket bound to every address tells the one a datagram came to, and
+  # answers from it when the Transmit names it, IPv4 into a socket for both
+  # included; the OS would answer the loopback's 127.0.0.1 from itself.
+  def test_the_address_a_datagram_came_to_and_answers_from
+    skip "127.0.0.2 is Linux's loopback" unless RUBY_PLATFORM.include?("linux")
+    { "0.0.0.0" => "127.0.0.2", "::" => "::ffff:127.0.0.2" }.each do |host, local|
+      server = bind(host)
+      client = bind("127.0.0.1")
+      port = server.local_address[1]
+      client.send(transmit("hello".b, ["127.0.0.2", port]))
+      _, from, to, = received(server).first
+      assert_equal [local, port], to, host
+      server.send(transmit("world".b, from, source: to))
+      assert_equal [["world", ["127.0.0.2", port], client.local_address, :not_ect]], received(client), host
+    end
   end
 
   # A peer can mark congestion; the codepoint is the low two bits of the

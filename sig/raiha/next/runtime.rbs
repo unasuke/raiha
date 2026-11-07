@@ -55,7 +55,7 @@ module Raiha::Next::Runtime
 
     private def read: () -> void
 
-    private def take: (Array[[String, UDP::address, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
+    private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
 
     private def run: () -> void
 
@@ -84,6 +84,7 @@ module Raiha::Next::Runtime
 
     @socket: UDPSocket
     @family: Integer
+    @port: Integer
     @gso: bool
 
     def self.bind: (String host, Integer port) -> UDP
@@ -95,7 +96,7 @@ module Raiha::Next::Runtime
 
     def send: (Raiha::Next::QUIC::Transmit transmit) -> bool
 
-    def receive: () -> Array[[String, address, ecn]]
+    def receive: () -> Array[[String, address, address?, ecn]]
 
     def wait_readable: (?(Float | Integer)? timeout) -> bool
 
@@ -103,12 +104,14 @@ module Raiha::Next::Runtime
 
     def closed?: () -> bool
 
-    private def send_segments: (String payload, Integer size, String destination, Socket::AncillaryData? mark) -> SystemCallError?
-    private def send_datagram: (String datagram, String destination, Socket::AncillaryData? mark) -> bool
+    private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
+    private def send_datagram: (String datagram, String destination, Array[Socket::AncillaryData] controls) -> bool
     private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]
 
     private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?
 
+    private def source: (address? source) -> Socket::AncillaryData?
+    private def destination: (Array[Socket::AncillaryData] controls) -> address?
     private def ecn: (Array[Socket::AncillaryData] controls) -> ecn
   end
 end
