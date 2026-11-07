@@ -37,8 +37,11 @@ module Raiha::Next::QUIC
       @retiring = [] #: Array[Integer]
     end
 
-    # The stateless reset tokens of the active IDs.
-    def reset_tokens = @active.filter_map(&:stateless_reset_token)
+    # The stateless reset tokens a datagram that no packet of the
+    # connection opens is compared with: those of the IDs this end sends
+    # with, not of those active and not yet used, nor of those retired
+    # (RFC 9000 "Detecting a Stateless Reset").
+    def reset_tokens = @active.select { |entry| entry.connection_id == @current }.filter_map(&:stateless_reset_token)
 
     # Takes a NEW_CONNECTION_ID frame.
     def receive(frame)

@@ -28,8 +28,15 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
   def test_up_to_the_limit
     peer = ids
     (1..3).each { peer.receive(new_id(_1)) }
-    assert_equal 4, peer.reset_tokens.size
     assert_violation(QUIC::ErrorCode::CONNECTION_ID_LIMIT_ERROR) { peer.receive(new_id(4)) }
+  end
+
+  # RFC 9000 "Detecting a Stateless Reset": only the token of the ID in
+  # use counts, not those of the IDs not yet used.
+  def test_the_reset_token_of_the_id_in_use
+    peer = ids
+    (1..3).each { peer.receive(new_id(_1)) }
+    assert_equal ["t".b * 16], peer.reset_tokens
   end
 
   # Retire Prior To retires the IDs below it, the one in use too, which
