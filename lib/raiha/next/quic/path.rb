@@ -43,6 +43,7 @@ module Raiha::Next::QUIC
       @validation_deadline = nil #: Float?
       @challenges_sent = {} #: Hash[String, bool]
       @full_size_due = false
+      @validation_owed = false
       @max_datagram_size = max_datagram_size
       @tracer = tracer
       start_over
@@ -108,6 +109,7 @@ module Raiha::Next::QUIC
     # a PATH_CHALLENGE goes at once and again each `interval`, twice as
     # long each time, until `deadline`, when the path fails.
     def start_validation(now:, interval:, deadline:)
+      @validation_owed = false
       @challenge_due_at = now
       @challenge_interval = interval
       @validation_deadline = deadline
@@ -117,12 +119,17 @@ module Raiha::Next::QUIC
     # Whether the path is being validated.
     def validating? = !@validation_deadline.nil?
 
-    # The validation stops where it is, neither failing nor succeeding.
+    # The validation stops where it is, neither failing nor succeeding, and
+    # is owed: the path is to be validated anew before it is used again.
     def stop_validation
       @challenge_due_at = @challenge_interval = @validation_deadline = nil
       @challenges_sent = {}
       @full_size_due = false
+      @validation_owed = true
     end
+
+    # Whether a validation stopped is owed.
+    def validation_owed? = @validation_owed
 
     # Whether a PATH_CHALLENGE is due on the path at `now`.
     def challenge_due?(now)

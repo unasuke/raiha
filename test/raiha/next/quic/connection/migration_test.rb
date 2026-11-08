@@ -131,11 +131,11 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     datagrams
   end
 
-  # Probes from new addresses push the path left out of the paths being
-  # validated, but it stays the one to go back to when the new path
-  # fails, and the connection goes on there, its validation stopped and
-  # failing nothing.
-  def test_probes_leave_the_path_to_go_back_to
+  # A rebinding, then probes from three new addresses that push the path
+  # left out of the paths being validated, and the new path left
+  # unanswered until the server goes back to the path it left; the server,
+  # the key log, the time, and the datagrams it sent then.
+  def gone_back_after_probes
     server, keylog, _, now = connected(ids: 5, config: QUIC::Config.new(active_connection_id_limit: 8))
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
     sent(server, keylog, now)
@@ -145,10 +145,26 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     end
     sent(server, keylog, now)
     datagrams = run_timers(server, keylog, now) { |sent| sent.any? { _1.first == CLIENT } }
+    [server, keylog, server.next_timeout, datagrams]
+  end
+
+  # Pushed out by probes, the path left stays the one to go back to when
+  # the new path fails, and, gone back to, is validated anew (RFC 9000
+  # "Off-Path Packet Forwarding"): answered, the connection goes on there.
+  def test_probes_leave_the_path_to_go_back_to
+    server, keylog, now, datagrams = gone_back_after_probes
     refute server.closed?
-    assert(datagrams.any? { _1.first == CLIENT })
-    run_timers(server, keylog, server.next_timeout) { false }
+    _, data = challenges(datagrams).fetch(CLIENT)
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1100), from: CLIENT, to: SERVER, now:)
+    run_timers(server, keylog, now) { false }
     refute server.closed?, server.close_reason&.reason
+  end
+
+  # The path gone back to unanswered too, nothing validated is left.
+  def test_the_path_gone_back_to_is_validated_anew
+    server, keylog, now, = gone_back_after_probes
+    run_timers(server, keylog, now) { false }
+    assert_equal "no validated path", server.close_reason&.reason
   end
 
   # The answer to a short challenge validates the new path's address, but

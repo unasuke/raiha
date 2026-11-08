@@ -21,6 +21,7 @@ module Raiha::Next::QUIC
     @validation_deadline: Float?
     @challenges_sent: Hash[String, bool]
     @full_size_due: bool
+    @validation_owed: bool
     @congestion: Congestion::_Controller
     @startup: Congestion::_StartupController?
     @app_limited: bool
@@ -50,6 +51,7 @@ module Raiha::Next::QUIC
     def start_validation: (now: Float, interval: Float, deadline: Float) -> void
     def validating?: () -> bool
     def stop_validation: () -> void
+    def validation_owed?: () -> bool
     def challenge_due?: (Float now) -> bool
     def challenge_sent: (String data, full_size: bool, now: Float) -> void
     def responded: (String data, now: Float) -> bool

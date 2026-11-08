@@ -1398,7 +1398,7 @@ module Raiha::Next::QUIC
     # with no ID, it is not.
     private def switch_to(path, now, revalidate: true)
       @validating.delete(path)
-      start_validation(path, now) unless path.validated? || path.validating?
+      start_validation(path, now) unless path.validating? || (path.validated? && !path.validation_owed?)
       left = @path
       @last_validated = left if left.validated?
       connection_id = path.destination_connection_id
@@ -1442,8 +1442,10 @@ module Raiha::Next::QUIC
     # goes, or, when it is the path last validated, stops being validated
     # again and stays, with its ID, to go back to: it is kept apart from
     # the paths being validated, so that probes from new addresses cannot
-    # leave a connection nothing to go back to, and its validation stops,
-    # so that its deadline does not fail it once it is gone back to.
+    # leave a connection nothing to go back to. Its validation stops, so
+    # that its deadline does not fail it once it is gone back to, and is
+    # owed: gone back to, it is validated anew (RFC 9000 "Off-Path Packet
+    # Forwarding").
     private def make_room
       while @validating.size > MAX_VALIDATING_PATHS
         oldest = @validating.fetch(0)
