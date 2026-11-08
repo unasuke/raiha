@@ -100,6 +100,10 @@ module Raiha::Next::QUIC
     # keeps.
     attr_reader :destination_connection_id
 
+    # The path, left by the connection, sends with `connection_id`; nil
+    # when it has none to send with.
+    def send_with(connection_id) = @destination_connection_id = connection_id
+
     # Validation of the path starts at `now` (RFC 9000 "Path Validation"):
     # a PATH_CHALLENGE goes at once and again each `interval`, twice as
     # long each time, until `deadline`, when the path fails.

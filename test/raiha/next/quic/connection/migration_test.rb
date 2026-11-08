@@ -60,34 +60,77 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
 
   def ping = QUIC::Wire::Frame::Ping.new
 
+  # The PATH_CHALLENGE of each path in `datagrams`, by destination.
+  def challenges(datagrams)
+    datagrams.each_with_object({}) do |(destination, _, dcid, frames), all|
+      frames.grep(QUIC::Wire::Frame::PathChallenge).each { all[destination] = [dcid, _1.data] }
+    end
+  end
+
   # RFC 9000 "Responding to Connection Migration": a packet that is no
   # probe, the largest of its space, from a new address moves the server
   # there at once, and the first datagram on the new path carries a
   # PATH_CHALLENGE. With the Destination Connection ID as before, a NAT
-  # rebinding, the server goes on with the client's ID in use.
+  # rebinding, the server goes on with the client's ID in use, and
+  # validates the path it left again with an ID no path sent with (RFC 9000
+  # "Off-Path Packet Forwarding").
   def test_a_rebinding_moves_the_server
     server, keylog, id, now = connected
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
-    (destination, _, dcid, frames), *rest = sent(server, keylog, now)
-    assert_equal [ELSEWHERE, id], [destination, dcid]
-    assert_equal 1, frames.grep(QUIC::Wire::Frame::PathChallenge).size
-    assert_empty rest.reject { _1.first == ELSEWHERE }
+    datagrams = sent(server, keylog, now)
+    assert_equal ELSEWHERE, datagrams.first.first
+    assert_equal({ ELSEWHERE => id, CLIENT => "c0000001" }, challenges(datagrams).transform_values(&:first))
+  end
+
+  # With no ID left that no path sent with, the path left is not
+  # validated again: one ID would go to two addresses.
+  def test_a_rebinding_with_no_id_for_the_path_left
+    server, keylog, id, now = connected(ids: 0)
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal({ ELSEWHERE => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
   end
 
   # With another Destination Connection ID, the new path sends with an ID
-  # of the client's no path sent with, and the one in use before is
-  # retired once the path is validated, its amplification limit no longer
-  # holding back a datagram of a full size.
+  # of the client's no path sent with, and the path left validates again
+  # with the ID it had.
   def test_a_migration_with_a_new_id
+    server, keylog, id, now = connected
+    server.receive(packet(keylog, ping, number: 1000, dcid: "x".b * 8), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal({ ELSEWHERE => "c0000001", CLIENT => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
+  end
+
+  # The new path unanswered, the server goes back to the path it left,
+  # which answered, and retires the ID the failed path sent with.
+  def test_back_to_the_path_last_validated
     server, keylog, _, now = connected
     server.receive(packet(keylog, ping, number: 1000, dcid: "x".b * 8), from: ELSEWHERE, to: SERVER, now:)
-    datagrams = sent(server, keylog, now)
-    assert_equal [[ELSEWHERE, "c0000001"]], datagrams.map { [_1[0], _1[2]] }.uniq
-    challenge = datagrams.flat_map(&:last).grep(QUIC::Wire::Frame::PathChallenge).first
-    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: challenge.data), number: 1001, dcid: "x".b * 8), from: ELSEWHERE,
-      to: SERVER, now:)
-    retired = sent(server, keylog, now).flat_map(&:last).grep(QUIC::Wire::Frame::RetireConnectionID)
-    assert_equal [0], retired.map(&:sequence_number)
+    _, data = challenges(sent(server, keylog, now)).fetch(CLIENT)
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1001), from: CLIENT, to: SERVER, now:)
+    retired = []
+    until now > 10.0 || !retired.empty?
+      now = server.next_timeout
+      server.handle_timeout(now:)
+      datagrams = sent(server, keylog, now)
+      retired = datagrams.flat_map(&:last).grep(QUIC::Wire::Frame::RetireConnectionID).map(&:sequence_number)
+    end
+    assert_equal [1], retired
+    assert_equal [CLIENT], datagrams.map(&:first).uniq
+    refute server.closed?
+  end
+
+  # Neither path answering, there is no validated path to go back to: the
+  # connection closes at once with nothing sent.
+  def test_no_validated_path_left
+    server, keylog, _, now = connected
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    sent(server, keylog, now)
+    until server.closed? || now > 10.0
+      now = server.next_timeout
+      server.handle_timeout(now:)
+      sent(server, keylog, now) unless server.closed?
+    end
+    assert server.closed?
+    assert_equal [QUIC::ErrorCode::NO_ERROR, "no validated path"], [server.close_reason.code, server.close_reason.reason]
   end
 
   # A packet from a new address that is not the largest of its space,
@@ -115,11 +158,11 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     server.stream_write(stream_id, "x".b * 100_000)
     moving = packet(keylog, ping, number: 1000)
     server.receive(moving, from: ELSEWHERE, to: SERVER, now:)
-    before = sent(server, keylog, now)
+    before = sent(server, keylog, now).select { _1.first == ELSEWHERE }
     assert_operator before.sum { _2 }, :<=, 3 * moving.bytesize
-    challenge = before.flat_map(&:last).grep(QUIC::Wire::Frame::PathChallenge).first
-    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: challenge.data), number: 1001), from: ELSEWHERE, to: SERVER, now:)
-    assert_operator sent(server, keylog, now).sum { _2 }, :>, 3 * moving.bytesize
+    _, data = challenges(before).fetch(ELSEWHERE)
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1001), from: ELSEWHERE, to: SERVER, now:)
+    assert_operator sent(server, keylog, now).select { _1.first == ELSEWHERE }.sum { _2 }, :>, 3 * moving.bytesize
   end
 
   # A client whose own address changes under it, which the OS chooses,

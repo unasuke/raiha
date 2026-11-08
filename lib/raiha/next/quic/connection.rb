@@ -499,6 +499,8 @@ module Raiha::Next::QUIC
         @protection.handle_timeout(now:)
         @issued.handle_timeout(now)
         @validating.select { |path| path.validation_failed?(now) }.each { |path| abandon_path(path) }
+        fall_back(now) if @path.validation_failed?(now)
+        return unless @state == :open
         outcome = @recovery.on_timeout(now:)
         Recovery::Duty.dispatch(outcome, to: self)
         probe(outcome.probe) if outcome.probe
@@ -904,7 +906,10 @@ module Raiha::Next::QUIC
         end
       when Wire::Frame::PathResponse
         answered = [@path, *@validating].find { |each| each.responded(frame.data, now:) }
-        lift_amplification_limit(now) if answered.equal?(@path)
+        if answered.equal?(@path)
+          @last_validated = @path
+          lift_amplification_limit(now)
+        end
       end
     end
 
@@ -949,8 +954,11 @@ module Raiha::Next::QUIC
 
     # RFC 9000 "Idle Timeout": the connection ends at once, with nothing
     # sent.
-    private def time_out_idly
-      error = ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "idle timeout", application: false)
+    private def time_out_idly = close_silently("idle timeout")
+
+    # The connection ends at once for `reason`, with nothing sent.
+    private def close_silently(reason)
+      error = ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason:, application: false)
       @state = :closed
       @close_error = error
       @binding&.discard
@@ -1323,7 +1331,7 @@ module Raiha::Next::QUIC
     # where the client's packets come from.
     private def path_of(local, remote)
       return @path if @path.remote.nil?
-      [@path, *@validating, @last_validated].find do |path|
+      [@path, *@validating, @last_validated].compact.find do |path|
         path.remote == remote && (@role == :client || local.nil? || path.local.nil? || path.local == local)
       end
     end
@@ -1377,22 +1385,46 @@ module Raiha::Next::QUIC
       path
     end
 
-    # The connection sends on `path` from now on. A path with an ID of its
-    # own sends with it, and the ID in use before is retired. The path left
-    # stays the one last validated.
-    private def switch_to(path, now)
+    # The connection sends on `path` from now on, and the path left stays
+    # the one last validated when it was. A path with an ID of its own
+    # sends with it, and the path left keeps the ID in use before; else
+    # the path left takes an ID no path sent with, if there is one. When
+    # the peer moved (`revalidate`), the path left is validated again with
+    # its ID, as RFC 9000 "Off-Path Packet Forwarding" asks, so that a
+    # path an attacker forwarded packets to does not keep the connection;
+    # with no ID, it is not.
+    private def switch_to(path, now, revalidate: true)
       @validating.delete(path)
       start_validation(path, now) unless path.validated? || path.validating?
+      left = @path
+      @last_validated = left if left.validated?
       connection_id = path.destination_connection_id
       if connection_id && connection_id != @destination_connection_id
         @peer_ids&.switch(connection_id)
-        @peer_ids&.release(@destination_connection_id)
+        left.send_with(@destination_connection_id)
         @destination_connection_id = connection_id
+      else
+        left.send_with(@peer_ids&.claim)
       end
-      @last_validated = @path if @path.validated?
       lift_amplification_limit(now)
       @path = path
       @recovery.switch_path(path, now:)
+      return unless revalidate && left.destination_connection_id
+      start_validation(left, now)
+      @validating << left
+      abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
+    end
+
+    # RFC 9000 "Responding to Connection Migration": the path in use failed
+    # its validation, and the connection goes back to the path last
+    # validated; with none, it closes at once with nothing sent, as an
+    # idle one does.
+    private def fall_back(now)
+      failed = @path
+      last = @last_validated
+      return close_silently("no validated path") if last.nil? || last.equal?(failed)
+      switch_to(last, now, revalidate: false)
+      abandon_path(failed)
     end
 
     # Validation of `path` starts at `now`: a challenge each PTO of the
@@ -1407,6 +1439,7 @@ module Raiha::Next::QUIC
     # is retired.
     private def abandon_path(path)
       @validating.delete(path)
+      @last_validated = nil if path.equal?(@last_validated)
       path.abandon
       connection_id = path.destination_connection_id
       @peer_ids&.release(connection_id) if connection_id

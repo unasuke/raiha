@@ -46,6 +46,7 @@ module Raiha::Next::QUIC
     attr_reader challenge: String?
     def answered: () -> void
     attr_reader destination_connection_id: String?
+    def send_with: (String? connection_id) -> void
     def start_validation: (now: Float, interval: Float, deadline: Float) -> void
     def validating?: () -> bool
     def challenge_due?: (Float now) -> bool

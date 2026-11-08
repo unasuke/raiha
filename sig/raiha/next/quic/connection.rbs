@@ -72,7 +72,7 @@ module Raiha::Next::QUIC
     @issued: IssuedConnectionIDs
     @random: ::Raiha::Next::TLS::Keyring::_Random
     @validating: Array[Path]
-    @last_validated: Path
+    @last_validated: Path?
     @received_dcid: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
@@ -159,6 +159,7 @@ module Raiha::Next::QUIC
     private def close_for: (Violation violation, Float now) -> void
     private def enter_draining: (ConnectionError error, Float now) -> void
     private def time_out_idly: () -> void
+    private def close_silently: (String reason) -> void
     private def restart_idle: (Float now) -> void
     private def next_datagram: (Float now) -> [String, Path]?
     private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
@@ -182,7 +183,8 @@ module Raiha::Next::QUIC
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
-    private def switch_to: (Path path, Float now) -> void
+    private def switch_to: (Path path, Float now, ?revalidate: bool) -> void
+    private def fall_back: (Float now) -> void
     private def start_validation: (Path path, Float now) -> void
     private def abandon_path: (Path path) -> void
     private def path_pto: (Path path) -> Float
