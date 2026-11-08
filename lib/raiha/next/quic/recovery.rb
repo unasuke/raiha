@@ -237,6 +237,13 @@ module Raiha::Next::QUIC
     # before any, which the packet number of the next is decoded against.
     def largest_received(packet_type) = space_of(packet_type).largest_received
 
+    # The connection moved to `path`: PTOs and loss detection go by its
+    # RTT from now on, and the timer is set again by it.
+    def switch_path(path, now:)
+      @path = path
+      set_loss_detection_timer(now)
+    end
+
     # Records a packet sent at `now` on `path`, the current one unless
     # told, and counts it on the path when it is in flight.
     def on_packet_sent(packet_type:, packet_number:, sent_bytes:, ack_eliciting:, in_flight:, duties:, now:, pmtu_probe: false, path: @path)

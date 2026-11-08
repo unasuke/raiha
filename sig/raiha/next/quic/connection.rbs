@@ -73,6 +73,7 @@ module Raiha::Next::QUIC
     @random: ::Raiha::Next::TLS::Keyring::_Random
     @validating: Array[Path]
     @last_validated: Path
+    @received_dcid: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
@@ -164,6 +165,7 @@ module Raiha::Next::QUIC
     private def amplification_budget: (Float now) -> Integer?
     private def count_received: (String datagram, Path path, Float now) -> void
     private def validate_address: (Float now) -> void
+    private def lift_amplification_limit: (Float now) -> void
     private def send_again_at_once: () -> void
     private def probe: (Recovery::Probe probe) -> void
     private def probing?: (space space) -> bool
@@ -179,6 +181,9 @@ module Raiha::Next::QUIC
     private def path_of: (address? local, address? remote) -> Path?
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
+    private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
+    private def switch_to: (Path path, Float now) -> void
+    private def start_validation: (Path path, Float now) -> void
     private def abandon_path: (Path path) -> void
     private def path_pto: (Path path) -> Float
     private def validation_timeouts: () -> Array[Float]

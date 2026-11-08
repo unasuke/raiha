@@ -59,6 +59,14 @@ module Raiha::Next::QUIC
       entry.connection_id
     end
 
+    # The path that claimed `connection_id` is now the one in use: the ID
+    # in use before is claimed by the path that leaves it.
+    def switch(connection_id)
+      return if connection_id == @current || !@claimed.delete(connection_id)
+      @claimed << @current
+      @current = connection_id
+    end
+
     # A path that claimed `connection_id` went: the ID is retired, as no
     # other path sends with it.
     def release(connection_id)

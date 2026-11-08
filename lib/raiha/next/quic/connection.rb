@@ -155,6 +155,10 @@ module Raiha::Next::QUIC
       # back to when a new one fails; the first is, by the handshake.
       @validating = [] #: Array[Path]
       @last_validated = @path
+      # The Destination Connection ID of the last 1-RTT packet that came on
+      # the path in use: a packet from a new address with the same one is a
+      # NAT rebinding most likely.
+      @received_dcid = nil #: String?
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
       @datagrams = Datagrams.new(config:, events: @events)
@@ -775,6 +779,7 @@ module Raiha::Next::QUIC
       return dropped(:decryption_failure, length, now) unless payload
       accept_first_initial(header, from, to) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
+      largest = @recovery.largest_received(level)
       processed = @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
         ack_eliciting: frames.any?(&:ack_eliciting?), now:)
       return dropped(:duplicate, length, now) unless processed
@@ -789,8 +794,15 @@ module Raiha::Next::QUIC
       @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
-      path ||= probing_frames?(frames) ? probed_path(to, from, packet.datagram.bytesize, now) : @path
-      frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid, path) }
+      dcid = unmasked.header.dcid
+      if probing_frames?(frames)
+        path ||= probed_path(to, from, packet.datagram.bytesize, now)
+      elsif level == :one_rtt && !path.equal?(@path) && (largest.nil? || unmasked.packet_number > largest)
+        path = migrate(path, to, from, dcid, packet.datagram.bytesize, now) || path
+      end
+      path ||= @path
+      @received_dcid = dcid if level == :one_rtt && path.equal?(@path)
+      frames.each { |frame| receive_frame(level, frame, now, dcid, path) }
       if @role == :server && level == :handshake
         validate_address(now)
         discard_level(:initial, now)
@@ -890,7 +902,9 @@ module Raiha::Next::QUIC
           path.challenged(frame.data)
           @non_probing_due = true if path.equal?(@path)
         end
-      when Wire::Frame::PathResponse then [@path, *@validating].find { |each| each.responded(frame.data, now:) }
+      when Wire::Frame::PathResponse
+        answered = [@path, *@validating].find { |each| each.responded(frame.data, now:) }
+        lift_amplification_limit(now) if answered.equal?(@path)
       end
     end
 
@@ -1039,6 +1053,12 @@ module Raiha::Next::QUIC
     private def validate_address(now)
       return if @path.validated?
       @path.validate
+      lift_amplification_limit(now)
+    end
+
+    # The path in use has its address validated: what its amplification
+    # limit stopped goes again, and loss recovery sets its timer again.
+    private def lift_amplification_limit(now)
       return unless @amplification_limited
       @amplification_limited = false
       @recovery.amplification_limited(false, now:)
@@ -1327,11 +1347,58 @@ module Raiha::Next::QUIC
       connection_id = @peer_ids&.claim or return nil
       path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
       path.datagram_received(bytes)
-      interval = path_pto(path)
-      path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
+      start_validation(path, now)
       @validating << path
       abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
       path
+    end
+
+    # RFC 9000 "Responding to Connection Migration": a server's sending
+    # moves at once to the path a packet that is no probe came on, from an
+    # address no path has or from a path besides the one in use, when its
+    # packet number is the largest of its space so far, and the path is
+    # validated unless it is. With the Destination Connection ID the peer
+    # used before, a NAT rebinding most likely, a new path goes on with the
+    # peer's ID in use (RFC 9000 "Privacy Implications of Connection
+    # Migration"); with another, it takes one no path sent with, and
+    # without one there is no move. The path moved to; nil when there is
+    # no move.
+    private def migrate(path, local, remote, dcid, bytes, now)
+      return nil unless @role == :server && @handshake_confirmed
+      unless path
+        connection_id = nil #: String?
+        connection_id = (@peer_ids&.claim or return nil) unless dcid == @received_dcid
+        path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
+        path.datagram_received(bytes)
+      end
+      switch_to(path, now)
+      path
+    end
+
+    # The connection sends on `path` from now on. A path with an ID of its
+    # own sends with it, and the ID in use before is retired. The path left
+    # stays the one last validated.
+    private def switch_to(path, now)
+      @validating.delete(path)
+      start_validation(path, now) unless path.validated? || path.validating?
+      connection_id = path.destination_connection_id
+      if connection_id && connection_id != @destination_connection_id
+        @peer_ids&.switch(connection_id)
+        @peer_ids&.release(@destination_connection_id)
+        @destination_connection_id = connection_id
+      end
+      @last_validated = @path if @path.validated?
+      lift_amplification_limit(now)
+      @path = path
+      @recovery.switch_path(path, now:)
+    end
+
+    # Validation of `path` starts at `now`: a challenge each PTO of the
+    # path, twice as late each time, until three times the larger of its
+    # PTO and the current path's.
+    private def start_validation(path, now)
+      interval = path_pto(path)
+      path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
     end
 
     # A path besides the one in use goes, and the peer's ID it sent with
