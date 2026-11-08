@@ -42,6 +42,9 @@ module Raiha::Next::QUIC
     # How many PTOs a connection ID the peer retired still leads to the
     # connection.
     RETIRED_PTOS = 3
+    # The most paths besides the one in use a connection keeps, being
+    # validated or validated (CVE-2026-12707).
+    MAX_VALIDATING_PATHS = 3
     # How many times a server sends its Initial flight again at once on a
     # ClientHello that comes again (RFC 9002 "Speeding up Handshake
     # Completion"): once is enough for one loss, and twice for a burst.
@@ -771,7 +774,7 @@ module Raiha::Next::QUIC
       @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
-      path ||= @path
+      path ||= probing_frames?(frames) ? probed_path(to, from, packet.datagram.bytesize) : @path
       frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid, path) }
       if @role == :server && level == :handshake
         validate_address(now)
@@ -1276,6 +1279,40 @@ module Raiha::Next::QUIC
       [@path, *@validating, @last_validated].find do |path|
         path.remote == remote && (local.nil? || path.local.nil? || path.local == local)
       end
+    end
+
+    # Whether all of `frames` are probing frames (RFC 9000 "Probing a New
+    # Path").
+    private def probing_frames?(frames)
+      frames.all? do |frame|
+        frame.is_a?(Wire::Frame::PathChallenge) || frame.is_a?(Wire::Frame::PathResponse) ||
+          frame.is_a?(Wire::Frame::NewConnectionID) || frame.is_a?(Wire::Frame::Padding)
+      end
+    end
+
+    # A path for a probe from `remote` to `local` that the connection does
+    # not know, which `bytes` came on. Once the handshake is confirmed, it
+    # sends with an ID of the peer's no path sends with. Past
+    # MAX_VALIDATING_PATHS, the oldest goes (CVE-2026-12707). nil before
+    # the handshake is confirmed, or with no ID to send with, when the
+    # probe goes unanswered.
+    private def probed_path(local, remote, bytes)
+      return nil unless @handshake_confirmed
+      connection_id = @peer_ids&.claim or return nil
+      path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
+      path.datagram_received(bytes)
+      @validating << path
+      abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
+      path
+    end
+
+    # A path besides the one in use goes, and the peer's ID it sent with
+    # is retired.
+    private def abandon_path(path)
+      @validating.delete(path)
+      path.abandon
+      connection_id = path.destination_connection_id
+      @peer_ids&.release(connection_id) if connection_id
     end
 
     # Protects the packets of a datagram and records them as sent. The
