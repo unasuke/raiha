@@ -157,8 +157,9 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     assert_kind_of QUIC::Event::Closed, sides.fetch(:client).quic_events.last
   end
 
-  # What `from` sends goes to `to` at `now`.
+  # What `from` sends goes to `to` at `now`, from the address of its end.
   private def deliver(from, to, now)
-    from.transmits(now:).each { |transmit| to.receive(transmit.payload, from: CLIENT, now:) }
+    address = from.role == :client ? CLIENT : SERVER
+    from.transmits(now:).each { |transmit| to.receive(transmit.payload, from: address, now:) }
   end
 end

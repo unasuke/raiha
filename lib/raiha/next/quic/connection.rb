@@ -396,6 +396,11 @@ module Raiha::Next::QUIC
       end
       @path.learn(local: to, remote: from) if @role == :client
       path = path_of(to, from)
+      # RFC 9000 "Connection Migration": nothing comes from a new address
+      # before the handshake is confirmed, and a client takes nothing from
+      # a server address it did not migrate to; it is dropped, and no path
+      # is made for it.
+      return dropped(:rejected, datagram.bytesize, now) unless path || (@role == :server && @handshake_confirmed)
       count_received(datagram, path, now) if path
       processed = false
       offset = 0
