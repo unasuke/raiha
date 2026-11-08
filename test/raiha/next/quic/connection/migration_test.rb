@@ -216,6 +216,25 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert server.take_stateless_reset(reset, from: ELSEWHERE, now:)
   end
 
+  # Rebindings one after another, with no ID left for the paths left to
+  # be validated again with, leave those paths for good, and their
+  # addresses go with them.
+  def test_paths_left_for_good_take_their_addresses_out
+    peers = Peers.new
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection(source_connection_id: "s".b * 8, peers:)
+    now = handshake(client, server)
+    issued = (1..2).map do |sequence_number|
+      QUIC::Wire::Frame::NewConnectionID.new(sequence_number:, retire_prior_to: 0, connection_id: format("c%07d", sequence_number).b,
+        stateless_reset_token: format("%016d", sequence_number).b)
+    end
+    server.receive(packet(keylog, ping, *issued, number: 999), from: CLIENT, to: SERVER, now:)
+    addresses = (1..4).map { ["198.51.100.#{_1}", 61_000] }
+    addresses.each_with_index { |address, index| server.receive(packet(keylog, ping, number: 1000 + index), from: address, to: SERVER, now:) }
+    assert_equal [addresses[0], addresses[3]], peers.addresses
+  end
+
   # A path that fails and is left for good takes its address out.
   def test_a_failed_path_takes_its_address_out
     peers = Peers.new

@@ -915,7 +915,7 @@ module Raiha::Next::QUIC
           # The path is the one to go back to once its validation is over,
           # the full datagram answered too, not when the answer to a short
           # one validates its address.
-          @last_validated = @path unless @path.validating?
+          remember_validated(@path) unless @path.validating?
           lift_amplification_limit(now)
         end
       end
@@ -1407,23 +1407,38 @@ module Raiha::Next::QUIC
       @validating.delete(path)
       start_validation(path, now) unless path.validating? || (path.validated? && !path.validation_owed?)
       left = @path
-      @last_validated = left if left.validated?
+      remember_validated(left) if left.validated?
       connection_id = path.destination_connection_id
       if connection_id && connection_id != @destination_connection_id
         @peer_ids&.switch(connection_id)
         left.send_with(@destination_connection_id)
         @destination_connection_id = connection_id
-      else
+      elsif revalidate
         left.send_with(@peer_ids&.claim)
       end
       lift_amplification_limit(now)
       @path = path
       @recovery.switch_path(path, now:)
-      return unless revalidate && left.destination_connection_id
-      start_validation(left, now)
-      @validating << left
-      make_room
+      if revalidate && left.destination_connection_id
+        start_validation(left, now)
+        @validating << left
+        make_room
+      end
+      abandon_path(left) unless kept?(left)
     end
+
+    # `path` is the one to go back to; the one before goes unless the
+    # connection keeps it otherwise.
+    private def remember_validated(path)
+      previous = @last_validated
+      @last_validated = path
+      abandon_path(previous) if previous && !kept?(previous)
+    end
+
+    # Whether the connection keeps `path`: the one in use, one besides it,
+    # or the one to go back to. A path it does not keep goes through
+    # abandon_path, so that its ID is retired and its address forgotten.
+    private def kept?(path) = path.equal?(@path) || path.equal?(@last_validated) || @validating.include?(path)
 
     # RFC 9000 "Responding to Connection Migration": the path in use failed
     # its validation, and the connection goes back to the path last
@@ -1434,7 +1449,6 @@ module Raiha::Next::QUIC
       last = @last_validated
       return close_silently("no validated path") if last.nil? || last.equal?(failed)
       switch_to(last, now, revalidate: false)
-      abandon_path(failed)
     end
 
     # Validation of `path` starts at `now`: a challenge each PTO of the
