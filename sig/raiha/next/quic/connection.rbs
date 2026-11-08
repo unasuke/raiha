@@ -8,7 +8,10 @@ module Raiha::Next::QUIC
     PROBED_SPACES: Array[space]
     SEND_AGAIN_AT_ONCE: Integer
     RETIRED_PTOS: Integer
+    VALIDATION_PTOS: Integer
     MAX_VALIDATING_PATHS: Integer
+    CHALLENGE_LENGTH: Integer
+    MIN_PROBE: Integer
     MIN_INITIAL_DATAGRAM: Integer
     INITIAL_DCID_LENGTH: Integer
     DEFAULT_ACK_DELAY_EXPONENT: Integer
@@ -67,6 +70,7 @@ module Raiha::Next::QUIC
     @zero_rtt_rejection_unacknowledged: bool
     @peer_ids: PeerConnectionIDs?
     @issued: IssuedConnectionIDs
+    @random: ::Raiha::Next::TLS::Keyring::_Random
     @validating: Array[Path]
     @last_validated: Path
     @state: :open | :closing | :draining | :closed
@@ -174,8 +178,10 @@ module Raiha::Next::QUIC
     private def transmit: (String payload, Path path, Integer? segment_size) -> Transmit
     private def path_of: (address? local, address? remote) -> Path?
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
-    private def probed_path: (address? local, address remote, Integer bytes) -> Path?
+    private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def abandon_path: (Path path) -> void
+    private def path_pto: (Path path) -> Float
+    private def validation_timeouts: () -> Array[Float]
     private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?path: Path) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String

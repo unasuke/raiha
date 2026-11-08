@@ -42,9 +42,17 @@ module Raiha::Next::QUIC
     # How many PTOs a connection ID the peer retired still leads to the
     # connection.
     RETIRED_PTOS = 3
+    # RFC 9000 "Failed Path Validation": a path not validated in three
+    # times the larger of the current PTO and the new path's fails.
+    VALIDATION_PTOS = 3
     # The most paths besides the one in use a connection keeps, being
     # validated or validated (CVE-2026-12707).
     MAX_VALIDATING_PATHS = 3
+    # The bytes of unpredictable data a PATH_CHALLENGE carries.
+    CHALLENGE_LENGTH = 8
+    # The least a probe of a path takes, which a path with less left of its
+    # amplification limit cannot send: no timer waits for it.
+    MIN_PROBE = 64
     # How many times a server sends its Initial flight again at once on a
     # ClientHello that comes again (RFC 9002 "Speeding up Handshake
     # Completion"): once is enough for one loss, and twice for a burst.
@@ -135,6 +143,7 @@ module Raiha::Next::QUIC
       new_token: nil, session: nil, issuer: nil, &start)
       @role = role
       @config = config
+      @random = random
       @version = config.versions.fetch(0)
       @created_at = now
       @time = time
@@ -467,7 +476,7 @@ module Raiha::Next::QUIC
         # A server at its amplification limit cannot send an ACK either, so
         # an ACK's deadline would only come round again and again.
         [@amplification_limited ? @recovery.loss_detection_timer : @recovery.next_timeout, @idle_deadline,
-          @protection.next_timeout, @path.pacing_release_at, @issued.next_timeout].compact.min
+          @protection.next_timeout, @path.pacing_release_at, @issued.next_timeout, *validation_timeouts].compact.min
       when :closing, :draining then @close_deadline
       end
     end
@@ -480,6 +489,7 @@ module Raiha::Next::QUIC
         return time_out_idly if idle && now >= idle
         @protection.handle_timeout(now:)
         @issued.handle_timeout(now)
+        @validating.select { |path| path.validation_failed?(now) }.each { |path| abandon_path(path) }
         outcome = @recovery.on_timeout(now:)
         Recovery::Duty.dispatch(outcome, to: self)
         probe(outcome.probe) if outcome.probe
@@ -774,7 +784,7 @@ module Raiha::Next::QUIC
       @bytes_received += length
       @eliciting_since_received = false
       adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
-      path ||= probing_frames?(frames) ? probed_path(to, from, packet.datagram.bytesize) : @path
+      path ||= probing_frames?(frames) ? probed_path(to, from, packet.datagram.bytesize, now) : @path
       frames.each { |frame| receive_frame(level, frame, now, unmasked.header.dcid, path) }
       if @role == :server && level == :handshake
         validate_address(now)
@@ -875,6 +885,7 @@ module Raiha::Next::QUIC
           path.challenged(frame.data)
           @non_probing_due = true if path.equal?(@path)
         end
+      when Wire::Frame::PathResponse then [@path, *@validating].find { |each| each.responded(frame.data, now:) }
       end
     end
 
@@ -1236,26 +1247,35 @@ module Raiha::Next::QUIC
 
     # A datagram of a path's probes alone (loss recovery's design,
     # "Probes"): the PATH_RESPONSE to a PATH_CHALLENGE waiting for its
-    # answer, the paths in turn, the one in use first. Padded to
-    # MIN_INITIAL_DATAGRAM bytes as far as the path's amplification limit
-    # lets it (RFC 9000 "Path Validation Responses"), it waits on neither
-    # the congestion window nor pacing, and counts nothing in flight. Lost,
-    # it does not go again: the peer sends a new challenge.
+    # answer, and a PATH_CHALLENGE of the path's validation when one is
+    # due, the paths in turn, the one in use first. Padded to
+    # MIN_INITIAL_DATAGRAM bytes when the path's amplification limit lets
+    # it, else as small as it is, so that what is left of the limit takes
+    # the challenges after (RFC 9000 "Path Validation"), it waits on
+    # neither the congestion window nor pacing, and counts nothing in
+    # flight. Lost, it does not go again: the peer sends a new challenge,
+    # and the validation its next.
     private def probing_datagram(now)
       return nil unless @protection.can_write?(:one_rtt)
       [@path, *@validating].each do |path|
-        response = path.challenge or next
-        frames = [Wire::Frame::PathResponse.new(data: response)] #: Array[Wire::Frame::t]
+        response = path.challenge
+        data = @random.bytes(CHALLENGE_LENGTH).b if path.challenge_due?(now)
+        frames = [] #: Array[Wire::Frame::t]
+        frames << Wire::Frame::PathResponse.new(data: response) if response
+        frames << Wire::Frame::PathChallenge.new(data:) if data
+        next if frames.empty?
         current = path.equal?(@path)
         header = Wire::ShortHeader.new(dcid: (current ? nil : path.destination_connection_id) || @destination_connection_id,
           key_phase: @protection.key_phase_bit)
         budget = current ? amplification_budget(now) : path.amplification_budget
         next if budget && budget < overhead(header) + Wire::Frame.encode(frames, ack_delay_exponent: 0).bytesize
-        path.answered
+        path.answered if response
         packet_number = @recovery.next_packet_number(:one_rtt)
         pending = Pending.new(level: :one_rtt, header:, packet_number:,
           packet_number_length: @recovery.packet_number_length(:one_rtt, packet_number), frames:, duties: [])
-        datagram = seal([pending], now, target: [MIN_INITIAL_DATAGRAM, budget].compact.min, probing: true, path:)
+        target = budget.nil? || budget >= MIN_INITIAL_DATAGRAM ? MIN_INITIAL_DATAGRAM : 0
+        datagram = seal([pending], now, target:, probing: true, path:)
+        path.challenge_sent(data, full_size: datagram.bytesize >= MIN_INITIAL_DATAGRAM, now:) if data
         path.datagram_sent(datagram.bytesize)
         return [datagram, path]
       end
@@ -1292,15 +1312,18 @@ module Raiha::Next::QUIC
 
     # A path for a probe from `remote` to `local` that the connection does
     # not know, which `bytes` came on. Once the handshake is confirmed, it
-    # sends with an ID of the peer's no path sends with. Past
-    # MAX_VALIDATING_PATHS, the oldest goes (CVE-2026-12707). nil before
-    # the handshake is confirmed, or with no ID to send with, when the
-    # probe goes unanswered.
-    private def probed_path(local, remote, bytes)
+    # sends with an ID of the peer's no path sends with, and is validated
+    # at once: a probe is answered with a probe (RFC 9000 "Probing a New
+    # Path"). Past MAX_VALIDATING_PATHS, the oldest goes (CVE-2026-12707).
+    # nil before the handshake is confirmed, or with no ID to send with,
+    # when the probe goes unanswered.
+    private def probed_path(local, remote, bytes, now)
       return nil unless @handshake_confirmed
       connection_id = @peer_ids&.claim or return nil
       path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
       path.datagram_received(bytes)
+      interval = path_pto(path)
+      path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
       @validating << path
       abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
       path
@@ -1313,6 +1336,20 @@ module Raiha::Next::QUIC
       path.abandon
       connection_id = path.destination_connection_id
       @peer_ids&.release(connection_id) if connection_id
+    end
+
+    # RFC 9002 "Computing PTO" for `path`, with the peer's max_ack_delay of
+    # Application Data.
+    private def path_pto(path) = path.rtt.pto_period + (@peer_parameters&.max_ack_delay || 0.0)
+
+    # When the validations of the paths want something next. A path with
+    # too little of its amplification limit left for a probe waits for no
+    # challenge, only for its deadline.
+    private def validation_timeouts
+      [@path, *@validating].filter_map do |path|
+        budget = path.amplification_budget
+        budget && budget < MIN_PROBE ? path.validation_deadline : path.validation_timeout
+      end
     end
 
     # Protects the packets of a datagram and records them as sent. The
