@@ -180,6 +180,30 @@ module Raiha::Next::QUIC
       private def instance_variables_to_inspect = %i[@remote @expires_at]
     end
 
+    # The connections by the peer addresses of their paths, which a
+    # datagram no connection ID leads anywhere is looked up by, for a
+    # stateless reset.
+    class Peers
+      def initialize
+        @connections = {} #: Hash[address, Array[Connection]]
+      end
+
+      # `connection` has a path to `address`.
+      def add(connection, address)
+        connections = @connections[address] ||= []
+        connections << connection unless connections.include?(connection)
+      end
+
+      # The connections with a path to `address`.
+      def of(address) = @connections[address] || []
+
+      # The connections closed are let go.
+      def prune
+        @connections.each_value { |connections| connections.delete_if(&:closed?) }
+        @connections.delete_if { |_, connections| connections.empty? }
+      end
+    end
+
     # How a connection has its Endpoint make connection IDs that lead to
     # it, each with its stateless reset token, for NEW_CONNECTION_ID frames,
     # and forget those the peer retired.
@@ -225,7 +249,7 @@ module Raiha::Next::QUIC
       # The connections by each connection ID that leads to them, and by the
       # peer's address.
       @connections = {} #: Hash[String, Connection]
-      @peers = {} #: Hash[address, Array[Connection]]
+      @peers = Peers.new
       # The offers by the Destination Connection ID of their Initials, and
       # the bytes they keep.
       @handles = {} #: Hash[String, Handle]
@@ -287,8 +311,7 @@ module Raiha::Next::QUIC
       connections.each { |connection| connection.handle_timeout(now:) }
       @handles.each_value.select { |handle| handle.expired?(now) }.each { |handle| forget(handle) }
       @connections.delete_if { |_, connection| connection.closed? }
-      @peers.each_value { |peers| peers.delete_if(&:closed?) }
-      @peers.delete_if { |_, peers| peers.empty? }
+      @peers.prune
     end
 
     # The second stage of the offer of `handle`: the Endpoint reads the
@@ -473,12 +496,12 @@ module Raiha::Next::QUIC
     # `datagram` came from that takes it as a Stateless Reset of its peer,
     # which then drains; nil when none does. A reset has a connection ID of
     # no connection, or none that reads.
-    private def reset_of(datagram, from, now) = @peers[from]&.find { |connection| connection.take_stateless_reset(datagram, now:) }
+    private def reset_of(datagram, from, now) = @peers.of(from).find { |connection| connection.take_stateless_reset(datagram, now:) }
 
     # Keeps `connection`, found by `ids` and by the address of its peer.
     private def add(connection, ids, peer)
       ids.each { |id| @connections[id] = connection }
-      (@peers[peer] ||= []) << connection
+      @peers.add(connection, peer)
       connection
     end
 

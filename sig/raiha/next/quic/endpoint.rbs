@@ -66,6 +66,15 @@ module Raiha::Next::QUIC
     @connection_ids: _ConnectionIDs
     @issuer: Issuer?
 
+    class Peers
+      @connections: Hash[address, Array[Connection]]
+
+      def initialize: () -> void
+      def add: (Connection connection, address address) -> void
+      def of: (address address) -> Array[Connection]
+      def prune: () -> void
+    end
+
     class Issuer
       include _Issuer
 
@@ -80,7 +89,7 @@ module Raiha::Next::QUIC
     @new_token_key: String
     @stateless_reset_key: String
     @connections: Hash[String, Connection]
-    @peers: Hash[address, Array[Connection]]
+    @peers: Peers
     @handles: Hash[String, Handle]
     @buffered: Integer
     @transmits: Array[Transmit]
