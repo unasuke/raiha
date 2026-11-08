@@ -1318,11 +1318,13 @@ module Raiha::Next::QUIC
     # The path `local` and `remote` name of those the connection keeps;
     # nil when it keeps none. An address not known on either side matches
     # any, and a server knows nothing of the path before the client's
-    # first Initial.
+    # first Initial. A client goes by the server's address alone: its own
+    # is the OS's to choose, which may change it, and a server answers
+    # where the client's packets come from.
     private def path_of(local, remote)
       return @path if @path.remote.nil?
       [@path, *@validating, @last_validated].find do |path|
-        path.remote == remote && (local.nil? || path.local.nil? || path.local == local)
+        path.remote == remote && (@role == :client || local.nil? || path.local.nil? || path.local == local)
       end
     end
 

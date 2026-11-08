@@ -122,6 +122,23 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_operator sent(server, keylog, now).sum { _2 }, :>, 3 * moving.bytesize
   end
 
+  # A client whose own address changes under it, which the OS chooses,
+  # takes what the server sends to the new one.
+  def test_a_client_takes_what_comes_to_a_new_address_of_its_own
+    client = client_connection
+    server = server_connection
+    now = handshake(client, server)
+    client.each_event { nil }
+    first = server.open_stream(direction: :uni)
+    server.stream_write(first, "hello", fin: true)
+    server.transmits(now:).each { client.receive(_1.payload, from: SERVER, to: CLIENT, now:) }
+    second = server.open_stream(direction: :uni)
+    server.stream_write(second, "again", fin: true)
+    server.transmits(now:).each { client.receive(_1.payload, from: SERVER, to: ELSEWHERE, now:) }
+    readable = [].tap { |events| client.each_event { events << _1 } }.grep(QUIC::Event::StreamReadable)
+    assert_equal [first, second], readable.map(&:stream_id)
+  end
+
   # A client takes nothing from a server address it did not migrate to.
   def test_a_client_drops_another_server_address
     client = client_connection
