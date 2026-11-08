@@ -194,6 +194,13 @@ module Raiha::Next::QUIC
         connections << connection unless connections.include?(connection)
       end
 
+      # `connection` has no path to `address` any more.
+      def remove(connection, address)
+        connections = @connections[address] or return
+        connections.delete(connection)
+        @connections.delete(address) if connections.empty?
+      end
+
       # The connections with a path to `address`.
       def of(address) = @connections[address] || []
 
@@ -287,7 +294,7 @@ module Raiha::Next::QUIC
       raise Error::Usage, "a server's Endpoint does not connect" unless @role == :client
       scid = new_connection_id
       connection = Connection.client(config: @config, tls_config:, keyring:, server_name:, remote:, time: wall_clock(now), now:, tracer:,
-        keylog:, source_connection_id: scid, token:, session:, early_data:, issuer: @issuer)
+        keylog:, source_connection_id: scid, token:, session:, early_data:, issuer: @issuer, peers: @peers)
       add(connection, [scid], remote)
     end
 
@@ -344,7 +351,8 @@ module Raiha::Next::QUIC
       connection = Connection.server(config: @config, tls_config:, keyring:, time: wall_clock(now), now:, tracer:, keylog:,
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
-        source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:, issuer: @issuer)
+        source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:, issuer: @issuer,
+        peers: @peers)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
@@ -496,7 +504,7 @@ module Raiha::Next::QUIC
     # `datagram` came from that takes it as a Stateless Reset of its peer,
     # which then drains; nil when none does. A reset has a connection ID of
     # no connection, or none that reads.
-    private def reset_of(datagram, from, now) = @peers.of(from).find { |connection| connection.take_stateless_reset(datagram, now:) }
+    private def reset_of(datagram, from, now) = @peers.of(from).find { |connection| connection.take_stateless_reset(datagram, from:, now:) }
 
     # Keeps `connection`, found by `ids` and by the address of its peer.
     private def add(connection, ids, peer)

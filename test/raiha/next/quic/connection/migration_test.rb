@@ -185,6 +185,53 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert(datagrams.any? { _1.first == CLIENT })
   end
 
+  # Keeps the addresses a connection tells it of.
+  class Peers
+    attr_reader :addresses
+
+    def initialize = @addresses = []
+
+    def add(_connection, address) = @addresses << address
+
+    def remove(_connection, address) = @addresses.delete(address)
+  end
+
+  # A connection tells its Endpoint's peers of the address of a path it
+  # moves to, and of one it leaves for good, so that a stateless reset
+  # from there finds it; only a reset with the token of the ID it sends
+  # with on a path to that address is one.
+  def test_the_addresses_of_the_paths_and_stateless_resets
+    peers = Peers.new
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection(source_connection_id: "s".b * 8, peers:)
+    now = handshake(client, server)
+    issued = QUIC::Wire::Frame::NewConnectionID.new(sequence_number: 1, retire_prior_to: 0, connection_id: "c0000001".b,
+      stateless_reset_token: "r".b * 16)
+    server.receive(packet(keylog, issued, number: 900), from: CLIENT, to: SERVER, now:)
+    server.receive(packet(keylog, ping, number: 1000, dcid: "x".b * 8), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal [ELSEWHERE], peers.addresses
+    reset = QUIC::StatelessReset.packet(token: "r".b * 16, length: 42, random: Random.new(5))
+    refute server.take_stateless_reset(reset, from: CLIENT, now:)
+    assert server.take_stateless_reset(reset, from: ELSEWHERE, now:)
+  end
+
+  # A path that fails and is left for good takes its address out.
+  def test_a_failed_path_takes_its_address_out
+    peers = Peers.new
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection(source_connection_id: "s".b * 8, peers:)
+    now = handshake(client, server)
+    server.receive(packet(keylog, ping, number: 999), from: CLIENT, to: SERVER, now:)
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal [ELSEWHERE], peers.addresses
+    sent(server, keylog, now)
+    run_timers(server, keylog, now) { |datagrams| datagrams.any? { _1.first == CLIENT } }
+    refute server.closed?
+    assert_empty peers.addresses
+  end
+
   # Neither path answering, there is no validated path to go back to: the
   # connection closes at once with nothing sent.
   def test_no_validated_path_left

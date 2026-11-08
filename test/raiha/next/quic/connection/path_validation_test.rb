@@ -13,10 +13,10 @@ class RaihaNextQUICConnectionPathValidationTest < Minitest::Test
   # A server done with the handshake, its connection ID "s" * 8, given
   # `ids` more IDs of the client's, "c0000001" on; the client's key log;
   # and the time.
-  def connected(ids: 3, config: QUIC::Config.new)
+  def connected(ids: 3, config: QUIC::Config.new, peers: nil)
     keylog = Keylog.new
     client = client_connection(keylog:)
-    server = server_connection(source_connection_id: "s".b * 8, config:)
+    server = server_connection(source_connection_id: "s".b * 8, config:, peers:)
     now = handshake(client, server)
     server.each_event { nil }
     issued = (1..ids).map do |sequence_number|
@@ -113,15 +113,29 @@ class RaihaNextQUICConnectionPathValidationTest < Minitest::Test
     assert_empty on(NEW, sent(server, keylog, now))
   end
 
+  # Keeps the addresses a connection tells it of.
+  class Peers
+    attr_reader :addresses
+
+    def initialize = @addresses = []
+
+    def add(_connection, address) = @addresses << address
+
+    def remove(_connection, address) = @addresses.delete(address)
+  end
+
   # Probes from a thousand addresses leave the server with three paths
   # besides the one in use, the newest, each the older's going as a newer
-  # comes (CVE-2026-12707).
+  # comes, and the Endpoint's peers with their addresses alone
+  # (CVE-2026-12707).
   def test_probes_from_a_thousand_addresses
-    server, keylog, now = connected(ids: 1000, config: QUIC::Config.new(active_connection_id_limit: 1001))
+    peers = Peers.new
+    server, keylog, now = connected(ids: 1000, config: QUIC::Config.new(active_connection_id_limit: 1001), peers:)
     (1..1000).each do |i|
       server.receive(packet(keylog, challenge([i].pack("Q>")), number: 2000 + i), from: ["203.0.113.1", 10_000 + i], to: SERVER, now:)
     end
     destinations = sent(server, keylog, now).map(&:first).uniq - [CLIENT]
     assert_equal [10_998, 10_999, 11_000], destinations.map(&:last).sort
+    assert_equal destinations.sort, peers.addresses.sort
   end
 end

@@ -31,26 +31,25 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
     assert_violation(QUIC::ErrorCode::CONNECTION_ID_LIMIT_ERROR) { peer.receive(new_id(4)) }
   end
 
-  # RFC 9000 "Detecting a Stateless Reset": only the token of the ID in
-  # use counts, not those of the IDs not yet used.
-  def test_the_reset_token_of_the_id_in_use
+  # RFC 9000 "Detecting a Stateless Reset": the tokens of the IDs a
+  # connection sends with, of those still active.
+  def test_the_reset_tokens_of_the_ids_sent_with
     peer = ids
     (1..3).each { peer.receive(new_id(_1)) }
-    assert_equal ["t".b * 16], peer.reset_tokens
+    assert_equal ["t".b * 16, new_id(2).stateless_reset_token], peer.reset_tokens(["\x00".b * 8, new_id(2).connection_id, "x".b * 8])
   end
 
   # A path besides the one in use claims an ID no path sends with, the
-  # lowest first, whose token then counts for a stateless reset; given
-  # back, the ID is retired. Zero-length IDs are the same for every path.
+  # lowest first; given back, the ID is retired, and its token counts no
+  # more. Zero-length IDs are the same for every path.
   def test_claim_and_release
     peer = ids
     (1..2).each { peer.receive(new_id(_1)) }
     assert_equal [new_id(1).connection_id, new_id(2).connection_id, nil], 3.times.map { peer.claim }
-    assert_equal ["t".b * 16, new_id(1).stateless_reset_token, new_id(2).stateless_reset_token], peer.reset_tokens
     peer.release(new_id(1).connection_id)
     peer.release(new_id(1).connection_id)
     assert_equal [1], retirements(peer)
-    assert_equal ["t".b * 16, new_id(2).stateless_reset_token], peer.reset_tokens
+    assert_empty peer.reset_tokens([new_id(1).connection_id])
     assert_equal "".b, ids(first: "".b).claim
   end
 
@@ -62,7 +61,7 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
     peer.receive(new_id(2, retire_prior_to: 2))
     assert_equal new_id(2).connection_id, peer.current
     assert_equal [0, 1], retirements(peer)
-    assert_equal [new_id(2).stateless_reset_token], peer.reset_tokens
+    assert_equal [new_id(2).stateless_reset_token], peer.reset_tokens([peer.current])
   end
 
   # One that comes numbered below Retire Prior To goes straight back.

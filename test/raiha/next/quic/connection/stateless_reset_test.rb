@@ -42,9 +42,9 @@ class RaihaNextQUICConnectionStatelessResetTest < Minitest::Test
   # whether it is a reset of theirs.
   def test_a_reset_of_no_packet_of_the_connection
     client, now = connected
-    refute client.take_stateless_reset(reset("x".b * 16), now:)
-    assert client.take_stateless_reset(reset(TOKEN), now:)
+    refute client.take_stateless_reset(reset("x".b * 16), from: SERVER, now:)
+    assert client.take_stateless_reset(reset(TOKEN), from: SERVER, now:)
     assert client.draining?
-    refute client.take_stateless_reset(reset(TOKEN), now:)
+    refute client.take_stateless_reset(reset(TOKEN), from: SERVER, now:)
   end
 end

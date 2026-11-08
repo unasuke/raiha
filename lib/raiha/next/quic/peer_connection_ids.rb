@@ -44,11 +44,11 @@ module Raiha::Next::QUIC
       @claimed = [] #: Array[String]
     end
 
-    # The stateless reset tokens a datagram that no packet of the
-    # connection opens is compared with: those of the IDs this end sends
-    # with, not of those active and not yet used, nor of those retired
-    # (RFC 9000 "Detecting a Stateless Reset").
-    def reset_tokens = @active.select { |entry| in_use?(entry.connection_id) }.filter_map(&:stateless_reset_token)
+    # The stateless reset tokens of `connection_ids`, the IDs this end
+    # sends with on the paths to the address a datagram that no packet of
+    # the connection opens came from; not of those active and not yet
+    # used, nor of those retired (RFC 9000 "Detecting a Stateless Reset").
+    def reset_tokens(connection_ids) = @active.select { |entry| connection_ids.include?(entry.connection_id) }.filter_map(&:stateless_reset_token)
 
     # An ID for a path to send with that no path has sent with, the lowest
     # first; nil when there is none. Zero-length IDs are always there.

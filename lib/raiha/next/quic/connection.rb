@@ -92,15 +92,16 @@ module Raiha::Next::QUIC
     # frames carry before the handshake completes goes in 0-RTT packets, to
     # the limits the session remembers (`zero_rtt_state`). An Endpoint's
     # `issuer` makes the connection IDs it issues once the handshake is
-    # confirmed; with none, it issues none.
+    # confirmed; with none, it issues none. Its `peers` learn the address
+    # of each path the connection has, for a stateless reset to find it.
     def self.client(config:, tls_config:, keyring:, server_name:, remote:, time:, now:, tracer: nil, keylog: nil, source_connection_id: nil,
-      token: nil, session: nil, early_data: false, issuer: nil)
+      token: nil, session: nil, early_data: false, issuer: nil, peers: nil)
       raise ArgumentError, "a token is a String of one byte or more" unless token.nil? || (token.is_a?(String) && !token.empty?)
       raise ArgumentError, "session must be a QUIC::Session" unless session.nil? || session.is_a?(Session)
       raise ArgumentError, "early_data must be true or false" unless early_data == true || early_data == false
       zero_rtt = early_data && !session.nil? && session.version == config.versions.fetch(0).number
       new(role: :client, config:, now:, time:, remote:, tracer:, random: keyring.random, source_connection_id:, token:,
-        session:, issuer:) do |connection, parameters|
+        session:, issuer:, peers:) do |connection, parameters|
         TLSBinding.client(connection:, config: tls_config, keyring:, server_name:, transport_parameters: parameters, time:, tracer:, keylog:,
           session: session&.tls, early_data: zero_rtt)
       end
@@ -122,15 +123,15 @@ module Raiha::Next::QUIC
     # opens on none of it (RFC 9369 "TLS Resumption and NEW_TOKEN Tokens").
     # `anti_replay` is the record of the 0-RTT taken, which a TLS Config that
     # takes 0-RTT needs, and `app_early_data_context` what of the application
-    # 0-RTT is taken only if the same of (TLSBinding.server). `issuer` is
-    # as of a client.
+    # 0-RTT is taken only if the same of (TLSBinding.server). `issuer` and
+    # `peers` are as of a client.
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil)
+      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil, peers: nil)
       raise ArgumentError, "app_early_data_context must be a String" unless app_early_data_context.is_a?(String)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
         retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:,
-        issuer:) do |connection, parameters|
+        issuer:, peers:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:,
           version: config.versions.fetch(0), anti_replay:, app_early_data_context:)
       end
@@ -140,7 +141,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      new_token: nil, session: nil, issuer: nil, &start)
+      new_token: nil, session: nil, issuer: nil, peers: nil, &start)
       @role = role
       @config = config
       @random = random
@@ -165,6 +166,7 @@ module Raiha::Next::QUIC
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
       @issued = IssuedConnectionIDs.new(@source_connection_id, issuer:, connection: self)
+      @peers = peers
       @stateless_reset_token = stateless_reset_token
       @peer_parameters = nil #: TransportParameters?
       @handshake_complete = false
@@ -414,7 +416,7 @@ module Raiha::Next::QUIC
         offset = packet.end_offset
         break unless @state == :open
       end
-      take_stateless_reset(datagram, now:) unless processed
+      take_stateless_reset(datagram, from:, now:) unless processed
       if @state == :open && @events.size > MAX_EVENTS
         raise Violation.new("more than #{MAX_EVENTS} events not taken", code: ErrorCode::INTERNAL_ERROR)
       end
@@ -427,10 +429,13 @@ module Raiha::Next::QUIC
 
     # RFC 9000 "Detecting a Stateless Reset": whether `datagram`, none of
     # whose packets this connection could take, ends in a stateless reset
-    # token the peer gave, which the connection then drains on, sending
+    # token the peer gave of an ID this end sends with on a path to `from`,
+    # the address it came from; the connection then drains on it, sending
     # nothing more. Each token is compared in constant time.
-    def take_stateless_reset(datagram, now:)
-      return false unless @state == :open && StatelessReset.match?(datagram, @peer_ids&.reset_tokens || [])
+    def take_stateless_reset(datagram, from:, now:)
+      paths = [@path, *@validating].select { |path| path.remote == from }
+      ids = paths.filter_map { |path| path.equal?(@path) ? @destination_connection_id : path.destination_connection_id }
+      return false unless @state == :open && StatelessReset.match?(datagram, @peer_ids&.reset_tokens(ids) || [])
       enter_draining(ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "stateless reset", application: false), now)
       true
     end
@@ -1361,6 +1366,7 @@ module Raiha::Next::QUIC
       path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
       path.datagram_received(bytes)
       start_validation(path, now)
+      @peers&.add(self, remote)
       @validating << path
       make_room
       path
@@ -1383,6 +1389,7 @@ module Raiha::Next::QUIC
         connection_id = (@peer_ids&.claim or return nil) unless dcid == @received_dcid
         path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
         path.datagram_received(bytes)
+        @peers&.add(self, remote)
       end
       switch_to(path, now)
       path
@@ -1461,6 +1468,9 @@ module Raiha::Next::QUIC
       @validating.delete(path)
       @last_validated = nil if path.equal?(@last_validated)
       path.abandon
+      remote = path.remote
+      kept = [@path, *@validating, @last_validated].compact.any? { |each| each.remote == remote }
+      @peers&.remove(self, remote) if remote && !kept
       connection_id = path.destination_connection_id
       @peer_ids&.release(connection_id) if connection_id
     end

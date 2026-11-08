@@ -1,4 +1,10 @@
 module Raiha::Next::QUIC
+  # What a connection tells the addresses of its paths' peers to.
+  interface _Peers
+    def add: (Connection connection, address address) -> void
+    def remove: (Connection connection, address address) -> void
+  end
+
   class Endpoint
     MAX_RESET_LENGTH: Integer
     RESET_BURST: Float
@@ -67,10 +73,11 @@ module Raiha::Next::QUIC
     @issuer: Issuer?
 
     class Peers
+      include _Peers
+
       @connections: Hash[address, Array[Connection]]
 
       def initialize: () -> void
-      def add: (Connection connection, address address) -> void
       def of: (address address) -> Array[Connection]
       def prune: () -> void
     end
