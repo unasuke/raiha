@@ -216,6 +216,28 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert server.take_stateless_reset(reset, from: ELSEWHERE, now:)
   end
 
+  # The client moves, the new path's address is validated by a short
+  # challenge, and the client comes back before the full one is
+  # answered: the server moves back to the path it left, which goes on,
+  # and the path it leaves now is validated again.
+  def test_back_to_the_path_left
+    server, keylog, id, now = connected
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    first = challenges(sent(server, keylog, now))
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: first.fetch(ELSEWHERE).last), number: 1001), from: ELSEWHERE,
+      to: SERVER, now:)
+    sent(server, keylog, now)
+    server.receive(packet(keylog, ping, number: 1003), from: CLIENT, to: SERVER, now:)
+    refute server.path.abandoned?
+    assert_equal CLIENT, server.path.remote
+    assert_equal({ ELSEWHERE => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: first.fetch(CLIENT).last), number: 1004), from: CLIENT,
+      to: SERVER, now:)
+    run_timers(server, keylog, now) { false }
+    refute server.closed?, server.close_reason&.reason
+    assert_equal CLIENT, server.path.remote
+  end
+
   # Rebindings one after another, with no ID left for the paths left to
   # be validated again with, leave those paths for good, and their
   # addresses go with them.

@@ -1407,7 +1407,8 @@ module Raiha::Next::QUIC
       @validating.delete(path)
       start_validation(path, now) unless path.validating? || (path.validated? && !path.validation_owed?)
       left = @path
-      remember_validated(left) if left.validated?
+      previous = @last_validated
+      @last_validated = left if left.validated? && !left.validating?
       connection_id = path.destination_connection_id
       if connection_id && connection_id != @destination_connection_id
         @peer_ids&.switch(connection_id)
@@ -1424,7 +1425,9 @@ module Raiha::Next::QUIC
         @validating << left
         make_room
       end
-      abandon_path(left) unless kept?(left)
+      # What goes is decided once the move is over: the path moved to may
+      # be the one to go back to before.
+      [left, previous].uniq.each { |each| abandon_path(each) if each && !kept?(each) }
     end
 
     # `path` is the one to go back to; the one before goes unless the
