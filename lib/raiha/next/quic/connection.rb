@@ -1442,11 +1442,14 @@ module Raiha::Next::QUIC
     # goes, or, when it is the path last validated, stops being validated
     # again and stays, with its ID, to go back to: it is kept apart from
     # the paths being validated, so that probes from new addresses cannot
-    # leave a connection nothing to go back to.
+    # leave a connection nothing to go back to, and its validation stops,
+    # so that its deadline does not fail it once it is gone back to.
     private def make_room
       while @validating.size > MAX_VALIDATING_PATHS
         oldest = @validating.fetch(0)
-        oldest.equal?(@last_validated) ? @validating.delete(oldest) : abandon_path(oldest)
+        next abandon_path(oldest) unless oldest.equal?(@last_validated)
+        @validating.delete(oldest)
+        oldest.stop_validation
       end
     end
 

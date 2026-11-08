@@ -133,7 +133,8 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
 
   # Probes from new addresses push the path left out of the paths being
   # validated, but it stays the one to go back to when the new path
-  # fails.
+  # fails, and the connection goes on there, its validation stopped and
+  # failing nothing.
   def test_probes_leave_the_path_to_go_back_to
     server, keylog, _, now = connected(ids: 5, config: QUIC::Config.new(active_connection_id_limit: 8))
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
@@ -146,6 +147,8 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     datagrams = run_timers(server, keylog, now) { |sent| sent.any? { _1.first == CLIENT } }
     refute server.closed?
     assert(datagrams.any? { _1.first == CLIENT })
+    run_timers(server, keylog, server.next_timeout) { false }
+    refute server.closed?, server.close_reason&.reason
   end
 
   # The answer to a short challenge validates the new path's address, but

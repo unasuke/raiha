@@ -49,6 +49,7 @@ module Raiha::Next::QUIC
     def send_with: (String? connection_id) -> void
     def start_validation: (now: Float, interval: Float, deadline: Float) -> void
     def validating?: () -> bool
+    def stop_validation: () -> void
     def challenge_due?: (Float now) -> bool
     def challenge_sent: (String data, full_size: bool, now: Float) -> void
     def responded: (String data, now: Float) -> bool

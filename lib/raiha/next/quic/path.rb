@@ -117,6 +117,13 @@ module Raiha::Next::QUIC
     # Whether the path is being validated.
     def validating? = !@validation_deadline.nil?
 
+    # The validation stops where it is, neither failing nor succeeding.
+    def stop_validation
+      @challenge_due_at = @challenge_interval = @validation_deadline = nil
+      @challenges_sent = {}
+      @full_size_due = false
+    end
+
     # Whether a PATH_CHALLENGE is due on the path at `now`.
     def challenge_due?(now)
       due = @challenge_due_at
