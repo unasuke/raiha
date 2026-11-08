@@ -907,7 +907,10 @@ module Raiha::Next::QUIC
       when Wire::Frame::PathResponse
         answered = [@path, *@validating].find { |each| each.responded(frame.data, now:) }
         if answered.equal?(@path)
-          @last_validated = @path
+          # The path is the one to go back to once its validation is over,
+          # the full datagram answered too, not when the answer to a short
+          # one validates its address.
+          @last_validated = @path unless @path.validating?
           lift_amplification_limit(now)
         end
       end
@@ -1359,7 +1362,7 @@ module Raiha::Next::QUIC
       path.datagram_received(bytes)
       start_validation(path, now)
       @validating << path
-      abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
+      make_room
       path
     end
 
@@ -1412,7 +1415,7 @@ module Raiha::Next::QUIC
       return unless revalidate && left.destination_connection_id
       start_validation(left, now)
       @validating << left
-      abandon_path(@validating.fetch(0)) while @validating.size > MAX_VALIDATING_PATHS
+      make_room
     end
 
     # RFC 9000 "Responding to Connection Migration": the path in use failed
@@ -1433,6 +1436,18 @@ module Raiha::Next::QUIC
     private def start_validation(path, now)
       interval = path_pto(path)
       path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
+    end
+
+    # Past MAX_VALIDATING_PATHS, the oldest path besides the one in use
+    # goes, or, when it is the path last validated, stops being validated
+    # again and stays, with its ID, to go back to: it is kept apart from
+    # the paths being validated, so that probes from new addresses cannot
+    # leave a connection nothing to go back to.
+    private def make_room
+      while @validating.size > MAX_VALIDATING_PATHS
+        oldest = @validating.fetch(0)
+        oldest.equal?(@last_validated) ? @validating.delete(oldest) : abandon_path(oldest)
+      end
     end
 
     # A path besides the one in use goes, and the peer's ID it sent with

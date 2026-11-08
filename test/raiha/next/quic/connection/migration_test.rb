@@ -26,10 +26,10 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
   # A server done with the handshake, its connection ID "s" * 8, given
   # `ids` more IDs of the client's, "c0000001" on; the client's key log;
   # the client's ID in use; and the time.
-  def connected(ids: 3)
+  def connected(ids: 3, config: QUIC::Config.new)
     keylog = Keylog.new
     client = client_connection(keylog:)
-    server = server_connection(source_connection_id: "s".b * 8)
+    server = server_connection(source_connection_id: "s".b * 8, config:)
     now = handshake(client, server)
     server.each_event { nil }
     issued = (1..ids).map do |sequence_number|
@@ -116,6 +116,54 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal [1], retired
     assert_equal [CLIENT], datagrams.map(&:first).uniq
     refute server.closed?
+  end
+
+  # Runs the server's timers until `until` says so or ten seconds pass;
+  # the datagrams it sent last.
+  def run_timers(server, keylog, now, &until_)
+    datagrams = []
+    until now > 10.0 || server.closed?
+      now = server.next_timeout
+      server.handle_timeout(now:)
+      datagrams = server.closed? ? [] : sent(server, keylog, now)
+      break if until_.(datagrams)
+    end
+    datagrams
+  end
+
+  # Probes from new addresses push the path left out of the paths being
+  # validated, but it stays the one to go back to when the new path
+  # fails.
+  def test_probes_leave_the_path_to_go_back_to
+    server, keylog, _, now = connected(ids: 5, config: QUIC::Config.new(active_connection_id_limit: 8))
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    sent(server, keylog, now)
+    (1..3).each do |i|
+      probe = packet(keylog, QUIC::Wire::Frame::PathChallenge.new(data: [i].pack("Q>")), number: 1000 + i)
+      server.receive(probe, from: ["203.0.113.1", 20_000 + i], to: SERVER, now:)
+    end
+    sent(server, keylog, now)
+    datagrams = run_timers(server, keylog, now) { |sent| sent.any? { _1.first == CLIENT } }
+    refute server.closed?
+    assert(datagrams.any? { _1.first == CLIENT })
+  end
+
+  # The answer to a short challenge validates the new path's address, but
+  # the path is not the one to go back to until a full datagram is
+  # answered: that unanswered, the server goes back to the path it left.
+  def test_a_short_answer_does_not_make_the_path_to_go_back_to
+    server, keylog, _, now = connected
+    server.receive(packet(keylog, ping, number: 1000, dcid: "x".b * 8), from: ELSEWHERE, to: SERVER, now:)
+    first = challenges(sent(server, keylog, now))
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: first.fetch(CLIENT).last), number: 1001), from: CLIENT, to: SERVER,
+      now:)
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data: first.fetch(ELSEWHERE).last), number: 1002), from: ELSEWHERE,
+      to: SERVER, now:)
+    full = sent(server, keylog, now).select { _1.first == ELSEWHERE }
+    assert(full.any? { |_, size, _, frames| size == 1200 && frames.any?(QUIC::Wire::Frame::PathChallenge) })
+    datagrams = run_timers(server, keylog, now) { |sent| sent.any? { _1.first == CLIENT } }
+    refute server.closed?
+    assert(datagrams.any? { _1.first == CLIENT })
   end
 
   # Neither path answering, there is no validated path to go back to: the
