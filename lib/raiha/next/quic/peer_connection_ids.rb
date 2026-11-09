@@ -3,7 +3,8 @@
 module Raiha::Next::QUIC
   # The connection IDs the peer issued for this end to send to (RFC 9000
   # "Issuing Connection IDs" and "Consuming and Retiring Connection IDs"):
-  # the one of the handshake, sequence number 0, and those NEW_CONNECTION_ID
+  # the one of the handshake, sequence number 0, that of a server's
+  # preferred address, sequence number 1, and those NEW_CONNECTION_ID
   # frames bring, with their stateless reset tokens.
   #
   # Retire Prior To retires the IDs numbered below it, the one in use too,
@@ -29,11 +30,16 @@ module Raiha::Next::QUIC
     attr_reader :current
 
     # The peer's first ID, sequence number 0, with the stateless reset token
-    # its transport parameters gave, if any; `limit` is this end's
+    # its transport parameters gave, if any, and the ID of the preferred
+    # address they gave, if any; `limit` is this end's
     # active_connection_id_limit.
-    def initialize(connection_id, stateless_reset_token:, limit:)
+    def initialize(connection_id, stateless_reset_token:, limit:, preferred_address: nil)
       @limit = limit
       @active = [Entry.new(sequence_number: 0, connection_id:, stateless_reset_token:)]
+      if preferred_address
+        @active << Entry.new(sequence_number: 1, connection_id: preferred_address.connection_id,
+          stateless_reset_token: preferred_address.stateless_reset_token)
+      end
       @current = connection_id
       @retire_prior_to = 0
       # The sequence numbers to retire, and those retired and not yet

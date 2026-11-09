@@ -21,7 +21,8 @@ module Raiha::Next::QUIC
 
     attr_reader current: String
 
-    def initialize: (String connection_id, stateless_reset_token: String?, limit: Integer) -> void
+    def initialize: (String connection_id, stateless_reset_token: String?, limit: Integer,
+                     ?preferred_address: TransportParameters::PreferredAddress?) -> void
     def reset_tokens: (Array[String] connection_ids) -> Array[String]
     def claim: () -> String?
     def claimed?: (String connection_id) -> bool

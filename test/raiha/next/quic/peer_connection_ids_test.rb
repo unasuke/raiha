@@ -53,6 +53,20 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
     assert_equal "".b, ids(first: "".b).claim
   end
 
+  # The ID of a server's preferred address is sequence number 1, claimed
+  # and counted towards the limit as any other, with its token.
+  def test_the_preferred_address
+    preferred = QUIC::TransportParameters::PreferredAddress.new(ipv4: ["192.0.2.2", 4434], ipv6: nil, connection_id: new_id(1).connection_id,
+      stateless_reset_token: new_id(1).stateless_reset_token)
+    peer = QUIC::PeerConnectionIDs.new("\x00".b * 8, stateless_reset_token: "t".b * 16, limit: 3, preferred_address: preferred)
+    assert_equal new_id(1).connection_id, peer.claim
+    assert_equal [new_id(1).stateless_reset_token], peer.reset_tokens([new_id(1).connection_id])
+    peer.receive(new_id(1))
+    assert_violation(QUIC::ErrorCode::PROTOCOL_VIOLATION) { peer.receive(new_id(1, connection_id: "z".b * 8)) }
+    peer.receive(new_id(2))
+    assert_violation(QUIC::ErrorCode::CONNECTION_ID_LIMIT_ERROR) { peer.receive(new_id(3)) }
+  end
+
   # Retire Prior To retires the IDs below it, the one in use too, which
   # gives way to the lowest active.
   def test_retire_prior_to

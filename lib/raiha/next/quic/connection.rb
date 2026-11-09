@@ -571,7 +571,7 @@ module Raiha::Next::QUIC
       authenticate_connection_ids(parameters)
       check_zero_rtt_limits(parameters)
       @peer_ids = PeerConnectionIDs.new(@destination_connection_id, stateless_reset_token: parameters.stateless_reset_token,
-        limit: @config.active_connection_id_limit)
+        limit: @config.active_connection_id_limit, preferred_address: parameters.preferred_address)
       @tracer.parameters_set(owner: :remote, parameters:, now: @now) if @tracer # steep:ignore
       @peer_parameters = parameters
       @streams.peer_parameters = parameters
