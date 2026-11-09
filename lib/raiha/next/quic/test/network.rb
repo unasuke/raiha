@@ -10,6 +10,9 @@ module Raiha::Next::QUIC::Test
   # anything with `receive(payload, from:, to:, ecn:, now:)`,
   # `each_transmit(now:)`, `next_timeout` and `handle_timeout(now:)`, added at
   # an address; what it sends goes to the node at the destination address.
+  # A node can have more addresses, and sends from the one a Transmit names
+  # as its source. An address can be put behind a NAT, which gives what is
+  # sent from it another source address.
   #
   # Between two nodes a link puts a path model, or an array of them in order:
   # a value whose `start(random:)` gives the state of one direction, with
@@ -34,6 +37,8 @@ module Raiha::Next::QUIC::Test
       @addresses = {} #: Hash[_Node, Raiha::Next::QUIC::address]
       @addresses.compare_by_identity
       @links = {} #: Hash[[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address], _Path]
+      @outside = {} #: Hash[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address]
+      @inside = {} #: Hash[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address]
       @direct = Direct.new
     end
 
@@ -42,13 +47,35 @@ module Raiha::Next::QUIC::Test
     # Puts `node` on the network at `address` ([host, port]) and gives it
     # back.
     def add(node, address:)
-      raise ArgumentError, "#{address.inspect} is taken" if @nodes.key?(address)
-      @nodes[address] = node
+      take(address, node)
       @addresses[node] = address
       node
     end
 
+    # The address `node` was added at.
     def address_of(node) = @addresses.fetch(node)
+
+    # Gives `node`, already on the network, another address, as a server's
+    # second address it offers as its preferred address.
+    def add_address(node, address:)
+      address_of(node)
+      take(address, node)
+      self
+    end
+
+    # Puts a node's address `inside` behind a NAT, or changes the NAT's
+    # binding: from now on, what the node sends from `inside` leaves from
+    # `to`, and what comes to `to` reaches the node at `inside`. What comes
+    # to the address it was seen at before is lost, as when a NAT has
+    # dropped the binding.
+    def rebind(inside, to:)
+      raise ArgumentError, "no node is at #{inside.inspect}" unless @nodes.key?(inside)
+      raise ArgumentError, "#{to.inspect} is taken" if @nodes.key?(to) || @inside.key?(to)
+      @inside.delete(@outside[inside])
+      @outside[inside] = to
+      @inside[to] = inside
+      self
+    end
 
     # Puts a server's Endpoint on the network at `address`, run by a
     # Test::Server that takes every offer with `tls_config` and `keyring`,
@@ -101,16 +128,16 @@ module Raiha::Next::QUIC::Test
     private def settle
       MAX_ROUNDS.times do
         moved = false
-        @nodes.each_value do |node|
+        @addresses.each_key do |node|
           timeout = node.next_timeout
           next unless timeout && timeout <= now
           moved = true
           node.handle_timeout(now:)
         end
-        @nodes.each do |address, node|
+        @addresses.each_key do |node|
           node.each_transmit(now:) do |transmit|
             moved = true
-            transmit_from(address, transmit)
+            transmit_from(node, transmit)
           end
         end
         each_path do |path|
@@ -124,18 +151,36 @@ module Raiha::Next::QUIC::Test
       raise Stuck, "still sending at #{now}"
     end
 
-    private def transmit_from(source, transmit)
+    # Sends from the address the Transmit names, or the one the node was
+    # added at, which the NAT the node is behind changes; over the link
+    # between the node and the one at the destination, whichever addresses
+    # they use.
+    private def transmit_from(node, transmit)
+      source = transmit.source || address_of(node)
+      raise ArgumentError, "#{source.inspect} is not an address of the node" unless @nodes[source].equal?(node) # steep:ignore
       payload = transmit.payload
       size = transmit.segment_size || payload.bytesize
-      path = @links.fetch([source, transmit.destination], @direct)
+      receiver = (to = inside(transmit.destination)) && @nodes[to]
+      path = receiver ? @links.fetch([address_of(node), address_of(receiver)], @direct) : @direct
+      source = @outside.fetch(source, source)
       0.step(payload.bytesize - 1, size) do |offset|
         path.submit(Datagram.new(payload: payload.byteslice(offset, size), source:, destination: transmit.destination, ecn: transmit.ecn), now:) # steep:ignore
       end
     end
 
     private def deliver(datagram)
-      node = @nodes[datagram.destination] or return
-      node.receive(datagram.payload, from: datagram.source, to: datagram.destination, ecn: datagram.ecn, now:)
+      to = inside(datagram.destination) or return
+      node = @nodes[to] or return
+      node.receive(datagram.payload, from: datagram.source, to:, ecn: datagram.ecn, now:)
+    end
+
+    # The address on the network a datagram to `address` reaches: through
+    # the NAT, or none for an address the NAT hides.
+    private def inside(address) = @inside.fetch(address) { address unless @outside.key?(address) }
+
+    private def take(address, node)
+      raise ArgumentError, "#{address.inspect} is taken" if @nodes.key?(address) || @inside.key?(address)
+      @nodes[address] = node
     end
 
     private def each_path(&)
@@ -145,7 +190,7 @@ module Raiha::Next::QUIC::Test
 
     # When something happens next, after everything due now has happened.
     private def next_event
-      times = @nodes.each_value.filter_map(&:next_timeout)
+      times = @addresses.each_key.filter_map(&:next_timeout)
       each_path { |path| (time = path.next_timeout) && times << time }
       time = times.min
       raise Stuck, "#{time} is still due at #{now}" if time && time <= now

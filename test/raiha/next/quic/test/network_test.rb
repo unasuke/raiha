@@ -50,13 +50,16 @@ class RaihaNextQUICTestNetworkTest < Minitest::Test
     def next_timeout = @sends.first&.first
 
     def handle_timeout(now:) = nil
+
+    # Sends `transmit` at `time`, after what it sends before then.
+    def push(time, transmit) = @sends << [time, transmit]
   end
 
   # Sends back whatever it receives.
   class Echo < Node
     def receive(payload, from:, to:, ecn:, now:)
       super
-      @sends << [now, QUIC::Transmit.new(payload:, destination: from, source: nil, ecn:, segment_size: nil)]
+      push(now, QUIC::Transmit.new(payload:, destination: from, source: nil, ecn:, segment_size: nil))
     end
   end
 
@@ -133,6 +136,59 @@ class RaihaNextQUICTestNetworkTest < Minitest::Test
     b = net.add(Node.new, address: B)
     net.advance(0.0)
     assert_equal %w[abc def g], b.received.map(&:first)
+  end
+
+  # Behind a NAT, what a node sends leaves from the NAT's address, and what
+  # comes back to that address reaches the node at its own. Once the NAT
+  # binds another, what comes to the address before is lost, as is what
+  # comes to the node's own address.
+  def test_a_nat
+    net = Test::Network.new(seed: 1)
+    a = net.add(Node.new(0.0 => transmit("one".b), 1.0 => transmit("two".b)), address: A)
+    b = net.add(Echo.new, address: B)
+    net.rebind(A, to: ["203.0.113.1", 50_000])
+    net.advance(0.5)
+    assert_equal [["one", ["203.0.113.1", 50_000], B]], b.received.map { _1.take(3) }
+    assert_equal [["one", B, A]], a.received.map { _1.take(3) }
+    net.rebind(A, to: ["203.0.113.2", 50_001])
+    b.received.clear
+    b.push(1.0, transmit("old".b, to: ["203.0.113.1", 50_000]))
+    b.push(1.0, transmit("own".b, to: A))
+    net.advance(1.0)
+    assert_equal [["two", ["203.0.113.2", 50_001], B]], b.received.map { _1.take(3) }
+    assert_equal %w[one two], a.received.map(&:first)
+  end
+
+  # A node with a second address takes what comes to it, and sends from
+  # it when a Transmit names it as the source; it cannot send from an
+  # address that is not its own.
+  def test_a_second_address
+    net = Test::Network.new(seed: 1)
+    a = net.add(Node.new(0.0 => transmit("ping".b, to: ["192.0.2.3", 443])), address: A)
+    b = net.add(Node.new, address: B)
+    net.add_address(b, address: ["192.0.2.3", 443])
+    net.advance(0.0)
+    assert_equal [["ping", A, ["192.0.2.3", 443]]], b.received.map { _1.take(3) }
+    b.push(0.0, QUIC::Transmit.new(payload: "pong".b, destination: A, source: ["192.0.2.3", 443], ecn: :not_ect, segment_size: nil))
+    net.advance(0.0)
+    assert_equal [["pong", ["192.0.2.3", 443], A]], a.received.map { _1.take(3) }
+    assert_raises(ArgumentError) { net.add_address(a, address: B) }
+    b.push(0.0, QUIC::Transmit.new(payload: "x".b, destination: A, source: A, ecn: :not_ect, segment_size: nil))
+    assert_raises(ArgumentError) { net.advance(0.0) }
+  end
+
+  # The link between two nodes carries what goes between them, whichever
+  # of their addresses, or the NAT's, it goes from and to.
+  def test_a_link_between_nodes_whatever_their_addresses
+    net = Test::Network.new(seed: 1)
+    a = net.add(Node.new(0.0 => transmit("first".b, to: ["192.0.2.3", 443])), address: A)
+    b = net.add(Echo.new, address: B)
+    net.add_address(b, address: ["192.0.2.3", 443])
+    net.rebind(A, to: ["203.0.113.1", 50_000])
+    net.link(a, b, model: Delay.new(0.1))
+    assert net.run_until { a.received.any? }
+    assert_in_delta 0.1, b.received.first.last
+    assert_in_delta 0.2, a.received.first.last
   end
 
   def test_unknown_destinations_are_dropped

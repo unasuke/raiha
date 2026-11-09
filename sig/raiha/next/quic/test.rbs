@@ -144,6 +144,8 @@ module Raiha::Next::QUIC::Test
     @nodes: Hash[::Raiha::Next::QUIC::address, _Node]
     @addresses: Hash[_Node, ::Raiha::Next::QUIC::address]
     @links: Hash[[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address], _Path]
+    @outside: Hash[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address]
+    @inside: Hash[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address]
     @direct: Direct
 
     attr_reader clock: VirtualClock
@@ -152,6 +154,8 @@ module Raiha::Next::QUIC::Test
     def now: () -> Float
     def add: [N < _Node] (N node, address: ::Raiha::Next::QUIC::address) -> N
     def address_of: (_Node node) -> ::Raiha::Next::QUIC::address
+    def add_address: (_Node node, address: ::Raiha::Next::QUIC::address) -> self
+    def rebind: (::Raiha::Next::QUIC::address inside, to: ::Raiha::Next::QUIC::address) -> self
     def add_server: (config: ::Raiha::Next::QUIC::Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
                      time: Time, address: ::Raiha::Next::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?,
                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> Server
@@ -160,8 +164,10 @@ module Raiha::Next::QUIC::Test
     def advance: (Float seconds) -> void
 
     private def settle: () -> void
-    private def transmit_from: (::Raiha::Next::QUIC::address source, ::Raiha::Next::QUIC::Transmit transmit) -> void
+    private def transmit_from: (_Node node, ::Raiha::Next::QUIC::Transmit transmit) -> void
     private def deliver: (Datagram datagram) -> void
+    private def inside: (::Raiha::Next::QUIC::address address) -> ::Raiha::Next::QUIC::address?
+    private def take: (::Raiha::Next::QUIC::address address, _Node node) -> _Node
     private def each_path: () { (_Path) -> void } -> void
     private def next_event: () -> Float?
     private def start: (model model) -> _Path
