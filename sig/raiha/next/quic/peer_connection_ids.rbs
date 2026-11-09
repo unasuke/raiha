@@ -24,6 +24,7 @@ module Raiha::Next::QUIC
     def initialize: (String connection_id, stateless_reset_token: String?, limit: Integer) -> void
     def reset_tokens: (Array[String] connection_ids) -> Array[String]
     def claim: () -> String?
+    def claimed?: (String connection_id) -> bool
     def switch: (String connection_id) -> void
     def release: (String connection_id) -> void
     private def in_use?: (String connection_id) -> bool

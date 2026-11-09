@@ -64,6 +64,17 @@ class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
     assert_equal [new_id(2).stateless_reset_token], peer.reset_tokens([peer.current])
   end
 
+  # Retire Prior To retiring the ID in use, it gives way to the lowest no
+  # path claimed; a path's ID retired is no longer claimed.
+  def test_retire_prior_to_and_the_paths
+    peer = ids
+    (1..3).each { peer.receive(new_id(_1)) }
+    assert_equal new_id(1).connection_id, peer.claim
+    peer.receive(new_id(4, retire_prior_to: 2))
+    assert_equal new_id(2).connection_id, peer.current
+    refute peer.claimed?(new_id(1).connection_id)
+  end
+
   # One that comes numbered below Retire Prior To goes straight back.
   def test_an_id_already_retired
     peer = ids

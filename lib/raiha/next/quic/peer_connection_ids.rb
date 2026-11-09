@@ -59,6 +59,10 @@ module Raiha::Next::QUIC
       entry.connection_id
     end
 
+    # Whether a path besides the one in use still sends with
+    # `connection_id`: claimed by it, and not retired by Retire Prior To.
+    def claimed?(connection_id) = @claimed.include?(connection_id) && @active.any? { |entry| entry.connection_id == connection_id }
+
     # The path that claimed `connection_id` is now the one in use: the ID
     # in use before is claimed by the path that leaves it.
     def switch(connection_id)
@@ -126,13 +130,15 @@ module Raiha::Next::QUIC
     end
 
     # The IDs numbered below `limit` are retired, and the one in use gives
-    # way to the lowest still active.
+    # way to the lowest still active that no path claimed. There is one:
+    # the frame's own ID, which its Retire Prior To never reaches.
     private def retire_prior_to(limit)
       @retire_prior_to = limit
       retired, @active = @active.partition { |entry| entry.sequence_number < limit }
       retired.each { |entry| retire(entry.sequence_number) }
       return if @active.any? { |entry| entry.connection_id == @current }
-      @current = @active.min_by(&:sequence_number)&.connection_id || @current
+      free = @active.reject { |entry| @claimed.include?(entry.connection_id) }
+      @current = free.min_by(&:sequence_number)&.connection_id || @current
     end
 
     private def in_use?(connection_id) = connection_id == @current || @claimed.include?(connection_id)

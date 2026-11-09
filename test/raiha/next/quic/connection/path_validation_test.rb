@@ -105,6 +105,24 @@ class RaihaNextQUICConnectionPathValidationTest < Minitest::Test
     assert_in_delta now + 3 * pto, t, 0.01
   end
 
+  # Retire Prior To retiring the ID a path being validated sends with,
+  # its next challenge goes with an ID no path sent with.
+  def test_a_path_s_id_retired
+    server, keylog, now = connected
+    server.receive(packet(keylog, challenge("abcdefgh".b), number: 1000), from: NEW, to: SERVER, now:)
+    assert_equal ["c0000001"], on(NEW, sent(server, keylog, now)).map { _1[2] }
+    issued = QUIC::Wire::Frame::NewConnectionID.new(sequence_number: 4, retire_prior_to: 2, connection_id: "c0000004".b,
+      stateless_reset_token: format("%016d", 4).b)
+    server.receive(packet(keylog, issued, number: 1001), from: CLIENT, to: SERVER, now:)
+    datagrams = []
+    while datagrams.empty?
+      now = server.next_timeout
+      server.handle_timeout(now:)
+      datagrams = on(NEW, sent(server, keylog, now))
+    end
+    assert_equal ["c0000003"], datagrams.map { _1[2] }.uniq
+  end
+
   # With no ID of the client's left that no path sent with, a probe from
   # a new address goes unanswered.
   def test_no_id_to_answer_with

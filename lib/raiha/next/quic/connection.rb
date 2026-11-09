@@ -901,6 +901,7 @@ module Raiha::Next::QUIC
         ids = @peer_ids or raise Violation.new("NEW_CONNECTION_ID before the transport parameters", frame_type: PeerConnectionIDs::FRAME_TYPE)
         ids.receive(frame)
         @destination_connection_id = ids.current
+        reassign_connection_ids(ids)
       when Wire::Frame::RetireConnectionID then @issued.retire(frame, dcid:, forget_at: now + RETIRED_PTOS * @path.rtt.pto_period)
       when Wire::Frame::PathChallenge
         # A challenge on a path the connection takes no probe on goes
@@ -1460,6 +1461,18 @@ module Raiha::Next::QUIC
     private def start_validation(path, now)
       interval = path_pto(path)
       path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
+    end
+
+    # The paths besides the one in use whose ID Retire Prior To retired
+    # send with an ID no path sent with, or go when there is none.
+    private def reassign_connection_ids(ids)
+      [*@validating, @last_validated].compact.uniq.each do |path|
+        connection_id = path.destination_connection_id
+        next if path.equal?(@path) || connection_id.nil? || ids.claimed?(connection_id)
+        ids.release(connection_id)
+        fresh = ids.claim
+        fresh ? path.send_with(fresh) : abandon_path(path)
+      end
     end
 
     # Past MAX_VALIDATING_PATHS, the oldest path besides the one in use
