@@ -98,6 +98,31 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     end
   end
 
+  # Seals a token that names the address it is for.
+  class Tokens
+    def mint(address, version:, now:) = "token for #{address.join(":")}".b
+  end
+
+  # RFC 9000 "Responding to Connection Migration": once the client's new
+  # address is validated, the full datagram answered too, the server gives
+  # it a NEW_TOKEN token for that address; a port changed alone takes none.
+  def test_a_token_for_a_new_address
+    [[ELSEWHERE, ["token for #{ELSEWHERE.join(":")}"]], [[CLIENT[0], 61_000], []]].each do |address, expected|
+      keylog = Keylog.new
+      client = client_connection(keylog:)
+      server = server_connection(source_connection_id: "s".b * 8, tokens: Tokens.new)
+      now = handshake(client, server)
+      server.receive(packet(keylog, ping, number: 999), from: CLIENT, to: SERVER, now:)
+      server.receive(packet(keylog, ping, number: 1000), from: address, to: SERVER, now:)
+      2.times do |i|
+        _, data = challenges(sent(server, keylog, now)).fetch(address)
+        server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1001 + i), from: address, to: SERVER, now:)
+      end
+      tokens = sent(server, keylog, now).flat_map(&:last).grep(QUIC::Wire::Frame::NewToken).map(&:token)
+      assert_equal expected, tokens, address.inspect
+    end
+  end
+
   # With no ID left that no path sent with, the path left is not
   # validated again: one ID would go to two addresses.
   def test_a_rebinding_with_no_id_for_the_path_left

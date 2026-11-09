@@ -211,6 +211,16 @@ module Raiha::Next::QUIC
       end
     end
 
+    # How a server's connection has its Endpoint seal a NEW_TOKEN token for
+    # a new address of the client it validated.
+    class Tokens
+      def initialize(mint)
+        @mint = mint
+      end
+
+      def mint(address, version:, now:) = @mint.call(address, version, now)
+    end
+
     # How a connection has its Endpoint make connection IDs that lead to
     # it, each with its stateless reset token, for NEW_CONNECTION_ID frames,
     # and forget those the peer retired.
@@ -248,6 +258,7 @@ module Raiha::Next::QUIC
       # Zero-length connection IDs lead to no connection of their own, and
       # are never issued.
       @issuer = config.connection_id_length.zero? ? nil : Issuer.new(->(connection) { issue_connection_id(connection) }, ->(id) { @connections.delete(id) })
+      @tokens = Tokens.new(->(address, version, now) { NewToken.mint(key: @new_token_key, address:, version:, time: wall_clock(now), random: @random) })
       @time = time
       @created_at = now
       @retry_token_key = config.retry_token_key || random.bytes(Config::MIN_KEY_LENGTH).b
@@ -352,7 +363,7 @@ module Raiha::Next::QUIC
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
         source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:, issuer: @issuer,
-        peers: @peers)
+        peers: @peers, tokens: @tokens)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }

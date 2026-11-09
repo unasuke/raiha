@@ -1,5 +1,10 @@
 module Raiha::Next::QUIC
   # What a connection tells the addresses of its paths' peers to.
+  # What seals a NEW_TOKEN token for a new address of the client.
+  interface _Tokens
+    def mint: (address address, version: Integer, now: Float) -> String
+  end
+
   interface _Peers
     def add: (Connection connection, address address) -> void
     def remove: (Connection connection, address address) -> void
@@ -71,6 +76,15 @@ module Raiha::Next::QUIC
     @random: Crypto::_Random
     @connection_ids: _ConnectionIDs
     @issuer: Issuer?
+    @tokens: Tokens
+
+    class Tokens
+      include _Tokens
+
+      @mint: ^(address, Integer, Float) -> String
+
+      def initialize: (^(address, Integer, Float) -> String mint) -> void
+    end
 
     class Peers
       include _Peers

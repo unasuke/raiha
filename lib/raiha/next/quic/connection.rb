@@ -124,14 +124,15 @@ module Raiha::Next::QUIC
     # `anti_replay` is the record of the 0-RTT taken, which a TLS Config that
     # takes 0-RTT needs, and `app_early_data_context` what of the application
     # 0-RTT is taken only if the same of (TLSBinding.server). `issuer` and
-    # `peers` are as of a client.
+    # `peers` are as of a client. The Endpoint's `tokens` seal a NEW_TOKEN
+    # token for a new address of the client the connection validates.
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil, peers: nil)
+      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil, peers: nil, tokens: nil)
       raise ArgumentError, "app_early_data_context must be a String" unless app_early_data_context.is_a?(String)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
         retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:,
-        issuer:, peers:) do |connection, parameters|
+        issuer:, peers:, tokens:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:,
           version: config.versions.fetch(0), anti_replay:, app_early_data_context:)
       end
@@ -141,7 +142,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      new_token: nil, session: nil, issuer: nil, peers: nil, &start)
+      new_token: nil, session: nil, issuer: nil, peers: nil, tokens: nil, &start)
       @role = role
       @config = config
       @random = random
@@ -218,6 +219,7 @@ module Raiha::Next::QUIC
       # handshake, and whether the frame is to go (again, if lost).
       @new_token = new_token
       @new_token_due = false
+      @tokens = tokens
       # A client's session to resume, and how its 0-RTT goes: :disabled,
       # :pending while 0-RTT packets go, then :accepted or :rejected.
       @session = session
@@ -916,7 +918,11 @@ module Raiha::Next::QUIC
           # The path is the one to go back to once its validation is over,
           # the full datagram answered too, not when the answer to a short
           # one validates its address.
-          remember_validated(@path) unless @path.validating?
+          unless @path.validating?
+            previous = @last_validated
+            remember_validated(@path)
+            give_new_token(now) unless previous&.remote&.first == @path.remote&.first
+          end
           lift_amplification_limit(now)
         end
       end
@@ -1395,6 +1401,17 @@ module Raiha::Next::QUIC
       end
       switch_to(path, now)
       path
+    end
+
+    # RFC 9000 "Responding to Connection Migration": a server that validated
+    # a new address of the client, another IP address than the path to go
+    # back to before, gives it a token for that address, which goes until
+    # acknowledged; a port has nothing to do with the token.
+    private def give_new_token(now)
+      tokens = @tokens or return
+      remote = @path.remote or return
+      @new_token = tokens.mint(remote, version: @version.number, now:)
+      @new_token_due = true
     end
 
     # Whether `local` and `remote` differ from the path in use in the

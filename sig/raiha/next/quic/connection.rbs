@@ -71,6 +71,7 @@ module Raiha::Next::QUIC
     @peer_ids: PeerConnectionIDs?
     @issued: IssuedConnectionIDs
     @peers: _Peers?
+    @tokens: _Tokens?
     @random: ::Raiha::Next::TLS::Keyring::_Random
     @validating: Array[Path]
     @last_validated: Path?
@@ -101,13 +102,13 @@ module Raiha::Next::QUIC
                       ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
                       ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool,
                       ?source_connection_id: String?, ?stateless_reset_token: String?, ?new_token: String?,
-                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?issuer: _Issuer?, ?peers: _Peers?) -> Connection
+                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?issuer: _Issuer?, ?peers: _Peers?, ?tokens: _Tokens?) -> Connection
 
     def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
                      random: ::Raiha::Next::TLS::Keyring::_Random, ?original_destination_connection_id: String?,
                      ?retry_source_connection_id: String?, ?address_validated: bool, ?source_connection_id: String?,
                      ?stateless_reset_token: String?, ?token: String?,
-                     ?new_token: String?, ?session: Session?, ?issuer: _Issuer?, ?peers: _Peers?) { (Connection, TransportParameters) -> TLSBinding } -> void
+                     ?new_token: String?, ?session: Session?, ?issuer: _Issuer?, ?peers: _Peers?, ?tokens: _Tokens?) { (Connection, TransportParameters) -> TLSBinding } -> void
     def zero_rtt_state: () -> (:disabled | :pending | :accepted | :rejected)
     def stream_early_data?: (Integer stream_id) -> bool
     def acknowledge_zero_rtt_rejection: () -> nil
@@ -184,6 +185,7 @@ module Raiha::Next::QUIC
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
+    private def give_new_token: (Float now) -> void
     private def port_only?: (address? local, address remote) -> bool
     private def switch_to: (Path path, Float now, ?revalidate: bool) -> void
     private def fall_back: (Float now) -> void
