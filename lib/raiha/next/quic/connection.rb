@@ -160,6 +160,10 @@ module Raiha::Next::QUIC
       # The path a client validates to the server's preferred address, once
       # it has started to.
       @preferred_path = nil #: Path?
+      # The path the 1-RTT packet that is no probe with the largest number
+      # so far came on, which a server moves to at its preferred address
+      # once it has validated the path.
+      @newest_path = nil #: Path?
       # The Destination Connection ID of the last 1-RTT packet that came on
       # the path in use: a packet from a new address with the same one is a
       # NAT rebinding most likely.
@@ -813,8 +817,9 @@ module Raiha::Next::QUIC
       dcid = unmasked.header.dcid
       if probing_frames?(frames)
         path ||= probed_path(to, from, packet.datagram.bytesize, now)
-      elsif level == :one_rtt && !path.equal?(@path) && (largest.nil? || unmasked.packet_number > largest)
-        path = migrate(path, to, from, dcid, packet.datagram.bytesize, now) || path
+      elsif level == :one_rtt && (largest.nil? || unmasked.packet_number > largest)
+        path = migrate(path, to, from, dcid, packet.datagram.bytesize, now) || path unless path.equal?(@path)
+        @newest_path = path
       end
       path ||= @path
       @received_dcid = dcid if level == :one_rtt && path.equal?(@path)
@@ -931,7 +936,8 @@ module Raiha::Next::QUIC
             give_new_token(now) unless previous&.remote&.first == @path.remote&.first
           end
           lift_amplification_limit(now)
-        elsif answered&.equal?(@preferred_path) && !answered.validating?
+        elsif answered && !answered.validating? &&
+            (answered.equal?(@preferred_path) || (answered.equal?(@newest_path) && preferred_local?(answered.local)))
           switch_to(answered, now, revalidate: false)
         end
       end
@@ -1398,8 +1404,14 @@ module Raiha::Next::QUIC
     # used before, a NAT rebinding most likely, a new path goes on with the
     # peer's ID in use (RFC 9000 "Privacy Implications of Connection
     # Migration"); with another, it takes one no path sent with, and
-    # without one there is no move. The path moved to; nil when there is
-    # no move.
+    # without one there is no path.
+    #
+    # To the server's preferred address, the sending moves only once the
+    # server has validated the path itself, here or when the validation
+    # ends, as an attacker could start the move otherwise (RFC 9000
+    # "Migration to a Preferred Address"); it is under way already, and the
+    # path left needs no validating again. The path the packet came on; nil
+    # when there is none.
     private def migrate(path, local, remote, dcid, bytes, now)
       return nil unless @role == :server && @handshake_confirmed
       unless path
@@ -1410,9 +1422,20 @@ module Raiha::Next::QUIC
         path.take_over(@path) if port_only?(local, remote)
         @peers&.add(self, remote)
       end
-      switch_to(path, now)
+      if !preferred_local?(local)
+        switch_to(path, now)
+      elsif path.validated? && !path.validating? && !path.validation_owed?
+        switch_to(path, now, revalidate: false)
+      elsif !@validating.include?(path)
+        start_validation(path, now)
+        @validating << path
+        make_room
+      end
       path
     end
+
+    # Whether `local` is one of a server's preferred addresses.
+    private def preferred_local?(local) = @config.preferred_address&.value?(local) || false
 
     # RFC 9000 "Migration to a Preferred Address": a client, once the
     # handshake is confirmed and the server has an ID of the client's to

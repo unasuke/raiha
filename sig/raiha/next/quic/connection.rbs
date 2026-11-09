@@ -76,6 +76,7 @@ module Raiha::Next::QUIC
     @validating: Array[Path]
     @last_validated: Path?
     @preferred_path: Path?
+    @newest_path: Path?
     @received_dcid: String?
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
@@ -187,6 +188,7 @@ module Raiha::Next::QUIC
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
     private def move_to_preferred_address: (Float now) -> void
+    private def preferred_local?: (address? local) -> bool
     private def give_new_token: (Float now) -> void
     private def port_only?: (address? local, address remote) -> bool
     private def switch_to: (Path path, Float now, ?revalidate: bool) -> void
