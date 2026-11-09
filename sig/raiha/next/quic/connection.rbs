@@ -184,6 +184,7 @@ module Raiha::Next::QUIC
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
+    private def port_only?: (address? local, address remote) -> bool
     private def switch_to: (Path path, Float now, ?revalidate: bool) -> void
     private def fall_back: (Float now) -> void
     private def remember_validated: (Path path) -> void

@@ -148,6 +148,22 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_equal 4.0, path.validation_deadline
   end
 
+  # A path the peer's port alone tells apart takes over what the other
+  # learned, which starts learning over and keeps what it has in flight.
+  def test_take_over
+    old = path(initial_max_datagram_size: 1350)
+    old.add_in_flight(sent_bytes: 1350, ack_eliciting: true, now: 0.0)
+    old.rtt.update(latest_rtt: 0.05, ack_delay: 0.0, max_ack_delay: 0.025, handshake_confirmed: true, now: 1.0)
+    old.ecn_validated(now: 1.0)
+    congestion = old.congestion
+    new = path()
+    new.take_over(old)
+    assert_equal [0.05, 1350, :capable, 0], [new.rtt.smoothed_rtt, new.max_datagram_size, new.ecn_state, new.bytes_in_flight]
+    assert_same congestion, new.congestion
+    assert_equal [0.333, :testing, 1350], [old.rtt.smoothed_rtt, old.ecn_state, old.bytes_in_flight]
+    refute_same congestion, old.congestion
+  end
+
   # Until the remote address is validated, three times what came on the
   # path may go on it (RFC 9000 "Address Validation"); once it is, there is
   # no limit.

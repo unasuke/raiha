@@ -188,14 +188,48 @@ module Raiha::Next::QUIC
     # to where a new path starts, as after a Retry (RFC 9002 "Handling Retry
     # Packets").
     def start_over
+      @bytes_in_flight = 0
+      @ack_eliciting_in_flight = 0
+      @packets_in_flight = 0
+      start_learning
+    end
+
+    # The path takes over what `path`, which only the peer's port tells
+    # apart, learned of the network: its RTT, congestion controller,
+    # pacer, rate meter, datagram size and ECN state (RFC 9000 "Loss
+    # Detection and Congestion Control", a NAT rebinding most likely).
+    # `path` starts learning over, so that what was sent on it counts for
+    # nothing here, and keeps what it has in flight.
+    def take_over(path) = path.hand_over_to(self)
+
+    # Gives `path` what this path learned, and starts learning over.
+    def hand_over_to(path)
+      path.adopt(rtt: @rtt, congestion: @congestion, startup: @startup, pacer: @pacer, rate_meter: @rate_meter, rtt_heard: @rtt_heard,
+        max_datagram_size: @max_datagram_size, ecn: [@ecn_state, @ecn_testing_sent, @ecn_testing_lost])
+      @ecn_state = :testing
+      @ecn_testing_sent = @ecn_testing_lost = 0
+      start_learning
+    end
+
+    # Takes what another path learned (hand_over_to).
+    def adopt(rtt:, congestion:, startup:, pacer:, rate_meter:, rtt_heard:, max_datagram_size:, ecn:)
+      @rtt = rtt
+      @congestion = congestion
+      @startup = startup
+      @pacer = pacer
+      @rate_meter = rate_meter
+      @rtt_heard = rtt_heard
+      @max_datagram_size = max_datagram_size
+      @ecn_state, @ecn_testing_sent, @ecn_testing_lost = ecn
+    end
+
+    # A new RTT estimator, congestion controller, pacer and rate meter.
+    private def start_learning
       @rtt = Recovery::RttEstimator.new
       cc = @config.congestion_control.new(max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, config: @config,
         tracer: @tracer)
       @startup = @config.startup&.new(cc, max_datagram_size: @max_datagram_size, initial_window: @config.initial_window, tracer: @tracer)
       @congestion = @startup || cc
-      @bytes_in_flight = 0
-      @ack_eliciting_in_flight = 0
-      @packets_in_flight = 0
       @app_limited = false
       @rtt_heard = false
       @pacer = Pacer.new(capacity: Config::DEFAULT_INITIAL_WINDOW.call(@max_datagram_size), granularity: @config.pacing_granularity)

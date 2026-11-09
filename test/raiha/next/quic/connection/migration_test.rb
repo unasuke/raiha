@@ -82,6 +82,22 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal({ ELSEWHERE => id, CLIENT => "c0000001" }, challenges(datagrams).transform_values(&:first))
   end
 
+  # RFC 9000 "Loss Detection and Congestion Control": a move that changes
+  # the client's port alone, a NAT rebinding most likely, takes the RTT
+  # and the congestion controller over to the new path; one to another
+  # address starts them over.
+  def test_a_port_change_takes_over_what_the_path_learned
+    [[[CLIENT[0], 61_000], true], [ELSEWHERE, false]].each do |address, kept|
+      server, keylog, _, now = connected
+      smoothed = server.path.rtt.smoothed_rtt
+      congestion = server.path.congestion
+      server.receive(packet(keylog, ping, number: 1000), from: address, to: SERVER, now:)
+      assert_equal address, server.path.remote
+      assert_equal kept, server.path.rtt.smoothed_rtt == smoothed && server.path.congestion.equal?(congestion), address.inspect
+      assert_equal 0, server.path.bytes_in_flight
+    end
+  end
+
   # With no ID left that no path sent with, the path left is not
   # validated again: one ID would go to two addresses.
   def test_a_rebinding_with_no_id_for_the_path_left

@@ -1390,10 +1390,19 @@ module Raiha::Next::QUIC
         connection_id = (@peer_ids&.claim or return nil) unless dcid == @received_dcid
         path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
         path.datagram_received(bytes)
+        path.take_over(@path) if port_only?(local, remote)
         @peers&.add(self, remote)
       end
       switch_to(path, now)
       path
+    end
+
+    # Whether `local` and `remote` differ from the path in use in the
+    # peer's port alone, when the new path takes over what the path in use
+    # learned (Path#take_over).
+    private def port_only?(local, remote)
+      current = @path.remote or return false
+      current[0] == remote[0] && current[1] != remote[1] && (local.nil? || @path.local.nil? || @path.local == local)
     end
 
     # The connection sends on `path` from now on, and the path left stays
