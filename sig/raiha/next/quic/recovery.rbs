@@ -264,6 +264,7 @@ module Raiha::Next::QUIC
         def ack_frame_acked: (Ack duty) -> void
         def reset_stream_acked: (ResetStream duty) -> void
         def retire_connection_id_acked: (RetireConnectionID duty) -> void
+        def new_connection_id_acked: (NewConnectionID duty) -> void
         def stream_data_lost: (Stream duty) -> void
         def crypto_data_lost: (Crypto duty) -> void
         def reset_stream_lost: (ResetStream duty) -> void

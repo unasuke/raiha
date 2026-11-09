@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/support/quic_transfer"
+require "raiha/next/support/quic_recovery"
 
 # Loss recovery's design, "the scenarios on virtual time": a NAT binds the
 # client's address anew in the middle of a download, and drops what comes
@@ -16,6 +17,10 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
     max_stream_receive_window: 16 << 20, max_receive_window: 24 << 20)
 
   SIZE = 2_000_000
+
+  PREFERRED = ["192.0.2.2", 4434].freeze
+
+  PROBING = [QUIC::Wire::Frame::PathChallenge, QUIC::Wire::Frame::PathResponse, QUIC::Wire::Frame::Padding].freeze
 
   # Keeps each datagram that passes, with the time, and passes it on at
   # once.
@@ -80,5 +85,73 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
       assert_operator new.window, :>=, window, name
       assert net.run_until(within: 20.0) { reads.last.last == SIZE }, name
     end
+  end
+
+  # Downloads SIZE bytes through 10 Mbps and 20 ms each way from a server
+  # that offers PREFERRED as its preferred address, at `addresses` besides
+  # SERVER, to a client that issues connection IDs, keeping what the client
+  # sends and its tracer's events. Gives the network, the client, the
+  # server, the client's reads, what it sent as [time, datagram], its
+  # tracer, and when the handshake was confirmed.
+  def offered(addresses, client_config: WIDE)
+    path = QUIC::Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 200_000)
+    sent = []
+    tracer = NextQUICRecovery::RecordingTracer.new
+    random = Random.new(9)
+    issuer = QUIC::Endpoint::Issuer.new(->(_connection) { [random.bytes(8), random.bytes(16)] }, ->(_connection_id) {})
+    net, client, server, reads = download(SIZE, forward: [Tap.new(sent), path], reverse: path, client_config:, client_tracer: tracer,
+      client_issuer: issuer, server_config: QUIC::Config.new(preferred_address: { ipv4: PREFERRED }), server_addresses: addresses)
+    assert net.run_until { client.handshake_confirmed? }
+    [net, client, server, reads, sent, tracer, net.now]
+  end
+
+  # The ID of the preferred address the server's transport parameters gave.
+  def preferred_id(tracer) = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].preferred_address.connection_id
+
+  # The frames of the packets the client sent with `dcid` before `time`.
+  def frames_with(tracer, dcid, before:)
+    tracer.of(:packet_sent).select { _1[:header].dcid == dcid && _1[:now] < before }.flat_map { _1[:frames] }
+  end
+
+  # RFC 9000 "Migration to a Preferred Address": once the handshake is
+  # confirmed and one of its IDs acknowledged, a round trip on, the client
+  # validates a path to the preferred address with the ID that came with
+  # it, sending nothing but probes there, and moves to it once validated;
+  # the server follows, and the download ends.
+  def test_a_move_to_the_preferred_address
+    net, client, server, reads, sent, tracer, confirmed_at = offered([PREFERRED])
+    assert net.run_until { client.path.remote == PREFERRED }
+    moved_at = net.now
+    first_at, first = sent.find { |_, datagram| datagram.destination == PREFERRED }
+    assert_operator first_at - confirmed_at, :>=, 0.04
+    assert_equal preferred_id(tracer), QUIC::Wire::Packet.parse(first.payload, dcid_length: 8).header.dcid
+    probes = frames_with(tracer, preferred_id(tracer), before: moved_at)
+    refute_empty probes
+    assert probes.all? { |frame| PROBING.any? { frame.is_a?(_1) } }
+    assert net.run_until(within: 20.0) { reads.last&.last == SIZE }
+    assert_equal PREFERRED, server.connections.first.path.local
+  end
+
+  # A client with zero-length connection IDs issues none to wait for: the
+  # server answers on any path with none, and the client moves as soon as
+  # the handshake is confirmed.
+  def test_a_move_with_zero_length_connection_ids
+    net, client, _, reads, sent, _, confirmed_at = offered([PREFERRED], client_config: WIDE.with(connection_id_length: 0))
+    assert net.run_until { client.path.remote == PREFERRED }
+    assert_equal confirmed_at, sent.find { |_, datagram| datagram.destination == PREFERRED }.first
+    assert net.run_until(within: 20.0) { reads.last&.last == SIZE }
+  end
+
+  # A preferred address that nothing answers at: the download ends where
+  # it began, and the client, having sent nothing but probes there,
+  # retires the ID it sent with once the validation fails.
+  def test_a_preferred_address_that_fails
+    net, client, _, reads, _, tracer, = offered([])
+    retired = -> { tracer.of(:packet_sent).flat_map { _1[:frames] }.grep(QUIC::Wire::Frame::RetireConnectionID).map(&:sequence_number) }
+    assert net.run_until(within: 20.0) { reads.last&.last == SIZE && retired.call.any? }
+    assert_equal [[1], SERVER], [retired.call, client.path.remote]
+    probes = frames_with(tracer, preferred_id(tracer), before: net.now)
+    refute_empty probes
+    assert probes.all? { |frame| PROBING.any? { frame.is_a?(_1) } }
   end
 end

@@ -35,7 +35,7 @@ class RaihaNextQUICRecoveryDispatchTest < Minitest::Test
     Duty::DataBlocked => [nil, :data_blocked_lost],
     Duty::StreamDataBlocked => [nil, :stream_data_blocked_lost],
     Duty::StreamsBlocked => [nil, :streams_blocked_lost],
-    Duty::NewConnectionID => [nil, :new_connection_id_lost],
+    Duty::NewConnectionID => %i[new_connection_id_acked new_connection_id_lost],
     Duty::RetireConnectionID => %i[retire_connection_id_acked retire_connection_id_lost],
     Duty::NewToken => [nil, :new_token_lost],
     Duty::HandshakeDone => [nil, :handshake_done_lost]

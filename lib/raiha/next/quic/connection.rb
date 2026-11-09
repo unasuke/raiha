@@ -157,6 +157,9 @@ module Raiha::Next::QUIC
       # back to when a new one fails; the first is, by the handshake.
       @validating = [] #: Array[Path]
       @last_validated = @path
+      # The path a client validates to the server's preferred address, once
+      # it has started to.
+      @preferred_path = nil #: Path?
       # The Destination Connection ID of the last 1-RTT packet that came on
       # the path in use: a packet from a new address with the same one is a
       # NAT rebinding most likely.
@@ -653,6 +656,10 @@ module Raiha::Next::QUIC
     # A NEW_CONNECTION_ID frame lost goes again.
     def new_connection_id_lost(duty) = @issued.lost(duty)
 
+    # An ID this end issued is acknowledged: the peer has one to send with
+    # on a new path, and a client moves to the server's preferred address.
+    def new_connection_id_acked(_duty) = move_to_preferred_address(@now)
+
     def new_token_lost(duty)
       @new_token_due = true if @state == :open && @new_token
     end
@@ -924,6 +931,8 @@ module Raiha::Next::QUIC
             give_new_token(now) unless previous&.remote&.first == @path.remote&.first
           end
           lift_amplification_limit(now)
+        elsif answered&.equal?(@preferred_path) && !answered.validating?
+          switch_to(answered, now, revalidate: false)
         end
       end
     end
@@ -939,6 +948,8 @@ module Raiha::Next::QUIC
       discard_level(:handshake, now)
       peer = @peer_parameters
       @issued.issue(peer.active_connection_id_limit) if peer
+      # A server sends to zero-length IDs on any path, with none to wait for.
+      move_to_preferred_address(now) if @source_connection_id.empty?
     end
 
     # RFC 9000 "Immediate Close": what was being sent stops, and only the
@@ -1401,6 +1412,28 @@ module Raiha::Next::QUIC
       end
       switch_to(path, now)
       path
+    end
+
+    # RFC 9000 "Migration to a Preferred Address": a client, once the
+    # handshake is confirmed and the server has an ID of the client's to
+    # answer with, validates a path to the server's preferred address that
+    # PreferredAddress#choose gives, with an ID of the server's no path
+    # sent with, the preferred address's own first; it does once. The path
+    # is the client's own making, to an address authenticated transport
+    # parameters gave, and has no amplification limit. Only probes go on
+    # it until it is validated, when the connection moves to it; failed,
+    # the connection stays where it is.
+    private def move_to_preferred_address(now)
+      return unless @role == :client && @handshake_confirmed && @preferred_path.nil?
+      preferred = @peer_parameters&.preferred_address or return
+      server = @path.remote or return
+      remote = preferred.choose(families: @config.address_families, server:) or return
+      connection_id = @peer_ids&.claim or return
+      path = Path.new(config: @config, remote:, validated: true, destination_connection_id: connection_id, tracer: @tracer)
+      start_validation(path, now)
+      @peers&.add(self, remote)
+      @validating << path
+      @preferred_path = path
     end
 
     # RFC 9000 "Responding to Connection Migration": a server that validated
