@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "ipaddr"
+
 module Raiha::Next::QUIC
   # What connections are set up with, one value for every connection of an
   # Endpoint and shareable between Ractors: the transport parameters this
@@ -36,6 +38,13 @@ module Raiha::Next::QUIC
   # same ones.
   # Left nil, an Endpoint draws its own, which only one process can use.
   # inspect does not show them.
+  #
+  # preferred_address is the address a server offers its clients to move
+  # to once the handshake is confirmed (RFC 9000 "Preferred Address"),
+  # `{ipv4: [host, port], ipv6: [host, port]}` with either or both, nil
+  # for none. address_families are those of the addresses this end can
+  # send to, :ipv4 and :ipv6, which a client chooses the server's
+  # preferred address from.
   class Config < Data.define(
     :max_idle_timeout, :max_udp_payload_size,
     :initial_max_data, :initial_max_stream_data_bidi_local, :initial_max_stream_data_bidi_remote, :initial_max_stream_data_uni,
@@ -44,7 +53,7 @@ module Raiha::Next::QUIC
     :versions, :connection_id_length, :initial_max_datagram_size,
     :max_stream_receive_window, :max_receive_window, :max_send_buffer,
     :congestion_control, :initial_window, :startup, :pacing_granularity, :max_transmit_size, :fast_convergence, :beta_ecn,
-    :retry_token_key, :stateless_reset_key
+    :retry_token_key, :stateless_reset_key, :preferred_address, :address_families
   )
     include Raiha::Next::TLS::MaskedInspect
 
@@ -55,6 +64,8 @@ module Raiha::Next::QUIC
 
     # The fewest bytes a key of an Endpoint's tokens has: HMAC-SHA256's.
     MIN_KEY_LENGTH = 32
+
+    ADDRESS_FAMILIES = %i[ipv4 ipv6].freeze
 
     TRANSPORT_PARAMETERS = %i[
       max_idle_timeout max_udp_payload_size
@@ -71,7 +82,11 @@ module Raiha::Next::QUIC
     # initial limit and to 1.5 times the stream window. The initial window
     # is the minimum of two datagrams at least, pacing wakes up after some
     # time, a Transmit carries something, and beta_ecn shrinks the window. A
-    # key has MIN_KEY_LENGTH bytes at least.
+    # key has MIN_KEY_LENGTH bytes at least. A preferred address has an
+    # address of its family and a port, and comes with connection IDs that
+    # are not zero-length, as a server that sends with none offers none (RFC
+    # 9000 "Preferred Address"); the address families are some of
+    # ADDRESS_FAMILIES.
     def initialize(
       max_idle_timeout: 30.0, max_udp_payload_size: 65_527,
       initial_max_data: 768 * 1024, initial_max_stream_data_bidi_local: 512 * 1024,
@@ -82,7 +97,8 @@ module Raiha::Next::QUIC
       versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200,
       max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024,
       congestion_control: DEFAULT_CONGESTION_CONTROL, initial_window: DEFAULT_INITIAL_WINDOW, startup: nil, pacing_granularity: 0.001,
-      max_transmit_size: nil, fast_convergence: true, beta_ecn: nil, retry_token_key: nil, stateless_reset_key: nil
+      max_transmit_size: nil, fast_convergence: true, beta_ecn: nil, retry_token_key: nil, stateless_reset_key: nil,
+      preferred_address: nil, address_families: ADDRESS_FAMILIES
     )
       TransportParameters.new(
         max_idle_timeout:, max_udp_payload_size:, initial_max_data:, initial_max_stream_data_bidi_local:,
@@ -119,10 +135,16 @@ module Raiha::Next::QUIC
       { retry_token_key:, stateless_reset_key: }.each do |name, key|
         raise ArgumentError, "#{name} is under #{MIN_KEY_LENGTH} bytes" if key && key.bytesize < MIN_KEY_LENGTH
       end
+      check_preferred_address(preferred_address, connection_id_length) if preferred_address
+      if address_families.empty? || !(address_families - ADDRESS_FAMILIES).empty?
+        raise ArgumentError, "address_families #{address_families.inspect} are not some of #{ADDRESS_FAMILIES.inspect}"
+      end
       retry_token_key = retry_token_key&.b&.freeze
       stateless_reset_key = stateless_reset_key&.b&.freeze
       # A copy, so that making it shareable does not freeze the caller's.
       versions = Ractor.make_shareable(versions, copy: true)
+      preferred_address = Ractor.make_shareable(preferred_address, copy: true)
+      address_families = Ractor.make_shareable(address_families, copy: true)
       begin
         initial_window = Ractor.make_shareable(initial_window, copy: true)
       rescue TypeError, Ractor::Error => error
@@ -132,6 +154,18 @@ module Raiha::Next::QUIC
     end
 
     def masked_members = %i[retry_token_key stateless_reset_key]
+
+    private def check_preferred_address(preferred_address, connection_id_length)
+      raise ArgumentError, "a preferred address with zero-length connection IDs" if connection_id_length.zero?
+      if preferred_address.empty? || !(preferred_address.keys - ADDRESS_FAMILIES).empty?
+        raise ArgumentError, "a preferred address of #{preferred_address.keys.inspect}, not some of #{ADDRESS_FAMILIES.inspect}"
+      end
+      preferred_address.each do |family, (host, port)|
+        address = IPAddr.new(host)
+        raise ArgumentError, "#{host} is no #{family} address" unless family == :ipv4 ? address.ipv4? : address.ipv6?
+        raise ArgumentError, "a preferred address with port #{port}" unless port.between?(1, 65_535)
+      end
+    end
 
     # The transport parameters a connection with these settings sends, with
     # its connection IDs and, for a server, its token and preferred address.

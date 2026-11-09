@@ -134,4 +134,32 @@ class RaihaNextQUICConfigTest < Minitest::Test
     assert_raises(ArgumentError) { Config.new(retry_token_key: "k" * 31) }
     assert_raises(ArgumentError) { Config.new(stateless_reset_key: "".b) }
   end
+
+  # A server's preferred address: either family or both, each of its own
+  # family with a port, shareable without freezing the caller's; none with
+  # zero-length connection IDs (RFC 9000 "Preferred Address").
+  def test_preferred_address
+    assert_nil Config.new.preferred_address
+    ipv4 = ["192.0.2.2", 4434]
+    config = Config.new(preferred_address: { ipv4:, ipv6: ["2001:db8::2", 4434] })
+    assert_equal({ ipv4: ["192.0.2.2", 4434], ipv6: ["2001:db8::2", 4434] }, config.preferred_address)
+    assert Ractor.shareable?(config)
+    refute ipv4.frozen?
+    assert_equal({ ipv6: ["2001:db8::2", 4434] }, Config.new(preferred_address: { ipv6: ["2001:db8::2", 4434] }).preferred_address)
+    [{}, { ipv4: ["2001:db8::2", 4434] }, { ipv6: ["192.0.2.2", 4434] }, { ipv4: ["192.0.2.2", 0] }, { ipv4: ["192.0.2.2", 65_536] },
+     { ipv5: ["192.0.2.2", 4434] }, { ipv4: ["example.com", 4434] }].each do |preferred_address|
+      assert_raises(ArgumentError, preferred_address.inspect) { Config.new(preferred_address:) }
+    end
+    assert_raises(ArgumentError) { Config.new(preferred_address: { ipv4: }, connection_id_length: 0) }
+  end
+
+  # The families of the addresses this end sends to: both by default,
+  # either alone, and nothing else.
+  def test_address_families
+    assert_equal %i[ipv4 ipv6], Config.new.address_families
+    assert_equal %i[ipv4], Config.new(address_families: %i[ipv4]).address_families
+    [[], %i[ipv4 ipx], %w[ipv4]].each do |address_families|
+      assert_raises(ArgumentError, address_families.inspect) { Config.new(address_families:) }
+    end
+  end
 end

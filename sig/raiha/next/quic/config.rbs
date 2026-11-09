@@ -1,8 +1,11 @@
 module Raiha::Next::QUIC
+  type address_family = :ipv4 | :ipv6
+
   class Config < Data
     include ::Raiha::Next::TLS::MaskedInspect
 
     MIN_KEY_LENGTH: Integer
+    ADDRESS_FAMILIES: Array[address_family]
     TRANSPORT_PARAMETERS: Array[Symbol]
     DEFAULT_CONGESTION_CONTROL: Congestion::_Algorithm
     DEFAULT_INITIAL_WINDOW: Congestion::_InitialWindow
@@ -35,6 +38,8 @@ module Raiha::Next::QUIC
     attr_reader beta_ecn: Float?
     attr_reader retry_token_key: String?
     attr_reader stateless_reset_key: String?
+    attr_reader preferred_address: Hash[address_family, address]?
+    attr_reader address_families: Array[address_family]
 
     def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                    ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
@@ -46,7 +51,8 @@ module Raiha::Next::QUIC
                    ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                    ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                    ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
-                   ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?) -> instance
+                   ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
+                   ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family]) -> instance
     def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                      ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
                      ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
@@ -57,8 +63,11 @@ module Raiha::Next::QUIC
                      ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                      ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                      ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
-                     ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?) -> void
+                     ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
+                     ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family]) -> void
     def masked_members: () -> Array[Symbol]
+
+    private def check_preferred_address: (Hash[address_family, address] preferred_address, Integer connection_id_length) -> void
 
     def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
                                ?retry_source_connection_id: String?, ?stateless_reset_token: String?,
