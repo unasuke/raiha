@@ -23,6 +23,7 @@ module Raiha::Next::QUIC
       def initialize: (ipv4: address?, ipv6: address?, connection_id: String, stateless_reset_token: String) -> void
       def self.read: (Wire::Reader reader) -> PreferredAddress
 
+      def choose: (families: Array[address_family], server: address) -> address?
       def encode: () -> String
 
       private def self.address: (String bytes, Integer port) -> address?

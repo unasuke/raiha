@@ -63,6 +63,21 @@ module Raiha::Next::QUIC
         [IPAddr.new_ntoh(bytes).to_s, port]
       end
 
+      # The address a client that sends to `families` (Config#address_families)
+      # moves to from the server's address `server`: IPv6 before IPv4, and
+      # none that is unspecified or multicast, nor loopback unless `server`
+      # is (RFC 9000 "Generic Request Forgery Countermeasures"); nil when
+      # none is.
+      def choose(families:, server:)
+        loopback = IPAddr.new(server[0]).loopback?
+        [(ipv6 if families.include?(:ipv6)), (ipv4 if families.include?(:ipv4))].compact.find do |address|
+          ip = IPAddr.new(address[0]).native
+          bits = ip.to_i
+          multicast = ip.ipv4? ? bits >> 28 == 0xe : bits >> 120 == 0xff
+          !bits.zero? && !multicast && (loopback || !ip.loopback?)
+        end
+      end
+
       def encode
         writer = Wire::Writer.new
         writer.bytes(ipv4 ? IPAddr.new(ipv4[0]).hton : "\0".b * 4).u16(ipv4 ? ipv4[1] : 0)

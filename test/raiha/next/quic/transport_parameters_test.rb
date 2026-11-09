@@ -108,6 +108,24 @@ class RaihaNextQUICTransportParametersTest < Minitest::Test
 
   # RFC 9000 "Transport Parameter Definitions": the parameters only a
   # server sends.
+  # A client moves to IPv6 before IPv4, of the families it sends to, and
+  # to no unspecified or multicast address, nor a loopback one unless the
+  # server's is.
+  def test_choosing_a_preferred_address
+    both = %i[ipv4 ipv6]
+    server = ["192.0.2.9", 443]
+    assert_equal ["2001:db8::1", 8443], preferred_address.choose(families: both, server:)
+    assert_equal ["192.0.2.1", 443], preferred_address.choose(families: %i[ipv4], server:)
+    assert_nil preferred_address.with(ipv6: nil).choose(families: %i[ipv6], server:)
+    ["::", "ff02::1", "::1", "::ffff:224.0.0.1"].each do |host|
+      assert_equal ["192.0.2.1", 443], preferred_address.with(ipv6: [host, 443]).choose(families: both, server:), host
+    end
+    ["0.0.0.0", "224.0.0.1", "127.0.0.1"].each do |host|
+      assert_nil preferred_address.with(ipv4: [host, 443], ipv6: nil).choose(families: both, server:), host
+    end
+    assert_equal ["::1", 443], preferred_address.with(ipv6: ["::1", 443]).choose(families: both, server: ["127.0.0.1", 443])
+  end
+
   def test_server_only_parameters_from_a_client
     { 0x00 => "o" * 8, 0x02 => "s" * 16, 0x0d => preferred_address.encode, 0x10 => "y" * 8 }.each do |id, value|
       assert_rejected(tp(0x0f, SCID) + tp(id, value), "0x#{id.to_s(16)}")
