@@ -59,6 +59,33 @@ class RaihaNextQUICIssuedConnectionIDsTest < Minitest::Test
     assert_equal [:connection] * 3, issuer.connections
   end
 
+  # A server's preferred address takes sequence number 1, with no frame,
+  # and counts among those active: NEW_CONNECTION_ID frames go from 2.
+  # Retired, it is replaced as any other.
+  def test_the_preferred_address
+    issuer = Issuer.new
+    ids = QUIC::IssuedConnectionIDs.new("0".b * 8, issuer:, connection: :connection)
+    preferred = ids.preferred_address({ ipv4: ["192.0.2.2", 4434] })
+    assert_equal QUIC::TransportParameters::PreferredAddress.new(ipv4: ["192.0.2.2", 4434], ipv6: nil, connection_id: "00000001",
+      stateless_reset_token: "00000001" * 2), preferred
+    ids.issue(4)
+    assert_equal [2, 3], frames(ids).map(&:sequence_number)
+    ids.lost(QUIC::Recovery::Duty::NewConnectionID.new(sequence_number: 1))
+    assert_empty frames(ids)
+    ids.retire(retire(1), dcid: "0".b * 8, forget_at: 1.0)
+    assert_equal [4], frames(ids).map(&:sequence_number)
+  end
+
+  # No address, zero-length connection IDs or no issuer: no preferred
+  # address.
+  def test_no_preferred_address
+    issuer = Issuer.new
+    assert_nil QUIC::IssuedConnectionIDs.new("0".b * 8, issuer:, connection: :connection).preferred_address(nil)
+    assert_nil QUIC::IssuedConnectionIDs.new("".b, issuer:, connection: :connection).preferred_address({ ipv4: ["192.0.2.2", 4434] })
+    assert_nil QUIC::IssuedConnectionIDs.new("0".b * 8, issuer: nil, connection: :connection).preferred_address({ ipv4: ["192.0.2.2", 4434] })
+    assert_empty issuer.connections
+  end
+
   def test_a_lost_frame_goes_again_as_it_was
     ids = QUIC::IssuedConnectionIDs.new("0".b * 8, issuer: Issuer.new, connection: :connection)
     ids.issue(4)

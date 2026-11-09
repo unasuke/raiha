@@ -34,6 +34,7 @@ module Raiha::Next::QUIC
     end
 
     def initialize: (String first, issuer: _Issuer?, connection: Connection) -> void
+    def preferred_address: (Hash[address_family, address]? addresses) -> TransportParameters::PreferredAddress?
     def issue: (Integer limit) -> void
     def next_frame: (Integer room) -> [Wire::Frame::NewConnectionID, Recovery::Duty::NewConnectionID]?
     def retire: (Wire::Frame::RetireConnectionID frame, dcid: String, forget_at: Float) -> void

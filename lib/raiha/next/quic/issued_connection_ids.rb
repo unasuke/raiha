@@ -3,7 +3,8 @@
 module Raiha::Next::QUIC
   # The connection IDs this end issued for the peer to send to (RFC 9000
   # "Issuing Connection IDs"): the one of the handshake, sequence number 0,
-  # and those NEW_CONNECTION_ID frames carry, which the Endpoint makes
+  # that of a server's preferred address, sequence number 1, and those
+  # NEW_CONNECTION_ID frames carry, which the Endpoint makes
   # (Endpoint::Issuer) with their stateless reset tokens and leads to the
   # connection. Once the handshake is confirmed, as many are issued as the
   # peer's active_connection_id_limit takes, MAX at most; Retire Prior To
@@ -47,6 +48,18 @@ module Raiha::Next::QUIC
       @limit = 0
       # The IDs retired that wait to be forgotten, the oldest first.
       @retired = [] #: Array[Retired]
+    end
+
+    # The preferred address the transport parameters offer at `addresses`
+    # (Config#preferred_address), with an ID issued for it, sequence number
+    # 1, that no frame carries; nil with no addresses or no issuer, when
+    # there is none.
+    def preferred_address(addresses)
+      return nil unless addresses && (issuer = @issuer)
+      connection_id, stateless_reset_token = issuer.issue(@connection)
+      @active << Entry.new(sequence_number: @next_sequence_number, connection_id:, frame: nil)
+      @next_sequence_number += 1
+      TransportParameters::PreferredAddress.new(ipv4: addresses[:ipv4], ipv6: addresses[:ipv6], connection_id:, stateless_reset_token:)
     end
 
     # Issues IDs until min(`limit`, MAX) are active; `limit` is the peer's

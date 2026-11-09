@@ -92,6 +92,25 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     from_client.each { assert_equal QUIC::Route::Deliver.new(connection:), client.receive(to.(_1), from: SERVER, to: CLIENT, now: 1.0) }
   end
 
+  # A server with a preferred address offers it with an ID of sequence
+  # number 1 and its token, which its Endpoint brings to the connection;
+  # its NEW_CONNECTION_ID frames go from sequence number 2.
+  def test_a_server_s_preferred_address
+    client = client_endpoint
+    server = QUIC::Endpoint.server(config: CONFIG.with(preferred_address: { ipv6: ["2001:db8::2", 4434] }), random: Random.new(3), time: NOW,
+      now: 0.0)
+    tracer = NextQUICRecovery::RecordingTracer.new
+    connection = connect(client, tracer:)
+    exchange(client, server, connection)
+    preferred = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].preferred_address
+    assert_equal [nil, ["2001:db8::2", 4434]], [preferred.ipv4, preferred.ipv6]
+    assert_equal QUIC::StatelessReset.token(key: CONFIG.stateless_reset_key, connection_id: preferred.connection_id),
+      preferred.stateless_reset_token
+    assert_kind_of QUIC::Route::Deliver, server.receive("\x40".b + preferred.connection_id + "\0".b * 30, from: CLIENT, to: SERVER, now: 1.0)
+    issued = tracer.of(:packet_received).flat_map { _1[:frames] || [] }.grep(QUIC::Wire::Frame::NewConnectionID)
+    assert_equal [2, 3], issued.map(&:sequence_number)
+  end
+
   # A Retry goes to the connection it is for, which takes it.
   def test_a_retry
     client = client_endpoint

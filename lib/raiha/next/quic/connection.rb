@@ -854,7 +854,7 @@ module Raiha::Next::QUIC
       @original_destination_connection_id ||= header.dcid
       parameters = @config.transport_parameters(initial_source_connection_id: @source_connection_id,
         original_destination_connection_id: @original_destination_connection_id, retry_source_connection_id: @retry_source_connection_id,
-        stateless_reset_token: @stateless_reset_token)
+        stateless_reset_token: @stateless_reset_token, preferred_address: @issued.preferred_address(@config.preferred_address))
       @tracer.parameters_set(owner: :local, parameters:, now: @now) if @tracer # steep:ignore
       @binding = @start_binding.call(self, parameters)
     end
