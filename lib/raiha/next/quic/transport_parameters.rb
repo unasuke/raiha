@@ -98,6 +98,9 @@ module Raiha::Next::QUIC
       if stateless_reset_token && stateless_reset_token.bytesize != STATELESS_RESET_TOKEN_LENGTH
         raise ArgumentError, "a stateless reset token has 16 bytes, not #{stateless_reset_token.bytesize}"
       end
+      # RFC 9000 "Preferred Address": a server that sends with zero-length
+      # connection IDs offers no preferred address.
+      raise ArgumentError, "a preferred address with zero-length connection IDs" if preferred_address && initial_source_connection_id&.empty?
       super
     end
 

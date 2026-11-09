@@ -127,7 +127,8 @@ class RaihaNextQUICTransportParametersTest < Minitest::Test
       "a stateless reset token of 15 bytes" => tp(0x00, "o" * 8) + tp(0x0f, SCID) + tp(0x02, "s" * 15),
       "a preferred address with an empty connection ID" =>
         tp(0x00, "o" * 8) + tp(0x0f, SCID) + tp(0x0d, "\x00" * 24 + "\x00" + "r" * 16),
-      "a preferred address cut short" => tp(0x00, "o" * 8) + tp(0x0f, SCID) + tp(0x0d, preferred_address.encode.byteslice(0, 40))
+      "a preferred address cut short" => tp(0x00, "o" * 8) + tp(0x0f, SCID) + tp(0x0d, preferred_address.encode.byteslice(0, 40)),
+      "a preferred address with zero-length connection IDs" => tp(0x00, "o" * 8) + tp(0x0f, "") + tp(0x0d, preferred_address.encode)
     }.each { |name, bytes| assert_rejected(bytes, name, sender: :server) }
   end
 
