@@ -39,6 +39,12 @@ module Raiha::Next::Runtime
   # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
   # socket sends the datagrams of a Transmit with GSO (UDP.batching).
   #
+  # Each socket is bound to "::", which sends to IPv4 too, so that a
+  # connection can move to a server's preferred address of either family;
+  # where IPv6 is off and it cannot be, to "0.0.0.0", and the connection
+  # takes IPv4 addresses alone (Config#address_families). The address a
+  # datagram goes from is the OS's to choose.
+  #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
   # the first connection tried resumes it, and with `token`, one of its
   # Session#tokens, its Initials carry it, so that the server need not
@@ -145,6 +151,13 @@ module Raiha::Next::Runtime
       driver.stop
     end
 
+    # A socket for a connection, and the Config for its addresses.
+    private def bind
+      [UDP.bind("::", 0), @config]
+    rescue SystemCallError
+      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
+    end
+
     # [address, port] of `host` for UDP, each once.
     private def resolve(host, port)
       Addrinfo.getaddrinfo(host, port, nil, :DGRAM).map do |info|
@@ -156,8 +169,8 @@ module Raiha::Next::Runtime
     # begin once the driver starts: [driver, session].
     private def attempt(address, server_name, session:, token:, early_data:)
       made = false
-      udp = UDP.bind(address[0].include?(":") ? "::" : "0.0.0.0", 0)
-      endpoint = Raiha::Next::QUIC::Endpoint.client(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
+      udp, config = bind
+      endpoint = Raiha::Next::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
       quic = session.is_a?(Raiha::Next::HTTP3::Session) ? session.quic : session

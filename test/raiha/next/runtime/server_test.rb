@@ -321,6 +321,59 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
+  # Runs the block with no socket binding to "::", as where IPv6 is off.
+  def without_ipv6
+    bind = Runtime::UDP.method(:bind)
+    Runtime::UDP.define_singleton_method(:bind) { |host, port| host == "::" ? raise(Errno::EAFNOSUPPORT) : bind.call(host, port) }
+    yield
+  ensure
+    Runtime::UDP.define_singleton_method(:bind, bind) if bind
+  end
+
+  # Skips the test where "::1" cannot be bound.
+  def need_ipv6
+    socket = UDPSocket.new(Socket::AF_INET6)
+    socket.bind("::1", 0)
+  rescue SystemCallError
+    skip "::1 cannot be bound here"
+  ensure
+    socket&.close
+  end
+
+  # A server on IPv4 that prefers an IPv6 address as well: its client,
+  # bound to "::", sends to either, and moves to IPv6.
+  def test_a_client_moves_to_ipv6_from_ipv4
+    need_ipv6
+    Sync do
+      preferred = { ipv4: ["127.0.0.1", free_port], ipv6: ["::1", free_port] }
+      serving(method(:echoes), config: QUIC::Config.new(preferred_address: preferred)) do |port|
+        reply = connect(port) do |session|
+          500.times { session.connection.path.remote == preferred[:ipv6] ? break : sleep(0.01) }
+          [session.connection.path.remote, echo(session, "moved")]
+        end
+        assert_equal [preferred[:ipv6], "ECHO:moved"], reply
+      end
+    end
+  end
+
+  # Where IPv6 is off, a client's socket is bound to "0.0.0.0", and it
+  # moves to the IPv4 address of the two preferred.
+  def test_a_client_where_ipv6_is_off
+    need_ipv6
+    Sync do
+      preferred = { ipv4: ["127.0.0.1", free_port], ipv6: ["::1", free_port] }
+      serving(method(:echoes), config: QUIC::Config.new(preferred_address: preferred)) do |port|
+        without_ipv6 do
+          reply = connect(port) do |session|
+            500.times { session.connection.path.remote == preferred[:ipv4] ? break : sleep(0.01) }
+            [session.connection.path.remote, echo(session, "moved")]
+          end
+          assert_equal [preferred[:ipv4], "ECHO:moved"], reply
+        end
+      end
+    end
+  end
+
   # A preferred address the server cannot bind a socket to is never
   # offered: `run` raises.
   def test_a_preferred_address_that_cannot_be_bound

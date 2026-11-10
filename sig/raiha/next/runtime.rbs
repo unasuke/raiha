@@ -307,6 +307,7 @@ module Raiha::Next::Runtime
 
     private def finish: (Driver driver, Session session) -> void
 
+    private def bind: () -> [UDP, Raiha::Next::QUIC::Config]
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 
     private def attempt: (UDP::address address, String server_name, session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil,
