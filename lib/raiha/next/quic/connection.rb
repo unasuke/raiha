@@ -456,7 +456,8 @@ module Raiha::Next::QUIC
     # path and are as large, the last of them possibly shorter, go with it
     # in one Transmit, as many as fit and Transmit::MAX_SEGMENTS at most
     # (GSO); seeing whether the next one fits builds it, and one that does
-    # not starts the next Transmit.
+    # not starts the next Transmit. A datagram to go alone goes in a
+    # Transmit of its own.
     def each_transmit(now:)
       @now = now
       limit = @config.max_transmit_size
@@ -469,11 +470,11 @@ module Raiha::Next::QUIC
       end
       sent = next_datagram(now)
       while sent
-        payload, path = sent
+        payload, path, alone = sent
         size = payload.bytesize
         count = 1
         sent = next_datagram(now)
-        while sent && sent[1].equal?(path) && count < Transmit::MAX_SEGMENTS && sent[0].bytesize <= size &&
+        while !alone && sent && !sent[2] && sent[1].equal?(path) && count < Transmit::MAX_SEGMENTS && sent[0].bytesize <= size &&
             payload.bytesize + sent[0].bytesize <= limit
           payload = payload.b if count == 1
           payload << sent[0]
@@ -1015,18 +1016,19 @@ module Raiha::Next::QUIC
       @idle_deadline = timeout && now + [timeout, CLOSE_PTOS * @path.rtt.pto_period].max
     end
 
-    # The next datagram to send, nil when there is nothing. What elicits an
-    # ACK goes only while the congestion window has room for a datagram
-    # more and pacing lets it go, or a probe is due, which waits on neither
-    # (RFC 9002 "Probe Timeout"); a datagram of ACKs alone waits on nothing
-    # (RFC 9002 "Pacing"). The 1-RTT keys change first when a key update
-    # is due; when they cannot and are at their confidentiality limit, the
-    # connection closes. While closing, only the CONNECTION_CLOSE frame, when
-    # due. When nothing goes, the path hears why.
+    # The next datagram to send, as [datagram, its path, whether it goes
+    # alone], nil when there is nothing. What elicits an ACK goes only
+    # while the congestion window has room for a datagram more and pacing
+    # lets it go, or a probe is due, which waits on neither (RFC 9002
+    # "Probe Timeout"); a datagram of ACKs alone waits on nothing (RFC 9002
+    # "Pacing"). The 1-RTT keys change first when a key update is due; when
+    # they cannot and are at their confidentiality limit, the connection
+    # closes. While closing, only the CONNECTION_CLOSE frame, when due.
+    # When nothing goes, the path hears why.
     private def next_datagram(now)
       unless @state == :open
         closing = closing_datagram(now) or return nil
-        return [closing, @path]
+        return [closing, @path, false]
       end
       probe = probing_datagram(now) and return probe
       limit = @path.max_datagram_size
@@ -1041,7 +1043,7 @@ module Raiha::Next::QUIC
       rescue Violation => error
         close_for(error, now)
         closing = closing_datagram(now) or return nil
-        return [closing, @path]
+        return [closing, @path, false]
       end
       pending = [] #: Array[Pending]
       used = 0
@@ -1063,7 +1065,7 @@ module Raiha::Next::QUIC
       @probe_datagrams -= 1 if @probe_datagrams.positive? && pending.any? { |packet| packet.frames.any?(&:ack_eliciting?) }
       @path.datagram_sent(datagram.bytesize)
       discard_level(:initial, now) if @role == :client && pending.any? { |packet| packet.level == :handshake }
-      [datagram, @path]
+      [datagram, @path, false]
     end
 
     # Sending stops for `reason`: the path keeps whether the congestion
@@ -1352,7 +1354,7 @@ module Raiha::Next::QUIC
         datagram = seal([pending], now, target:, probing: true, path:)
         path.challenge_sent(data, full_size: datagram.bytesize >= MIN_INITIAL_DATAGRAM, now:) if data
         path.datagram_sent(datagram.bytesize)
-        return [datagram, path]
+        return [datagram, path, false]
       end
       nil
     end
