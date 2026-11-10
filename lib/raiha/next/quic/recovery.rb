@@ -271,6 +271,7 @@ module Raiha::Next::QUIC
       largest_before = space.largest_acked_packet
       acked = space.acknowledge(ack.ranges, frame_type: ack.ecn ? 0x03 : 0x02)
       spurious = take_spurious(space, ack.ranges, now)
+      mtu_probes_acked(spurious, now)
       if acked.empty?
         return spurious.empty? ? Outcome::NONE : Outcome.new(acked: spurious, lost: Outcome::NO_PACKETS, probe: nil)
       end
@@ -501,9 +502,11 @@ module Raiha::Next::QUIC
     # Each path that sent packets lost takes them out of flight and tells
     # its congestion controller once, with the latest time one of them was
     # sent (RFC 9002 "On Packets Lost"). The loss of a probe of the path MTU
-    # tells it nothing; a path abandoned does neither.
+    # tells it nothing, and goes to the path's search; a path abandoned
+    # does neither.
     private def on_lost(lost, now)
       @packets_lost += lost.size
+      lost.each { |packet| packet.path.mtu_probe_lost(packet.sent_bytes) if packet.pmtu_probe && !packet.path.abandoned? }
       lost.select { |packet| packet.ecn == :ect0 }.group_by(&:path).each { |path, packets| path.ecn_lost(packets.size, now:) }
       lost.select(&:in_flight).group_by(&:path).each do |path, packets|
         next if path.abandoned?
@@ -553,6 +556,15 @@ module Raiha::Next::QUIC
         path.delivered(acked_bytes, largest: packets.fetch(-1).packet_number, now:) if space.name == :application_data
         path.acked(acked_bytes:, largest_acked_sent_at: packets.map(&:time_sent).max || now, sampled: path.equal?(sampled), now:)
       end
+      mtu_probes_acked(acked, now)
+    end
+
+    # The probes of the path MTU among `packets`, acknowledged, go to the
+    # search of the path that sent them, those declared lost before too;
+    # a probe is the one packet of its datagram, and its size the
+    # datagram's.
+    private def mtu_probes_acked(packets, now)
+      packets.each { |packet| packet.path.mtu_probe_acked(packet.sent_bytes, now:) if packet.pmtu_probe && !packet.path.abandoned? }
     end
 
     # The values of the current path that changed since last told, at once

@@ -102,6 +102,7 @@ module Raiha::Next::QUIC
     private def on_lost: (Array[SentPacket] lost, Float now) -> void
     private def persistent_congestion?: (Path path, Array[SentPacket] lost) -> bool
     private def on_acked: (PacketNumberSpace space, Array[SentPacket] acked, Path? sampled, Float now) -> void
+    private def mtu_probes_acked: (Array[SentPacket] packets, Float now) -> void
     private def trace_metrics: (Float now) -> void
     private def skip_interval: () -> Integer
     private def random_below: (Integer bound) -> Integer
