@@ -81,6 +81,7 @@ module Raiha::Next::Runtime
     MARKS: Hash[Symbol, Integer]
     DROPPED: Array[singleton(SystemCallError)]
     UDP_SEGMENT: Integer
+    PMTUDISC_PROBE: Integer
     GSO_REFUSED: Array[singleton(SystemCallError)]
     GSO_UNAVAILABLE: Array[singleton(SystemCallError)]
     MAX_TRANSMIT: Integer
@@ -92,6 +93,8 @@ module Raiha::Next::Runtime
 
     def self.bind: (String host, Integer port) -> UDP
     def self.batching: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
+    def self.unfragmented?: () -> bool
+    def self.pmtud: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
 
     def initialize: (UDPSocket socket) -> void
 

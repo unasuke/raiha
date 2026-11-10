@@ -14,6 +14,11 @@ module Raiha::Next::Runtime
   # the IPv4-mapped "::ffff:192.0.2.1"), so that a peer is the same
   # address whichever socket it came on, and it maps them back to send.
   #
+  # On Linux, IP fragments nothing it sends and the kernel's idea of the
+  # path MTU is left aside (PMTUDISC_PROBE), so that a probe for a larger
+  # datagram is lost or refused (EMSGSIZE) rather than pass in pieces;
+  # elsewhere, the runtime sends no probe (UDP.pmtud).
+  #
   # Where the kernel will not cut them, a path with no checksum offload
   # (EIO, as ns-3's simulator has it) or a kernel without UDP_SEGMENT
   # (ENOPROTOOPT), the datagrams go one by one and the socket no longer
@@ -40,6 +45,9 @@ module Raiha::Next::Runtime
     # Linux's UDP_SEGMENT, a control message at the level of UDP, which
     # Socket does not name.
     UDP_SEGMENT = 103
+    # Linux's IP_PMTUDISC_PROBE and IPV6_PMTUDISC_PROBE, which Socket does
+    # not name either.
+    PMTUDISC_PROBE = 3
     # What GSO refuses with; the first two say it never works here.
     GSO_REFUSED = [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].freeze
     GSO_UNAVAILABLE = [Errno::EIO, Errno::ENOPROTOOPT].freeze
@@ -50,6 +58,14 @@ module Raiha::Next::Runtime
     # `config` with MAX_TRANSMIT for max_transmit_size, unless it has one:
     # a socket here sends the datagrams of a Transmit as they are cut.
     def self.batching(config) = config.max_transmit_size ? config : config.with(max_transmit_size: MAX_TRANSMIT)
+
+    # Whether a socket here keeps IP from fragmenting what it sends.
+    def self.unfragmented? = RUBY_PLATFORM.include?("linux") && Socket.const_defined?(:IP_MTU_DISCOVER) &&
+      Socket.const_defined?(:IPV6_MTU_DISCOVER)
+
+    # `config` with enable_pmtud false where a socket cannot keep IP from
+    # fragmenting, so that no probe passes in pieces.
+    def self.pmtud(config) = unfragmented? || !config.enable_pmtud ? config : config.with(enable_pmtud: false)
 
     # A socket bound to `host` and `port` (0 for one the OS chooses).
     def self.bind(host, port)
@@ -75,6 +91,11 @@ module Raiha::Next::Runtime
       # takes both.
       @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_PKTINFO, 1)
       @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVPKTINFO, 1) if @family == Socket::AF_INET6
+      # No fragments, at both levels on a socket that sends both.
+      if UDP.unfragmented?
+        @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_MTU_DISCOVER, PMTUDISC_PROBE)
+        @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER, PMTUDISC_PROBE) if @family == Socket::AF_INET6
+      end
       @gso = RUBY_PLATFORM.include?("linux")
     end
 

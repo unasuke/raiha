@@ -26,7 +26,9 @@ module Raiha::Next::Runtime
   # Destination Connection ID the client first chose.
   #
   # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
-  # socket sends the datagrams of a Transmit with GSO (UDP.batching).
+  # socket sends the datagrams of a Transmit with GSO (UDP.batching), and
+  # enable_pmtud false where the socket cannot keep IP from fragmenting
+  # (UDP.pmtud).
   #
   # A `config` with a preferred_address has a socket bound to each of its
   # addresses as well, unless the first socket takes what comes there
@@ -53,7 +55,7 @@ module Raiha::Next::Runtime
 
     def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
       anti_replay: nil, app_early_data_context: "".b)
-      @config = UDP.batching(config)
+      @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring
       @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)

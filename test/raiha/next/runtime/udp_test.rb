@@ -234,6 +234,29 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     assert_equal 1200, UDP.batching(QUIC::Config.new(max_transmit_size: 1200)).max_transmit_size
   end
 
+  # On Linux, IP fragments nothing a socket sends, at both levels of one
+  # bound to "::".
+  def test_no_fragments
+    skip "PMTUDISC_PROBE is Linux's" unless UDP.unfragmented?
+    ip = [Socket::IPPROTO_IP, Socket::IP_MTU_DISCOVER]
+    { "127.0.0.1" => [ip], "::" => [ip, [Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER]] }.each do |host, options|
+      socket = bind(host).instance_variable_get(:@socket)
+      options.each { |level, name| assert_equal UDP::PMTUDISC_PROBE, socket.getsockopt(level, name).int, host }
+    end
+  end
+
+  # Where a socket cannot keep IP from fragmenting, a Config probes no
+  # path; where it can, the Config is as it was.
+  def test_pmtud
+    config = QUIC::Config.new
+    assert_same config, UDP.pmtud(config) if UDP.unfragmented?
+    unfragmented = UDP.method(:unfragmented?)
+    UDP.define_singleton_method(:unfragmented?) { false }
+    assert_equal [false, false], [UDP.pmtud(config).enable_pmtud, UDP.pmtud(config.with(enable_pmtud: false)).enable_pmtud]
+  ensure
+    UDP.define_singleton_method(:unfragmented?, unfragmented) if unfragmented
+  end
+
   def test_a_batch_has_a_limit
     receiver = bind("127.0.0.1")
     sender = bind("127.0.0.1")

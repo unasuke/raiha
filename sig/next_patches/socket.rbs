@@ -1,7 +1,10 @@
 # Socket::AncillaryData.int takes the int it carries as its last argument,
 # which the bundled declaration types as a Symbol like the other three.
-# Added to it with `| ...`.
+# Added to it with `| ...`. Linux's IPV6_MTU_DISCOVER, which Socket defines
+# there, the bundled declaration does not name.
 class Socket
+  IPV6_MTU_DISCOVER: Integer
+
   class AncillaryData
     def self.int: (Symbol family, Symbol level, Symbol type, Integer value) -> instance
                 | ...

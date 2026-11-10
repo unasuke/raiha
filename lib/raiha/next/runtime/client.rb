@@ -37,7 +37,9 @@ module Raiha::Next::Runtime
   # time it began.
   #
   # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
-  # socket sends the datagrams of a Transmit with GSO (UDP.batching).
+  # socket sends the datagrams of a Transmit with GSO (UDP.batching), and
+  # enable_pmtud false where the socket cannot keep IP from fragmenting
+  # (UDP.pmtud).
   #
   # Each socket is bound to "::", which sends to IPv4 too, so that a
   # connection can move to a server's preferred address of either family;
@@ -72,7 +74,7 @@ module Raiha::Next::Runtime
     end
 
     def initialize(config:, tls_config:, keyring:, connect_timeout: CONNECT_TIMEOUT, qlog_dir: nil)
-      @config = UDP.batching(config)
+      @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring
       @connect_timeout = connect_timeout
