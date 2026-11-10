@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 module Raiha::Next::Runtime
-  # Runs an Endpoint on a UDP socket, with two fibers of its own under the
-  # Fiber scheduler: the reader waits for datagrams and gives them to the
-  # Endpoint; the runner runs the timers, lets the owner take its turn and
-  # sends what there is to send, then waits until a timer is due or
-  # something has changed.
+  # Runs an Endpoint on a UDP socket, and on others besides, as a server's
+  # at its preferred addresses, with fibers of its own under the Fiber
+  # scheduler: a reader for each socket waits for datagrams and gives them
+  # to the Endpoint; the runner runs the timers, lets the owner take its
+  # turn and sends what there is to send, then waits until a timer is due
+  # or something has changed. A Transmit goes from the socket its source
+  # is on (UDP#sends_from?), the first when none is.
   #
   # A call into the core never waits: the runtime gives it no I/O that could
   # yield to another fiber (a qlog goes to memory, and to its file after the
@@ -19,9 +21,10 @@ module Raiha::Next::Runtime
 
     def self.clock = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    def initialize(endpoint, udp, owner)
+    def initialize(endpoint, udp, owner, others: [])
       @endpoint = endpoint
       @udp = udp
+      @udps = [udp, *others]
       @owner = owner
       # Only for the runner to wait on.
       @lock = Thread::Mutex.new
@@ -34,7 +37,7 @@ module Raiha::Next::Runtime
     # Starts the reader and the runner, in fibers of the scheduler.
     def start
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
-      Fiber.schedule { read }
+      @udps.each { |udp| Fiber.schedule { read(udp) } }
       Fiber.schedule { run }
       self
     end
@@ -54,26 +57,26 @@ module Raiha::Next::Runtime
     def flush
       transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
       @endpoint.each_transmit(now: Driver.clock) { |transmit| transmits << transmit }
-      transmits.each { |transmit| @udp.send(transmit) }
+      transmits.each { |transmit| emit(transmit) }
     end
 
-    # Stops the reader and the runner and closes the socket; the owner is
-    # told. The socket closes even when telling the owner fails.
+    # Stops the readers and the runner and closes the sockets; the owner is
+    # told. The sockets close even when telling the owner fails.
     def stop
       return if @stopped
       @stopped = true
       changed
       @owner.stopped(@failure)
     ensure
-      @udp.close unless @udp.closed?
+      @udps.each { |udp| udp.close unless udp.closed? }
     end
 
-    private def read
+    private def read(udp)
       until @stopped
-        @udp.wait_readable
-        responses = take(@udp.receive, Driver.clock)
+        udp.wait_readable
+        responses = take(udp.receive, Driver.clock)
         changed
-        responses.each { |transmit| @udp.send(transmit) }
+        responses.each { |transmit| emit(transmit) }
       end
     rescue IOError, Errno::EBADF
       raise unless @stopped
@@ -94,7 +97,7 @@ module Raiha::Next::Runtime
 
     private def run
       until @stopped
-        turn(Driver.clock).each { |transmit| @udp.send(transmit) }
+        turn(Driver.clock).each { |transmit| emit(transmit) }
         @lock.synchronize do
           @changed.wait(@lock, timeout) unless @dirty || @stopped
           @dirty = false
@@ -121,6 +124,12 @@ module Raiha::Next::Runtime
     private def timeout
       deadline = [@endpoint.next_timeout, @owner.next_timeout].compact.min or return nil
       [deadline - Driver.clock, 0.0].max
+    end
+
+    # Sends `transmit` from the socket its source is on.
+    private def emit(transmit)
+      source = transmit.source
+      (source && @udps.find { |udp| udp.sends_from?(source) } || @udp).send(transmit)
     end
 
     private def fail(error)

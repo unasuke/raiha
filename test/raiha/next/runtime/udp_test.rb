@@ -84,6 +84,26 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     end
   end
 
+  # A datagram goes from a socket from its own address and port, or any
+  # address of its family on its port when bound to "0.0.0.0", any address
+  # at all when bound to "::".
+  def test_what_a_socket_sends_from
+    specific = bind("127.0.0.1")
+    port = specific.local_address[1]
+    assert specific.sends_from?(["127.0.0.1", port])
+    refute specific.sends_from?(["127.0.0.2", port])
+    refute specific.sends_from?(["127.0.0.1", port + 1])
+    ipv4 = bind("0.0.0.0")
+    port = ipv4.local_address[1]
+    assert ipv4.sends_from?(["192.0.2.1", port])
+    refute ipv4.sends_from?(["2001:db8::1", port])
+    both = bind("::")
+    port = both.local_address[1]
+    assert both.sends_from?(["192.0.2.1", port])
+    assert both.sends_from?(["2001:db8::1", port])
+    refute both.sends_from?(["2001:db8::1", port + 1])
+  end
+
   # A peer can mark congestion; the codepoint is the low two bits of the
   # traffic class, whatever the rest says.
   def test_congestion_experienced_and_the_rest_of_the_class

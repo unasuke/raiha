@@ -33,6 +33,7 @@ module Raiha::Next::Runtime
     attr_reader failure: StandardError?
 
     @udp: UDP
+    @udps: Array[UDP]
     @owner: _Owner
     @lock: Thread::Mutex
     @changed: Thread::ConditionVariable
@@ -41,7 +42,7 @@ module Raiha::Next::Runtime
 
     def self.clock: () -> Float
 
-    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner) -> void
+    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP]) -> void
 
     def start: () -> self
 
@@ -53,7 +54,7 @@ module Raiha::Next::Runtime
 
     def stop: () -> void
 
-    private def read: () -> void
+    private def read: (UDP udp) -> void
 
     private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
 
@@ -62,6 +63,8 @@ module Raiha::Next::Runtime
     private def turn: (Float now) -> Array[Raiha::Next::QUIC::Transmit]
 
     private def timeout: () -> Float?
+
+    private def emit: (Raiha::Next::QUIC::Transmit transmit) -> bool
 
     private def fail: (StandardError error) -> void
   end
@@ -93,6 +96,7 @@ module Raiha::Next::Runtime
     def initialize: (UDPSocket socket) -> void
 
     def local_address: () -> address
+    def sends_from?: (address address) -> bool
 
     def send: (Raiha::Next::QUIC::Transmit transmit) -> bool
 

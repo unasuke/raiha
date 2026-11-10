@@ -49,6 +49,32 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
     end
   end
 
+  # An Endpoint that keeps each datagram with the address it came to, and
+  # sends what it is given.
+  class Recorder
+    attr_reader :received
+
+    def initialize
+      @received = []
+      @transmits = []
+    end
+
+    def receive(data, from:, to:, ecn:, now:)
+      @received << [data, to]
+      nil
+    end
+
+    def each_transmit(now:)
+      yield @transmits.shift until @transmits.empty?
+    end
+
+    def next_timeout = nil
+
+    def handle_timeout(now:) = nil
+
+    def push(transmit) = @transmits << transmit
+  end
+
   def server
     tls_config = server_config
     endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: SecureRandom, time: Time.now, now: Runtime::Driver.clock)
@@ -124,6 +150,34 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
       assert eventually { driver.stopped? }
       assert_equal "a turn that fails", driver.failure&.message
       assert_same driver.failure, owner.stopped_with
+    end
+  end
+
+  # With a socket besides, as a server's preferred address has: what comes
+  # to it goes to the Endpoint, and a Transmit goes from the socket of its
+  # source, the first when it has none.
+  def test_another_socket
+    Sync do
+      endpoint = Recorder.new
+      first = Runtime::UDP.bind("127.0.0.1", 0)
+      second = Runtime::UDP.bind("127.0.0.1", 0)
+      driver = Runtime::Driver.new(endpoint, first, Owner.new(endpoint), others: [second]).start
+      peer = UDPSocket.new
+      peer.bind("127.0.0.1", 0)
+      peer.send("to the second", 0, *second.local_address)
+      assert eventually { endpoint.received.any? }
+      assert_equal [["to the second", second.local_address]], endpoint.received
+      to = ["127.0.0.1", peer.local_address.ip_port]
+      endpoint.push(QUIC::Transmit.new(payload: "from the second", destination: to, source: second.local_address, ecn: :not_ect,
+        segment_size: nil))
+      endpoint.push(QUIC::Transmit.new(payload: "from the first", destination: to, source: nil, ecn: :not_ect, segment_size: nil))
+      driver.changed
+      got = 2.times.map { data, from = peer.recvfrom(100); [data, from[1]] }
+      assert_equal [["from the first", first.local_address[1]], ["from the second", second.local_address[1]]], got.sort
+      driver.stop
+      assert second.closed?
+    ensure
+      peer&.close
     end
   end
 end

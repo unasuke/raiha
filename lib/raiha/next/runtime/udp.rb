@@ -84,6 +84,18 @@ module Raiha::Next::Runtime
       [address.ip_address, address.ip_port]
     end
 
+    # Whether a datagram from `address` ([address, port]) goes from this
+    # socket: the port is the socket's, and so is the address, or the
+    # socket is bound to any of its family, IPv4 too for "::".
+    def sends_from?(address)
+      host, port = address
+      return false unless port == @port
+      bound = @socket.local_address
+      return true if bound.ipv6? && bound.ipv6_unspecified?
+      return !host.include?(":") if bound.ip_address == "0.0.0.0"
+      unmapped(bound.ip_address) == host
+    end
+
     # Sends each datagram of `transmit`; whether all of them went. The ECN
     # mark of an IPv4 destination, IPv4-mapped included, goes as IP_TOS:
     # Linux leaves IPV6_TCLASS off a datagram that leaves as IPv4. The
