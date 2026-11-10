@@ -28,9 +28,9 @@ class RaihaNextRuntimeServerTest < Minitest::Test
   # A server of the runtime on a free port running `handler` for each
   # session, for the block, which is given the port, the server and the
   # fiber that runs it; stopped after.
-  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS, tls: server_config, **options)
-    server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1",
-      port: 0, max_connections:, **options)
+  def serving(handler, max_connections: Runtime::Server::MAX_CONNECTIONS, tls: server_config, config: QUIC::Config.new, **options)
+    server = Runtime::Server.new(config:, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0,
+      max_connections:, **options)
     running = Fiber.schedule { server.run(&handler) }
     sleep 0.01 until server.local_address
     yield server.local_address.fetch(1), server, running
@@ -295,5 +295,40 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     tls = server_config
     server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
     assert_raises(Runtime::Error::Usage) { server.run { flunk } }
+  end
+
+  # A port no socket is bound to, as far as anyone knows.
+  def free_port
+    socket = UDPSocket.new
+    socket.bind("127.0.0.1", 0)
+    socket.local_address.ip_port
+  ensure
+    socket&.close
+  end
+
+  # A server with a preferred address listens there too: its client moves
+  # there once the handshake is confirmed, and the server answers from it.
+  def test_a_preferred_address
+    Sync do
+      preferred = ["127.0.0.1", free_port]
+      serving(method(:echoes), config: QUIC::Config.new(preferred_address: { ipv4: preferred })) do |port|
+        reply = connect(port) do |session|
+          500.times { session.connection.path.remote == preferred ? break : sleep(0.01) }
+          [session.connection.path.remote, echo(session, "moved")]
+        end
+        assert_equal [preferred, "ECHO:moved"], reply
+      end
+    end
+  end
+
+  # A preferred address the server cannot bind a socket to is never
+  # offered: `run` raises.
+  def test_a_preferred_address_that_cannot_be_bound
+    Sync do
+      tls = server_config
+      server = Runtime::Server.new(config: QUIC::Config.new(preferred_address: { ipv4: ["192.0.2.1", 4434] }), tls_config: tls,
+        keyring: server_keyring(config: tls), host: "127.0.0.1", port: 0)
+      assert_raises(Errno::EADDRNOTAVAIL) { server.run { flunk } }
+    end
   end
 end

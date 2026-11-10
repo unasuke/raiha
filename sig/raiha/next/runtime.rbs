@@ -362,6 +362,7 @@ module Raiha::Next::Runtime
     def stopped: (StandardError? failure) -> void
 
     private def driver!: () -> Driver
+    private def preferred_sockets: (UDP udp) -> Array[UDP]
 
     private def advance_ticket_keys: () -> void
 

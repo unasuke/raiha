@@ -28,6 +28,12 @@ module Raiha::Next::Runtime
   # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
   # socket sends the datagrams of a Transmit with GSO (UDP.batching).
   #
+  # A `config` with a preferred_address has a socket bound to each of its
+  # addresses as well, unless the first socket takes what comes there
+  # already, bound to any address on its port; `run` raises the error of
+  # one it cannot bind, so that no client is offered an address the server
+  # does not listen at.
+  #
   # When the ticket keys of `tls_config` are a TicketKeys.ratchet, the
   # server builds them again once their epoch is over, before the next
   # connection it takes, with a Keyring to match. Keys of another kind are
@@ -81,10 +87,11 @@ module Raiha::Next::Runtime
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
       @handler = handler
       udp = @udp = UDP.bind(@host, @port)
+      others = preferred_sockets(udp)
       endpoint = Raiha::Next::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
       # Known before it starts, so that leaving `run` while it starts stops
       # it too.
-      driver = @driver = Driver.new(endpoint, udp, self)
+      driver = @driver = Driver.new(endpoint, udp, self, others:)
       driver.start
       reader, @wake = IO.pipe
       Fiber.schedule { wake_on(reader, driver) }
@@ -171,6 +178,19 @@ module Raiha::Next::Runtime
     end
 
     private def driver! = @driver || raise(Error::Usage, "the server is not running")
+
+    # A socket bound to each preferred address that none bound so far
+    # sends from; none is left open when one cannot be bound, nor `udp`.
+    private def preferred_sockets(udp)
+      others = [] #: Array[UDP]
+      (@config.preferred_address&.values || []).each do |host, port|
+        others << UDP.bind(host, port) unless [udp, *others].any? { |socket| socket.sends_from?([host, port]) }
+      rescue SystemCallError
+        [udp, *others].each(&:close)
+        raise
+      end
+      others
+    end
 
     # A ticket is sealed with the key of the epoch it is issued in, and keys
     # of epochs long gone stop opening any. A Keyring of another Config is
