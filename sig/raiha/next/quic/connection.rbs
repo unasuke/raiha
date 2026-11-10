@@ -188,6 +188,7 @@ module Raiha::Next::QUIC
     private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
     private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
     private def move_to_preferred_address: (Float now) -> void
+    private def move_to_own_preferred_address: (Path path, Float now) -> void
     private def preferred_local?: (address? local) -> bool
     private def give_new_token: (Float now) -> void
     private def port_only?: (address? local, address remote) -> bool

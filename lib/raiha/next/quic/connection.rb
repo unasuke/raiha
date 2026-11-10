@@ -936,9 +936,12 @@ module Raiha::Next::QUIC
             give_new_token(now) unless previous&.remote&.first == @path.remote&.first
           end
           lift_amplification_limit(now)
-        elsif answered && !answered.validating? &&
-            (answered.equal?(@preferred_path) || (answered.equal?(@newest_path) && preferred_local?(answered.local)))
-          switch_to(answered, now, revalidate: false)
+        elsif answered && !answered.validating?
+          if answered.equal?(@preferred_path)
+            switch_to(answered, now, revalidate: false)
+          elsif answered.equal?(@newest_path) && preferred_local?(answered.local)
+            move_to_own_preferred_address(answered, now)
+          end
         end
       end
     end
@@ -1409,9 +1412,8 @@ module Raiha::Next::QUIC
     # To the server's preferred address, the sending moves only once the
     # server has validated the path itself, here or when the validation
     # ends, as an attacker could start the move otherwise (RFC 9000
-    # "Migration to a Preferred Address"); it is under way already, and the
-    # path left needs no validating again. The path the packet came on; nil
-    # when there is none.
+    # "Migration to a Preferred Address"); it is under way already. The
+    # path the packet came on; nil when there is none.
     private def migrate(path, local, remote, dcid, bytes, now)
       return nil unless @role == :server && @handshake_confirmed
       unless path
@@ -1425,7 +1427,7 @@ module Raiha::Next::QUIC
       if !preferred_local?(local)
         switch_to(path, now)
       elsif path.validated? && !path.validating? && !path.validation_owed?
-        switch_to(path, now, revalidate: false)
+        move_to_own_preferred_address(path, now)
       elsif !@validating.include?(path)
         start_validation(path, now)
         @validating << path
@@ -1433,6 +1435,13 @@ module Raiha::Next::QUIC
       end
       path
     end
+
+    # A server moves to `path`, at its preferred address. With the client
+    # at another address than the path in use goes to, the client seems to
+    # have moved too, and the path left is validated again, as RFC 9000
+    # "Off-Path Packet Forwarding" asks; at the same address, an attacker
+    # forwarding packets gains nothing, and it is not.
+    private def move_to_own_preferred_address(path, now) = switch_to(path, now, revalidate: path.remote != @path.remote)
 
     # Whether `local` is one of a server's preferred addresses.
     private def preferred_local?(local) = @config.preferred_address&.value?(local) || false

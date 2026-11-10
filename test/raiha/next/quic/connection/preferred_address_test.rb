@@ -8,6 +8,7 @@ class RaihaNextQUICConnectionPreferredAddressTest < Minitest::Test
   include NextQUICPair
 
   PREFERRED = ["192.0.2.2", 4434].freeze
+  ELSEWHERE = ["198.51.100.7", 61_000].freeze
 
   # A server at SERVER offering PREFERRED, done with the handshake, given
   # three more IDs of the client's; the client's key log; and the time.
@@ -99,5 +100,18 @@ class RaihaNextQUICConnectionPreferredAddressTest < Minitest::Test
     server.receive(packet(keylog, ping, number: 1001), from: CLIENT, to: SERVER, now: now += 0.03)
     server.receive(packet(keylog, answer(data), number: 1002), from: CLIENT, to: PREFERRED, now:)
     assert_equal [SERVER], sent(server, keylog, now).map(&:first).uniq
+  end
+
+  # The client at PREFERRED from another address than before seems to have
+  # moved too: once the server has moved, it validates the path left again
+  # (RFC 9000 "Off-Path Packet Forwarding"), as it does not when the
+  # client's address is the same.
+  def test_a_new_client_address_at_the_preferred_address
+    server, keylog, now = connected
+    server.receive(packet(keylog, *padded(ping), number: 1000), from: ELSEWHERE, to: PREFERRED, now:)
+    data = challenge(sent(server, keylog, now))
+    server.receive(packet(keylog, answer(data), number: 1001), from: ELSEWHERE, to: PREFERRED, now: now += 0.03)
+    server.receive(packet(keylog, ping, number: 1002), from: ELSEWHERE, to: PREFERRED, now:)
+    assert_includes sent(server, keylog, now).select { |_, data| data }.map(&:first), SERVER
   end
 end
