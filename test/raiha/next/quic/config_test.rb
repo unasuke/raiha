@@ -11,8 +11,8 @@ class RaihaNextQUICConfigTest < Minitest::Test
       config.to_h.values_at(:max_idle_timeout, :max_udp_payload_size, :initial_max_data, :initial_max_stream_data_uni,
         :initial_max_streams_bidi, :initial_max_streams_uni, :max_ack_delay, :ack_delay_exponent, :active_connection_id_limit,
         :disable_active_migration, :max_datagram_frame_size)
-    assert_equal [[QUIC::Version::V1], 8, 1200, 6 * 1024 * 1024, 15 * 1024 * 1024, 15 * 1024 * 1024],
-      config.to_h.values_at(:versions, :connection_id_length, :initial_max_datagram_size, :max_stream_receive_window,
+    assert_equal [[QUIC::Version::V1], 8, 1200, true, 6 * 1024 * 1024, 15 * 1024 * 1024, 15 * 1024 * 1024],
+      config.to_h.values_at(:versions, :connection_id_length, :initial_max_datagram_size, :enable_pmtud, :max_stream_receive_window,
         :max_receive_window, :max_send_buffer)
   end
 

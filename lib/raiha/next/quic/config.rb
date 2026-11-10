@@ -17,6 +17,11 @@ module Raiha::Next::QUIC
   # DATAGRAM frames; RFC 9221 suggests 65535 to have them. max_udp_payload_size
   # is what this end can receive, and initial_max_datagram_size what it
   # sends before a path is probed: two things, however alike the names.
+  # enable_pmtud probes each path for larger datagrams (RFC 8899
+  # "Datagram Packetization Layer Path MTU Discovery"); a probe that IP
+  # fragments on the way would pass for one that fits, so the I/O layer
+  # must keep IP from fragmenting what it sends, as Runtime::UDP does
+  # where it can, or the application sets it false.
   #
   # congestion_control is the class of the algorithm each path makes its
   # controller from, or its name in Congestion::ALGORITHMS; initial_window
@@ -50,7 +55,7 @@ module Raiha::Next::QUIC
     :initial_max_data, :initial_max_stream_data_bidi_local, :initial_max_stream_data_bidi_remote, :initial_max_stream_data_uni,
     :initial_max_streams_bidi, :initial_max_streams_uni,
     :max_ack_delay, :ack_delay_exponent, :active_connection_id_limit, :disable_active_migration, :max_datagram_frame_size,
-    :versions, :connection_id_length, :initial_max_datagram_size,
+    :versions, :connection_id_length, :initial_max_datagram_size, :enable_pmtud,
     :max_stream_receive_window, :max_receive_window, :max_send_buffer,
     :congestion_control, :initial_window, :startup, :pacing_granularity, :max_transmit_size, :fast_convergence, :beta_ecn,
     :retry_token_key, :stateless_reset_key, :preferred_address, :address_families
@@ -94,7 +99,7 @@ module Raiha::Next::QUIC
       initial_max_streams_bidi: 100, initial_max_streams_uni: 100,
       max_ack_delay: 0.025, ack_delay_exponent: 3, active_connection_id_limit: 4, disable_active_migration: false,
       max_datagram_frame_size: nil,
-      versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200,
+      versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200, enable_pmtud: true,
       max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024,
       congestion_control: DEFAULT_CONGESTION_CONTROL, initial_window: DEFAULT_INITIAL_WINDOW, startup: nil, pacing_granularity: 0.001,
       max_transmit_size: nil, fast_convergence: true, beta_ecn: nil, retry_token_key: nil, stateless_reset_key: nil,

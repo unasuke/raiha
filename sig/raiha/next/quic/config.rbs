@@ -26,6 +26,7 @@ module Raiha::Next::QUIC
     attr_reader versions: Array[Version]
     attr_reader connection_id_length: Integer
     attr_reader initial_max_datagram_size: Integer
+    attr_reader enable_pmtud: bool
     attr_reader max_stream_receive_window: Integer
     attr_reader max_receive_window: Integer
     attr_reader max_send_buffer: Integer
@@ -47,7 +48,7 @@ module Raiha::Next::QUIC
                    ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
                    ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
                    ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
-                   ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
+                   ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer, ?enable_pmtud: bool,
                    ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                    ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                    ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
@@ -59,7 +60,7 @@ module Raiha::Next::QUIC
                      ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
                      ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
                      ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
-                     ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer,
+                     ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer, ?enable_pmtud: bool,
                      ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
                      ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                      ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
