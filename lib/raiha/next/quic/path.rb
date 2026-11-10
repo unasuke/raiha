@@ -45,6 +45,7 @@ module Raiha::Next::QUIC
       @full_size_due = false
       @validation_owed = false
       @max_datagram_size = max_datagram_size
+      @mtu_search = nil #: MTUSearch?
       @tracer = tracer
       start_over
       @abandoned = false
@@ -353,11 +354,37 @@ module Raiha::Next::QUIC
         end
     end
 
-    # The path's MTU changed (DPLPMTUD).
+    # The path's MTU changed (DPLPMTUD): the congestion controller hears,
+    # and the pacer's burst is RFC 9002's initial window of the new size.
     def update_max_datagram_size(max_datagram_size, now:)
       @max_datagram_size = max_datagram_size
       @congestion.on_mtu_updated(max_datagram_size:, now:)
+      @pacer.capacity = Config::DEFAULT_INITIAL_WINDOW.call(max_datagram_size)
     end
+
+    # The path searches for the largest datagram it carries, up to `up_to`
+    # bytes, from what it carries now (MTUSearch); a search under way or
+    # done goes on as it is.
+    def search_mtu(up_to:)
+      @mtu_search ||= MTUSearch.new(from: @max_datagram_size, up_to:)
+    end
+
+    # The size of the probe of the path's MTU to send next; nil when none
+    # is due.
+    def mtu_probe_size = @mtu_search&.next_size
+
+    # A probe of `size` bytes went on the path.
+    def mtu_probe_sent(size) = @mtu_search&.sent(size)
+
+    # A probe of `size` bytes got through: the path carries datagrams that
+    # large from now on, when they are larger than before.
+    def mtu_probe_acked(size, now:)
+      through = @mtu_search&.acked(size) or return
+      update_max_datagram_size(through, now:)
+    end
+
+    # A probe of `size` bytes was lost.
+    def mtu_probe_lost(size) = @mtu_search&.lost(size)
 
     # The window sending goes by: the congestion controller's, but until
     # an ACK tells the controller an RTT, when nothing is paced, no more

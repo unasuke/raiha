@@ -26,6 +26,10 @@ module Raiha::Next::QUIC
       @tokens >= size
     end
 
+    # The burst the bucket holds from now on, as the datagrams of the path
+    # grow; what it holds now stays.
+    attr_writer :capacity
+
     # A datagram of `bytes` went; one that went without waiting, a probe
     # say, still takes its bytes, and the next waits the longer.
     def sent(bytes) = @tokens -= bytes

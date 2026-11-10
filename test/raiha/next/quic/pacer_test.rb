@@ -14,6 +14,16 @@ class RaihaNextQUICPacerTest < Minitest::Test
   # A full bucket at 0.0.
   def full_pacer = Pacer.new(capacity: 10 * MDS, granularity: 0.001).tap { _1.ready?(MDS, RATE, 0.0) }
 
+  # A burst grown with the datagrams: what the bucket holds stays, and it
+  # fills up to the new capacity.
+  def test_a_new_capacity
+    pacer = full_pacer
+    pacer.capacity = 20 * MDS
+    assert pacer.ready?(10 * MDS, RATE, 0.0)
+    refute pacer.ready?(10 * MDS + 1, RATE, 0.0)
+    assert pacer.ready?(20 * MDS, RATE, 0.1)
+  end
+
   def test_a_burst_of_its_capacity
     pacer = full_pacer
     10.times do

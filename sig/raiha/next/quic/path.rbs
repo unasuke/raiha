@@ -31,6 +31,7 @@ module Raiha::Next::QUIC
     @ecn_testing_sent: Integer
     @ecn_testing_lost: Integer
     @pacer: Pacer
+    @mtu_search: MTUSearch?
     @pacing_release_at: Float?
     @rate_meter: Recovery::RateMeter
 
@@ -77,6 +78,11 @@ module Raiha::Next::QUIC
     def app_limited?: () -> bool
     def transmission_stopped: (Symbol reason, waiting: bool, next_packet_number: Integer) -> bool
     def update_max_datagram_size: (Integer max_datagram_size, now: Float) -> void
+    def search_mtu: (up_to: Integer) -> MTUSearch
+    def mtu_probe_size: () -> Integer?
+    def mtu_probe_sent: (Integer size) -> Integer?
+    def mtu_probe_acked: (Integer size, now: Float) -> void
+    def mtu_probe_lost: (Integer size) -> void
     def window: () -> Integer
     def window_packets: () -> Integer
     def abandon: () -> void

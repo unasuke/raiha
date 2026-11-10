@@ -105,6 +105,22 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_equal [1500, 3000, 14_720], [path.max_datagram_size, path.congestion.minimum_window, path.congestion.window]
   end
 
+  # A path searches for its MTU from what it carries: a probe at a time,
+  # and one through makes the path carry that much; asked again, the
+  # search goes on as it is. With no search, there is no probe.
+  def test_mtu_search
+    path = path()
+    assert_nil path.mtu_probe_size
+    path.search_mtu(up_to: 1472)
+    assert_equal 1472, path.mtu_probe_size
+    path.mtu_probe_sent(1472)
+    assert_nil path.mtu_probe_size
+    path.mtu_probe_acked(1472, now: 1.0)
+    assert_equal [1472, 2944], [path.max_datagram_size, path.congestion.minimum_window]
+    path.search_mtu(up_to: 1500)
+    assert_nil path.mtu_probe_size
+  end
+
   def test_abandon
     path = path()
     refute path.abandoned?

@@ -6,6 +6,7 @@ module Raiha::Next::QUIC
     @filled_at: Float?
 
     def initialize: (capacity: Integer, granularity: Float) -> void
+    attr_writer capacity: Integer
     def ready?: (Integer size, Float? rate, Float now) -> bool
     def sent: (Integer bytes) -> Float
     def release_at: (Integer size, Float? rate, Float now) -> Float?
