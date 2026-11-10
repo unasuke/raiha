@@ -114,4 +114,40 @@ class RaihaNextQUICConnectionPreferredAddressTest < Minitest::Test
     server.receive(packet(keylog, ping, number: 1002), from: ELSEWHERE, to: PREFERRED, now:)
     assert_includes sent(server, keylog, now).select { |_, data| data }.map(&:first), SERVER
   end
+
+  # Moved to PREFERRED, the server drops a packet to SERVER numbered past
+  # what it had received, which moves nothing back, and takes one numbered
+  # before, late on the way: the next ACK has the late one and not the
+  # newer.
+  def test_newer_packets_to_the_first_address_are_dropped
+    server, keylog, now = connected
+    server.receive(packet(keylog, *padded(ping), number: 1000), from: CLIENT, to: PREFERRED, now:)
+    data = challenge(sent(server, keylog, now))
+    server.receive(packet(keylog, answer(data), number: 1001), from: CLIENT, to: PREFERRED, now: now += 0.03)
+    server.receive(packet(keylog, ping, number: 1002), from: CLIENT, to: SERVER, now:)
+    server.receive(packet(keylog, ping, number: 950), from: CLIENT, to: SERVER, now:)
+    now += 0.03
+    server.handle_timeout(now:)
+    transmits = server.transmits(now:)
+    assert_equal [PREFERRED], transmits.map(&:source).uniq
+    acked = transmits.flat_map { server_one_rtt(keylog, _1.payload, phase: 0)&.last || [] }.grep(QUIC::Wire::Frame::Ack)
+      .flat_map { |ack| ack.ranges.flat_map(&:to_a) }
+    assert_includes acked, 950
+    refute_includes acked, 1002
+  end
+
+  # Moved to PREFERRED with the client at another address, the server
+  # takes a newer packet to SERVER, which takes the connection back there,
+  # as one from the client would when an attacker forwarded copies.
+  def test_newer_packets_to_the_first_address_after_the_client_seemed_to_move
+    server, keylog, now = connected
+    server.receive(packet(keylog, *padded(ping), number: 1000), from: ELSEWHERE, to: PREFERRED, now:)
+    data = challenge(sent(server, keylog, now))
+    server.receive(packet(keylog, answer(data), number: 1001), from: ELSEWHERE, to: PREFERRED, now: now += 0.03)
+    server.receive(packet(keylog, ping, number: 1002), from: CLIENT, to: SERVER, now:)
+    now += 0.03
+    server.handle_timeout(now:)
+    acks = server.transmits(now:).select { (server_one_rtt(keylog, _1.payload, phase: 0)&.last || []).grep(QUIC::Wire::Frame::Ack).any? }
+    assert_equal [[SERVER, CLIENT]], acks.map { [_1.source, _1.destination] }.uniq
+  end
 end

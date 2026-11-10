@@ -162,8 +162,10 @@ module Raiha::Next::QUIC
       @preferred_path = nil #: Path?
       # The path the 1-RTT packet that is no probe with the largest number
       # so far came on, which a server moves to at its preferred address
-      # once it has validated the path.
+      # once it has validated the path, and the largest number received
+      # when it moved.
       @newest_path = nil #: Path?
+      @moved_after = nil #: Integer?
       # The Destination Connection ID of the last 1-RTT packet that came on
       # the path in use: a packet from a new address with the same one is a
       # NAT rebinding most likely.
@@ -797,6 +799,11 @@ module Raiha::Next::QUIC
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period))
       return dropped(:decryption_failure, length, now) unless payload
+      # RFC 9000 "Migration to a Preferred Address": a server moved there
+      # drops what comes to another address newer than the move, and takes
+      # what is older, late on the way.
+      moved = @moved_after
+      return dropped(:rejected, length, now) if moved && level == :one_rtt && unmasked.packet_number > moved && !preferred_local?(to)
       accept_first_initial(header, from, to) if first && header.is_a?(Wire::LongHeader)
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       largest = @recovery.largest_received(level)
@@ -1437,11 +1444,18 @@ module Raiha::Next::QUIC
     end
 
     # A server moves to `path`, at its preferred address. With the client
-    # at another address than the path in use goes to, the client seems to
-    # have moved too, and the path left is validated again, as RFC 9000
-    # "Off-Path Packet Forwarding" asks; at the same address, an attacker
-    # forwarding packets gains nothing, and it is not.
-    private def move_to_own_preferred_address(path, now) = switch_to(path, now, revalidate: path.remote != @path.remote)
+    # at the address the path in use goes to, from now on it drops what
+    # comes to another address numbered past what it has received (RFC 9000
+    # "Migration to a Preferred Address"). With the client at another
+    # address, the client seems to have moved too: the path left is
+    # validated again, as RFC 9000 "Off-Path Packet Forwarding" asks, and
+    # what comes there is taken, so that a newer packet on it takes the
+    # connection back from an attacker forwarding copies of packets.
+    private def move_to_own_preferred_address(path, now)
+      client_moved = path.remote != @path.remote
+      @moved_after = client_moved ? nil : @recovery.largest_received(:one_rtt)
+      switch_to(path, now, revalidate: client_moved)
+    end
 
     # Whether `local` is one of a server's preferred addresses.
     private def preferred_local?(local) = @config.preferred_address&.value?(local) || false
