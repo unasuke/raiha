@@ -45,13 +45,14 @@ module RaihaInterop
       log("dropped a datagram of #{transmit.payload.bytesize} bytes to #{transmit.destination.inspect}")
     end
 
-    # The datagrams on `socket` as [data, [address, port] it came from,
-    # [address, port] it came to, ecn]: waits for the first until
-    # `deadline` (forever when nil), then takes those there already, as
-    # many as the socket takes at once.
-    def receive_datagrams(socket, deadline)
+    # The datagrams on `sockets`, one socket or several, as [data,
+    # [address, port] it came from, [address, port] it came to, ecn]: waits
+    # for the first until `deadline` (forever when nil), then takes those
+    # there already, as many as each socket takes at once.
+    def receive_datagrams(sockets, deadline)
       timeout = deadline && [deadline - mono, 0].max
-      socket.wait_readable(timeout) ? socket.receive : []
+      ready, = IO.select(Array(sockets), nil, nil, timeout)
+      (ready || []).flat_map(&:receive)
     end
 
     # The keylog of SSLKEYLOGFILE, nil when it is not set.

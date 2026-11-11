@@ -8,6 +8,9 @@ module RaihaInterop
   # for the retry testcase, and answers each request, "GET /path\r\n" on a stream the
   # client opens, with the file of the path under WWW, ending the stream.
   # A path with no file gets nothing. It runs until the runner stops it.
+  # For the connectionmigration testcase, it offers its own addresses, of
+  # IPv4 and IPv6, on PREFERRED_PORT as its preferred address, and listens
+  # there too.
   #
   # It gives tickets sealed with a key made at random as it starts, and
   # takes 0-RTT from them. As no ticket opens from before the start, the
@@ -16,6 +19,7 @@ module RaihaInterop
     include NextQUIC
 
     PORT = 443
+    PREFERRED_PORT = 4434
     # How much of a response goes to stream_write at a time.
     PIECE = 65_536
 
@@ -37,13 +41,19 @@ module RaihaInterop
       @keyring = TLS::Keyring.server(config: @tls_config, identities: [identity])
       @anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false)
       @keylog = keylog
-      socket = udp_socket("::", (@env["BIND_PORT"] || PORT).to_i)
-      endpoint = QUIC::Endpoint.server(config: quic_config, random: SecureRandom, time: Time.now, now: mono)
-      log("listening on port #{socket.local_address[1]} testcase=#{@testcase}")
+      config = quic_config
+      @sockets = [udp_socket("::", (@env["BIND_PORT"] || PORT).to_i)]
+      if @testcase == "connectionmigration"
+        config = config.with(preferred_address: preferred_address)
+        @sockets << udp_socket("::", PREFERRED_PORT)
+        log("preferred address #{config.preferred_address.inspect}")
+      end
+      endpoint = QUIC::Endpoint.server(config:, random: SecureRandom, time: Time.now, now: mono)
+      log("listening on port #{@sockets.first.local_address[1]} testcase=#{@testcase}")
       loop do
-        endpoint.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
-        receive_datagrams(socket, endpoint.next_timeout).each do |data, from, to, ecn|
-          dispatch(endpoint, socket, endpoint.receive(data, from:, to:, ecn:, now: mono))
+        endpoint.each_transmit(now: mono) { |transmit| send_from_source(transmit) }
+        receive_datagrams(@sockets, endpoint.next_timeout).each do |data, from, to, ecn|
+          dispatch(endpoint, endpoint.receive(data, from:, to:, ecn:, now: mono))
         end
         deadline = endpoint.next_timeout
         endpoint.handle_timeout(now: mono) if deadline && deadline <= mono
@@ -58,16 +68,32 @@ module RaihaInterop
 
     # What the application does with a Route: a Retry first for the retry
     # testcase, then the ClientHello read and accepted.
-    private def dispatch(endpoint, socket, route)
+    private def dispatch(endpoint, route)
       case route
       when QUIC::Route::Incoming
         return endpoint.retry(route.handle, now: mono) if @testcase == "retry" && !route.address_validated
-        dispatch(endpoint, socket, endpoint.admit(route.handle, now: mono))
+        dispatch(endpoint, endpoint.admit(route.handle, now: mono))
       when QUIC::Route::ClientHello
         endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now: mono, tracer: qlog(:server), keylog: @keylog,
           anti_replay: @anti_replay)
-      when QUIC::Route::Respond then send_transmit(socket, route.transmit)
+      when QUIC::Route::Respond then send_from_source(route.transmit)
       end
+    end
+
+    # Sends `transmit` from the socket its source is on, the first when it
+    # has none.
+    private def send_from_source(transmit)
+      source = transmit.source
+      send_transmit((source && @sockets.find { |socket| socket.sends_from?(source) }) || @sockets.first, transmit)
+    end
+
+    # This host's addresses, the first of IPv4 and of IPv6 that are
+    # neither loopback nor link-local, on PREFERRED_PORT.
+    private def preferred_address
+      addresses = Socket.ip_address_list
+      ipv4 = addresses.find { |address| address.ipv4? && !address.ipv4_loopback? }
+      ipv6 = addresses.find { |address| address.ipv6? && !address.ipv6_loopback? && !address.ipv6_linklocal? }
+      { ipv4: ipv4 && [ipv4.ip_address, PREFERRED_PORT], ipv6: ipv6 && [ipv6.ip_address, PREFERRED_PORT] }.compact
     end
 
     private def serve(connection)

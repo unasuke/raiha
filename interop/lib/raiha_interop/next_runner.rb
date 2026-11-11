@@ -22,7 +22,9 @@ module RaihaInterop
     CLIENT_TESTCASES = %w[
       handshake transfer retry chacha20 keyupdate versionnegotiation resumption zerortt http3 multiconnect ecn
     ].freeze
-    SERVER_TESTCASES = %w[handshake transfer retry chacha20 versionnegotiation resumption zerortt http3 multiconnect ecn].freeze
+    SERVER_TESTCASES = %w[
+      handshake transfer retry chacha20 versionnegotiation resumption zerortt http3 multiconnect ecn connectionmigration
+    ].freeze
     # What quic-interop-runner takes for a testcase not implemented.
     NOT_IMPLEMENTED = 127
 
