@@ -150,14 +150,6 @@ module Raiha::Next::QUIC
                   | (String data) -> instance
     end
 
-    class PathValidated < Data
-      attr_reader local: address?
-      attr_reader remote: address
-
-      def self.new: (local: address?, remote: address) -> instance
-                  | (address? local, address remote) -> instance
-    end
-
     class KeyUpdated < Data
       attr_reader phase: Integer
 
@@ -202,6 +194,6 @@ module Raiha::Next::QUIC
     end
 
     type t = Connected | StreamReadable | StreamWritable | StreamReset | StopSending | DatagramReceived
-           | PathValidated | KeyUpdated | SessionTicket | ZeroRttRejected | NewToken | TLSEvent | Closed
+           | KeyUpdated | SessionTicket | ZeroRttRejected | NewToken | TLSEvent | Closed
   end
 end

@@ -26,9 +26,6 @@ module Raiha::Next::QUIC
     class DatagramReceived < Data.define(:data)
     end
 
-    class PathValidated < Data.define(:local, :remote)
-    end
-
     class KeyUpdated < Data.define(:phase)
     end
 

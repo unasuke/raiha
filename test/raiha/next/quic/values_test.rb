@@ -57,7 +57,6 @@ class RaihaNextQUICValuesTest < Minitest::Test
       QUIC::Event::StreamReset.new(stream_id: 0, error_code: 1, final_size: 10),
       QUIC::Event::StopSending.new(stream_id: 0, error_code: 1),
       QUIC::Event::DatagramReceived.new(data: "d".b.freeze),
-      QUIC::Event::PathValidated.new(local: nil, remote: Ractor.make_shareable(["192.0.2.1", 443])),
       QUIC::Event::KeyUpdated.new(phase: 1),
       QUIC::Event::TLSEvent.new(event: TLS::Event::SessionNotOffered.new(reason: :ticket_expired)),
       QUIC::Event::Closed.new(error:, by_peer: true)
