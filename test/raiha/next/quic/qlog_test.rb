@@ -98,6 +98,20 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert_equal ["quic:connection_id_updated", { "owner" => "remote", "old" => "01" * 8, "new" => "02" * 8 }], records(io).last.values_at("name", "data")
   end
 
+  # The addresses of a path go as qlog's PathEndpointInfo, by family; one
+  # not known yet not at all.
+  def test_migration_state_updated
+    io = StringIO.new
+    tracer = QUIC::Qlog::Tracer.new(io, vantage_point: :server)
+    tracer.migration_state_updated(state: :probing_started, local: ["192.0.2.2", 443], remote: ["2001:db8::1", 4433], now: 1.0)
+    tracer.migration_state_updated(state: :migration_complete, local: nil, remote: ["192.0.2.1", 50_000], now: 2.0)
+    assert_equal [
+      { "new" => "probing_started", "path_local" => { "ip_v4" => "192.0.2.2", "port_v4" => 443 },
+        "path_remote" => { "ip_v6" => "2001:db8::1", "port_v6" => 4433 } },
+      { "new" => "migration_complete", "path_remote" => { "ip_v4" => "192.0.2.1", "port_v4" => 50_000 } }
+    ], records(io).drop(1).map { _1["data"] }
+  end
+
   # A key update is told for the keys of both directions, with no key.
   def test_a_key_update
     io = StringIO.new

@@ -518,7 +518,10 @@ module Raiha::Next::QUIC
         return time_out_idly if idle && now >= idle
         @protection.handle_timeout(now:)
         @issued.handle_timeout(now)
-        @validating.select { |path| path.validation_failed?(now) }.each { |path| abandon_path(path) }
+        @validating.select { |path| path.validation_failed?(now) }.each do |path|
+          trace_migration(:probing_abandoned, path, now)
+          abandon_path(path)
+        end
         fall_back(now) if @path.validation_failed?(now)
         return unless @state == :open
         outcome = @recovery.on_timeout(now:)
@@ -955,12 +958,14 @@ module Raiha::Next::QUIC
           # the full datagram answered too, not when the answer to a short
           # one validates its address.
           unless @path.validating?
+            trace_migration(:migration_complete, @path, now)
             previous = @last_validated
             remember_validated(@path)
             give_new_token(now) unless previous&.remote&.first == @path.remote&.first
           end
           lift_amplification_limit(now)
         elsif answered && !answered.validating?
+          trace_migration(:probing_successful, answered, now)
           if answered.equal?(@preferred_path)
             switch_to(answered, now, revalidate: false)
           elsif answered.equal?(@newest_path) && preferred_local?(answered.local)
@@ -1447,6 +1452,7 @@ module Raiha::Next::QUIC
       path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
       path.datagram_received(bytes)
       start_validation(path, now)
+      trace_migration(:probing_started, path, now)
       @peers&.add(self, remote)
       @validating << path
       make_room
@@ -1484,6 +1490,7 @@ module Raiha::Next::QUIC
         move_to_own_preferred_address(path, now)
       elsif !@validating.include?(path)
         start_validation(path, now)
+        trace_migration(:probing_started, path, now)
         @validating << path
         make_room
       end
@@ -1524,6 +1531,7 @@ module Raiha::Next::QUIC
       connection_id = @peer_ids&.claim or return
       path = Path.new(config: @config, remote:, validated: true, destination_connection_id: connection_id, tracer: @tracer)
       start_validation(path, now)
+      trace_migration(:probing_started, path, now)
       @peers&.add(self, remote)
       @validating << path
       @preferred_path = path
@@ -1573,8 +1581,11 @@ module Raiha::Next::QUIC
       lift_amplification_limit(now)
       @path = path
       @recovery.switch_path(path, now:)
+      trace_migration(:migration_started, path, now)
+      trace_migration(:migration_complete, path, now) unless path.validating?
       if revalidate && left.destination_connection_id
         start_validation(left, now)
+        trace_migration(:probing_started, left, now)
         @validating << left
         make_room
       end
@@ -1602,9 +1613,19 @@ module Raiha::Next::QUIC
     # idle one does.
     private def fall_back(now)
       failed = @path
+      trace_migration(:migration_abandoned, failed, now)
       last = @last_validated
       return close_silently("no validated path") if last.nil? || last.equal?(failed)
       switch_to(last, now, revalidate: false)
+    end
+
+    # How the paths stand (qlog `migration_state_updated`): `state` is
+    # :probing_started, :probing_successful or :probing_abandoned for a
+    # path besides the one in use, and :migration_started,
+    # :migration_complete or :migration_abandoned for one the connection
+    # moved to.
+    private def trace_migration(state, path, now)
+      @tracer.migration_state_updated(state:, local: path.local, remote: path.remote, now:) if @tracer # steep:ignore
     end
 
     # Validation of `path` starts at `now`: a challenge each PTO of the

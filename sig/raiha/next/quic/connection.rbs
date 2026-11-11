@@ -200,6 +200,7 @@ module Raiha::Next::QUIC
     private def fall_back: (Float now) -> void
     private def remember_validated: (Path path) -> void
     private def kept?: (Path path) -> bool
+    private def trace_migration: (migration_state state, Path path, Float now) -> void
     private def start_validation: (Path path, Float now) -> void
     private def reassign_connection_ids: (PeerConnectionIDs ids) -> void
     private def make_room: () -> void

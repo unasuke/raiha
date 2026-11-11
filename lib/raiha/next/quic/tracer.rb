@@ -95,5 +95,12 @@ module Raiha::Next::QUIC
     # `connection_id_updated`): the peer's this end sends with (`owner`
     # :remote), or this end's the peer sends with (:local).
     def connection_id_updated(owner:, old:, new:, now:) = nil
+
+    # How a path between `local` and `remote` stands (qlog
+    # `migration_state_updated`): :probing_started, :probing_successful
+    # and :probing_abandoned as one besides the path in use is validated,
+    # and :migration_started, :migration_complete and :migration_abandoned
+    # as the connection moves to one.
+    def migration_state_updated(state:, local:, remote:, now:) = nil
   end
 end

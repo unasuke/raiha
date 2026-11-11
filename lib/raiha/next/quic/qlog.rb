@@ -129,6 +129,11 @@ module Raiha::Next::QUIC
         event(now, "quic:connection_id_updated", { owner: owner.to_s, old: hex(old), new: hex(new) })
       end
 
+      def migration_state_updated(state:, local:, remote:, now:)
+        data = { new: state.to_s, path_local: endpoint(local), path_remote: endpoint(remote) } #: Hash[Symbol, json]
+        event(now, "quic:migration_state_updated", data.compact)
+      end
+
       def parameters_set(owner:, parameters:, now:)
         event(now, "quic:parameters_set", { owner: owner.to_s, **values(parameters.to_h.compact) })
       end
@@ -226,6 +231,13 @@ module Raiha::Next::QUIC
       private def record_size(json) = RECORD_SEPARATOR.bytesize + json.bytesize + 1
 
       private def hex(bytes) = bytes.unpack1("H*")
+
+      # An address as qlog's PathEndpointInfo has it, by its family; nil
+      # for none.
+      private def endpoint(address)
+        host, port = address || (return nil)
+        host.include?(":") ? { ip_v6: host, port_v6: port } : { ip_v4: host, port_v4: port }
+      end
     end
   end
 end

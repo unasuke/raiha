@@ -52,6 +52,7 @@ module Raiha::Next::QUIC
       def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
       def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> void
       def connection_id_updated: (owner: :local | :remote, old: String, new: String, now: Float) -> void
+      def migration_state_updated: (state: migration_state, local: address?, remote: address?, now: Float) -> void
       def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
       def key_updated: (level: PacketProtection::level, now: Float) -> void
       def tls_trace: (::Raiha::Next::TLS::Trace::t value) -> void
@@ -65,6 +66,7 @@ module Raiha::Next::QUIC
       private def room_for?: (Integer bytes) -> bool
       private def stop_reason: (Integer bytes) -> Hash[Symbol, json]
       private def hex: (String bytes) -> String
+      private def endpoint: (address? address) -> Hash[Symbol, json]?
     end
   end
 end
