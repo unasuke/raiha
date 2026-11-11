@@ -132,6 +132,18 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
     assert_equal PREFERRED, server.connections.first.path.local
   end
 
+  # Moved to the preferred address, the client still takes a stateless
+  # reset from the server's first address, with the token of the ID it sent
+  # with there: the path is the one to go back to (RFC 9000 "Detecting a
+  # Stateless Reset").
+  def test_a_stateless_reset_from_the_first_address
+    net, client, _, _, _, tracer, = offered([PREFERRED])
+    assert net.run_until { client.path.remote == PREFERRED }
+    token = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].stateless_reset_token
+    client.receive("\x40".b + "\x55".b * 30 + token, from: SERVER, to: CLIENT, now: net.now)
+    assert client.draining?
+  end
+
   # A client with zero-length connection IDs issues none to wait for: the
   # server answers on any path with none, and the client moves as soon as
   # the handshake is confirmed.

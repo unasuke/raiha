@@ -444,10 +444,11 @@ module Raiha::Next::QUIC
     # RFC 9000 "Detecting a Stateless Reset": whether `datagram`, none of
     # whose packets this connection could take, ends in a stateless reset
     # token the peer gave of an ID this end sends with on a path to `from`,
-    # the address it came from; the connection then drains on it, sending
-    # nothing more. Each token is compared in constant time.
+    # the address it came from, the path to go back to's too; the
+    # connection then drains on it, sending nothing more. Each token is
+    # compared in constant time.
     def take_stateless_reset(datagram, from:, now:)
-      paths = [@path, *@validating].select { |path| path.remote == from }
+      paths = [@path, *@validating, @last_validated].compact.uniq.select { |path| path.remote == from }
       ids = paths.filter_map { |path| path.equal?(@path) ? @destination_connection_id : path.destination_connection_id }
       return false unless @state == :open && StatelessReset.match?(datagram, @peer_ids&.reset_tokens(ids) || [])
       enter_draining(ConnectionError.new(code: ErrorCode::NO_ERROR, frame_type: 0, reason: "stateless reset", application: false), now)
