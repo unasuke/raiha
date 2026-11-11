@@ -84,9 +84,10 @@ class RaihaNextQUICConnectionStreamSendTest < Minitest::Test
     assert_equal 2000, read_all(server, stream_id).bytesize
   end
 
-  # Streams with data to send take turns.
+  # Streams with data to send take turns, in the first two datagrams when
+  # no probe of the path MTU goes first.
   def test_streams_take_turns
-    client, server, now = connected
+    client, server, now = connected(client_config: QUIC::Config.new(enable_pmtud: false))
     first = client.open_stream
     second = client.open_stream
     client.stream_write(first, "a" * 3000)

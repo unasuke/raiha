@@ -12,6 +12,7 @@ module Raiha::Next::QUIC
     MAX_VALIDATING_PATHS: Integer
     CHALLENGE_LENGTH: Integer
     MIN_PROBE: Integer
+    MAX_MTU_PROBE: Hash[address_family, Integer]
     MIN_INITIAL_DATAGRAM: Integer
     INITIAL_DCID_LENGTH: Integer
     DEFAULT_ACK_DELAY_EXPONENT: Integer
@@ -183,6 +184,7 @@ module Raiha::Next::QUIC
     private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
     private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
     private def probing_datagram: (Float now) -> [String, Path, bool]?
+    private def mtu_probe_datagram: (Float now) -> [String, Path, bool]?
     private def transmit: (String payload, Path path, Integer? segment_size) -> Transmit
     private def path_of: (address? local, address? remote) -> Path?
     private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
@@ -203,10 +205,10 @@ module Raiha::Next::QUIC
     private def abandon_path: (Path path) -> void
     private def path_pto: (Path path) -> Float
     private def validation_timeouts: () -> Array[Float]
-    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?path: Path) -> String
+    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?mtu_probe: bool, ?path: Path) -> String
     private def padded_initial?: (Pending packet) -> bool
     private def padded: (Pending packet, String payload, Integer missing) -> String
-    private def protect: (Pending packet, String payload, Float now, probing: bool, path: Path) -> String
+    private def protect: (Pending packet, String payload, Float now, probing: bool, mtu_probe: bool, path: Path) -> String
     private def header_for: (PacketProtection::level level) -> Wire::header
     private def overhead: (Wire::header header) -> Integer
     private def token_field: (Wire::LongHeader header) -> Integer

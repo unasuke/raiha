@@ -53,6 +53,9 @@ module Raiha::Next::QUIC
     # The least a probe of a path takes, which a path with less left of its
     # amplification limit cannot send: no timer waits for it.
     MIN_PROBE = 64
+    # The largest datagram a path is searched up to, by the family of its
+    # peer's address: 1500 bytes of Ethernet less the IP and UDP headers.
+    MAX_MTU_PROBE = { ipv4: 1472, ipv6: 1452 }.freeze
     # How many times a server sends its Initial flight again at once on a
     # ClientHello that comes again (RFC 9002 "Speeding up Handshake
     # Completion"): once is enough for one loss, and twice for a burst.
@@ -1038,7 +1041,7 @@ module Raiha::Next::QUIC
         closing = closing_datagram(now) or return nil
         return [closing, @path, false]
       end
-      probe = probing_datagram(now) and return probe
+      probe = probing_datagram(now) || mtu_probe_datagram(now) and return probe
       limit = @path.max_datagram_size
       budget = amplification_budget(now)
       limit = [limit, budget].min if budget
@@ -1360,6 +1363,34 @@ module Raiha::Next::QUIC
       nil
     end
 
+    # RFC 8899 "Datagram Packetization Layer Path MTU Discovery": once the
+    # handshake is confirmed and the path in use is validated, the path is
+    # searched for the largest datagram it carries, up to MAX_MTU_PROBE of
+    # its family and the peer's max_udp_payload_size, unless the Config
+    # says no (enable_pmtud). A probe due goes when the congestion window
+    # has room for it and pacing lets it go, after any probe of loss
+    # recovery: a 1-RTT packet of PING and PADDING alone, which fills a
+    # datagram of the size and goes alone, so that a datagram too large
+    # takes nothing else with it. It counts in flight, and its loss tells
+    # the congestion controller nothing.
+    private def mtu_probe_datagram(now)
+      path = @path
+      peer = @peer_parameters
+      remote = path.remote
+      return nil unless @config.enable_pmtud && @handshake_confirmed && @probe_datagrams.zero? && peer && remote
+      return nil unless path.validated? && !path.validating?
+      path.search_mtu(up_to: [MAX_MTU_PROBE.fetch(remote[0].include?(":") ? :ipv6 : :ipv4), peer.max_udp_payload_size].min)
+      size = path.mtu_probe_size or return nil
+      return nil unless path.bytes_in_flight + size <= path.window && path.paced?(size, now)
+      packet_number = @recovery.next_packet_number(:one_rtt)
+      pending = Pending.new(level: :one_rtt, header: header_for(:one_rtt), packet_number:,
+        packet_number_length: @recovery.packet_number_length(:one_rtt, packet_number), frames: [Wire::Frame::Ping.new], duties: [])
+      datagram = seal([pending], now, target: size, mtu_probe: true)
+      path.mtu_probe_sent(size)
+      path.datagram_sent(datagram.bytesize)
+      [datagram, path, true]
+    end
+
     # A Transmit of `payload` on `path`: a server's from the address the
     # path came to, a client's from where the OS chooses, which may change
     # under the connection.
@@ -1632,8 +1663,8 @@ module Raiha::Next::QUIC
     # is MIN_INITIAL_DATAGRAM when it carries a client's Initial, or a
     # server's that elicits an ACK. Every packet is padded so that header
     # protection has its sample. A `probing` datagram counts nothing in
-    # flight.
-    private def seal(pending, now, target: nil, probing: false, path: @path)
+    # flight; one that is an `mtu_probe` is recorded as one.
+    private def seal(pending, now, target: nil, probing: false, mtu_probe: false, path: @path)
       target ||= pending.any? { |packet| padded_initial?(packet) } ? MIN_INITIAL_DATAGRAM : 0
       payloads = pending.map do |packet|
         payload = Wire::Frame.encode(packet.frames, ack_delay_exponent: own_ack_delay_exponent(packet.level))
@@ -1642,7 +1673,7 @@ module Raiha::Next::QUIC
       end
       size = pending.each_with_index.sum { |packet, index| sealed_size(packet, payloads.fetch(index).bytesize) }
       payloads[-1] = padded(pending.fetch(-1), payloads.fetch(-1), target - size) if target > size
-      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now, probing:, path:) }.join
+      pending.each_with_index.map { |packet, index| protect(packet, payloads.fetch(index), now, probing:, mtu_probe:, path:) }.join
     end
 
     # RFC 9000 "Datagram Size": every Initial of a client, and those of a
@@ -1658,7 +1689,7 @@ module Raiha::Next::QUIC
       payload + "\0".b * (missing - grown)
     end
 
-    private def protect(packet, payload, now, probing:, path:)
+    private def protect(packet, payload, now, probing:, mtu_probe:, path:)
       keys = @protection.write_keys(packet.level) or raise Error::StateError, "no keys to write #{packet.level}"
       sealed = Wire::Packet.seal(packet.header, packet_number: packet.packet_number, packet_number_length: packet.packet_number_length,
         payload:, keys:)
@@ -1679,7 +1710,7 @@ module Raiha::Next::QUIC
         restart_idle(now)
       end
       @recovery.on_packet_sent(packet_type: packet.level, packet_number: packet.packet_number, sent_bytes: sealed.bytesize,
-        ack_eliciting:, in_flight:, duties: packet.duties, now:, path:)
+        ack_eliciting:, in_flight:, duties: packet.duties, now:, pmtu_probe: mtu_probe, path:)
       sealed
     end
 

@@ -14,10 +14,12 @@ class RaihaNextQUICConnectionAckOnlyTest < Minitest::Test
   # `rounds` round trips from the first Initial on; once the handshake is
   # confirmed, the server writes `bytes` to the client every round trip
   # while `writing` says so. Gives the client's 1-RTT packets from then and
-  # the datagrams each round trip sent.
+  # the datagrams each round trip sent. The client sends no probe of the
+  # path MTU, which would elicit an ACK of its own.
   def exchange(rounds:, bytes:, writing: ->(_) { true })
     tracer = NextQUICRecovery::RecordingTracer.new
-    @client = client_connection(tracer:, config: QUIC::Config.new(initial_max_data: 4 << 20, initial_max_stream_data_bidi_remote: 4 << 20))
+    @client = client_connection(tracer:, config: QUIC::Config.new(initial_max_data: 4 << 20, initial_max_stream_data_bidi_remote: 4 << 20,
+      enable_pmtud: false))
     server = server_connection
     now = 0.0
     stream_id = nil

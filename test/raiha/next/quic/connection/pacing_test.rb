@@ -10,13 +10,14 @@ require "raiha/next/support/quic_recovery"
 class RaihaNextQUICConnectionPacingTest < Minitest::Test
   include NextQUICPair
 
-  # A window of a hundred datagrams, ten times the pacer's bucket.
-  WIDE = QUIC::Config.new(initial_window: Ractor.shareable_lambda { |max_datagram_size| 100 * max_datagram_size })
+  # A window of a hundred datagrams, ten times the pacer's bucket, of 1200
+  # bytes each: no probe of the path MTU grows them.
+  WIDE = QUIC::Config.new(initial_window: Ractor.shareable_lambda { |max_datagram_size| 100 * max_datagram_size }, enable_pmtud: false)
 
   # A client and a server done with the handshake 100 ms a round, the
   # server's packets traced by `tracer`, and the time then.
   def connected(tracer: nil)
-    client = client_connection
+    client = client_connection(config: QUIC::Config.new(enable_pmtud: false))
     server = server_connection(config: WIDE, tracer:)
     now = handshake(client, server, step: 0.1)
     [client, server].each { |connection| connection.each_event { nil } }

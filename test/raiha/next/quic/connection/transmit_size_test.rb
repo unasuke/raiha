@@ -43,6 +43,24 @@ class RaihaNextQUICConnectionTransmitSizeTest < Minitest::Test
     assert_operator client.stream_read(0, 100_000).bytesize, :>, 10_000
   end
 
+  # A probe of the path MTU, which the server sends once the handshake is
+  # confirmed, goes in a Transmit of its own, though what goes after it
+  # would go in with it as smaller datagrams.
+  def test_a_probe_of_the_mtu_alone
+    client = client_connection
+    server = server_connection(config: QUIC::Config.new(max_transmit_size: 12_000))
+    transmits = []
+    now = 0.0
+    until server.handshake_confirmed? && transmits.any? { _1.payload.bytesize == 1472 }
+      flunk "no probe" if now > 0.01
+      client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+      server.transmits(now:).each { transmits << _1 }.each { client.receive(_1.payload, from: SERVER, now:) }
+      now += 0.001
+    end
+    assert_nil transmits.find { _1.payload.bytesize == 1472 }.segment_size
+    refute transmits.any? { _1.segment_size == 1472 }
+  end
+
   # A datagram each, as before, without it.
   def test_a_datagram_each_without
     _client, server, now = responding(30_000, config: QUIC::Config.new)
