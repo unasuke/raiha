@@ -836,7 +836,9 @@ module Raiha::Next::QUIC
         path = migrate(path, to, from, dcid, packet.datagram.bytesize, now) || path unless path.equal?(@path)
         @newest_path = path
       end
-      path ||= @path
+      # A packet from an address no path has, late or with no ID to answer
+      # with, is taken with no path: a challenge in it goes unanswered,
+      # rather than answered on another path (RFC 9000 "Path Validation").
       if level == :one_rtt && path.equal?(@path)
         before = @received_dcid
         @received_dcid = dcid

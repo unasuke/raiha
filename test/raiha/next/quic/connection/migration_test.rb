@@ -356,6 +356,17 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal [CLIENT], sent(server, keylog, now).map(&:first).uniq
   end
 
+  # A challenge in an older packet from a new address is not answered on
+  # the path in use, which is not where it came from; the packet makes no
+  # path to answer on either.
+  def test_a_challenge_in_an_older_packet
+    server, keylog, _, now = connected
+    server.receive(packet(keylog, ping, number: 1001), from: CLIENT, to: SERVER, now:)
+    challenge = QUIC::Wire::Frame::PathChallenge.new(data: "abcdefgh".b)
+    server.receive(packet(keylog, ping, challenge, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    assert_empty sent(server, keylog, now).flat_map(&:last).grep(QUIC::Wire::Frame::PathResponse)
+  end
+
   # With another Destination Connection ID and no ID of the client's left
   # to send with, there is no move.
   def test_no_move_with_no_id
