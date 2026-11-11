@@ -14,6 +14,7 @@ module Raiha::Next::QUIC
     def next_size: () -> Integer?
     def done?: () -> bool
     def sent: (Integer size) -> Integer
+    def abandon_probe: () -> nil
     def acked: (Integer size) -> Integer?
     def lost: (Integer size) -> void
   end

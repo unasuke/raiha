@@ -208,8 +208,9 @@ class RaihaNextQUICPathTest < Minitest::Test
   end
 
   # A path the peer's port alone tells apart takes over what the other
-  # learned, the search for its MTU too, which starts learning over and
-  # keeps what it has in flight.
+  # learned, the search for its MTU too, which sends again the probe out
+  # on the other, as what became of it goes there; the other starts
+  # learning over and keeps what it has in flight.
   def test_take_over
     old = path(initial_max_datagram_size: 1350)
     old.add_in_flight(sent_bytes: 1350, ack_eliciting: true, now: 0.0)
@@ -217,6 +218,7 @@ class RaihaNextQUICPathTest < Minitest::Test
     old.ecn_validated(now: 1.0)
     old.search_mtu(up_to: 1472)
     3.times { old.mtu_probe_lost(1472, now: 1.0) }
+    old.mtu_probe_sent(1411)
     congestion = old.congestion
     new = path()
     new.take_over(old)

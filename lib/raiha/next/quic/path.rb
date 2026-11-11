@@ -208,8 +208,11 @@ module Raiha::Next::QUIC
     # it counts for nothing here, and keeps what it has in flight.
     def take_over(path) = path.hand_over_to(self)
 
-    # Gives `path` what this path learned, and starts learning over.
+    # Gives `path` what this path learned, and starts learning over. A
+    # probe of the MTU out on this path is heard of here, where the search
+    # no longer is, so the search sends the next on `path`.
     def hand_over_to(path)
+      @mtu_search&.abandon_probe
       path.adopt(rtt: @rtt, congestion: @congestion, startup: @startup, pacer: @pacer, rate_meter: @rate_meter, rtt_heard: @rtt_heard,
         max_datagram_size: @max_datagram_size, mtu_search: @mtu_search, ecn: [@ecn_state, @ecn_testing_sent, @ecn_testing_lost])
       @mtu_search = nil

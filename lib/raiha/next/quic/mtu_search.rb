@@ -43,6 +43,10 @@ module Raiha::Next::QUIC
     # A probe of `size` went.
     def sent(size) = @probing = size
 
+    # The probe out will not be heard of, as it went on a path the search
+    # left: the next is due.
+    def abandon_probe = @probing = nil
+
     # A probe of `size` got through: the size the path carries now, when
     # it is larger than before; else nil.
     def acked(size)
