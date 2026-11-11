@@ -31,7 +31,7 @@ class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
     sent(server)
     actions(server)
     events(server)
-    server.datagram_max_size = 1000
+    server.datagram_max_size = -> { 1000 }
     server
   end
 
@@ -85,9 +85,9 @@ class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
     refute server.datagram_send(8, "x")
     refute server.datagram_send(0, "x" * 1000)
     assert server.datagram_send(0, "x" * 999)
-    server.datagram_max_size = nil
+    server.datagram_max_size = -> {}
     refute server.datagram_send(0, "x")
-    server.datagram_max_size = 1000
+    server.datagram_max_size = -> { 1000 }
     (HTTP3::Connection::MAX_DATAGRAMS - 1).times { assert server.datagram_send(0, "x") }
     refute server.datagram_send(0, "x")
   end

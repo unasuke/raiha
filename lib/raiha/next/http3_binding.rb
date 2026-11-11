@@ -6,9 +6,10 @@ require_relative "http3"
 module Raiha::Next
   # Joins one QUIC connection and the HTTP/3 connection over it, neither of
   # which knows the other: what QUIC tells of its streams goes to HTTP/3,
-  # and what HTTP/3 writes and asks of the transport goes to QUIC. It
-  # decides nothing of its own beyond opening HTTP/3's three streams once
-  # QUIC has connected, and which streams to read. A client's connection
+  # and what HTTP/3 writes and asks of the transport goes to QUIC, the
+  # size of a DATAGRAM, which changes with the path, included. It decides
+  # nothing of its own beyond opening HTTP/3's three streams once QUIC has
+  # connected, and which streams to read. A client's connection
   # that sends 0-RTT carries HTTP/3 from the start: the streams open at the
   # first `flush`, and the requests go with them before the handshake
   # completes.
@@ -30,6 +31,7 @@ module Raiha::Next
     def initialize(connection, http3)
       @connection = connection
       @http3 = http3
+      ask_datagram_size(http3)
       @paused = {} #: Hash[Integer, true]
       @closed = false
       @started = false
@@ -72,6 +74,7 @@ module Raiha::Next
     # reads them from their start.
     def restart(http3)
       @http3 = http3
+      ask_datagram_size(http3)
       @paused.clear
       @started = false
       @start_due = @connection.handshake_complete?
@@ -88,12 +91,17 @@ module Raiha::Next
       @paused.delete(stream_id)
     end
 
+    # `http3` asks QUIC the size of a DATAGRAM each time one is to go: the
+    # peer's own limit once the handshake has completed, not the one 0-RTT
+    # remembered, and the path's as it changes.
+    private def ask_datagram_size(http3)
+      http3.datagram_max_size = -> { @connection.datagram_max_size }
+    end
+
     # The handshake has completed: HTTP/3's streams open unless 0-RTT opened
-    # them, and DATAGRAMs go to the peer's own limit, not the one 0-RTT
-    # remembered.
+    # them.
     private def connected(now)
-      return start(now) unless @started
-      @http3.datagram_max_size = @connection.datagram_max_size
+      start(now) unless @started
     end
 
     # The control and QPACK streams, three of this end's going one way,
@@ -102,7 +110,6 @@ module Raiha::Next
     private def start(now)
       @started = true
       @start_due = false
-      @http3.datagram_max_size = @connection.datagram_max_size
       control, encoder, decoder = Array.new(3) { @connection.open_stream(direction: :uni) }
       if control && encoder && decoder
         @http3.start(control:, encoder:, decoder:)

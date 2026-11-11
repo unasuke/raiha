@@ -245,7 +245,7 @@ module Raiha::Next::HTTP3
     @peer_goaway: Integer?
     @max_push_id: Integer?
     @pending_priorities: Hash[Integer, Priority]
-    @datagram_max_size: Integer?
+    @datagram_max_size: ^() -> Integer? | nil
     @datagrams: Array[[String, Integer]]
     @field_section_limit: Integer
     @max_section: Integer
@@ -263,7 +263,7 @@ module Raiha::Next::HTTP3
     def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
     def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
     def closed?: () -> bool
-    attr_writer datagram_max_size: Integer?
+    attr_writer datagram_max_size: ^() -> Integer? | nil
 
     def datagram_received: (String data) -> void
     def datagram_send: (Integer stream_id, String payload) -> bool

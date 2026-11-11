@@ -17,6 +17,7 @@ module Raiha::Next
     def pause: (Integer stream_id) -> void
     def resume: (Integer stream_id) -> void
 
+    private def ask_datagram_size: (HTTP3::Connection http3) -> void
     private def connected: (Float now) -> void
     private def start: (Float now) -> void
     private def read: (Integer stream_id) -> void

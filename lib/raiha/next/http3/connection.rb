@@ -145,9 +145,9 @@ module Raiha::Next::HTTP3
       @max_push_id = nil #: Integer?
       # The PRIORITY_UPDATEs for requests not opened yet.
       @pending_priorities = {} #: Hash[Integer, Priority]
-      # HTTP Datagrams: the most the transport carries in one, and those
-      # waiting to go with their urgency.
-      @datagram_max_size = nil #: Integer?
+      # HTTP Datagrams: where to ask the most the transport carries in one,
+      # and those waiting to go with their urgency.
+      @datagram_max_size = nil #: ^() -> Integer? | nil
       @datagrams = [] #: Array[[String, Integer]]
       @field_section_limit = limit
       @max_section = QPACK::Decoder::EXPANSION_BOUND * limit
@@ -274,8 +274,9 @@ module Raiha::Next::HTTP3
       taken
     end
 
-    # The most a DATAGRAM frame of the transport carries; nil while it
-    # carries none, which may be for good.
+    # What gives the most a DATAGRAM frame of the transport carries at the
+    # time, as that changes with the path, or nil while it carries none,
+    # which may be for good; asked each time a datagram is to go.
     attr_writer :datagram_max_size
 
     # The transport received a DATAGRAM, `data`, an HTTP Datagram (RFC 9297
@@ -306,7 +307,7 @@ module Raiha::Next::HTTP3
     # with it for the transport to order it by.
     def datagram_send(stream_id, payload)
       return false if @closed || !@settings.h3_datagram || !peer_limits&.h3_datagram
-      return false unless (max_size = @datagram_max_size) && @sending[stream_id]&.datagrams && @datagrams.size < MAX_DATAGRAMS
+      return false unless (max_size = @datagram_max_size&.call) && @sending[stream_id]&.datagrams && @datagrams.size < MAX_DATAGRAMS
       data = Varint.encode(stream_id / 4) << payload.b
       return false if data.bytesize > max_size
       @datagrams << [data, priority_of(stream_id).urgency]

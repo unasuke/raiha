@@ -85,6 +85,23 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     assert_equal [HTTP3::Event::Datagram.new(stream_id: 0, payload: "ping")], client.of(HTTP3::Event::Datagram)
   end
 
+  # HTTP/3 asks QUIC the size of a DATAGRAM each time one is to go: once
+  # the client's path has grown to 1472 bytes, a datagram larger than a
+  # path of 1200 bytes carries goes.
+  def test_http_datagrams_as_the_path_grows
+    config = QUIC::Config.new(max_datagram_frame_size: 65_535)
+    respond = ->(side, event) { side.http3.send_headers(event.stream_id, OK) if event.is_a?(HTTP3::Event::Headers) }
+    net, quic, sides = h3_network(on_server_event: respond, settings: HTTP3::Settings.new(h3_datagram: true), client_config: config, server_config: config)
+    assert net.run_until { sides[:client]&.http3&.peer_settings }
+    client = sides.fetch(:client)
+    client.http3.send_request(quic.open_stream, CONNECT)
+    assert net.run_until { client.of(HTTP3::Event::Headers).any? && quic.path.max_datagram_size == 1472 }
+    size = quic.datagram_max_size - 1
+    assert_operator size, :>, 1200 - 30
+    assert client.http3.datagram_send(0, "x" * size)
+    refute client.http3.datagram_send(0, "x" * (size + 1))
+  end
+
   # A stream paused is left unread, the peer held back by QUIC's flow
   # control, until it is resumed.
   def test_a_paused_stream
