@@ -20,6 +20,11 @@ module RaihaInterop
     include NextQUIC
 
     RESUMING = %w[resumption zerortt].freeze
+    # Makes the connection IDs the connection issues, as an Endpoint's
+    # would, so that the server has one to answer a new path with, and the
+    # connection moves to a preferred address: at random, with stateless
+    # reset tokens at random too, as nothing here takes a reset to them.
+    ISSUER = QUIC::Endpoint::Issuer.new(->(_connection) { [SecureRandom.bytes(8), SecureRandom.bytes(16)] }, ->(_connection_id) {})
 
     # How long the client tries before it gives up.
     DEADLINE = 120
@@ -113,7 +118,7 @@ module RaihaInterop
       tls_config = TLS::Config.client(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, cipher_suites:, grease: !chacha20,
         trust_anchors: certificates_der(File.join(certs_dir, "ca.pem")))
       QUIC::Connection.client(config: quic_config, tls_config:, keyring: TLS::Keyring.client(config: tls_config), server_name:,
-        remote:, time: Time.now, now: mono, tracer: qlog(:client), keylog:, session:, early_data:)
+        remote:, time: Time.now, now: mono, tracer: qlog(:client), keylog:, session:, early_data:, issuer: ISSUER)
     end
 
     # A turn of the application: a stream for each path while the server
