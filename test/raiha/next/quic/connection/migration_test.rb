@@ -367,6 +367,24 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_empty sent(server, keylog, now).flat_map(&:last).grep(QUIC::Wire::Frame::PathResponse)
   end
 
+  # RFC 9000 "Failed Path Validation": a validation is given three times
+  # the PTO of a path of the initial RTT at least, however short the RTT
+  # of both paths: here the client moves to ELSEWHERE, whose RTT comes to
+  # be a millisecond, the path it left is pushed out by probes, owing its
+  # validation, and the client comes back to it.
+  def test_the_deadline_of_a_validation
+    server, keylog, _, now = connected(ids: 5, config: QUIC::Config.new(active_connection_id_limit: 8))
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    server.path.rtt.update(latest_rtt: 0.001, ack_delay: 0.0, max_ack_delay: 0.025, handshake_confirmed: true, now:)
+    (1..3).each do |i|
+      probe = packet(keylog, QUIC::Wire::Frame::PathChallenge.new(data: [i].pack("Q>")), number: 1000 + i)
+      server.receive(probe, from: ["203.0.113.1", 20_000 + i], to: SERVER, now:)
+    end
+    server.receive(packet(keylog, ping, number: 1010), from: CLIENT, to: SERVER, now:)
+    assert_equal CLIENT, server.path.remote
+    assert_in_delta 3 * (0.333 + 4 * 0.1665 + 0.025), server.path.validation_deadline - now, 0.001
+  end
+
   # With another Destination Connection ID and no ID of the client's left
   # to send with, there is no move.
   def test_no_move_with_no_id

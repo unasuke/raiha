@@ -1637,11 +1637,12 @@ module Raiha::Next::QUIC
     end
 
     # Validation of `path` starts at `now`: a challenge each PTO of the
-    # path, twice as late each time, until three times the larger of its
-    # PTO and the current path's.
+    # path, twice as late each time, until three times the larger of the
+    # current path's PTO and that of a path of the initial RTT (RFC 9000
+    # "Failed Path Validation"), however short an RTT the path took over.
     private def start_validation(path, now)
-      interval = path_pto(path)
-      path.start_validation(now:, interval:, deadline: now + VALIDATION_PTOS * [path_pto(@path), interval].max)
+      initial = Recovery::RttEstimator.new.pto_period + (@peer_parameters&.max_ack_delay || 0.0)
+      path.start_validation(now:, interval: path_pto(path), deadline: now + VALIDATION_PTOS * [path_pto(@path), initial].max)
     end
 
     # The paths besides the one in use whose ID Retire Prior To retired
