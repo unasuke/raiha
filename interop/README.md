@@ -233,13 +233,22 @@ issue on this.
 | `zerortt` | as for `resumption`, with the rest in 0-RTT, asked again in 1-RTT if the server rejects it | as for `resumption`, and takes 0-RTT, recorded with no time to warm up |
 | `multiconnect` | each request on a connection of its own, one after another | as for `handshake` |
 | `ecn` | as for `handshake`; its packets are marked ECT(0), as all are | as for `handshake` |
+| `connectionmigration` | the runner gives it `transfer`: it moves to the server's preferred address, IPv6 first, once the handshake is confirmed and one of its connection IDs acknowledged | offers its own first IPv4 and IPv6 addresses on port 4434 as its preferred address, listens there too, and moves there once it has validated the client's path to it |
 
 Everything else returns exit status 127. The runner gives several
 testcases another's name: `blackhole`, `amplificationlimit`,
-`transferloss`, `transfercorruption` and the `goodput` and
-`crosstraffic` measurements are `transfer` to both, `longrtt` is
-`handshake`, and `handshakeloss` and `handshakecorruption` are
-`multiconnect`.
+`transferloss`, `transfercorruption`, `rebind-port`, `rebind-addr`,
+`ipv6` and the `goodput` and `crosstraffic` measurements are `transfer`
+to both, `longrtt` is `handshake`, and `handshakeloss` and
+`handshakecorruption` are `multiconnect`, and `connectionmigration` is
+`transfer` to the client.
+
+The server listens on `[::]:443`, which takes IPv4 as well, and the
+client binds `::` and looks the server's name up for an address of
+either family, so that it reaches `server6` for `ipv6`. A client the
+NAT of `rebind-port` or `rebind-addr` moves is taken where it moves:
+the server validates the new path, and the old one again, and goes on
+sending there.
 
 ### With the ns-3 simulator
 
@@ -282,7 +291,13 @@ docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest 
 cd tmp/quic-interop-runner
 COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
   -t handshakeloss,transferloss,handshakecorruption,transfercorruption,longrtt,blackhole,amplificationlimit,ecn,goodput,crosstraffic
+COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
+  -t rebind-port,rebind-addr,connectionmigration,ipv6
 ```
+
+`rebind-port`, `rebind-addr`, `connectionmigration` and `ipv6` need the
+simulator too: the sim-less compose neither rebinds the client nor
+carries IPv6.
 
 The runner leaves the log directory and the networks of a run behind;
 give each run a `--log-dir` of its own, and take the networks on
