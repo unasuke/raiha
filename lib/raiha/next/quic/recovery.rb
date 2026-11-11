@@ -501,9 +501,11 @@ module Raiha::Next::QUIC
 
     # Each path that sent packets lost takes them out of flight and tells
     # its congestion controller once, with the latest time one of them was
-    # sent (RFC 9002 "On Packets Lost"). The loss of a probe of the path MTU
-    # tells it nothing, and goes to the path's search; a path abandoned
-    # does neither.
+    # sent (RFC 9002 "On Packets Lost"); persistent congestion takes its
+    # minimum RTT anew, and tells the path, which may have lost its larger
+    # datagrams in a black hole. The loss of a probe of the path MTU tells
+    # the controller nothing, and goes to the path's search; a path
+    # abandoned does neither.
     private def on_lost(lost, now)
       @packets_lost += lost.size
       lost.each { |packet| packet.path.mtu_probe_lost(packet.sent_bytes) if packet.pmtu_probe && !packet.path.abandoned? }
@@ -515,7 +517,9 @@ module Raiha::Next::QUIC
         largest_lost_sent_at = congested.map(&:time_sent).max or next
         persistent = persistent_congestion?(path, lost)
         path.congestion.on_loss(lost_bytes: congested.sum(&:sent_bytes), largest_lost_sent_at:, persistent:, now:)
-        path.rtt.reset_min_rtt if persistent
+        next unless persistent
+        path.rtt.reset_min_rtt
+        path.persistent_congestion(now:)
       end
     end
 

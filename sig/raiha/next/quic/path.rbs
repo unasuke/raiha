@@ -1,6 +1,7 @@
 module Raiha::Next::QUIC
   class Path
     AMPLIFICATION_FACTOR: Integer
+    MIN_DATAGRAM_SIZE: Integer
 
     attr_reader rtt: Recovery::RttEstimator
     attr_reader bytes_in_flight: Integer
@@ -83,6 +84,7 @@ module Raiha::Next::QUIC
     def mtu_probe_sent: (Integer size) -> Integer?
     def mtu_probe_acked: (Integer size, now: Float) -> void
     def mtu_probe_lost: (Integer size) -> void
+    def persistent_congestion: (now: Float) -> void
     def window: () -> Integer
     def window_packets: () -> Integer
     def abandon: () -> void

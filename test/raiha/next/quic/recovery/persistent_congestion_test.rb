@@ -60,6 +60,15 @@ class RaihaNextQUICRecoveryPersistentCongestionTest < Minitest::Test
     assert_equal [false], persistent(recovery)
   end
 
+  # A path that carries more than 1200 bytes goes back to 1200 on
+  # persistent congestion (RFC 9000 "Datagram Size").
+  def test_a_black_hole
+    recovery = sampled
+    recovery.path.update_max_datagram_size(1472, now: 1.0)
+    lose_a_run(recovery, ack_at: 3.3)
+    assert_equal [true, 1200], [persistent(recovery).last, recovery.path.max_datagram_size]
+  end
+
   # A packet acknowledged in between ends the run.
   def test_a_gap_ends_the_run
     recovery = sampled

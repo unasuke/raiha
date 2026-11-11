@@ -16,6 +16,8 @@ module Raiha::Next::QUIC
     # RFC 9000 "Address Validation": an endpoint sends no more than three
     # times what it received to an address not validated.
     AMPLIFICATION_FACTOR = 3
+    # RFC 9000 "Datagram Size": the least every path carries.
+    MIN_DATAGRAM_SIZE = 1200
 
     attr_reader :rtt
     attr_reader :bytes_in_flight
@@ -387,6 +389,16 @@ module Raiha::Next::QUIC
 
     # A probe of `size` bytes was lost.
     def mtu_probe_lost(size) = @mtu_search&.lost(size)
+
+    # Persistent congestion on a path that carries more than
+    # MIN_DATAGRAM_SIZE may be its larger datagrams lost in a black hole
+    # (RFC 9000 "Datagram Size"): the path goes back to MIN_DATAGRAM_SIZE,
+    # and its search starts over.
+    def persistent_congestion(now:)
+      return unless @max_datagram_size > MIN_DATAGRAM_SIZE
+      update_max_datagram_size(MIN_DATAGRAM_SIZE, now:)
+      @mtu_search = nil
+    end
 
     # The window sending goes by: the congestion controller's, but until
     # an ACK tells the controller an RTT, when nothing is paced, no more

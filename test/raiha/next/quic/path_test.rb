@@ -121,6 +121,22 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_nil path.mtu_probe_size
   end
 
+  # Persistent congestion on a path that carries more than 1200 bytes
+  # takes it back to 1200, and its search starts over; on one of 1200, it
+  # changes nothing.
+  def test_a_black_hole
+    path = path()
+    path.search_mtu(up_to: 1472)
+    path.mtu_probe_sent(1472)
+    path.mtu_probe_acked(1472, now: 1.0)
+    path.persistent_congestion(now: 2.0)
+    assert_equal [1200, nil], [path.max_datagram_size, path.mtu_probe_size]
+    path.search_mtu(up_to: 1472)
+    assert_equal 1472, path.mtu_probe_size
+    path.persistent_congestion(now: 3.0)
+    assert_equal [1200, 1472], [path.max_datagram_size, path.mtu_probe_size]
+  end
+
   def test_abandon
     path = path()
     refute path.abandoned?
