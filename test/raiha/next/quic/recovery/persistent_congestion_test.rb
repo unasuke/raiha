@@ -81,6 +81,20 @@ class RaihaNextQUICRecoveryPersistentCongestionTest < Minitest::Test
     assert_equal 1200, recovery.path.max_datagram_size
   end
 
+  # A PTO on the path left counts for nothing on the path moved to.
+  def test_ptos_on_two_paths
+    recovery = sampled
+    recovery.path.update_max_datagram_size(1472, now: 1.0)
+    send_packet(recovery, :handshake, now: 1.1)
+    recovery.on_timeout(now: recovery.next_timeout)
+    moved = QUIC::Path.new(config: QUIC::Config.new(congestion_control: Spy))
+    moved.update_max_datagram_size(1472, now: 2.0)
+    recovery.switch_path(moved, now: 2.0)
+    send_packet(recovery, :handshake, now: 2.0)
+    recovery.on_timeout(now: recovery.next_timeout)
+    assert_equal 1472, moved.max_datagram_size
+  end
+
   # A packet acknowledged in between ends the run.
   def test_a_gap_ends_the_run
     recovery = sampled

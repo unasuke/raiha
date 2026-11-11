@@ -34,6 +34,7 @@ module Raiha::Next::QUIC
     @ecn_testing_lost: Integer
     @pacer: Pacer
     @mtu_search: MTUSearch?
+    @timed_out: Integer
     @pacing_release_at: Float?
     @rate_meter: Recovery::RateMeter
 
@@ -86,7 +87,7 @@ module Raiha::Next::QUIC
     def mtu_probe_acked: (Integer size, now: Float) -> void
     def mtu_probe_lost: (Integer size, now: Float) -> void
     def persistent_congestion: (now: Float) -> void
-    def probe_timed_out: (Integer count, now: Float) -> void
+    def probe_timed_out: (now: Float) -> void
     def window: () -> Integer
     def window_packets: () -> Integer
     def abandon: () -> void

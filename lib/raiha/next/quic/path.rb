@@ -57,6 +57,8 @@ module Raiha::Next::QUIC
       @ecn_state = :testing
       @ecn_testing_sent = 0
       @ecn_testing_lost = 0
+      # PTOs in a row with nothing of the path's acknowledged.
+      @timed_out = 0
     end
 
     # The addresses a datagram that came on the path names, `local` the one
@@ -324,6 +326,7 @@ module Raiha::Next::QUIC
     # controller hears of them with the path's RTT, and with its latest
     # sample when the ACK's was the path's, `sampled`.
     def acked(acked_bytes:, largest_acked_sent_at:, sampled:, now:)
+      @timed_out = 0
       rtt = @rtt
       min_rtt = rtt.min_rtt
       @rtt_heard = true if min_rtt
@@ -407,11 +410,14 @@ module Raiha::Next::QUIC
     # Persistent congestion on the path, which may be a black hole.
     def persistent_congestion(now:) = black_hole(now)
 
-    # The `count`th PTO in a row ran out with no ACK: BLACK_HOLE_PTOS of
-    # them may be a black hole, which persistent congestion, judged on an
-    # ACK, never tells of when nothing at all gets through.
-    def probe_timed_out(count, now:)
-      black_hole(now) if count >= BLACK_HOLE_PTOS
+    # A PTO ran out while the path was in use: BLACK_HOLE_PTOS in a row,
+    # with nothing of the path's acknowledged in between, may be a black
+    # hole, which persistent congestion, judged on an ACK, never tells of
+    # when nothing at all gets through. Those that ran out on another path
+    # before the connection moved here count for nothing.
+    def probe_timed_out(now:)
+      @timed_out += 1
+      black_hole(now) if @timed_out >= BLACK_HOLE_PTOS
     end
 
     # The window sending goes by: the congestion controller's, but until

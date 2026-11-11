@@ -122,14 +122,19 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_nil path.mtu_probe_size
   end
 
-  # Two PTOs in a row with no ACK take a larger path back to 1200 as
-  # persistent congestion does; one does not.
+  # Two PTOs in a row with nothing of the path's acknowledged take a
+  # larger path back to 1200 as persistent congestion does; one does not,
+  # nor two with an ACK in between.
   def test_ptos_in_a_row
     path = path()
     path.update_max_datagram_size(1472, now: 1.0)
-    path.probe_timed_out(1, now: 2.0)
+    path.probe_timed_out(now: 2.0)
+    path.add_in_flight(sent_bytes: 1200, ack_eliciting: true, now: 2.0)
+    path.remove_in_flight(sent_bytes: 1200, ack_eliciting: true)
+    path.acked(acked_bytes: 1200, largest_acked_sent_at: 2.0, sampled: false, now: 2.5)
+    path.probe_timed_out(now: 3.0)
     assert_equal 1472, path.max_datagram_size
-    path.probe_timed_out(2, now: 3.0)
+    path.probe_timed_out(now: 4.0)
     assert_equal 1200, path.max_datagram_size
   end
 
