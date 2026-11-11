@@ -42,8 +42,8 @@ module RaihaInterop
       log("listening on port #{socket.local_address[1]} testcase=#{@testcase}")
       loop do
         endpoint.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
-        receive_datagrams(socket, endpoint.next_timeout).each do |data, from, ecn|
-          dispatch(endpoint, socket, endpoint.receive(data, from:, ecn:, now: mono))
+        receive_datagrams(socket, endpoint.next_timeout).each do |data, from, to, ecn|
+          dispatch(endpoint, socket, endpoint.receive(data, from:, to:, ecn:, now: mono))
         end
         deadline = endpoint.next_timeout
         endpoint.handle_timeout(now: mono) if deadline && deadline <= mono

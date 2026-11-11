@@ -88,8 +88,8 @@ module RaihaInterop
         step(connection)
         connection.each_transmit(now: mono) { |transmit| send_transmit(socket, transmit) }
         next if done.call
-        receive_datagrams(socket, [connection.next_timeout, limit].compact.min).each do |data, from, ecn|
-          connection.receive(data, from:, ecn:, now: mono)
+        receive_datagrams(socket, [connection.next_timeout, limit].compact.min).each do |data, from, to, ecn|
+          connection.receive(data, from:, to:, ecn:, now: mono)
         end
         deadline = connection.next_timeout
         connection.handle_timeout(now: mono) if deadline && deadline <= mono
