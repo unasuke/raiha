@@ -77,12 +77,18 @@ class RaihaNextQUICConnectionPreferredAddressTest < Minitest::Test
   end
 
   # A packet that is no probe to PREFERRED, with no probe before it, makes
-  # a path the server validates and does not move to yet; the answer
-  # moves it.
+  # a path the server validates and does not move to yet, with an ID of
+  # the client's of its own, though the packet came with the ID in use, as
+  # the server goes on sending from SERVER; the answer moves it.
   def test_a_packet_that_is_no_probe_first
     server, keylog, now = connected
     server.receive(packet(keylog, *padded(ping), number: 1000), from: CLIENT, to: PREFERRED, now:)
-    datagrams = sent(server, keylog, now)
+    server.handle_timeout(now: now + 0.03)
+    transmits = server.transmits(now: now + 0.03)
+    assert_equal ["c0000001"], transmits.select { _1.source == PREFERRED }.map { QUIC::Wire::Packet.parse(_1.payload, dcid_length: 8).header.dcid }
+    datagrams = transmits.map do |transmit|
+      [transmit.source, server_one_rtt(keylog, transmit.payload, phase: 0)&.last&.grep(QUIC::Wire::Frame::PathChallenge)&.first&.data]
+    end
     data = challenge(datagrams)
     refute_nil data
     assert_equal [SERVER], datagrams.reject { |source, data| source == PREFERRED && data }.map(&:first).uniq

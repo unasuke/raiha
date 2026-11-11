@@ -1467,7 +1467,8 @@ module Raiha::Next::QUIC
     # validated unless it is. With the Destination Connection ID the peer
     # used before, a NAT rebinding most likely, a new path goes on with the
     # peer's ID in use (RFC 9000 "Privacy Implications of Connection
-    # Migration"); with another, it takes one no path sent with, and
+    # Migration"); with another, or to a preferred address, where the move
+    # waits while both paths send, it takes one no path sent with, and
     # without one there is no path.
     #
     # To the server's preferred address, the sending moves only once the
@@ -1479,7 +1480,7 @@ module Raiha::Next::QUIC
       return nil unless @role == :server && @handshake_confirmed
       unless path
         connection_id = nil #: String?
-        connection_id = (@peer_ids&.claim or return nil) unless dcid == @received_dcid
+        connection_id = (@peer_ids&.claim or return nil) unless dcid == @received_dcid && !preferred_local?(local)
         path = Path.new(config: @config, local:, remote:, destination_connection_id: connection_id, tracer: @tracer)
         path.datagram_received(bytes)
         path.take_over(@path) if port_only?(local, remote)
