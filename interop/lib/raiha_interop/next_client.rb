@@ -13,7 +13,9 @@ module RaihaInterop
   # after another. For resumption and zerortt, the first path is fetched
   # on a connection of its own, which waits for a ticket, and the rest on
   # a second that resumes it, in 0-RTT for zerortt; what a rejected 0-RTT
-  # asked for is asked again.
+  # asked for is asked again. Its socket is bound to "::", which sends to
+  # IPv4 too, so that it reaches a server of either family, as the ipv6
+  # testcase's server6, and moves to a preferred address of either.
   class NextClient
     include NextQUIC
 
@@ -72,7 +74,7 @@ module RaihaInterop
       @bodies = {}
       @saved = 0
       @tickets = []
-      socket = udp_socket("0.0.0.0", 0)
+      socket = udp_socket("::", 0)
       connection = connect(server_name, remote, session:, early_data:)
       log("connecting to #{remote.inspect} testcase=#{@testcase} requests=#{paths.size} resuming=#{!session.nil?} 0-RTT=#{connection.zero_rtt_state}")
       limit = mono + DEADLINE
@@ -170,7 +172,7 @@ module RaihaInterop
     # packet that echoes its connection IDs (RFC 9000 "Version
     # Negotiation"); the rest of the packet is never read.
     private def probe_version_negotiation(remote)
-      socket = udp_socket("0.0.0.0", 0)
+      socket = udp_socket("::", 0)
       dcid = SecureRandom.bytes(8)
       scid = SecureRandom.bytes(8)
       header = [0xc0, PROBE_VERSION, dcid.bytesize].pack("CNC") + dcid + [scid.bytesize].pack("C") + scid + [0, 0x44b0].pack("Cn")
@@ -191,9 +193,10 @@ module RaihaInterop
       1
     end
 
-    # The address of the server of `uri`, as [address, port].
+    # The address of the server of `uri`, as [address, port], of either
+    # family.
     private def resolve(uri)
-      address = Addrinfo.getaddrinfo(uri.host, uri.port || 443, :INET, :DGRAM).first or raise "#{uri.host} does not resolve"
+      address = Addrinfo.getaddrinfo(uri.host, uri.port || 443, nil, :DGRAM).first or raise "#{uri.host} does not resolve"
       [address.ip_address, address.ip_port]
     end
 

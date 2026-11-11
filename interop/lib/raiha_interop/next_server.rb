@@ -4,8 +4,8 @@ require_relative "next_quic"
 
 module RaihaInterop
   # The server of hq-interop on the next release of raiha: an Endpoint on
-  # UDP port 443 that takes every client, after a Retry for the retry
-  # testcase, and answers each request, "GET /path\r\n" on a stream the
+  # UDP port 443 of IPv4 and IPv6 that takes every client, after a Retry
+  # for the retry testcase, and answers each request, "GET /path\r\n" on a stream the
   # client opens, with the file of the path under WWW, ending the stream.
   # A path with no file gets nothing. It runs until the runner stops it.
   #
@@ -37,7 +37,7 @@ module RaihaInterop
       @keyring = TLS::Keyring.server(config: @tls_config, identities: [identity])
       @anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false)
       @keylog = keylog
-      socket = udp_socket("0.0.0.0", (@env["BIND_PORT"] || PORT).to_i)
+      socket = udp_socket("::", (@env["BIND_PORT"] || PORT).to_i)
       endpoint = QUIC::Endpoint.server(config: quic_config, random: SecureRandom, time: Time.now, now: mono)
       log("listening on port #{socket.local_address[1]} testcase=#{@testcase}")
       loop do
