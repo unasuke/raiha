@@ -508,7 +508,7 @@ module Raiha::Next::QUIC
     # abandoned does neither.
     private def on_lost(lost, now)
       @packets_lost += lost.size
-      lost.each { |packet| packet.path.mtu_probe_lost(packet.sent_bytes) if packet.pmtu_probe && !packet.path.abandoned? }
+      lost.each { |packet| packet.path.mtu_probe_lost(packet.sent_bytes, now:) if packet.pmtu_probe && !packet.path.abandoned? }
       lost.select { |packet| packet.ecn == :ect0 }.group_by(&:path).each { |path, packets| path.ecn_lost(packets.size, now:) }
       lost.select(&:in_flight).group_by(&:path).each do |path, packets|
         next if path.abandoned?

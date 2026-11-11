@@ -20,6 +20,7 @@ module Raiha::Next::QUIC
     def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
     def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
     def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+    def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> void
   end
 
   module Tracer
@@ -53,5 +54,6 @@ module Raiha::Next::QUIC
     def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> nil
     def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
     def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
+    def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> nil
   end
 end

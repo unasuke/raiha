@@ -85,5 +85,10 @@ module Raiha::Next::QUIC
     def connection_data_blocked_updated(old:, new:, reason:, now:) = nil
 
     def stream_data_blocked_updated(stream_id:, old:, new:, reason:, now:) = nil
+
+    # The datagrams of the path grew or shrank from `old` bytes to `new`,
+    # or the search for its MTU ended at `old` (qlog `mtu_updated`); `done`
+    # once the search has ended.
+    def mtu_updated(old:, new:, done:, now:) = nil
   end
 end

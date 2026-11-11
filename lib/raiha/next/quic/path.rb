@@ -361,9 +361,11 @@ module Raiha::Next::QUIC
     # The path's MTU changed (DPLPMTUD): the congestion controller hears,
     # and the pacer's burst is RFC 9002's initial window of the new size.
     def update_max_datagram_size(max_datagram_size, now:)
+      old = @max_datagram_size
       @max_datagram_size = max_datagram_size
       @congestion.on_mtu_updated(max_datagram_size:, now:)
       @pacer.capacity = Config::DEFAULT_INITIAL_WINDOW.call(max_datagram_size)
+      @tracer.mtu_updated(old:, new: max_datagram_size, done: @mtu_search&.done? || false, now:) if @tracer # steep:ignore
     end
 
     # The path searches for the largest datagram it carries, up to `up_to`
@@ -387,8 +389,14 @@ module Raiha::Next::QUIC
       update_max_datagram_size(through, now:)
     end
 
-    # A probe of `size` bytes was lost.
-    def mtu_probe_lost(size) = @mtu_search&.lost(size)
+    # A probe of `size` bytes was lost at `now`, which may end the search.
+    def mtu_probe_lost(size, now:)
+      search = @mtu_search or return
+      done = search.done?
+      search.lost(size)
+      return if done || !search.done?
+      @tracer.mtu_updated(old: @max_datagram_size, new: @max_datagram_size, done: true, now:) if @tracer # steep:ignore
+    end
 
     # Persistent congestion on a path that carries more than
     # MIN_DATAGRAM_SIZE may be its larger datagrams lost in a black hole
@@ -396,8 +404,8 @@ module Raiha::Next::QUIC
     # and its search starts over.
     def persistent_congestion(now:)
       return unless @max_datagram_size > MIN_DATAGRAM_SIZE
-      update_max_datagram_size(MIN_DATAGRAM_SIZE, now:)
       @mtu_search = nil
+      update_max_datagram_size(MIN_DATAGRAM_SIZE, now:)
     end
 
     # The window sending goes by: the congestion controller's, but until

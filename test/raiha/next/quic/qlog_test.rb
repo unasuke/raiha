@@ -86,6 +86,12 @@ class RaihaNextQUICQlogTest < Minitest::Test
     ], records(io).last.dig("data", "frames")
   end
 
+  def test_mtu_updated
+    io = StringIO.new
+    QUIC::Qlog::Tracer.new(io, vantage_point: :client).mtu_updated(old: 1200, new: 1472, done: true, now: 1.5)
+    assert_equal [1500.0, "quic:mtu_updated", { "old" => 1200, "new" => 1472, "done" => true }], records(io).last.values_at("time", "name", "data")
+  end
+
   # A key update is told for the keys of both directions, with no key.
   def test_a_key_update
     io = StringIO.new

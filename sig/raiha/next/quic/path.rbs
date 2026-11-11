@@ -83,7 +83,7 @@ module Raiha::Next::QUIC
     def mtu_probe_size: () -> Integer?
     def mtu_probe_sent: (Integer size) -> Integer?
     def mtu_probe_acked: (Integer size, now: Float) -> void
-    def mtu_probe_lost: (Integer size) -> void
+    def mtu_probe_lost: (Integer size, now: Float) -> void
     def persistent_congestion: (now: Float) -> void
     def window: () -> Integer
     def window_packets: () -> Integer

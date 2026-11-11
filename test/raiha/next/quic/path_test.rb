@@ -1,5 +1,6 @@
 require "raiha/next/test_helper"
 require "raiha/next/quic"
+require "raiha/next/support/quic_recovery"
 
 class RaihaNextQUICPathTest < Minitest::Test
   QUIC = Raiha::Next::QUIC
@@ -137,6 +138,21 @@ class RaihaNextQUICPathTest < Minitest::Test
     assert_equal [1200, 1472], [path.max_datagram_size, path.mtu_probe_size]
   end
 
+  # The tracer hears each change of the path's datagrams, and the end of
+  # its search: through at the largest, given up on halfway, or gone back
+  # to 1200 on persistent congestion.
+  def test_mtu_updates_traced
+    tracer = NextQUICRecovery::RecordingTracer.new
+    path = QUIC::Path.new(config: QUIC::Config.new, tracer:)
+    path.search_mtu(up_to: 1472)
+    path.mtu_probe_acked(1472, now: 1.0)
+    path.persistent_congestion(now: 2.0)
+    path.search_mtu(up_to: 1220)
+    3.times { path.mtu_probe_lost(1220, now: 3.0) }
+    assert_equal [[1200, 1472, true, 1.0], [1472, 1200, false, 2.0], [1200, 1200, true, 3.0]],
+      tracer.of(:mtu_updated).map { _1.values_at(:old, :new, :done, :now) }
+  end
+
   def test_abandon
     path = path()
     refute path.abandoned?
@@ -189,7 +205,7 @@ class RaihaNextQUICPathTest < Minitest::Test
     old.rtt.update(latest_rtt: 0.05, ack_delay: 0.0, max_ack_delay: 0.025, handshake_confirmed: true, now: 1.0)
     old.ecn_validated(now: 1.0)
     old.search_mtu(up_to: 1472)
-    3.times { old.mtu_probe_lost(1472) }
+    3.times { old.mtu_probe_lost(1472, now: 1.0) }
     congestion = old.congestion
     new = path()
     new.take_over(old)

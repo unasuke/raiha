@@ -123,6 +123,8 @@ module Raiha::Next::QUIC
         event(now, "quic:stream_data_blocked_updated", { old: old.to_s, new: new.to_s, stream_id:, reason: reason.to_s })
       end
 
+      def mtu_updated(old:, new:, done:, now:) = event(now, "quic:mtu_updated", { old:, new:, done: })
+
       def parameters_set(owner:, parameters:, now:)
         event(now, "quic:parameters_set", { owner: owner.to_s, **values(parameters.to_h.compact) })
       end
