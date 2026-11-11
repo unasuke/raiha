@@ -65,6 +65,27 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert client.any? { _1["name"] == "raiha:tls_transcript_updated" }
   end
 
+  # The frames of paths and connection IDs go with what they carry: the
+  # sequence numbers, the IDs and token, and the data of a challenge and
+  # its response, in hex.
+  def test_frames_of_paths_and_connection_ids
+    io = StringIO.new
+    frames = [
+      QUIC::Wire::Frame::NewConnectionID.new(sequence_number: 1, retire_prior_to: 0, connection_id: "\x01".b * 8,
+        stateless_reset_token: "\x02".b * 16),
+      QUIC::Wire::Frame::RetireConnectionID.new(sequence_number: 2),
+      QUIC::Wire::Frame::PathChallenge.new(data: "abcdefgh".b), QUIC::Wire::Frame::PathResponse.new(data: "abcdefgh".b)
+    ]
+    header = QUIC::Tracer::PacketHeader.new(packet_type: :one_rtt, packet_number: 5, version: nil, dcid: "\x03".b * 8, scid: nil, key_phase: 0)
+    QUIC::Qlog::Tracer.new(io, vantage_point: :server).packet_sent(header:, frames:, raw_length: 100, now: 1.0)
+    assert_equal [
+      { "frame_type" => "new_connection_id", "sequence_number" => 1, "retire_prior_to" => 0, "connection_id" => "01" * 8,
+        "stateless_reset_token" => "02" * 16 },
+      { "frame_type" => "retire_connection_id", "sequence_number" => 2 },
+      { "frame_type" => "path_challenge", "data" => "6162636465666768" }, { "frame_type" => "path_response", "data" => "6162636465666768" }
+    ], records(io).last.dig("data", "frames")
+  end
+
   # A key update is told for the keys of both directions, with no key.
   def test_a_key_update
     io = StringIO.new

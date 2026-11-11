@@ -36,7 +36,7 @@ module Raiha::Next::QUIC
     # a trace of the TLS layer, which comes with no time, has the time of
     # the event before it, which the same input caused.
     # Connection IDs and other bytes are hex; the bytes of data, only their
-    # length. Events qlog has no name for go under "raiha:": a spurious loss,
+    # length, but the data of a path challenge and response. Events qlog has no name for go under "raiha:": a spurious loss,
     # and the TLS layer's traces as "raiha:tls_" and the name of the trace.
     # A layer above QUIC writes its own events with `record`, at the time of
     # the event before them, and names its schema in `event_schemas`.
@@ -154,9 +154,11 @@ module Raiha::Next::QUIC
       end
 
       # A frame as qlog has it: its type, and its fields, with data as
-      # its length.
+      # its length but a path challenge's and response's, in hex.
       private def frame(frame)
         case frame
+        when Wire::Frame::PathChallenge then { frame_type: "path_challenge", data: hex(frame.data) }
+        when Wire::Frame::PathResponse then { frame_type: "path_response", data: hex(frame.data) }
         when Wire::Frame::Ack
           ranges = frame.ranges.reverse.map { |range| [range.begin, range.end] } #: Array[json]
           { frame_type: "ack", ack_delay: frame.delay * 1000, acked_ranges: ranges }
