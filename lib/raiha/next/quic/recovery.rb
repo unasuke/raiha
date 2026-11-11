@@ -181,7 +181,7 @@ module Raiha::Next::QUIC
     # Timeout"). A loss time declares the packets lost; otherwise the PTO
     # asks for two probes in the space it ran out in, or one in a Handshake
     # or Initial packet when nothing is in flight to keep the server from
-    # being stuck, and backs off.
+    # being stuck, and backs off; the path hears how many ran out in a row.
     def on_timeout(now:)
       timer = @loss_detection_timer
       return Outcome::NONE unless timer && now >= timer
@@ -202,6 +202,7 @@ module Raiha::Next::QUIC
           Probe.new(space: lone_probe_space, packets: 1)
         end
       @pto_count += 1
+      @path.probe_timed_out(@pto_count, now:)
       set_loss_detection_timer(now)
       trace_metrics(now)
       Outcome.new(acked: Outcome::NO_PACKETS, lost: Outcome::NO_PACKETS, probe:)

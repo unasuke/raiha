@@ -18,6 +18,9 @@ module Raiha::Next::QUIC
     AMPLIFICATION_FACTOR = 3
     # RFC 9000 "Datagram Size": the least every path carries.
     MIN_DATAGRAM_SIZE = 1200
+    # PTOs in a row with no ACK that may be a black hole: from the first,
+    # as long as persistent congestion takes, three PTOs.
+    BLACK_HOLE_PTOS = 2
 
     attr_reader :rtt
     attr_reader :bytes_in_flight
@@ -398,14 +401,14 @@ module Raiha::Next::QUIC
       @tracer.mtu_updated(old: @max_datagram_size, new: @max_datagram_size, done: true, now:) if @tracer # steep:ignore
     end
 
-    # Persistent congestion on a path that carries more than
-    # MIN_DATAGRAM_SIZE may be its larger datagrams lost in a black hole
-    # (RFC 9000 "Datagram Size"): the path goes back to MIN_DATAGRAM_SIZE,
-    # and its search starts over.
-    def persistent_congestion(now:)
-      return unless @max_datagram_size > MIN_DATAGRAM_SIZE
-      @mtu_search = nil
-      update_max_datagram_size(MIN_DATAGRAM_SIZE, now:)
+    # Persistent congestion on the path, which may be a black hole.
+    def persistent_congestion(now:) = black_hole(now)
+
+    # The `count`th PTO in a row ran out with no ACK: BLACK_HOLE_PTOS of
+    # them may be a black hole, which persistent congestion, judged on an
+    # ACK, never tells of when nothing at all gets through.
+    def probe_timed_out(count, now:)
+      black_hole(now) if count >= BLACK_HOLE_PTOS
     end
 
     # The window sending goes by: the congestion controller's, but until
@@ -426,6 +429,15 @@ module Raiha::Next::QUIC
     def abandon = @abandoned = true
 
     def abandoned? = @abandoned
+
+    # On a path that carries more than MIN_DATAGRAM_SIZE, the larger
+    # datagrams may be lost in a black hole (RFC 9000 "Datagram Size"): the
+    # path goes back to MIN_DATAGRAM_SIZE, and its search starts over.
+    private def black_hole(now)
+      return unless @max_datagram_size > MIN_DATAGRAM_SIZE
+      @mtu_search = nil
+      update_max_datagram_size(MIN_DATAGRAM_SIZE, now:)
+    end
 
     private def change_ecn_state(state, now)
       return if state == @ecn_state

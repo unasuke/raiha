@@ -69,6 +69,18 @@ class RaihaNextQUICRecoveryPersistentCongestionTest < Minitest::Test
     assert_equal [true, 1200], [persistent(recovery).last, recovery.path.max_datagram_size]
   end
 
+  # Nothing at all acknowledged: no persistent congestion is judged, and
+  # the second PTO in a row takes a larger path back to 1200.
+  def test_a_black_hole_that_lets_nothing_through
+    recovery = sampled
+    recovery.path.update_max_datagram_size(1472, now: 1.0)
+    send_packet(recovery, :handshake, now: 1.1)
+    recovery.on_timeout(now: recovery.next_timeout)
+    assert_equal 1472, recovery.path.max_datagram_size
+    recovery.on_timeout(now: recovery.next_timeout)
+    assert_equal 1200, recovery.path.max_datagram_size
+  end
+
   # A packet acknowledged in between ends the run.
   def test_a_gap_ends_the_run
     recovery = sampled

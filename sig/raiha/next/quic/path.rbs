@@ -2,6 +2,7 @@ module Raiha::Next::QUIC
   class Path
     AMPLIFICATION_FACTOR: Integer
     MIN_DATAGRAM_SIZE: Integer
+    BLACK_HOLE_PTOS: Integer
 
     attr_reader rtt: Recovery::RttEstimator
     attr_reader bytes_in_flight: Integer
@@ -85,6 +86,7 @@ module Raiha::Next::QUIC
     def mtu_probe_acked: (Integer size, now: Float) -> void
     def mtu_probe_lost: (Integer size, now: Float) -> void
     def persistent_congestion: (now: Float) -> void
+    def probe_timed_out: (Integer count, now: Float) -> void
     def window: () -> Integer
     def window_packets: () -> Integer
     def abandon: () -> void
@@ -95,6 +97,7 @@ module Raiha::Next::QUIC
     def ecn_validated: (now: Float) -> void
     def ecn_failed: (now: Float) -> void
 
+    private def black_hole: (Float now) -> void
     private def change_ecn_state: (:testing | :capable | :failed state, Float now) -> void
   end
 end
