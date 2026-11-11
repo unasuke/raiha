@@ -229,6 +229,15 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
 
   # The Config of a runtime: MAX_TRANSMIT for max_transmit_size, unless the
   # application chose one.
+  # IO.select waits on sockets of the runtime together.
+  def test_waiting_on_several
+    first = bind("127.0.0.1")
+    second = bind("127.0.0.1")
+    first.send(transmit("hello".b, second.local_address))
+    ready, = IO.select([first, second], nil, nil, 1)
+    assert_equal [second], ready
+  end
+
   def test_batching
     assert_equal UDP::MAX_TRANSMIT, UDP.batching(QUIC::Config.new).max_transmit_size
     assert_equal 1200, UDP.batching(QUIC::Config.new(max_transmit_size: 1200)).max_transmit_size

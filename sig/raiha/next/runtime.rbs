@@ -111,6 +111,8 @@ module Raiha::Next::Runtime
 
     def closed?: () -> bool
 
+    def to_io: () -> UDPSocket
+
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Array[Socket::AncillaryData] controls) -> bool
     private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]

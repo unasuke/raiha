@@ -171,6 +171,10 @@ module Raiha::Next::Runtime
 
     def closed? = @socket.closed?
 
+    # The socket, so that IO.select waits on this with others, as a loop of
+    # an application's own that reads several does.
+    def to_io = @socket
+
     # All the datagrams in one sendmsg: nil when they went, else what it
     # failed with.
     private def send_segments(payload, size, destination, controls)
