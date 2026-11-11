@@ -201,6 +201,24 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     refute server.closed?, server.close_reason&.reason
   end
 
+  # Pushed out of the paths being validated, the path to go back to still
+  # answers a challenge that comes on it, there (RFC 9000 "Path
+  # Validation").
+  def test_the_path_to_go_back_to_answers_a_challenge
+    server, keylog, _, now = connected(ids: 5, config: QUIC::Config.new(active_connection_id_limit: 8))
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    sent(server, keylog, now)
+    (1..3).each do |i|
+      probe = packet(keylog, QUIC::Wire::Frame::PathChallenge.new(data: [i].pack("Q>")), number: 1000 + i)
+      server.receive(probe, from: ["203.0.113.1", 20_000 + i], to: SERVER, now:)
+    end
+    sent(server, keylog, now)
+    challenge = packet(keylog, QUIC::Wire::Frame::PathChallenge.new(data: "abcdefgh".b), number: 1010)
+    server.receive(challenge, from: CLIENT, to: SERVER, now:)
+    responses = sent(server, keylog, now).select { _1.first == CLIENT }.flat_map(&:last).grep(QUIC::Wire::Frame::PathResponse)
+    assert_equal [QUIC::Wire::Frame::PathResponse.new(data: "abcdefgh".b)], responses
+  end
+
   # The path gone back to unanswered too, nothing validated is left.
   def test_the_path_gone_back_to_is_validated_anew
     server, keylog, now, = gone_back_after_probes

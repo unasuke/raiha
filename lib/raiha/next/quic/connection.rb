@@ -1348,7 +1348,10 @@ module Raiha::Next::QUIC
     # A datagram of a path's probes alone (loss recovery's design,
     # "Probes"): the PATH_RESPONSE to a PATH_CHALLENGE waiting for its
     # answer, and a PATH_CHALLENGE of the path's validation when one is
-    # due, the paths in turn, the one in use first. Padded to
+    # due, the paths in turn, the one in use first and the one to go back
+    # to last, on the path the challenge came on (RFC 9000 "Path
+    # Validation"); a path besides the one in use with no ID of its own
+    # sends nothing. Padded to
     # MIN_INITIAL_DATAGRAM bytes when the path's amplification limit lets
     # it, else as small as it is, so that what is left of the limit takes
     # the challenges after (RFC 9000 "Path Validation"), it waits on
@@ -1357,14 +1360,15 @@ module Raiha::Next::QUIC
     # and the validation its next.
     private def probing_datagram(now)
       return nil unless @protection.can_write?(:one_rtt)
-      [@path, *@validating].each do |path|
+      [@path, *@validating, @last_validated].compact.uniq.each do |path|
+        current = path.equal?(@path)
+        next unless current || path.destination_connection_id
         response = path.challenge
         data = @random.bytes(CHALLENGE_LENGTH).b if path.challenge_due?(now)
         frames = [] #: Array[Wire::Frame::t]
         frames << Wire::Frame::PathResponse.new(data: response) if response
         frames << Wire::Frame::PathChallenge.new(data:) if data
         next if frames.empty?
-        current = path.equal?(@path)
         header = Wire::ShortHeader.new(dcid: (current ? nil : path.destination_connection_id) || @destination_connection_id,
           key_phase: @protection.key_phase_bit)
         budget = current ? amplification_budget(now) : path.amplification_budget
