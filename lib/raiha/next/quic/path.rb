@@ -197,23 +197,24 @@ module Raiha::Next::QUIC
 
     # The path takes over what `path`, which only the peer's port tells
     # apart, learned of the network: its RTT, congestion controller,
-    # pacer, rate meter, datagram size and ECN state (RFC 9000 "Loss
-    # Detection and Congestion Control", a NAT rebinding most likely).
-    # `path` starts learning over, so that what was sent on it counts for
-    # nothing here, and keeps what it has in flight.
+    # pacer, rate meter, datagram size, the search for it, and ECN state
+    # (RFC 9000 "Loss Detection and Congestion Control", a NAT rebinding
+    # most likely). `path` starts learning over, so that what was sent on
+    # it counts for nothing here, and keeps what it has in flight.
     def take_over(path) = path.hand_over_to(self)
 
     # Gives `path` what this path learned, and starts learning over.
     def hand_over_to(path)
       path.adopt(rtt: @rtt, congestion: @congestion, startup: @startup, pacer: @pacer, rate_meter: @rate_meter, rtt_heard: @rtt_heard,
-        max_datagram_size: @max_datagram_size, ecn: [@ecn_state, @ecn_testing_sent, @ecn_testing_lost])
+        max_datagram_size: @max_datagram_size, mtu_search: @mtu_search, ecn: [@ecn_state, @ecn_testing_sent, @ecn_testing_lost])
+      @mtu_search = nil
       @ecn_state = :testing
       @ecn_testing_sent = @ecn_testing_lost = 0
       start_learning
     end
 
     # Takes what another path learned (hand_over_to).
-    def adopt(rtt:, congestion:, startup:, pacer:, rate_meter:, rtt_heard:, max_datagram_size:, ecn:)
+    def adopt(rtt:, congestion:, startup:, pacer:, rate_meter:, rtt_heard:, max_datagram_size:, mtu_search:, ecn:)
       @rtt = rtt
       @congestion = congestion
       @startup = startup
@@ -221,6 +222,7 @@ module Raiha::Next::QUIC
       @rate_meter = rate_meter
       @rtt_heard = rtt_heard
       @max_datagram_size = max_datagram_size
+      @mtu_search = mtu_search
       @ecn_state, @ecn_testing_sent, @ecn_testing_lost = ecn
     end
 

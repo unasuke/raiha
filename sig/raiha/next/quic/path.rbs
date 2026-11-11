@@ -64,7 +64,7 @@ module Raiha::Next::QUIC
     def take_over: (Path path) -> void
     def hand_over_to: (Path path) -> void
     def adopt: (rtt: Recovery::RttEstimator, congestion: Congestion::_Controller, startup: Congestion::_StartupController?, pacer: Pacer,
-                rate_meter: Recovery::RateMeter, rtt_heard: bool, max_datagram_size: Integer,
+                rate_meter: Recovery::RateMeter, rtt_heard: bool, max_datagram_size: Integer, mtu_search: MTUSearch?,
                 ecn: [:testing | :capable | :failed, Integer, Integer]) -> void
     private def start_learning: () -> void
     def congestion: () -> Congestion::_Controller
