@@ -772,7 +772,7 @@ module Raiha::Next::QUIC
         return dropped(:general, length, now)
       end
       @retry_source_connection_id = packet.scid
-      @destination_connection_id = packet.scid
+      use_peer_connection_id(packet.scid, now)
       @token = packet.token
       @protection.install_initial(packet.scid)
       Recovery::Duty.dispatch(@recovery.on_retry(now:), to: self)
@@ -824,7 +824,7 @@ module Raiha::Next::QUIC
       @packets_received += 1
       @bytes_received += length
       @eliciting_since_received = false
-      adopt_peer_connection_id(header) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
+      adopt_peer_connection_id(header, now) if @role == :client && header.is_a?(Wire::LongHeader) && level == :initial
       dcid = unmasked.header.dcid
       if probing_frames?(frames)
         path ||= probed_path(to, from, packet.datagram.bytesize, now)
@@ -833,7 +833,11 @@ module Raiha::Next::QUIC
         @newest_path = path
       end
       path ||= @path
-      @received_dcid = dcid if level == :one_rtt && path.equal?(@path)
+      if level == :one_rtt && path.equal?(@path)
+        before = @received_dcid
+        @received_dcid = dcid
+        @tracer.connection_id_updated(owner: :local, old: before, new: dcid, now:) if @tracer && before && before != dcid # steep:ignore
+      end
       frames.each { |frame| receive_frame(level, frame, now, dcid, path) }
       if @role == :server && level == :handshake
         validate_address(now)
@@ -865,6 +869,15 @@ module Raiha::Next::QUIC
       Crypto::Initial.derive(dcid: header.dcid, version: @version).client
     end
 
+    # The peer's ID this end sends with from now on: the tracer hears when
+    # it changes (qlog `connection_id_updated`).
+    private def use_peer_connection_id(connection_id, now)
+      before = @destination_connection_id
+      @destination_connection_id = connection_id
+      return if before == connection_id
+      @tracer.connection_id_updated(owner: :remote, old: before, new: connection_id, now:) if @tracer # steep:ignore
+    end
+
     # The server learns from the client's first Initial, once it has opened,
     # its connection ID, address and the Destination Connection ID its
     # Initial keys come from, and the addresses of the path. Until then
@@ -885,9 +898,9 @@ module Raiha::Next::QUIC
     # A client takes the Source Connection ID of the server's first Initial
     # packet as the Destination Connection ID of its own, and only that one
     # (RFC 9000 "Negotiating Connection IDs").
-    private def adopt_peer_connection_id(header)
+    private def adopt_peer_connection_id(header, now)
       return if @peer_source_connection_id
-      @destination_connection_id = header.scid
+      use_peer_connection_id(header.scid, now)
       @peer_source_connection_id = header.scid
     end
 
@@ -925,7 +938,7 @@ module Raiha::Next::QUIC
       when Wire::Frame::NewConnectionID
         ids = @peer_ids or raise Violation.new("NEW_CONNECTION_ID before the transport parameters", frame_type: PeerConnectionIDs::FRAME_TYPE)
         ids.receive(frame)
-        @destination_connection_id = ids.current
+        use_peer_connection_id(ids.current, now)
         reassign_connection_ids(ids)
       when Wire::Frame::RetireConnectionID then @issued.retire(frame, dcid:, forget_at: now + RETIRED_PTOS * @path.rtt.pto_period)
       when Wire::Frame::PathChallenge
@@ -1553,7 +1566,7 @@ module Raiha::Next::QUIC
       if connection_id && connection_id != @destination_connection_id
         @peer_ids&.switch(connection_id)
         left.send_with(@destination_connection_id)
-        @destination_connection_id = connection_id
+        use_peer_connection_id(connection_id, now)
       elsif revalidate
         left.send_with(@peer_ids&.claim)
       end

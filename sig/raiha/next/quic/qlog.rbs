@@ -51,6 +51,7 @@ module Raiha::Next::QUIC
       def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
       def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
       def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> void
+      def connection_id_updated: (owner: :local | :remote, old: String, new: String, now: Float) -> void
       def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
       def key_updated: (level: PacketProtection::level, now: Float) -> void
       def tls_trace: (::Raiha::Next::TLS::Trace::t value) -> void

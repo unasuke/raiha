@@ -90,5 +90,10 @@ module Raiha::Next::QUIC
     # or the search for its MTU ended at `old` (qlog `mtu_updated`); `done`
     # once the search has ended.
     def mtu_updated(old:, new:, done:, now:) = nil
+
+    # The connection ID in use changed from `old` to `new` (qlog
+    # `connection_id_updated`): the peer's this end sends with (`owner`
+    # :remote), or this end's the peer sends with (:local).
+    def connection_id_updated(owner:, old:, new:, now:) = nil
   end
 end

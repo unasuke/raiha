@@ -158,7 +158,8 @@ module Raiha::Next::QUIC
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
-    private def adopt_peer_connection_id: (Wire::LongHeader header) -> void
+    private def adopt_peer_connection_id: (Wire::LongHeader header, Float now) -> void
+    private def use_peer_connection_id: (String connection_id, Float now) -> void
     private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now, String dcid, Path? path) -> void
     private def confirm: (Float now) -> void
     private def enter_closing: (ConnectionError error, Float now) -> void

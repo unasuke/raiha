@@ -125,6 +125,10 @@ module Raiha::Next::QUIC
 
       def mtu_updated(old:, new:, done:, now:) = event(now, "quic:mtu_updated", { old:, new:, done: })
 
+      def connection_id_updated(owner:, old:, new:, now:)
+        event(now, "quic:connection_id_updated", { owner: owner.to_s, old: hex(old), new: hex(new) })
+      end
+
       def parameters_set(owner:, parameters:, now:)
         event(now, "quic:parameters_set", { owner: owner.to_s, **values(parameters.to_h.compact) })
       end

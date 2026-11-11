@@ -92,6 +92,12 @@ class RaihaNextQUICQlogTest < Minitest::Test
     assert_equal [1500.0, "quic:mtu_updated", { "old" => 1200, "new" => 1472, "done" => true }], records(io).last.values_at("time", "name", "data")
   end
 
+  def test_connection_id_updated
+    io = StringIO.new
+    QUIC::Qlog::Tracer.new(io, vantage_point: :server).connection_id_updated(owner: :remote, old: "\x01".b * 8, new: "\x02".b * 8, now: 1.0)
+    assert_equal ["quic:connection_id_updated", { "owner" => "remote", "old" => "01" * 8, "new" => "02" * 8 }], records(io).last.values_at("name", "data")
+  end
+
   # A key update is told for the keys of both directions, with no key.
   def test_a_key_update
     io = StringIO.new
