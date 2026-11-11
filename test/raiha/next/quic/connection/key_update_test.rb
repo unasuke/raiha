@@ -67,11 +67,10 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
     QUIC::Wire::Frame.encode([ack, QUIC::Wire::Frame::Ping.new], ack_delay_exponent: 3)
   end
 
-  # The server once it has updated its keys on its own, quic-go's interval
-  # after a packet of its first keys was acknowledged; with the client's
-  # key log, the server's connection ID, the time, and what the server
-  # sent after, opened with its new keys.
-  def updated_by_server
+  # The server once a packet of its first keys was acknowledged, to update
+  # them on its own quic-go's interval later; with the client's key log,
+  # the server's connection ID and the time.
+  def due_to_update
     server, keylog, server_id, now = connected
     server.transmits(now:)
     100.times { server.receive(client_one_rtt(keylog, dcid: server_id, payload: PING, packet_number: 1000 + _1), from: CLIENT, now:) }
@@ -79,7 +78,24 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
     refute_empty first
     assert first.all?, "the server keeps its first keys until a packet of them is acknowledged"
     server.receive(client_one_rtt(keylog, dcid: server_id, payload: ack_of(first.map { _2 }.max), packet_number: 1100), from: CLIENT, now:)
+    [server, keylog, server_id, now]
+  end
+
+  # The server once it has updated its keys, with what it sent after,
+  # opened with its new keys.
+  def updated_by_server
+    server, keylog, server_id, now = due_to_update
     [server, keylog, server_id, now, server.transmits(now: now + 1.0).map { server_one_rtt(keylog, _1.payload, phase: 1) }]
+  end
+
+  # A probe of a path due as the key update is goes with the new keys.
+  def test_a_probe_of_a_path_after_the_update
+    server, keylog, server_id, now = due_to_update
+    challenge = QUIC::Wire::Frame.encode([QUIC::Wire::Frame::PathChallenge.new(data: "abcdefgh".b)], ack_delay_exponent: 3)
+    server.receive(client_one_rtt(keylog, dcid: server_id, payload: challenge, packet_number: 1101), from: CLIENT, now: now + 1.0)
+    sent = server.transmits(now: now + 1.0)
+    refute_empty sent
+    assert sent.all? { server_one_rtt(keylog, _1.payload, phase: 1) }
   end
 
   def test_the_server_updates_its_keys

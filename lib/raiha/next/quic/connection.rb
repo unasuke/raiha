@@ -1021,12 +1021,20 @@ module Raiha::Next::QUIC
     # while the congestion window has room for a datagram more and pacing
     # lets it go, or a probe is due, which waits on neither (RFC 9002
     # "Probe Timeout"); a datagram of ACKs alone waits on nothing (RFC 9002
-    # "Pacing"). The 1-RTT keys change first when a key update is due; when
-    # they cannot and are at their confidentiality limit, the connection
-    # closes. While closing, only the CONNECTION_CLOSE frame, when due.
-    # When nothing goes, the path hears why.
+    # "Pacing"). The 1-RTT keys change first when a key update is due, before
+    # a probe of a path too; when they cannot and are at their
+    # confidentiality limit, the connection closes. While closing, only the
+    # CONNECTION_CLOSE frame, when due. When nothing goes, the path hears
+    # why.
     private def next_datagram(now)
       unless @state == :open
+        closing = closing_datagram(now) or return nil
+        return [closing, @path, false]
+      end
+      begin
+        @protection.update_keys_if_due
+      rescue Violation => error
+        close_for(error, now)
         closing = closing_datagram(now) or return nil
         return [closing, @path, false]
       end
@@ -1038,13 +1046,6 @@ module Raiha::Next::QUIC
       fits = @path.bytes_in_flight + limit <= @path.window
       paced = fits && @path.paced?(limit, now)
       eliciting = paced || @probe_datagrams.positive?
-      begin
-        @protection.update_keys_if_due
-      rescue Violation => error
-        close_for(error, now)
-        closing = closing_datagram(now) or return nil
-        return [closing, @path, false]
-      end
       pending = [] #: Array[Pending]
       used = 0
       LEVELS.each do |level|
