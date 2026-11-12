@@ -26,7 +26,7 @@ module Raiha::Next::TLS
 
       # State => epoch => the message types acceptable there. KeyUpdate in
       # :connected only where the Profile allows it.
-      EXPECTED = {
+      EXPECTED = Ractor.make_shareable({
         wait_sh: { initial: Set[ServerHello::MSG_TYPE] },
         wait_sh2: { initial: Set[ServerHello::MSG_TYPE] },
         wait_ee: { handshake: Set[EncryptedExtensions::MSG_TYPE] },
@@ -36,7 +36,7 @@ module Raiha::Next::TLS
         wait_finished: { handshake: Set[Finished::MSG_TYPE] },
         connected: { application: Set[NewSessionTicket::MSG_TYPE, KeyUpdate::MSG_TYPE] },
         failed: {} # steep:ignore
-      }.freeze #: Hash[Symbol, Hash[epoch, Set[Integer]]]
+      }) #: Hash[Symbol, Hash[epoch, Set[Integer]]]
 
       NONE = Set.new.freeze #: Set[Integer]
 

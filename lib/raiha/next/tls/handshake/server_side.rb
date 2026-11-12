@@ -30,7 +30,7 @@ module Raiha::Next::TLS
 
       STATES = %i[wait_ch2 wait_eoed wait_cert wait_cv wait_finished connected failed].freeze
 
-      EXPECTED = {
+      EXPECTED = Ractor.make_shareable({
         wait_ch2: { initial: Set[ClientHello::MSG_TYPE] },
         wait_eoed: { early_data: Set[EndOfEarlyData::MSG_TYPE] },
         wait_cert: { handshake: Set[Certificate::MSG_TYPE] },
@@ -38,7 +38,7 @@ module Raiha::Next::TLS
         wait_finished: { handshake: Set[Finished::MSG_TYPE] },
         connected: { application: Set[KeyUpdate::MSG_TYPE] },
         failed: {} # steep:ignore
-      }.freeze #: Hash[Symbol, Hash[epoch, Set[Integer]]]
+      }) #: Hash[Symbol, Hash[epoch, Set[Integer]]]
 
       NONE = Set.new.freeze #: Set[Integer]
 

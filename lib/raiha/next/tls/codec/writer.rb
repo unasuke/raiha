@@ -10,7 +10,7 @@ module Raiha::Next::TLS::Codec
   # The buffer is always BINARY: `String#<<` with an Integer appends a code
   # point, which is one byte only in a BINARY string.
   class Writer
-    PAD = ["".b, "\0".b, "\0\0".b, "\0\0\0".b].freeze #: Array[String]
+    PAD = Ractor.make_shareable(["".b, "\0".b, "\0\0".b, "\0\0\0".b]) #: Array[String]
 
     def initialize
       @buf = String.new(encoding: Encoding::BINARY)
