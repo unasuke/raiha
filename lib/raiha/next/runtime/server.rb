@@ -69,8 +69,8 @@ module Raiha::Next::Runtime
       raise ArgumentError, "a worker's server binds no host or port of its own" if worker && (host || port)
       @worker = worker
       @stop_error_code = stop_error_code
-      config = config.with(retry_token_key: config.retry_token_key || worker.retry_token_key,
-        stateless_reset_key: config.stateless_reset_key || worker.stateless_reset_key) if worker
+      config = config.with(retry_token_key: config.retry_token_key || worker.config.retry_token_key,
+        stateless_reset_key: config.stateless_reset_key || worker.config.stateless_reset_key) if worker
       @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring

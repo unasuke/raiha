@@ -389,7 +389,7 @@ class RaihaNextRuntimeServerTest < Minitest::Test
   def worker
     inbox = Ractor::Port.new
     Runtime::Worker.new(id: 0, count: 1, sockets: [Runtime::UDP.open("127.0.0.1", 0, reuse_port: true)], inbox:,
-      control: Ractor::Port.new, peers: [inbox], retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32,
+      control: Ractor::Port.new, peers: [inbox], config: Raiha::Next::QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32),
       anti_replay: Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now))
   end
 

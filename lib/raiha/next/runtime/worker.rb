@@ -5,9 +5,10 @@ module Raiha::Next::Runtime
   # its ID of `count`, the sockets bound for it, its `inbox`, where other
   # workers hand on what came for its connections, the `control` port
   # Workers asks it things through, and `peers`, the inboxes of all the
-  # workers by ID, its own included. The Retry token and stateless reset
-  # keys are those every worker uses, so that each takes the tokens and
-  # reads the connection IDs another issued, and `anti_replay` the record
+  # workers by ID, its own included. Its QUIC `config` has the Retry token
+  # and stateless reset keys every worker uses, so that each takes the
+  # tokens and reads the connection IDs another issued, and `anti_replay`
+  # is the record
   # of 0-RTT they share, so that each ClientHello's 0-RTT is taken once by
   # them all rather than once by each.
   #
@@ -27,13 +28,12 @@ module Raiha::Next::Runtime
     # another worker, received from one, and dropped as the queue was full.
     Stats = Data.define(:id, :sent, :received, :dropped)
 
-    attr_reader :id, :count, :sockets, :inbox, :control, :peers, :retry_token_key, :stateless_reset_key, :anti_replay
+    attr_reader :id, :count, :config, :sockets, :inbox, :control, :peers, :anti_replay
 
-    def initialize(id:, count:, sockets:, inbox:, control:, peers:, retry_token_key:, stateless_reset_key:, anti_replay:)
+    def initialize(id:, count:, config:, sockets:, inbox:, control:, peers:, anti_replay:)
       @id = id
+      @config = config
       @anti_replay = anti_replay
-      @retry_token_key = retry_token_key
-      @stateless_reset_key = stateless_reset_key
       @count = count
       @sockets = sockets
       @inbox = inbox
