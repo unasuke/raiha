@@ -297,15 +297,6 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     assert_raises(Runtime::Error::Usage) { server.run { flunk } }
   end
 
-  # A port no socket is bound to, as far as anyone knows.
-  def free_port
-    socket = UDPSocket.new
-    socket.bind("127.0.0.1", 0)
-    socket.local_address.ip_port
-  ensure
-    socket&.close
-  end
-
   # A server with a preferred address listens there too: its client moves
   # there once the handshake is confirmed, and the server answers from it.
   def test_a_preferred_address

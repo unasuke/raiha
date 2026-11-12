@@ -26,9 +26,6 @@ class RaihaNextRuntimeClientTest < Minitest::Test
     { config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls) }
   end
 
-  # A port nothing listens on.
-  def free_port = UDPSocket.open { |socket| socket.bind("127.0.0.1", 0) && socket.addr[1] }
-
   def echo(server)
     Fiber.schedule do
       accepted(server).each_stream do |stream|
