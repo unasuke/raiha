@@ -120,13 +120,16 @@ module Raiha::Next::Runtime
     # Whether a datagram from `address` ([address, port]) goes from this
     # socket: the port is the socket's, and so is the address, or the
     # socket is bound to any of its family, IPv4 too for "::".
-    def sends_from?(address)
+    def sends_from?(address) = UDP.covers?(@socket.local_address, address)
+
+    # Whether a socket bound to `bound` (an Addrinfo) sends from `address`,
+    # as `sends_from?` tells of one, for a socket not wrapped yet.
+    def self.covers?(bound, address)
       host, port = address
-      return false unless port == @port
-      bound = @socket.local_address
+      return false unless port == bound.ip_port
       return true if bound.ipv6? && bound.ipv6_unspecified?
       return !host.include?(":") if bound.ip_address == "0.0.0.0"
-      unmapped(bound.ip_address) == host
+      UDP.unmapped(bound.ip_address) == host
     end
 
     # Sends each datagram of `transmit`; whether all of them went. The ECN
@@ -244,7 +247,10 @@ module Raiha::Next::Runtime
     private def mapped(host) = @family == Socket::AF_INET6 && !host.include?(":") ? "::ffff:#{host}" : host
 
     # An IPv4-mapped address as the IPv4 address it maps.
-    private def unmapped(host) = host.start_with?("::ffff:") && host.include?(".") ? host.delete_prefix("::ffff:") : host
+    private def unmapped(host) = UDP.unmapped(host)
+
+    # `host` as IPv4's when it is IPv4-mapped.
+    def self.unmapped(host) = host.start_with?("::ffff:") && host.include?(".") ? host.delete_prefix("::ffff:") : host
 
     # The codepoint of a datagram from its control messages: IP_TOS is one
     # byte, IPV6_TCLASS an int.

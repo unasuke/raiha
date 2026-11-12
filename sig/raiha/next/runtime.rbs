@@ -151,6 +151,8 @@ module Raiha::Next::Runtime
 
     def self.bind: (String host, Integer port, ?reuse_port: bool) -> UDP
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
+    def self.covers?: (Addrinfo bound, address address) -> bool
+    def self.unmapped: (String host) -> String
     def self.batching: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
     def self.unfragmented?: () -> bool
     def self.pmtud: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
