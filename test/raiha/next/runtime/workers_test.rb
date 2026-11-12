@@ -122,11 +122,14 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
     assert stats.all? { |stat| [stat.sent, stat.received, stat.dropped] == [0, 0, 0] }
     workers.stop(timeout: 1)
     running.join(10)
-    quiet = workers(count: 1) { sleep 0.5 }
+    quiet = workers(count: 4) { sleep 0.5 }
     still = Thread.new { quiet.run }
     sleep 0.01 until quiet.local_address
     sleep 0.05
-    assert_equal [nil], quiet.stats(timeout: 0.1)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_equal [nil] * 4, quiet.stats(timeout: 0.1)
+    # They are asked at once, not one after another.
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 0.3
     still.join(10)
   ensure
     workers&.stop

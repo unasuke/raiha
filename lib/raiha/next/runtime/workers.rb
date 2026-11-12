@@ -118,24 +118,30 @@ module Raiha::Next::Runtime
 
     # What each worker counted of the datagrams handed on, by ID; nil for
     # one that has ended, or does not answer in `timeout` seconds, as one
-    # whose server is not running yet.
+    # whose server is not running yet. Every worker is asked at once, so
+    # that the answers take `timeout` at most, however many there are.
     def stats(timeout: STATS_TIMEOUT)
-      @controls.map do |control|
+      replies = @controls.map do |control|
         reply = Ractor::Port.new #: Ractor::Port[Worker::Stats?]
-        control.send([:stats, reply])
-        timer = Thread.new do
-          sleep timeout
+        begin
+          control.send([:stats, reply])
+        rescue Ractor::ClosedError
+          reply.send(nil)
+        end
+        reply
+      end
+      timer = Thread.new do
+        sleep timeout
+        replies.each do |reply|
           reply.send(nil)
         rescue Ractor::ClosedError
           nil
         end
-        reply.receive
-      rescue Ractor::ClosedError
-        nil
-      ensure
-        timer&.kill
-        reply&.close
       end
+      replies.map(&:receive)
+    ensure
+      timer&.kill
+      replies&.each(&:close)
     end
 
     # Tells the workers to stop each time `stop` writes to the pipe.
