@@ -389,11 +389,13 @@ class RaihaNextRuntimeServerTest < Minitest::Test
   def worker
     inbox = Ractor::Port.new
     Runtime::Worker.new(id: 0, count: 1, sockets: [Runtime::UDP.open("127.0.0.1", 0, reuse_port: true)], inbox:,
-      control: Ractor::Port.new, peers: [inbox], retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32)
+      control: Ractor::Port.new, peers: [inbox], retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32,
+      anti_replay: Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now))
   end
 
-  # A server given a worker binds nothing, reads the worker's socket, and
-  # takes a Config without keys, filling them with the worker's; a stop
+  # A server given a worker binds nothing, reads the worker's socket,
+  # takes a Config without keys, filling them with the worker's, and
+  # records 0-RTT in the worker's shared record; a stop
   # asked through the worker's control port ends `run`.
   def test_a_server_of_a_worker
     Sync do
@@ -403,6 +405,8 @@ class RaihaNextRuntimeServerTest < Minitest::Test
       server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), worker:)
       running = Fiber.schedule { server.run(&method(:echoes)) }
       assert_equal ["127.0.0.1", port], server.local_address
+      # 0-RTT is recorded where every worker records it.
+      assert_same worker.anti_replay, server.instance_variable_get(:@anti_replay)
       assert_equal "ECHO:hi", connect(port) { |session| echo(session, "hi") }
       worker.control.send([:stop, 1])
       sleep 0.01 while running.alive?

@@ -21,5 +21,21 @@ module Raiha::Next::TLS
 
       private def rotate: (Rational now) -> void
     end
+
+    class Shared
+      include _AntiReplay
+
+      type request = [String, Time, Time, Ractor::Port[result]] | :stop
+
+      TIMEOUT: Float
+      STOP: :stop
+
+      @requests: Ractor::Port[request]
+
+      def self.start: (now: Time, ?warmup: bool) -> [Shared, Ractor]
+      def initialize: (Ractor::Port[request] requests) -> void
+      def stop: () -> void
+      def inspect: () -> String
+    end
   end
 end

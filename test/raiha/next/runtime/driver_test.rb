@@ -198,7 +198,8 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
     Sync do
       inboxes = Array.new(2) { Ractor::Port.new }
       workers = Array.new(2) { |id| Runtime::Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes,
-        retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32) }
+        retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32,
+      anti_replay: Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)) }
       endpoint = Router.new
       udp = Runtime::UDP.bind("127.0.0.1", 0)
       driver = Runtime::Driver.new(endpoint, udp, Owner.new(endpoint), worker: workers[0]).start

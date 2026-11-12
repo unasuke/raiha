@@ -57,6 +57,7 @@ module Raiha::Next::Runtime
     attr_reader peers: Array[Ractor::Port[forwarded]]
     attr_reader retry_token_key: String
     attr_reader stateless_reset_key: String
+    attr_reader anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay
 
     @queue: Thread::Queue[forwarded]
     @sent: Integer
@@ -65,7 +66,8 @@ module Raiha::Next::Runtime
     @listener: Thread?
 
     def initialize: (id: Integer, count: Integer, sockets: Array[UDPSocket], inbox: Ractor::Port[forwarded], control: Ractor::Port[control],
-      peers: Array[Ractor::Port[forwarded]], retry_token_key: String, stateless_reset_key: String) -> void
+      peers: Array[Ractor::Port[forwarded]], retry_token_key: String, stateless_reset_key: String,
+      anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay) -> void
 
     def listen: (changed: ^() -> void, failed: ^(StandardError) -> void) { (control message) -> void } -> self
 

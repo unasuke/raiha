@@ -7,7 +7,9 @@ module Raiha::Next::Runtime
   # Workers asks it things through, and `peers`, the inboxes of all the
   # workers by ID, its own included. The Retry token and stateless reset
   # keys are those every worker uses, so that each takes the tokens and
-  # reads the connection IDs another issued.
+  # reads the connection IDs another issued, and `anti_replay` the record
+  # of 0-RTT they share, so that each ClientHello's 0-RTT is taken once by
+  # them all rather than once by each.
   #
   # A Ractor::Port waits for what comes without yielding to the Fiber
   # scheduler, so `listen` starts a thread of its own that waits on the
@@ -25,10 +27,11 @@ module Raiha::Next::Runtime
     # another worker, received from one, and dropped as the queue was full.
     Stats = Data.define(:id, :sent, :received, :dropped)
 
-    attr_reader :id, :count, :sockets, :inbox, :control, :peers, :retry_token_key, :stateless_reset_key
+    attr_reader :id, :count, :sockets, :inbox, :control, :peers, :retry_token_key, :stateless_reset_key, :anti_replay
 
-    def initialize(id:, count:, sockets:, inbox:, control:, peers:, retry_token_key:, stateless_reset_key:)
+    def initialize(id:, count:, sockets:, inbox:, control:, peers:, retry_token_key:, stateless_reset_key:, anti_replay:)
       @id = id
+      @anti_replay = anti_replay
       @retry_token_key = retry_token_key
       @stateless_reset_key = stateless_reset_key
       @count = count

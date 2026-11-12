@@ -54,7 +54,8 @@ module Raiha::Next::Runtime
   # nothing and reads the sockets bound for it, its first and those of the
   # preferred addresses; it issues connection IDs that tell its worker
   # (QUIC::WorkerConnectionIDs), fills the keys a `config` leaves out with
-  # those every worker shares, and its driver hands on to the other
+  # those every worker shares, records 0-RTT in the worker's shared
+  # `anti_replay` unless given one, and its driver hands on to the other
   # workers what came for their connections. What Workers asks through the
   # worker's control port, to stop or to take other TLS settings, is done
   # in the driver's turn, a stop with `stop_error_code` for the connections
@@ -73,7 +74,7 @@ module Raiha::Next::Runtime
       @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring
-      @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
+      @anti_replay = anti_replay || worker&.anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
       @app_early_data_context = app_early_data_context
       @host = host || "::"
       @port = port || 443

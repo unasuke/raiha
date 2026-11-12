@@ -66,5 +66,74 @@ module Raiha::Next::TLS
         @rotated_at = now
       end
     end
+
+    # A record that the Ractors of one process share: `start` begins a
+    # Ractor that keeps a Memory and answers each check sent to it, and the
+    # Shared it gives, which can itself be shared, sends them. A check waits
+    # TIMEOUT seconds at most for the answer, as a Ractor::Port waits with
+    # no limit of its own and is not woken by closing it; one not answered
+    # in time, or that cannot reach the record, is :unavailable. What the
+    # record raises for a check is :unavailable too, so it answers each.
+    class Shared
+      TIMEOUT = 0.1
+      STOP = :stop
+
+      # A Shared and the Ractor of its record, which `stop` ends.
+      def self.start(now:, warmup: true)
+        out = Ractor::Port.new
+        ractor = Ractor.new(out, now, warmup) do |out, now, warmup|
+          requests = Ractor::Port.new
+          out.send(requests)
+          memory = Memory.new(now:, warmup:)
+          loop do
+            request = requests.receive
+            break if request == STOP
+            binder, expires_at, at, reply = request
+            result = begin
+              memory.check(binder, expires_at:, now: at)
+            rescue StandardError
+              :unavailable
+            end
+            begin
+              reply.send(result)
+            rescue Ractor::ClosedError
+              nil
+            end
+          end
+        end
+        [new(out.receive), ractor]
+      end
+
+      def initialize(requests)
+        @requests = requests
+        freeze
+      end
+
+      def check(binder, expires_at:, now:)
+        reply = Ractor::Port.new
+        @requests.send([binder, expires_at, now, reply])
+        timer = Thread.new do
+          sleep TIMEOUT
+          reply.send(:unavailable)
+        rescue Ractor::ClosedError
+          nil
+        end
+        reply.receive
+      rescue Ractor::ClosedError
+        :unavailable
+      ensure
+        timer&.kill
+        reply&.close
+      end
+
+      # Ends the record; checks from then are :unavailable.
+      def stop
+        @requests.send(STOP)
+      rescue Ractor::ClosedError
+        nil
+      end
+
+      def inspect = "#<#{self.class.name}>"
+    end
   end
 end
