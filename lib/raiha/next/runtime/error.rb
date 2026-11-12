@@ -8,5 +8,9 @@ module Raiha::Next::Runtime
 
     # A call the runtime does not allow, as one with no Fiber scheduler.
     class Usage < Base; end
+
+    # A part of the runtime that runs on its own, as the record of 0-RTT
+    # the workers of Workers share, stopped before it was told to.
+    class Stopped < Base; end
   end
 end

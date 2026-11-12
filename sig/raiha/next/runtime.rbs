@@ -5,6 +5,9 @@ module Raiha::Next::Runtime
 
     class Usage < Base
     end
+
+    class Stopped < Base
+    end
   end
 
   # A protocol over a Session, HTTP/3: it takes each event of the
@@ -80,6 +83,35 @@ module Raiha::Next::Runtime
     private def queue: (forwarded forwarded, ^() -> void changed) -> void
 
     private def answer: (control message, ^(control) -> void control) -> void
+  end
+
+  class Workers
+    MAX: Integer
+
+    attr_reader count: Integer
+
+    @config: Raiha::Next::QUIC::Config
+    @host: String
+    @port: Integer
+    @args: Array[top]
+    @body: Proc
+    @local_address: UDP::address?
+    @controls: Array[Ractor::Port[Worker::control]]
+
+    def initialize: (count: Integer, config: Raiha::Next::QUIC::Config, ?host: String, ?port: Integer, ?args: Array[top]) { (Worker worker, *top) -> void } -> void
+
+    def local_address: () -> UDP::address?
+
+    def run: () -> nil
+
+    private def bind: () -> Array[Array[UDPSocket]]
+
+    private def start: (Integer id, Ractor::Port[[Integer, Ractor::Port[Worker::forwarded], Ractor::Port[Worker::control]]] out,
+      Raiha::Next::TLS::AntiReplay::Shared shared) -> Ractor
+
+    private def wait: (Array[Ractor] ractors, Ractor record) -> nil
+
+    private def stop_workers: (?Float | Integer timeout) -> void
   end
 
   class Driver
