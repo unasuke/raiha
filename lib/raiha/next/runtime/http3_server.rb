@@ -133,13 +133,15 @@ module Raiha::Next::Runtime
     #
     # 0-RTT is taken only from a ticket issued with the same `settings`
     # (RFC 9114 "Initialization"), and recorded in `anti_replay` as
-    # Runtime::Server has it.
+    # Runtime::Server has it. Given a `worker`, it is one of the workers of
+    # Workers as Runtime::Server is, and stops with H3_NO_ERROR when they
+    # are told to.
     class Server
-      def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
-        settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil)
+      def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
+        settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil, worker: nil)
         @settings = settings
         @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:, anti_replay:,
-          app_early_data_context: settings.early_data_context)
+          app_early_data_context: settings.early_data_context, worker:, stop_error_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
       end
 
       def run(&handler)

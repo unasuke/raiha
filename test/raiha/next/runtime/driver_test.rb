@@ -197,7 +197,8 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
   def test_a_worker_hands_on_and_takes
     Sync do
       inboxes = Array.new(2) { Ractor::Port.new }
-      workers = Array.new(2) { |id| Runtime::Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes) }
+      workers = Array.new(2) { |id| Runtime::Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes,
+        retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32) }
       endpoint = Router.new
       udp = Runtime::UDP.bind("127.0.0.1", 0)
       driver = Runtime::Driver.new(endpoint, udp, Owner.new(endpoint), worker: workers[0]).start

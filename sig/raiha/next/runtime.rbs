@@ -34,7 +34,7 @@ module Raiha::Next::Runtime
     # What Workers asks a worker through its control port.
     type control = :close
       | [:stats, Ractor::Port[Stats]]
-      | [:stop, Float | Integer, Integer]
+      | [:stop, Float | Integer]
       | [:reconfigure, Raiha::Next::TLS::Config, Array[Raiha::Next::TLS::Keyring::Identity]]
 
     QUEUE: Integer
@@ -55,6 +55,8 @@ module Raiha::Next::Runtime
     attr_reader inbox: Ractor::Port[forwarded]
     attr_reader control: Ractor::Port[control]
     attr_reader peers: Array[Ractor::Port[forwarded]]
+    attr_reader retry_token_key: String
+    attr_reader stateless_reset_key: String
 
     @queue: Thread::Queue[forwarded]
     @sent: Integer
@@ -63,7 +65,7 @@ module Raiha::Next::Runtime
     @listener: Thread?
 
     def initialize: (id: Integer, count: Integer, sockets: Array[UDPSocket], inbox: Ractor::Port[forwarded], control: Ractor::Port[control],
-      peers: Array[Ractor::Port[forwarded]]) -> void
+      peers: Array[Ractor::Port[forwarded]], retry_token_key: String, stateless_reset_key: String) -> void
 
     def listen: (changed: ^() -> void, failed: ^(StandardError) -> void) { (control message) -> void } -> self
 
@@ -403,10 +405,14 @@ module Raiha::Next::Runtime
     @stop: [Float | Integer, Integer]?
     @stop_deadline: Float?
     @wake: IO?
+    @worker: Worker?
+    @controls: Thread::Queue[Worker::control]
+    @worker_failure: StandardError?
+    @stop_error_code: Integer
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                     ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?,
-                     ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> void
+                     ?host: String?, ?port: Integer?, ?max_connections: Integer, ?qlog_dir: String?,
+                     ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?worker: Worker?, ?stop_error_code: Integer) -> void
 
     def run: () { (Session session) -> void } -> nil
 
@@ -425,6 +431,11 @@ module Raiha::Next::Runtime
     def stopped: (StandardError? failure) -> void
 
     private def driver!: () -> Driver
+
+    private def sockets: () -> [UDP, Array[UDP], Raiha::Next::QUIC::_ConnectionIDs]
+
+    private def control: (Worker::control message) -> void
+
     private def preferred_sockets: (UDP udp) -> Array[UDP]
 
     private def advance_ticket_keys: () -> void
@@ -684,8 +695,8 @@ module Raiha::Next::Runtime
       @server: Raiha::Next::Runtime::Server
 
       def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                       ?host: String, ?port: Integer, ?max_connections: Integer, ?qlog_dir: String?,
-                       ?settings: Raiha::Next::HTTP3::Settings, ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> void
+                       ?host: String?, ?port: Integer?, ?max_connections: Integer, ?qlog_dir: String?,
+                       ?settings: Raiha::Next::HTTP3::Settings, ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?worker: Worker?) -> void
 
       def run: () { (Request request) -> void } -> nil
 

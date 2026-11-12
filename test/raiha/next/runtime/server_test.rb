@@ -384,4 +384,63 @@ class RaihaNextRuntimeServerTest < Minitest::Test
       assert_raises(Errno::EADDRNOTAVAIL) { server.run { flunk } }
     end
   end
+
+  # A worker of one, on a socket bound here as Workers would bind it.
+  def worker
+    inbox = Ractor::Port.new
+    Runtime::Worker.new(id: 0, count: 1, sockets: [Runtime::UDP.open("127.0.0.1", 0, reuse_port: true)], inbox:,
+      control: Ractor::Port.new, peers: [inbox], retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32)
+  end
+
+  # A server given a worker binds nothing, reads the worker's socket, and
+  # takes a Config without keys, filling them with the worker's; a stop
+  # asked through the worker's control port ends `run`.
+  def test_a_server_of_a_worker
+    Sync do
+      worker = worker()
+      port = worker.sockets.first.local_address.ip_port
+      tls = server_config
+      server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), worker:)
+      running = Fiber.schedule { server.run(&method(:echoes)) }
+      assert_equal ["127.0.0.1", port], server.local_address
+      assert_equal "ECHO:hi", connect(port) { |session| echo(session, "hi") }
+      worker.control.send([:stop, 1])
+      sleep 0.01 while running.alive?
+      assert worker.inbox.closed?
+    end
+  end
+
+  # What fails in the thread that waits on the worker's ports ends `run`
+  # with it.
+  def test_a_failure_of_the_worker_thread
+    Sync do
+      worker = worker()
+      worker.define_singleton_method(:queue) { |*| raise "the worker thread failed" }
+      tls = server_config
+      server = Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), worker:)
+      failure = nil
+      running = Fiber.schedule do
+        server.run { flunk }
+      rescue RuntimeError => error
+        failure = error
+      end
+      worker.inbox.send(["x".b, ["127.0.0.1", 1], nil, :not_ect, 0.0])
+      sleep 0.01 while running.alive?
+      assert_equal "the worker thread failed", failure&.message
+    end
+  end
+
+  def test_a_worker_binds_no_host_or_port
+    tls = server_config
+    worker = worker()
+    assert_raises(ArgumentError) do
+      Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), worker:, port: 443)
+    end
+    assert_raises(ArgumentError) do
+      Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), worker:, host: "::")
+    end
+  ensure
+    worker&.sockets&.each(&:close)
+    worker&.close
+  end
 end

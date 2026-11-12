@@ -49,19 +49,38 @@ module Raiha::Next::Runtime
   # take a ClientHello's 0-RTT once. `app_early_data_context` is what of
   # the application its 0-RTT relies on, so that the 0-RTT of a ticket
   # issued with other settings is rejected (Endpoint#accept).
+  #
+  # Given a `worker`, the server is one of the workers of Workers: it binds
+  # nothing and reads the sockets bound for it, its first and those of the
+  # preferred addresses; it issues connection IDs that tell its worker
+  # (QUIC::WorkerConnectionIDs), fills the keys a `config` leaves out with
+  # those every worker shares, and its driver hands on to the other
+  # workers what came for their connections. What Workers asks through the
+  # worker's control port, to stop or to take other TLS settings, is done
+  # in the driver's turn, a stop with `stop_error_code` for the connections
+  # left. A `host` or `port` beside it is ArgumentError.
   class Server
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
 
-    def initialize(config:, tls_config:, keyring:, host: "::", port: 443, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
-      anti_replay: nil, app_early_data_context: "".b)
+    def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
+      anti_replay: nil, app_early_data_context: "".b, worker: nil, stop_error_code: 0)
+      raise ArgumentError, "a worker's server binds no host or port of its own" if worker && (host || port)
+      @worker = worker
+      @stop_error_code = stop_error_code
+      config = config.with(retry_token_key: config.retry_token_key || worker.retry_token_key,
+        stateless_reset_key: config.stateless_reset_key || worker.stateless_reset_key) if worker
       @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring
       @anti_replay = anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
       @app_early_data_context = app_early_data_context
-      @host = host
-      @port = port
+      @host = host || "::"
+      @port = port || 443
+      # What the worker's control port asked, for the driver's turn, and
+      # what failed in the thread that waits on it.
+      @controls = Thread::Queue.new
+      @worker_failure = nil #: StandardError?
       @max_connections = max_connections
       @qlog = qlog_dir && Qlog.new(qlog_dir)
       @traces = {} #: Hash[Session, Qlog::Pending]
@@ -88,13 +107,16 @@ module Raiha::Next::Runtime
     def run(&handler)
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
       @handler = handler
-      udp = @udp = UDP.bind(@host, @port)
-      others = preferred_sockets(udp)
-      endpoint = Raiha::Next::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock)
+      udp, others, connection_ids = sockets
+      endpoint = Raiha::Next::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock, connection_ids:)
       # Known before it starts, so that leaving `run` while it starts stops
       # it too.
-      driver = @driver = Driver.new(endpoint, udp, self, others:)
+      driver = @driver = Driver.new(endpoint, udp, self, others:, worker: @worker)
       driver.start
+      @worker&.listen(changed: -> { driver.changed }, failed: ->(error) { (@worker_failure = error) && driver.changed }) do |message|
+        @controls << message
+        driver.changed
+      end
       reader, @wake = IO.pipe
       Fiber.schedule { wake_on(reader, driver) }
       @lock.synchronize { @stopped.wait(@lock) until driver.stopped? }
@@ -103,6 +125,7 @@ module Raiha::Next::Runtime
     ensure
       # Left by an exception, or by the task running it being stopped.
       @driver&.stop
+      @worker&.close
       reader&.close
       @wake&.close
     end
@@ -155,6 +178,10 @@ module Raiha::Next::Runtime
     # The driver's turn: each Session's, the block for each whose handshake
     # has completed, and the sessions of connections over let go.
     def turn(now)
+      failure = @worker_failure and raise failure
+      while (message = @controls.pop(timeout: 0))
+        control(message)
+      end
       @sessions.each do |session|
         session.turn
         start(session) if !@stop && !@started.key?(session) && session.connection.handshake_complete?
@@ -180,6 +207,30 @@ module Raiha::Next::Runtime
     end
 
     private def driver! = @driver || raise(Error::Usage, "the server is not running")
+
+    # The socket, those besides it, and the connection IDs to issue: of the
+    # worker, or bound here.
+    private def sockets
+      if (worker = @worker)
+        first, *others = worker.sockets.map { |socket| UDP.new(socket) }
+        ids = Raiha::Next::QUIC::WorkerConnectionIDs.new(SecureRandom, worker_id: worker.id, worker_count: worker.count,
+          key: @config.stateless_reset_key || raise(Error::Usage, "a worker's Config has no stateless_reset_key"))
+        udp = first or raise Error::Usage, "the worker has no socket"
+        @udp = udp
+        return [udp, others, ids]
+      end
+      udp = @udp = UDP.bind(@host, @port)
+      [udp, preferred_sockets(udp), Raiha::Next::QUIC::RandomConnectionIDs.new(SecureRandom)]
+    end
+
+    # What Workers asked through the worker's control port.
+    private def control(message)
+      case message
+      in [:stop, timeout] then stop(timeout:, error_code: @stop_error_code)
+      in [:reconfigure, tls_config, identities] then reconfigure(tls_config:, keyring: Raiha::Next::TLS::Keyring.server(config: tls_config, identities:))
+      else nil
+      end
+    end
 
     # A socket bound to each preferred address that none bound so far
     # sends from; none is left open when one cannot be bound, nor `udp`.
