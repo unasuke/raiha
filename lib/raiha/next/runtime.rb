@@ -11,6 +11,7 @@ end
 require_relative "runtime/error"
 require_relative "runtime/udp"
 require_relative "runtime/driver"
+require_relative "runtime/worker"
 require_relative "runtime/qlog"
 require_relative "runtime/session"
 require_relative "runtime/client"

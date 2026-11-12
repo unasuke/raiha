@@ -28,6 +28,58 @@ module Raiha::Next::Runtime
     def stopped: (StandardError? failure) -> void
   end
 
+  class Worker
+    # A datagram handed on: [datagram, from, to, ecn, received_at].
+    type forwarded = [String, UDP::address, UDP::address?, UDP::ecn, Float]
+    # What Workers asks a worker through its control port.
+    type control = :close
+      | [:stats, Ractor::Port[Stats]]
+      | [:stop, Float | Integer, Integer]
+      | [:reconfigure, Raiha::Next::TLS::Config, Array[Raiha::Next::TLS::Keyring::Identity]]
+
+    QUEUE: Integer
+    CLOSE: :close
+
+    class Stats < Data
+      attr_reader id: Integer
+      attr_reader sent: Integer
+      attr_reader received: Integer
+      attr_reader dropped: Integer
+
+      def self.new: (id: Integer, sent: Integer, received: Integer, dropped: Integer) -> Stats
+    end
+
+    attr_reader id: Integer
+    attr_reader count: Integer
+    attr_reader sockets: Array[UDPSocket]
+    attr_reader inbox: Ractor::Port[forwarded]
+    attr_reader control: Ractor::Port[control]
+    attr_reader peers: Array[Ractor::Port[forwarded]]
+
+    @queue: Thread::Queue[forwarded]
+    @sent: Integer
+    @received: Integer
+    @dropped: Integer
+    @listener: Thread?
+
+    def initialize: (id: Integer, count: Integer, sockets: Array[UDPSocket], inbox: Ractor::Port[forwarded], control: Ractor::Port[control],
+      peers: Array[Ractor::Port[forwarded]]) -> void
+
+    def listen: (changed: ^() -> void, failed: ^(StandardError) -> void) { (control message) -> void } -> self
+
+    def forward: (Integer worker, forwarded forwarded) -> void
+
+    def take: () -> Array[forwarded]
+
+    def stats: () -> Stats
+
+    def close: () -> nil
+
+    private def queue: (forwarded forwarded, ^() -> void changed) -> void
+
+    private def answer: (control message, ^(control) -> void control) -> void
+  end
+
   class Driver
     attr_reader endpoint: Raiha::Next::QUIC::Endpoint
     attr_reader failure: StandardError?
