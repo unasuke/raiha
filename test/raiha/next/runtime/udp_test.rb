@@ -291,4 +291,27 @@ class RaihaNextRuntimeUDPTest < Minitest::Test
     refute sender.send(transmit("x".b * 70_000, receiver.local_address))
     refute receiver.wait_readable(0.05)
   end
+
+  # Sockets that reuse the port bind the same one, the port 0 gave the
+  # first included, and the kernel gives each the datagrams of some
+  # senders; without it the second does not bind.
+  def test_sockets_that_reuse_a_port
+    skip "SO_REUSEPORT spreads datagrams on Linux alone" unless RUBY_PLATFORM.include?("linux")
+    first = UDP.bind("127.0.0.1", 0, reuse_port: true).tap { @sockets << _1 }
+    port = first.local_address.fetch(1)
+    second = UDP.bind("127.0.0.1", port, reuse_port: true).tap { @sockets << _1 }
+    assert_equal port, second.local_address.fetch(1)
+    assert_raises(Errno::EADDRINUSE) { UDP.bind("127.0.0.1", port) }
+    32.times { bind("127.0.0.1").send(transmit("x".b, ["127.0.0.1", port])) }
+    counts = [first, second].map { |socket| socket.wait_readable(0.2) ? (socket.receive.size + drain(socket)) : 0 }
+    assert_equal 32, counts.sum
+    assert counts.all?(&:positive?), "each socket takes some senders: #{counts}"
+  end
+
+  # How many more datagrams `socket` has waiting.
+  def drain(socket)
+    count = 0
+    count += socket.receive.size while socket.wait_readable(0.05)
+    count
+  end
 end

@@ -67,13 +67,25 @@ module Raiha::Next::Runtime
     # fragmenting, so that no probe passes in pieces.
     def self.pmtud(config) = unfragmented? || !config.enable_pmtud ? config : config.with(enable_pmtud: false)
 
-    # A socket bound to `host` and `port` (0 for one the OS chooses).
-    def self.bind(host, port)
+    # A socket bound to `host` and `port` (0 for one the OS chooses); with
+    # `reuse_port`, one of several that share the address (UDP.open).
+    def self.bind(host, port, reuse_port: false) = new(open(host, port, reuse_port:))
+
+    # A plain UDPSocket bound to `host` and `port`, as `bind` wraps, which
+    # can be moved to another Ractor and wrapped there. With `reuse_port`
+    # (SO_REUSEPORT, set before binding), other sockets with it may bind
+    # the same address, and the kernel gives each the datagrams of some
+    # 4-tuples, as the workers of a server take theirs.
+    def self.open(host, port, reuse_port: false)
       family = Addrinfo.udp(host, port).afamily
       socket = UDPSocket.new(family)
       socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY, 0) if family == Socket::AF_INET6
+      socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEPORT, 1) if reuse_port
       socket.bind(host, port)
-      new(socket)
+      socket
+    rescue StandardError
+      socket&.close
+      raise
     end
 
     def initialize(socket)
