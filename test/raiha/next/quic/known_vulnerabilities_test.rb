@@ -45,20 +45,24 @@ class RaihaNextQUICKnownVulnerabilitiesTest < Minitest::Test
   # The first stage of a new connection derives no key, so that an
   # attacker's Initials cost the server their headers alone.
   def test_the_first_stage_derives_no_key
+    # A prepended module stays once the test is over, so it counts only for
+    # the thread of this test, and writes nothing to the class: the workers
+    # of other tests derive keys in Ractors, where it could not.
     counter = Module.new do
-      attr_accessor :derived
-
       def derive(...)
-        self.derived = (derived || 0) + 1
+        counts = Thread.current[:raiha_next_initial_derives]
+        counts << 1 if counts
         super
       end
     end
     QUIC::Crypto::Initial.singleton_class.prepend(counter)
     endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW, now: 0.0)
     datagram = client_connection.transmits(now: 0.0).first.payload
-    QUIC::Crypto::Initial.derived = 0
+    derives = Thread.current[:raiha_next_initial_derives] = []
     assert_instance_of QUIC::Route::Incoming, endpoint.receive(datagram, from: CLIENT, now: 0.0)
-    assert_equal 0, QUIC::Crypto::Initial.derived
+    assert_empty derives
+  ensure
+    Thread.current[:raiha_next_initial_derives] = nil
   end
 
   # A client's Initial packet to `dcid` with a PING, of `size` bytes.

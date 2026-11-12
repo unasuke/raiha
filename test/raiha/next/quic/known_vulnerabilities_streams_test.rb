@@ -57,14 +57,14 @@ class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
     refute ObjectSpace.dump(kept.first.data).include?('"shared":true'), "the STREAM data is shared"
   end
 
-  # Counts how often a piece of data received is looked at.
+  # Counts how often a piece of data received is looked at. A prepended
+  # module stays once the test is over, so it counts only for the thread of
+  # this test, and writes nothing to a module: the workers of other tests
+  # receive stream data in Ractors, where it could not.
   module Looks
-    class << self
-      attr_accessor :count
-    end
-
     def offset
-      Looks.count = (Looks.count || 0) + 1
+      looks = Thread.current[:raiha_next_chunk_looks]
+      looks << 1 if looks
       super
     end
   end
@@ -77,11 +77,14 @@ class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
     streams = QUIC::Streams.new(role: :client, config: QUIC::Config.new, events: [], now: 0.0)
     pieces = 4000
     most = (0...pieces).to_a.shuffle(random: Random.new(1)).map do |piece|
-      Looks.count = 0
+      looks = Thread.current[:raiha_next_chunk_looks] = []
       streams.receive_stream(stream(1, 2 * piece + 1, "x"), now: 0.0)
-      Looks.count || 0
+      looks.size
     end.max
     assert_operator most, :<=, 6 * Math.log2(pieces)
+    assert_operator most, :>, 0, "nothing was looked at"
+  ensure
+    Thread.current[:raiha_next_chunk_looks] = nil
   end
 
   # A client opens unidirectional streams and resets them at once, given
