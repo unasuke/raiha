@@ -2,6 +2,9 @@ module Raiha::Next::QUIC
   # What makes the connection IDs an Endpoint issues.
   interface _ConnectionIDs
     def generate: (Integer length) -> String
+
+    # The other worker that issued `connection_id`, nil for none.
+    def worker_of: (String connection_id) -> Integer?
   end
 
   class RandomConnectionIDs
@@ -10,5 +13,22 @@ module Raiha::Next::QUIC
     @random: Crypto::_Random
 
     def initialize: (Crypto::_Random random) -> void
+  end
+
+  class WorkerConnectionIDs
+    include _ConnectionIDs
+
+    MIN_LENGTH: Integer
+    MAX_WORKERS: Integer
+    LABEL: String
+
+    @random: Crypto::_Random
+    @worker_id: Integer
+    @worker_count: Integer
+    @key: String
+
+    def initialize: (Crypto::_Random random, worker_id: Integer, worker_count: Integer, key: String) -> void
+
+    private def mask: (String rest) -> Integer
   end
 end
