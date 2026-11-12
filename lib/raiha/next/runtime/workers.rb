@@ -22,10 +22,17 @@ module Raiha::Next::Runtime
   # returns when all are over, raising what the first that raised raised.
   # The record stopping before them is a failure too.
   #
+  # `stop` asks every worker to stop, from a signal handler as well,
+  # `reconfigure` has every worker take other TLS settings, building its
+  # Keyring of `identities`, and `stats` gives what each worker counted of
+  # the datagrams handed on, nil for one that does not answer in time.
+  #
   # SO_REUSEPORT spreads datagrams over sockets on Linux alone, where more
   # than one worker can be run.
   class Workers
     MAX = Raiha::Next::QUIC::WorkerConnectionIDs::MAX_WORKERS
+    # How long `stats` waits for a worker to answer.
+    STATS_TIMEOUT = 1.0
 
     attr_reader :count
 
@@ -45,6 +52,9 @@ module Raiha::Next::Runtime
       @body = Ractor.shareable_proc(&block) # steep:ignore
       @local_address = nil #: UDP::address?
       @controls = [] #: Array[Ractor::Port[Worker::control]]
+      # What `stop` asked, and the pipe it wakes `run` through.
+      @stop = nil #: (Float | Integer)?
+      @wake = nil #: IO?
     end
 
     # [address, port] the workers' sockets are bound to, once `run` bound
@@ -54,6 +64,7 @@ module Raiha::Next::Runtime
     # Runs the workers until all are over; raises what the first that
     # raised raised.
     def run
+      reader, @wake = IO.pipe
       sockets = bind
       shared, record = Raiha::Next::TLS::AntiReplay::Shared.start(now: Time.now)
       out = Ractor::Port.new
@@ -63,8 +74,13 @@ module Raiha::Next::Runtime
       @controls = started.map { |_, _, control| control }
       ractors.each_with_index { |ractor, id| ractor.send([sockets[id], peers], move: true) }
       sockets = nil
+      relay = Thread.new { relay_stops(reader) }
+      (timeout = @stop) and stop_workers(timeout)
       wait(ractors, record)
     ensure
+      relay&.kill
+      reader&.close
+      @wake&.close
       sockets&.flatten&.each(&:close)
       shared&.stop
       begin
@@ -72,6 +88,65 @@ module Raiha::Next::Runtime
       rescue Ractor::RemoteError
         nil
       end
+    end
+
+    # Asks every worker to stop, giving its sessions `timeout` seconds; the
+    # first call is the one that counts. It writes to a pipe without
+    # waiting, so a signal handler may call it, and `run` tells the workers.
+    def stop(timeout: Server::STOP_TIMEOUT)
+      @stop ||= timeout
+      @wake&.write_nonblock(".", exception: false)
+      nil
+    rescue IOError, SystemCallError
+      # `run` is returning and has closed the pipe.
+      nil
+    end
+
+    # Has every worker take the connections to come with `tls_config` and
+    # a Keyring of `identities` (TLS::Keyring::Identity); those taken keep
+    # theirs.
+    def reconfigure(tls_config:, identities:)
+      raise Error::Usage, "the workers are not running" if @controls.empty?
+      message = Ractor.make_shareable([:reconfigure, tls_config, identities], copy: true) #: Worker::control
+      @controls.each do |control|
+        control.send(message)
+      rescue Ractor::ClosedError
+        nil
+      end
+      nil
+    end
+
+    # What each worker counted of the datagrams handed on, by ID; nil for
+    # one that has ended, or does not answer in `timeout` seconds, as one
+    # whose server is not running yet.
+    def stats(timeout: STATS_TIMEOUT)
+      @controls.map do |control|
+        reply = Ractor::Port.new #: Ractor::Port[Worker::Stats?]
+        control.send([:stats, reply])
+        timer = Thread.new do
+          sleep timeout
+          reply.send(nil)
+        rescue Ractor::ClosedError
+          nil
+        end
+        reply.receive
+      rescue Ractor::ClosedError
+        nil
+      ensure
+        timer&.kill
+        reply&.close
+      end
+    end
+
+    # Tells the workers to stop each time `stop` writes to the pipe.
+    private def relay_stops(reader)
+      loop do
+        reader.wait_readable
+        reader.read_nonblock(64, exception: false)
+        stop_workers(@stop || Server::STOP_TIMEOUT)
+      end
+    rescue IOError
+      nil
     end
 
     # A socket for each worker on `host` and `port`, the port the first was

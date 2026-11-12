@@ -111,7 +111,7 @@ module Raiha::Next::Runtime
 
     private def answer(message, control)
       return control.call(message) unless message.is_a?(Array) && message.first == :stats
-      reply = message.fetch(1) #: Ractor::Port[Stats]
+      reply = message.fetch(1) #: Ractor::Port[Stats?]
       reply.send(stats)
     rescue Ractor::ClosedError
       nil

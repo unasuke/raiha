@@ -62,6 +62,93 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
     assert_equal "worker 0 failed", error.message
   end
 
+  # Workers serving echo, each answering with its ID, run in a thread of
+  # their own: the workers and the thread, once they bound their sockets.
+  def serving(count: 2)
+    tls = server_config
+    workers = workers(count:, args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
+      Sync do
+        Raiha::Next::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
+          session.each_stream { |stream| (stream << "ECHO#{worker.id}:" << stream.read).close_write }
+        end
+      end
+    end
+    running = Thread.new { workers.run }
+    sleep 0.01 until workers.local_address || !running.alive?
+    [workers, running]
+  end
+
+  # What a stream to the workers at `port` is answered.
+  def echo(port, data, server_name: "localhost")
+    tls = client_config
+    Sync do
+      Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls), server_name:) do |session|
+        stream = session.open_stream
+        stream << data
+        stream.close_write
+        stream.read
+      end
+    end
+  end
+
+  # A stop asked from a signal handler has every worker stop, and `run`
+  # return.
+  def test_a_stop_from_a_signal_handler
+    workers, running = serving
+    assert_match(/\AECHO[01]:hi\z/, echo(workers.local_address.fetch(1), "hi"))
+    previous = Signal.trap(:USR2) { workers.stop(timeout: 1) }
+    Process.kill(:USR2, Process.pid)
+    assert running.join(10), "the workers did not stop"
+    assert_nil running.value
+  ensure
+    Signal.trap(:USR2, previous || "DEFAULT")
+  end
+
+  # A stop asked before the workers run has them stop once they do.
+  def test_a_stop_before_they_run
+    workers, running = serving.tap { |workers, _| workers.stop(timeout: 1) }
+    assert running.join(10), "the workers did not stop"
+  ensure
+    workers&.stop
+  end
+
+  # Each worker answers what it counted; one whose server is not running
+  # does not, and is nil.
+  def test_stats
+    workers, running = serving
+    stats = workers.stats
+    assert_equal [0, 1], stats.map(&:id)
+    assert stats.all? { |stat| [stat.sent, stat.received, stat.dropped] == [0, 0, 0] }
+    workers.stop(timeout: 1)
+    running.join(10)
+    quiet = workers(count: 1) { sleep 0.5 }
+    still = Thread.new { quiet.run }
+    sleep 0.01 until quiet.local_address
+    sleep 0.05
+    assert_equal [nil], quiet.stats(timeout: 0.1)
+    still.join(10)
+  ensure
+    workers&.stop
+  end
+
+  # Other TLS settings and identities are taken for the connections to
+  # come: a certificate for another name has a client of "localhost" fail.
+  def test_reconfigure
+    workers, running = serving
+    port = workers.local_address.fetch(1)
+    assert_match(/\AECHO[01]:before\z/, echo(port, "before"))
+    other = Ractor.make_shareable(NextTLSPair.server_identity(names: ["DNS:other.example"]))
+    workers.reconfigure(tls_config: server_config, identities: [other])
+    sleep 0.1
+    assert_match(/\AECHO[01]:other\z/, echo(port, "other", server_name: "other.example"))
+    error = assert_raises(Runtime::ConnectError) { echo(port, "localhost") }
+    assert_match(/certificate_rejected/, error.message)
+  ensure
+    workers&.stop(timeout: 1)
+    running&.join(10)
+  end
+
   def test_the_arguments
     assert_raises(ArgumentError) { workers(count: 0) { nil } }
     assert_raises(ArgumentError) { workers(count: Runtime::Workers::MAX + 1) { nil } }

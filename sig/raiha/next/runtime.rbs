@@ -36,7 +36,7 @@ module Raiha::Next::Runtime
     type forwarded = [String, UDP::address, UDP::address?, UDP::ecn, Float]
     # What Workers asks a worker through its control port.
     type control = :close
-      | [:stats, Ractor::Port[Stats]]
+      | [:stats, Ractor::Port[Stats?]]
       | [:stop, Float | Integer]
       | [:reconfigure, Raiha::Next::TLS::Config, Array[Raiha::Next::TLS::Keyring::Identity]]
 
@@ -87,6 +87,7 @@ module Raiha::Next::Runtime
 
   class Workers
     MAX: Integer
+    STATS_TIMEOUT: Float
 
     attr_reader count: Integer
 
@@ -97,12 +98,22 @@ module Raiha::Next::Runtime
     @body: Proc
     @local_address: UDP::address?
     @controls: Array[Ractor::Port[Worker::control]]
+    @stop: (Float | Integer)?
+    @wake: IO?
 
     def initialize: (count: Integer, config: Raiha::Next::QUIC::Config, ?host: String, ?port: Integer, ?args: Array[top]) { (Worker worker, *top) -> void } -> void
 
     def local_address: () -> UDP::address?
 
     def run: () -> nil
+
+    def stop: (?timeout: Float | Integer) -> nil
+
+    def reconfigure: (tls_config: Raiha::Next::TLS::Config, identities: Array[Raiha::Next::TLS::Keyring::Identity]) -> nil
+
+    def stats: (?timeout: Float | Integer) -> Array[Worker::Stats?]
+
+    private def relay_stops: (IO reader) -> void
 
     private def bind: () -> Array[Array[UDPSocket]]
 
