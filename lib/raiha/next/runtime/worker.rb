@@ -51,12 +51,14 @@ module Raiha::Next::Runtime
     # each message to the control port but a request for `stats`, which it
     # answers itself, and `failed` with what it raises, if anything. It ends
     # at the CLOSE `close` sends, as closing a port does not wake
-    # Ractor.select.
+    # Ractor.select. The control port goes first: Ractor.select takes the
+    # first port that has something, and datagrams handed on without end
+    # would keep a stop waiting.
     def listen(changed:, failed:, &control)
       raise Error::Usage, "the worker listens already" if @listener
       @listener = Thread.new do
         loop do
-          port, message = Ractor.select(@inbox, @control)
+          port, message = Ractor.select(@control, @inbox)
           break if message == CLOSE && port.equal?(@control)
           port.equal?(@inbox) ? queue(message, changed) : answer(message, control)
         end

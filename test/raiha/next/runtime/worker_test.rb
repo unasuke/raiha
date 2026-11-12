@@ -73,6 +73,16 @@ class RaihaNextRuntimeWorkerTest < Minitest::Test
     assert_nil @controls.pop(timeout: 0.05)
   end
 
+  # What comes to the control port is taken before datagrams handed on
+  # that wait, so that a flood of them keeps no stop waiting.
+  def test_the_control_port_goes_before_the_inbox
+    100.times { |n| @workers[1].forward(0, forwarded(n)) }
+    @workers[0].control.send([:stop, 30])
+    order = Thread::Queue.new
+    @workers[0].listen(changed: -> { order << :handed_on }, failed: ->(error) { @thrown << error }) { |message| order << message }
+    assert_equal [:stop, 30], order.pop(timeout: 1)
+  end
+
   def test_close_ends_the_thread
     listen(@workers[0])
     @workers[0].close
