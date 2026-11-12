@@ -16,13 +16,19 @@ module Raiha::Next::Runtime
   # client or a server of the runtime, is told of each Route but a response
   # to send, takes its turn each time round with a timer of its own, and is
   # told when the driver stops, with what failed when something did.
+  #
+  # The driver of one of a server's workers hands on to its `worker` what
+  # the Endpoint routes to another (Route::Foreign), with where it came from
+  # and when, and in each turn gives the Endpoint what other workers handed
+  # on to this one, as it came then.
   class Driver
     attr_reader :endpoint, :failure
 
     def self.clock = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    def initialize(endpoint, udp, owner, others: [])
+    def initialize(endpoint, udp, owner, others: [], worker: nil)
       @endpoint = endpoint
+      @worker = worker
       @udp = udp
       @udps = [udp, *others]
       @owner = owner
@@ -89,8 +95,26 @@ module Raiha::Next::Runtime
     private def take(datagrams, now)
       responses = [] #: Array[Raiha::Next::QUIC::Transmit]
       datagrams.each do |data, from, to, ecn|
-        route = @endpoint.receive(data, from:, to:, ecn:, now:)
-        route.is_a?(Raiha::Next::QUIC::Route::Respond) ? responses << route.transmit : (@owner.route(route, now) if route)
+        case (route = @endpoint.receive(data, from:, to:, ecn:, now:))
+        when Raiha::Next::QUIC::Route::Respond then responses << route.transmit
+        when Raiha::Next::QUIC::Route::Foreign then @worker&.forward(route.worker, [data, from, to, ecn, now])
+        when nil then nil
+        else @owner.route(route, now)
+        end
+      end
+      responses
+    end
+
+    # What other workers handed on to this one, given to the Endpoint as
+    # it came then, never to be handed on again; the responses it sends.
+    private def take_forwarded
+      responses = [] #: Array[Raiha::Next::QUIC::Transmit]
+      @worker&.take&.each do |data, from, to, ecn, received_at|
+        case (route = @endpoint.receive(data, from:, to:, ecn:, now: received_at, forwarded: true))
+        when Raiha::Next::QUIC::Route::Respond then responses << route.transmit
+        when nil then nil
+        else @owner.route(route, received_at)
+        end
       end
       responses
     end
@@ -112,6 +136,7 @@ module Raiha::Next::Runtime
     # The timers of the Endpoint, the owner's turn, and what there is to
     # send after.
     private def turn(now)
+      take_forwarded.each { |transmit| emit(transmit) }
       deadline = @endpoint.next_timeout
       @endpoint.handle_timeout(now:) if deadline && deadline <= now
       @owner.turn(now)

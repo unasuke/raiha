@@ -180,4 +180,44 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
       peer&.close
     end
   end
+
+  # An Endpoint of worker 0 that routes "theirs" to worker 1, and keeps what
+  # it is given with whether it was handed on and when it came.
+  class Router < Recorder
+    def receive(data, from:, to:, ecn:, now:, forwarded: false)
+      return Raiha::Next::QUIC::Route::Foreign.new(worker: 1, datagram: data) if data == "theirs" && !forwarded
+      @received << [data, forwarded, now]
+      nil
+    end
+  end
+
+  # A worker's driver hands on what its Endpoint routes to another worker,
+  # with where and when it came, and gives its Endpoint what another worker
+  # handed on, as it came then and never to be handed on again.
+  def test_a_worker_hands_on_and_takes
+    Sync do
+      inboxes = Array.new(2) { Ractor::Port.new }
+      workers = Array.new(2) { |id| Runtime::Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes) }
+      endpoint = Router.new
+      udp = Runtime::UDP.bind("127.0.0.1", 0)
+      driver = Runtime::Driver.new(endpoint, udp, Owner.new(endpoint), worker: workers[0]).start
+      workers[0].listen(changed: -> { driver.changed }, failed: ->(_error) { nil }) { nil }
+      workers[1].listen(changed: -> { nil }, failed: ->(_error) { nil }) { nil }
+      peer = UDPSocket.new
+      peer.bind("127.0.0.1", 0)
+      peer.send("theirs", 0, *udp.local_address)
+      handed = []
+      assert eventually { handed.concat(workers[1].take).any? }
+      data, from, to, ecn, received_at = handed.first
+      assert_equal ["theirs", ["127.0.0.1", peer.local_address.ip_port], udp.local_address, :not_ect], [data, from, to, ecn]
+      assert_kind_of Float, received_at
+      workers[1].forward(0, ["mine".b, ["127.0.0.1", 1], nil, :not_ect, 12.5])
+      assert eventually { endpoint.received.any? }
+      assert_equal [["mine", true, 12.5]], endpoint.received
+      driver.stop
+    ensure
+      peer&.close
+      workers&.each(&:close)
+    end
+  end
 end

@@ -94,7 +94,9 @@ module Raiha::Next::Runtime
 
     def self.clock: () -> Float
 
-    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP]) -> void
+    @worker: Worker?
+
+    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP], ?worker: Worker?) -> void
 
     def start: () -> self
 
@@ -109,6 +111,8 @@ module Raiha::Next::Runtime
     private def read: (UDP udp) -> void
 
     private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
+
+    private def take_forwarded: () -> Array[Raiha::Next::QUIC::Transmit]
 
     private def run: () -> void
 
