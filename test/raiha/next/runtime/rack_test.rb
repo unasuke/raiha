@@ -160,4 +160,30 @@ class RaihaNextRuntimeRackTest < Minitest::Test
       end
     end
   end
+
+  # A Rack application served by workers, each in a Ractor of its own: an
+  # application built in each, which the Ractor can run.
+  def test_served_by_workers
+    skip "SO_REUSEPORT spreads datagrams on Linux alone" unless RUBY_PLATFORM.include?("linux")
+    tls = h3_server_config
+    workers = Runtime::Workers.new(count: 2, config: QUIC::Config.new, host: "127.0.0.1", port: 0,
+      args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
+      app = ->(env) { [200, { "content-type" => "text/plain" }, ["worker #{worker.id} at #{env["PATH_INFO"]}"]] }
+      Sync do
+        Raiha::Next::Runtime::HTTP3::Server.new(config: worker.config, tls_config: tls, keyring:, worker:)
+          .run(&Raiha::Next::Runtime::Rack.new(app))
+      end
+    end
+    running = Thread.new { workers.run }
+    sleep 0.01 until workers.local_address || !running.alive?
+    Sync do
+      response = client(workers.local_address.fetch(1)) { _1.get("/rack") }
+      assert_equal 200, response.status
+      assert_match(/\Aworker [01] at \/rack\z/, response.body)
+    end
+  ensure
+    workers&.stop(timeout: 1)
+    running&.join(10)
+  end
 end
