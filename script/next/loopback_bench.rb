@@ -238,13 +238,14 @@ begin
     mover = Mover.new(port, client_tls)
     before = forwarded_so_far.call
     moves = 0
-    until moves == MOVES
+    handed = false
+    until handed || moves == MOVES
       mover.move!
       moves += 1
       mover.poke
-      break if forwarded_so_far.call > before
+      handed = forwarded_so_far.call > before
     end
-    abort "nothing was handed on in #{MOVES} moves" if moves == MOVES
+    abort "nothing was handed on in #{MOVES} moves" unless handed
     before = forwarded_so_far.call
     bytes, seconds = mover.throughput(size)
     handed_on = forwarded_so_far.call - before
