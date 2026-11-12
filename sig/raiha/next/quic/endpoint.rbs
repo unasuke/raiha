@@ -122,7 +122,7 @@ module Raiha::Next::QUIC
     def self.client: (config: Config, random: Crypto::_Random, time: Time, now: Float, ?connection_ids: _ConnectionIDs) -> Endpoint
 
     def initialize: (role: :client | :server, config: Config, random: Crypto::_Random, time: Time, now: Float, connection_ids: _ConnectionIDs) -> void
-    def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> Route::t?
+    def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float, ?forwarded: bool) -> Route::t?
     def connect: (tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String, remote: address, now: Float,
                   ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?token: String?,
                   ?session: Session?, ?early_data: bool) -> Connection
@@ -140,7 +140,8 @@ module Raiha::Next::QUIC
     def connection_count: () -> Integer
 
     private def connections: () -> Array[Connection]
-    private def route: (Wire::header header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t?
+    private def route: (Wire::header header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float, forwarded: bool) -> Route::t?
+    private def foreign: (Wire::header header, String datagram, bool forwarded) -> Route::Foreign?
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def client_hello: (Handle handle) -> Route::ClientHello?

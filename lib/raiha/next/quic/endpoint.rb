@@ -283,11 +283,12 @@ module Raiha::Next::QUIC
 
     # What to do with `datagram`, which came from `from` to `to` with the
     # ECN codepoint `ecn`: a Route, or nil when an offer keeps it. Nothing
-    # the peer sends raises.
-    def receive(datagram, from:, to: nil, ecn: :not_ect, now:)
+    # the peer sends raises. A datagram another worker handed on is
+    # `forwarded`, and is not handed on again.
+    def receive(datagram, from:, to: nil, ecn: :not_ect, now:, forwarded: false)
       packet = Wire::Packet.parse(datagram, dcid_length: @config.connection_id_length)
       case packet
-      when Wire::Packet::Parsed then route(packet.header, datagram, from:, to:, ecn:, now:)
+      when Wire::Packet::Parsed then route(packet.header, datagram, from:, to:, ecn:, now:, forwarded:)
       when Wire::UnsupportedVersion
         @role == :server ? negotiate(packet, datagram, from, to) : Route::Drop.new(reason: :unsupported_version)
       else
@@ -413,12 +414,16 @@ module Raiha::Next::QUIC
     # Destination Connection ID, else, for a short header, to a connection
     # it is a Stateless Reset of, and at a server, for a client's Initial,
     # to the offer of a new connection, and for a short header, a Stateless
-    # Reset.
-    private def route(header, datagram, from:, to:, ecn:, now:)
+    # Reset. What none of those take but another worker issued the
+    # Destination Connection ID of goes to that worker.
+    private def route(header, datagram, from:, to:, ecn:, now:, forwarded:)
       return deliver(header.dcid, datagram, from:, to:, ecn:, now:) if @connections.key?(header.dcid)
       if header.is_a?(Wire::ShortHeader)
         if (connection = reset_of(datagram, from, now))
           return Route::Deliver.new(connection:)
+        end
+        if (foreign = foreign(header, datagram, forwarded))
+          return foreign
         end
         return @role == :server ? reset(header.dcid, datagram, from, to, now) : Route::Drop.new(reason: :unknown_connection_id)
       end
@@ -434,6 +439,9 @@ module Raiha::Next::QUIC
         return nil unless handle.admitted?
         handle.read(datagram, time: wall_clock(now), dcid_length: @config.connection_id_length)
         return client_hello(handle)
+      end
+      if (foreign = foreign(header, datagram, forwarded))
+        return foreign
       end
       return Route::Drop.new(reason: :unknown_connection_id) unless header.type == :initial
       # RFC 9000 "Datagram Size": a server drops an Initial in a datagram
@@ -490,6 +498,19 @@ module Raiha::Next::QUIC
       handle.keep(datagram, from:, to:, ecn:)
       @buffered += size
       nil
+    end
+
+    # Route::Foreign for a short header, Handshake or 0-RTT packet, as the
+    # first of `datagram`, whose Destination Connection ID, of the length
+    # this Endpoint issues, another worker issued; nil for any other, and
+    # for one that a worker `forwarded` already. An Initial is never handed
+    # on: a new connection's comes with the client's own choice of ID.
+    private def foreign(header, datagram, forwarded)
+      return nil if forwarded || @role == :client
+      return nil if header.is_a?(Wire::LongHeader) && header.type == :initial
+      return nil unless header.dcid.bytesize == @config.connection_id_length
+      worker = @connection_ids.worker_of(header.dcid) or return nil
+      Route::Foreign.new(worker:, datagram:)
     end
 
     # What the second stage of `handle` has come to: Route::ClientHello the
