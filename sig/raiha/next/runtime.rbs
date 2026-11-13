@@ -438,6 +438,8 @@ module Raiha::Next::Runtime
     @host: String
     @port: Integer
     @max_connections: Integer
+    @max_unvalidated: Integer
+    @admitted: Array[Raiha::Next::QUIC::Endpoint::Handle]
     @qlog: Qlog?
     @traces: Hash[Session, Qlog::Pending]
     @sessions: Array[Session]
@@ -456,7 +458,7 @@ module Raiha::Next::Runtime
     @stop_error_code: Integer
 
     def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                     ?host: String?, ?port: Integer?, ?max_connections: Integer, ?qlog_dir: String?,
+                     ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?qlog_dir: String?,
                      ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?worker: Worker?, ?stop_error_code: Integer) -> void
 
     def run: () { (Session session) -> void } -> nil
@@ -475,6 +477,7 @@ module Raiha::Next::Runtime
 
     def stopped: (StandardError? failure) -> void
 
+    private def unvalidated: (Float now) -> Integer
     private def driver!: () -> Driver
 
     private def sockets: () -> [UDP, Array[UDP], Raiha::Next::QUIC::_ConnectionIDs]
@@ -740,7 +743,7 @@ module Raiha::Next::Runtime
       @server: Raiha::Next::Runtime::Server
 
       def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
-                       ?host: String?, ?port: Integer?, ?max_connections: Integer, ?qlog_dir: String?,
+                       ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?qlog_dir: String?,
                        ?settings: Raiha::Next::HTTP3::Settings, ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?worker: Worker?) -> void
 
       def run: () { (Request request) -> void } -> nil

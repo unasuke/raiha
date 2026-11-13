@@ -130,6 +130,7 @@ module Raiha::Next::QUIC
     def acknowledge_zero_rtt_rejection: () -> nil
     def handshake_complete?: () -> bool
     def handshake_confirmed?: () -> bool
+    def address_validated?: () -> bool
     def closing?: () -> bool
     def draining?: () -> bool
     def closed?: () -> bool

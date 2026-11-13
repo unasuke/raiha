@@ -95,18 +95,58 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     end
   end
 
-  # Half the connections taken, a client shows its address with a Retry
-  # before it is taken; before then, none is sent.
-  def test_a_retry_once_half_the_connections_are_taken
+  # A client's first Initial from a socket of its own that sends nothing
+  # more: a connection whose address the handshake never validates.
+  def silent_client(port)
+    tls = client_config
+    connection = QUIC::Connection.client(config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
+      server_name: "localhost", remote: ["127.0.0.1", port], time: Time.now, now: 0.0)
+    socket = UDPSocket.new
+    socket.bind("127.0.0.1", 0)
+    connection.transmits(now: 0.0).each { socket.send(_1.payload, 0, "127.0.0.1", port) }
+    socket
+  end
+
+  # Once max_unvalidated connections have addresses not validated, a
+  # client shows its address with a Retry before it is taken; a connection
+  # whose handshake is done counts for nothing.
+  def test_a_retry_once_max_unvalidated_are_not_validated
     Sync do
-      serving(method(:echoes), max_connections: 2) do |port|
+      serving(method(:echoes), max_unvalidated: 1) do |port|
         connect(port) do |first|
           assert_nil first.connection.instance_variable_get(:@retry_source_connection_id)
-          connect(port) do |second|
-            refute_nil second.connection.instance_variable_get(:@retry_source_connection_id)
-            assert_equal "ECHO:second", echo(second, "second")
-          end
+          assert_equal "ECHO:first", echo(first, "first")
         end
+        silent = silent_client(port)
+        sleep 0.05
+        connect(port) do |second|
+          refute_nil second.connection.instance_variable_get(:@retry_source_connection_id)
+          assert_equal "ECHO:second", echo(second, "second")
+        end
+      ensure
+        silent&.close
+      end
+    end
+  end
+
+  # With max_unvalidated 0, every client shows its address with a Retry.
+  def test_a_retry_for_every_client
+    Sync do
+      serving(method(:echoes), max_unvalidated: 0) do |port|
+        connect(port) do |session|
+          refute_nil session.connection.instance_variable_get(:@retry_source_connection_id)
+          assert_equal "ECHO:retried", echo(session, "retried")
+        end
+      end
+    end
+  end
+
+  def test_max_unvalidated_from_0_to_max_connections
+    tls = server_config
+    [-1, 3, 1.5].each do |max_unvalidated|
+      assert_raises(ArgumentError) do
+        Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls), max_connections: 2,
+          max_unvalidated:)
       end
     end
   end

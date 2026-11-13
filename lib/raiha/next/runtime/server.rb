@@ -7,9 +7,13 @@ module Raiha::Next::Runtime
   # takes every client up to `max_connections` at a time, refusing more
   # with CONNECTION_REFUSED, and gives the block of `run` the Session of
   # each connection once its handshake completes, in a fiber of its own.
-  # Once half of them are taken, a client whose address no Retry has shown
-  # yet is sent one first, so that Initials from addresses spoofed by the
-  # thousand cannot take the rest.
+  # Once `max_unvalidated` connections, half of `max_connections` unless
+  # told, have addresses not validated, a client whose address no token
+  # has shown is sent a Retry first, so that Initials from addresses
+  # spoofed by the thousand cannot take the rest: those are the offers
+  # admitted and not yet taken, and the connections whose address the
+  # handshake has not validated yet, as one from a spoofed address never
+  # is. With 0, every such client is sent one.
   #
   # When the block is over, what the streams sent is given three PTOs to be
   # acknowledged and the connection closes with the application's error 0;
@@ -64,9 +68,12 @@ module Raiha::Next::Runtime
     MAX_CONNECTIONS = 1024
     STOP_TIMEOUT = 30
 
-    def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: MAX_CONNECTIONS, qlog_dir: nil,
-      anti_replay: nil, app_early_data_context: "".b, worker: nil, stop_error_code: 0)
+    def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: MAX_CONNECTIONS, max_unvalidated: max_connections / 2,
+      qlog_dir: nil, anti_replay: nil, app_early_data_context: "".b, worker: nil, stop_error_code: 0)
       raise ArgumentError, "a worker's server binds no host or port of its own" if worker && (host || port)
+      unless max_unvalidated.is_a?(Integer) && (0..max_connections).cover?(max_unvalidated)
+        raise ArgumentError, "max_unvalidated #{max_unvalidated.inspect} is not 0 to max_connections (#{max_connections})"
+      end
       @worker = worker
       @stop_error_code = stop_error_code
       config = config.with(retry_token_key: config.retry_token_key || worker.config.retry_token_key,
@@ -83,6 +90,9 @@ module Raiha::Next::Runtime
       @controls = Thread::Queue.new
       @worker_failure = nil #: StandardError?
       @max_connections = max_connections
+      @max_unvalidated = max_unvalidated
+      # The offers admitted whose ClientHello is not whole yet.
+      @admitted = [] #: Array[Raiha::Next::QUIC::Endpoint::Handle]
       @qlog = qlog_dir && Qlog.new(qlog_dir)
       @traces = {} #: Hash[Session, Qlog::Pending]
       @traces.compare_by_identity
@@ -163,9 +173,11 @@ module Raiha::Next::Runtime
       case route
       when Raiha::Next::QUIC::Route::Incoming
         return endpoint.refuse(route.handle) if @stop || @sessions.size >= @max_connections
-        return endpoint.retry(route.handle, now:) if !route.address_validated && @sessions.size * 2 >= @max_connections
-        hello = endpoint.admit(route.handle, now:) and route(hello, now)
+        return endpoint.retry(route.handle, now:) if !route.address_validated && unvalidated(now) >= @max_unvalidated
+        hello = endpoint.admit(route.handle, now:)
+        hello ? route(hello, now) : @admitted << route.handle
       when Raiha::Next::QUIC::Route::ClientHello
+        @admitted.delete(route.handle)
         advance_ticket_keys
         tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
         connection = endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer:, anti_replay: @anti_replay,
@@ -198,6 +210,13 @@ module Raiha::Next::Runtime
     end
 
     def next_timeout = @stop_deadline
+
+    # How many of the offers admitted and the connections taken have
+    # addresses not validated; offers that ended are let go.
+    private def unvalidated(now)
+      @admitted.reject! { |handle| handle.expired?(now) || handle.failed? }
+      @admitted.count { |handle| !handle.address_validated } + @sessions.count { |session| !session.connection.address_validated? }
+    end
 
     def stopped(failure)
       @sessions.each { |session| session.abort(failure) }

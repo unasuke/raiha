@@ -137,10 +137,10 @@ module Raiha::Next::Runtime
     # Workers as Runtime::Server is, and stops with H3_NO_ERROR when they
     # are told to.
     class Server
-      def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS, qlog_dir: nil,
-        settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil, worker: nil)
+      def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS,
+        max_unvalidated: max_connections / 2, qlog_dir: nil, settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil, worker: nil)
         @settings = settings
-        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, qlog_dir:, anti_replay:,
+        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, max_unvalidated:, qlog_dir:, anti_replay:,
           app_early_data_context: settings.early_data_context, worker:, stop_error_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
       end
 

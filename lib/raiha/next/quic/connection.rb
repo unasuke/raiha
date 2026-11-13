@@ -276,6 +276,11 @@ module Raiha::Next::QUIC
     # a server once it is complete, on a client once HANDSHAKE_DONE comes.
     def handshake_confirmed? = @handshake_confirmed
 
+    # Whether the peer's address on the path in use is validated (RFC 9000
+    # "Address Validation"), past which no amplification limit holds; a
+    # server's is once a token shows it, or a Handshake packet comes.
+    def address_validated? = @path.validated?
+
     def closing? = @state == :closing
 
     def draining? = @state == :draining
