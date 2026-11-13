@@ -53,10 +53,16 @@ module Raiha::Next::QUIC
     # `retry_source_connection_id`, nil without one.
     #
     # Once admitted, the offer reads the ClientHello out of the Initial
-    # packets with the client's Initial keys, into the TLS layer's Acceptor.
+    # packets with the client's Initial keys, into the TLS layer's Acceptor,
+    # and acknowledges them while the ClientHello is not whole, as RFC 9000
+    # "Sending ACK Frames" asks of every Initial packet that elicits one
+    # (acknowledgment). The ACKs come from `server_connection_id`, which
+    # the client sends its Initial packets to from then, and which the
+    # connection takes; the connection takes the ACKs as well
+    # (`early_acks`, Connection.server).
     class Handle
       attr_reader :remote, :version, :destination_connection_id, :source_connection_id, :original_destination_connection_id,
-        :retry_source_connection_id, :expires_at, :datagrams
+        :retry_source_connection_id, :expires_at, :datagrams, :server_connection_id, :early_acks
       # Whether the client's address is validated, by a Retry or by a token
       # of NEW_TOKEN.
       attr_reader :address_validated
@@ -81,6 +87,13 @@ module Raiha::Next::QUIC
         @largest = nil #: Integer?
         @violation = nil #: Violation?
         @offered = false
+        # What the second stage received and sent in the Initial space: the
+        # packets to acknowledge, the server's keys, and the ACKs that went.
+        @space = nil #: Recovery::PacketNumberSpace?
+        @server_keys = nil #: Crypto::Keys?
+        @server_connection_id = nil #: String?
+        @early_acks = [] #: Array[Connection::EarlyAck]
+        @sent = 0
       end
 
       # Keeps a datagram for the connection to take.
@@ -96,30 +109,76 @@ module Raiha::Next::QUIC
       # Starts reading the ClientHello, from the datagrams kept so far.
       # `time` is the wall clock; short header packets have connection IDs
       # of `dcid_length` bytes.
-      def admit(time:, dcid_length:)
+      def admit(time:, dcid_length:, now:)
         @acceptor = Raiha::Next::TLS::Handshake::Acceptor.new
-        @keys = Crypto::Initial.derive(dcid: @destination_connection_id, version: @version).client
-        @datagrams.each { |datagram, *| read(datagram, time:, dcid_length:) }
+        keys = Crypto::Initial.derive(dcid: @destination_connection_id, version: @version)
+        @keys = keys.client
+        @server_keys = keys.server
+        @space = Recovery::PacketNumberSpace.new(:initial)
+        @datagrams.each { |datagram, _, _, ecn| read(datagram, time:, dcid_length:, ecn:, now:) }
       end
+
+      # The server's connection ID is `connection_id` from now on, which the
+      # ACKs come from.
+      def choose_connection_id(connection_id) = @server_connection_id = connection_id
+
+      # Whether a packet received waits for an ACK: none once the ClientHello
+      # is whole, as the connection's first packets carry one, nor once it
+      # cannot be read, as the offer ends with a CONNECTION_CLOSE.
+      def ack_owed? = !accepted && !failed? && !!@space&.ack_owed?
+
+      # The server's Initial packet of only an ACK of the Initial packets
+      # received, which goes now; nil when none is owed, or the packet would
+      # take the server past three times what came from an address not
+      # validated (RFC 9000 "Address Validation"). A packet of only an ACK
+      # elicits none, and needs no padding (RFC 9000 "Datagram Size"). Its
+      # number takes two bytes, as the client acknowledges none of them and
+      # an offer may send far more than a byte tells apart.
+      def acknowledgment(now:)
+        space = @space
+        keys = @server_keys
+        scid = @server_connection_id
+        return nil unless space && keys && scid && ack_owed?
+        frame = space.ack_frame(now:) or return nil
+        header = Wire::LongHeader.new(type: :initial, version: @version, dcid: @source_connection_id, scid:)
+        payload = Wire::Frame.encode([frame.with(delay: 0.0)], ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
+        number = space.upcoming_packet_number
+        packet = Wire::Packet.seal(header, packet_number: number, packet_number_length: 2, payload:, keys:)
+        return nil if !@address_validated && @sent + packet.bytesize > Path::AMPLIFICATION_FACTOR * @buffered
+        space.next_packet_number
+        space.ack_sent
+        @sent += packet.bytesize
+        @early_acks << Connection::EarlyAck.new(packet_number: number, bytes: packet.bytesize, time: now)
+        packet
+      end
+
+      # The number of the server's next Initial packet.
+      def next_packet_number = @space&.upcoming_packet_number || 0
 
       # Reads the CRYPTO frames of the Initial packets of `datagram` that
       # open into the Acceptor. What breaks a rule once a packet has opened
       # ends the ClientHello. Once it is whole, nothing more is read: anyone
       # who saw the client's Initial can make Initial packets, and the
-      # connection, which reads them all again, is to judge them.
-      def read(datagram, time:, dcid_length:)
+      # connection, which reads them all again, is to judge them. The
+      # packets are those to the client's first connection ID, or to the
+      # server's, once an ACK has gone.
+      def read(datagram, time:, dcid_length:, ecn:, now:)
         acceptor = @acceptor or return
         keys = @keys or return
+        space = @space or return
         return if acceptor.accepted
         offset = 0
         while offset < datagram.bytesize && !failed?
           packet = parse(datagram, offset, dcid_length) or break
           offset = packet.end_offset
-          next unless packet.header.type == :initial && packet.header.dcid == @destination_connection_id
+          next unless packet.header.type == :initial
+          next unless packet.header.dcid == @destination_connection_id || packet.header.dcid == @server_connection_id
           unmasked = packet.unmask(keys.header_protection, largest: @largest)
           payload = unmasked.open(keys.aead) or next
           @largest = unmasked.packet_number if @largest.nil? || unmasked.packet_number > @largest # steep:ignore
-          Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT).each do |frame|
+          frames = Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
+          space.receive(unmasked.packet_number, ecn:, ack_eliciting: frames.any?(&:ack_eliciting?), now:)
+          frames.each do |frame|
             @crypto.receive(frame.offset, frame.data, limit: Raiha::Next::TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE) if frame.is_a?(Wire::Frame::Crypto)
           end
           bytes = @crypto.read
@@ -334,14 +393,15 @@ module Raiha::Next::QUIC
     end
 
     # The second stage of the offer of `handle`: the Endpoint reads the
-    # ClientHello out of its Initial packets, sending nothing meanwhile, ACKs
-    # included. Route::ClientHello when it is whole by now, else nil; the
-    # datagrams to come complete it. A ClientHello that cannot be read ends
-    # the offer with a CONNECTION_CLOSE.
+    # ClientHello out of its Initial packets, and acknowledges them while
+    # it is not whole. Route::ClientHello when it is whole by now, else nil;
+    # the datagrams to come complete it. A ClientHello that cannot be read
+    # ends the offer with a CONNECTION_CLOSE.
     def admit(handle, now:)
       pending!(handle)
       raise Error::StateError, "the offer is admitted already" if handle.admitted?
-      handle.admit(time: wall_clock(now), dcid_length: @config.connection_id_length)
+      handle.admit(time: wall_clock(now), dcid_length: @config.connection_id_length, now:)
+      acknowledge(handle, now)
       client_hello(handle)
     end
 
@@ -356,7 +416,7 @@ module Raiha::Next::QUIC
     def accept(handle, tls_config:, keyring:, now:, tracer: nil, keylog: nil, anti_replay: nil, app_early_data_context: "".b)
       pending!(handle)
       accepted = handle.accepted or raise Error::StateError, "the ClientHello of the offer is not whole yet"
-      scid = new_connection_id
+      scid = handle.server_connection_id || new_connection_id
       token = StatelessReset.token(key: @stateless_reset_key, connection_id: scid) unless scid.empty?
       new_token = NewToken.mint(key: @new_token_key, address: handle.remote, version: handle.version.number, time: wall_clock(now),
         random: @random)
@@ -364,7 +424,7 @@ module Raiha::Next::QUIC
         client_hello: accepted, original_destination_connection_id: handle.original_destination_connection_id,
         retry_source_connection_id: handle.retry_source_connection_id, address_validated: handle.address_validated,
         source_connection_id: scid, stateless_reset_token: token, new_token:, anti_replay:, app_early_data_context:, issuer: @issuer,
-        peers: @peers, tokens: @tokens)
+        peers: @peers, tokens: @tokens, early_acks: handle.early_acks)
       forget(handle)
       add(connection, [scid, handle.destination_connection_id], handle.remote)
       handle.datagrams.each { |datagram, from, to, ecn| connection.receive(datagram, from:, to:, ecn:, now:) }
@@ -440,7 +500,8 @@ module Raiha::Next::QUIC
           return dropped
         end
         return nil unless handle.admitted?
-        handle.read(datagram, time: wall_clock(now), dcid_length: @config.connection_id_length)
+        handle.read(datagram, time: wall_clock(now), dcid_length: @config.connection_id_length, ecn:, now:)
+        acknowledge(handle, now)
         return client_hello(handle)
       end
       if (foreign = foreign(header, datagram, forwarded))
@@ -528,6 +589,20 @@ module Raiha::Next::QUIC
       Route::ClientHello.new(handle:, accepted:)
     end
 
+    # Sends the ACK the offer of `handle` owes, if any, from a connection ID
+    # chosen for the server the first time. With connection IDs of zero
+    # length, which one offer alone could have, no ACK goes.
+    private def acknowledge(handle, now)
+      return unless handle.ack_owed? && @config.connection_id_length.positive?
+      unless handle.server_connection_id
+        id = new_connection_id
+        handle.choose_connection_id(id)
+        @handles[id] = handle
+      end
+      packet = handle.acknowledgment(now:) or return
+      @transmits << transmit(packet, handle.remote, handle.local)
+    end
+
     # Gives `datagram` to the connection of `dcid`.
     private def deliver(dcid, datagram, from:, to:, ecn:, now:)
       connection = @connections[dcid] or return Route::Drop.new(reason: :unknown_connection_id)
@@ -552,25 +627,28 @@ module Raiha::Next::QUIC
     # Initial packet, the server's only, sealed with the server's Initial
     # keys of the client's connection ID (RFC 9000 "Immediate Close during
     # the Handshake"). It is far smaller than the Initial that came, as the
-    # anti-amplification limit asks. Its Source Connection ID leads nowhere,
-    # as no connection follows, so it is drawn with nothing to avoid.
+    # anti-amplification limit asks. Its Source Connection ID is the one an
+    # ACK of the offer came from, and else leads nowhere, as no connection
+    # follows, so it is drawn with nothing to avoid; its packet number
+    # follows the ACKs'.
     private def close(handle, error)
-      packet = close_packet(handle.version, client_dcid: handle.destination_connection_id, client_scid: handle.source_connection_id, error:)
+      packet = close_packet(handle.version, client_dcid: handle.destination_connection_id, client_scid: handle.source_connection_id, error:,
+        scid: handle.server_connection_id, packet_number: handle.next_packet_number)
       @transmits << transmit(packet, handle.remote, handle.local)
       forget(handle)
     end
 
-    # The server's Initial packet with a CONNECTION_CLOSE of `error` to the
-    # client whose Initial had the connection IDs `client_dcid` and
-    # `client_scid`.
-    private def close_packet(version, client_dcid:, client_scid:, error:)
+    # The server's Initial packet `packet_number` with a CONNECTION_CLOSE of
+    # `error` to the client whose Initial had the connection IDs
+    # `client_dcid` and `client_scid`, from `scid`, or one drawn.
+    private def close_packet(version, client_dcid:, client_scid:, error:, scid: nil, packet_number: 0)
       reason = error.reason.b.byteslice(0, Connection::MAX_REASON_LENGTH) #: String
       frame = Wire::Frame::ConnectionClose.new(code: error.code, frame_type: error.frame_type, reason:, application: false)
-      scid = @random.bytes(@config.connection_id_length).b
+      scid ||= @random.bytes(@config.connection_id_length).b
       header = Wire::LongHeader.new(type: :initial, version:, dcid: client_scid, scid:)
       keys = Crypto::Initial.derive(dcid: client_dcid, version:).server
       payload = Wire::Frame.encode([frame], ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
-      Wire::Packet.seal(header, packet_number: 0, packet_number_length: 1, payload:, keys:)
+      Wire::Packet.seal(header, packet_number:, packet_number_length: 2, payload:, keys:)
     end
 
     # A connection ID of `config.connection_id_length` bytes, from the
@@ -604,6 +682,7 @@ module Raiha::Next::QUIC
 
     private def forget(handle)
       @handles.delete(handle.destination_connection_id)
+      (id = handle.server_connection_id) and @handles.delete(id)
       @buffered -= handle.buffered
     end
 

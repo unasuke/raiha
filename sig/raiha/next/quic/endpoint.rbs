@@ -39,6 +39,11 @@ module Raiha::Next::QUIC
       @violation: Violation?
       @offered: bool
       @address_validated: bool
+      @space: Recovery::PacketNumberSpace?
+      @server_keys: Crypto::Keys?
+      @server_connection_id: String?
+      @early_acks: Array[Connection::EarlyAck]
+      @sent: Integer
 
       attr_reader remote: address
       attr_reader version: Version
@@ -50,6 +55,8 @@ module Raiha::Next::QUIC
       attr_reader datagrams: Array[[String, address, address?, ecn | :ce]]
       attr_reader buffered: Integer
       attr_reader address_validated: bool
+      attr_reader server_connection_id: String?
+      attr_reader early_acks: Array[Connection::EarlyAck]
 
       def initialize: (remote: address, version: Version, destination_connection_id: String, source_connection_id: String,
                        original_destination_connection_id: String, retry_source_connection_id: String?, expires_at: Float,
@@ -57,8 +64,12 @@ module Raiha::Next::QUIC
       def keep: (String datagram, from: address, to: address?, ecn: ecn | :ce) -> void
       def expired?: (Float now) -> bool
       def admitted?: () -> bool
-      def admit: (time: Time, dcid_length: Integer) -> void
-      def read: (String datagram, time: Time, dcid_length: Integer) -> void
+      def admit: (time: Time, dcid_length: Integer, now: Float) -> void
+      def choose_connection_id: (String connection_id) -> String
+      def ack_owed?: () -> bool
+      def acknowledgment: (now: Float) -> String?
+      def next_packet_number: () -> Integer
+      def read: (String datagram, time: Time, dcid_length: Integer, ecn: ecn | :ce, now: Float) -> void
       def error: () -> ConnectionError?
       def failed?: () -> bool
       def reject: (Symbol description) -> ConnectionError
@@ -145,11 +156,13 @@ module Raiha::Next::QUIC
     private def offer: (Wire::LongHeader header, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def keep: (Handle handle, String datagram, from: address, to: address?, ecn: ecn | :ce) -> Route::Drop?
     private def client_hello: (Handle handle) -> Route::ClientHello?
+    private def acknowledge: (Handle handle, Float now) -> void
     private def deliver: (String dcid, String datagram, from: address, to: address?, ecn: ecn | :ce, now: Float) -> Route::t
     private def reset_of: (String datagram, address from, Float now) -> Connection?
     private def add: (Connection connection, Array[String] ids, address peer) -> Connection
     private def close: (Handle handle, ConnectionError error) -> void
-    private def close_packet: (Version version, client_dcid: String, client_scid: String, error: ConnectionError) -> String
+    private def close_packet: (Version version, client_dcid: String, client_scid: String, error: ConnectionError, ?scid: String?,
+                               ?packet_number: Integer) -> String
     private def new_connection_id: () -> String
     private def issue_connection_id: (Connection connection) -> [String, String]
     private def pending!: (Handle handle) -> void
