@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
+class RaihaQUICCongestionNewRenoTest < Minitest::Test
   NewReno = Raiha::QUIC::Congestion::NewReno
   MDS = 1200
   # RFC 9002 "Initial and Minimum Congestion Window".

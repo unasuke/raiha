@@ -9,8 +9,8 @@ require "rack/lint"
 # Rack::Lint: the env of a request, a body that answers `each`, a
 # streaming body, rack.input read as it comes, and the request itself in
 # raiha.request.
-class RaihaNextRuntimeRackTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeRackTest < Minitest::Test
+  include RuntimeHTTP3
 
   def serving(app)
     tls = h3_server_config
@@ -167,7 +167,7 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     skip "SO_REUSEPORT spreads datagrams on Linux alone" unless RUBY_PLATFORM.include?("linux")
     tls = h3_server_config
     workers = Runtime::Workers.new(count: 2, config: QUIC::Config.new, host: "127.0.0.1", port: 0,
-      args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+      args: [tls, Ractor.make_shareable(TLSPair.server_identity)]) do |worker, tls, identity|
       keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       app = ->(env) { [200, { "content-type" => "text/plain" }, ["worker #{worker.id} at #{env["PATH_INFO"]}"]] }
       Sync do

@@ -5,8 +5,8 @@ require "securerandom"
 # A stand-in for a client or a server of the runtime of the next release,
 # for tests of what lies under them: an Endpoint on a UDP socket of the
 # loopback interface, run by a Driver, with each connection in a Session.
-module NextRuntimeOwner
-  include NextQUICTLS
+module RuntimeOwner
+  include QUICTLS
 
   Runtime = Raiha::Runtime
 

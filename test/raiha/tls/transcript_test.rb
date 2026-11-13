@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls/test"
 
-class RaihaNextTLSTranscriptTest < Minitest::Test
+class RaihaTLSTranscriptTest < Minitest::Test
   TLS = Raiha::TLS
   Transcript = TLS::Transcript
   RFC8448 = TLS::Test::RFC8448

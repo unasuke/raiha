@@ -8,8 +8,8 @@ require "digest"
 # sender within the windows and the send buffer, credit lost on the way
 # does not stall a transfer, and the peer's room for streams comes back
 # as streams end. The rejection of 0-RTT comes with 0-RTT.
-class RaihaNextQUICTestFlowControlScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestFlowControlScenariosTest < Minitest::Test
+  include QUICTransfer
 
   # The server sends `body` on the stream the client opens with a request,
   # while the client's `reader` takes what it reads; gives the network, the
@@ -118,7 +118,7 @@ class RaihaNextQUICTestFlowControlScenariosTest < Minitest::Test
   # a millisecond: the server gives room for more as they end,
   # MAX_STREAMS every twelve or thirteen.
   def test_a_thousand_requests
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     opened = 0
     answered = 0
     client_step = lambda do |client, _now|

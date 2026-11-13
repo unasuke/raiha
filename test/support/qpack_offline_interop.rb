@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # blocks, each a stream ID (8 octets), a length (4 octets) and that many
 # octets, where stream 0 is the encoder stream and the others carry one
 # field section each.
-module NextQPACKOfflineInterop
+module QPACKOfflineInterop
   QPACK = Raiha::HTTP3::QPACK
   QIFS_DIR = ENV.fetch("QIFS_DIR") { File.expand_path("../../tmp/qifs", __dir__) }
 

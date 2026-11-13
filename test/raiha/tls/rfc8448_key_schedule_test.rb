@@ -4,7 +4,7 @@ require "raiha/tls/test"
 # RFC 8448 reproduced end to end from injected keys: the shared secret from
 # FixedKEM, the transcript from the wire bytes, and every secret, key and
 # Finished value derived from them, byte for byte.
-class RaihaNextTLSRFC8448KeyScheduleTest < Minitest::Test
+class RaihaTLSRFC8448KeyScheduleTest < Minitest::Test
   TLS = Raiha::TLS
   KeySchedule = TLS::KeySchedule
   LABELS = KeySchedule::LABELS

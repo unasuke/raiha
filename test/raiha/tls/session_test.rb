@@ -4,7 +4,7 @@ require "raiha/tls"
 # A session a client keeps: into plain values and back, whether it is still
 # usable, the PSK and the ticket age it gives, and a store that hands each
 # out once.
-class RaihaNextTLSSessionTest < Minitest::Test
+class RaihaTLSSessionTest < Minitest::Test
   TLS = Raiha::TLS
   Session = TLS::Session
   NOW = Time.at(1_800_000_000)

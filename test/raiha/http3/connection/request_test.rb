@@ -4,8 +4,8 @@ require "support/http3_pair"
 # A server's request streams (RFC 9114 "HTTP Request Lifecycle"): a field
 # section first, decoded by QPACK or waiting on it, none of the frames
 # that go elsewhere, and the end of the stream told with the last event.
-class RaihaNextHTTP3ConnectionRequestTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionRequestTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

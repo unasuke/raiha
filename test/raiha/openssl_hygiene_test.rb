@@ -5,7 +5,7 @@ require "prism"
 # call OpenSSL; everything else goes through them. Comments are ignored, and
 # a constant of our own named OpenSSL (KeyExchange::OpenSSL) is not a call
 # into the library.
-class RaihaNextOpenSSLHygieneTest < Minitest::Test
+class RaihaOpenSSLHygieneTest < Minitest::Test
   NEXT_DIR = File.expand_path("../../lib/raiha", __dir__)
   ALLOWED = { tls: %r{\Atls/(?:crypto|verifier)(?:\.rb\z|/)}, quic: %r{\Aquic/crypto(?:\.rb\z|/)} }
   # `OpenSSL::` or `OpenSSL.` that is not the tail of a longer constant path.

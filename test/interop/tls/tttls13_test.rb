@@ -9,10 +9,10 @@ require "tttls1.3"
 
 # The next release of raiha over TCP against tttls1.3, a TLS 1.3 in Ruby,
 # both ways, in one process.
-class NextTLSTttls13InteropTest < Minitest::Test
+class TLSTttls13InteropTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
-  PKI = NextTestPKI
+  Pair = TLSPair
+  PKI = TestPKI
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 

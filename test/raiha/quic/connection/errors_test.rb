@@ -4,8 +4,8 @@ require "support/quic_pair"
 # What the network sends never raises. A header that does
 # not read is dropped, since anyone could have sent it; what breaks a
 # packet that opened closes the connection with its error.
-class RaihaNextQUICConnectionErrorsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionErrorsTest < Minitest::Test
+  include QUICPair
 
   def closed(connection) = [].tap { |events| connection.each_event { events << _1 } }.grep(QUIC::Event::Closed)
 

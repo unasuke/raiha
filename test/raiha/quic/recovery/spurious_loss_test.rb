@@ -2,8 +2,8 @@ require "test_helper"
 require "support/quic_recovery"
 
 # Loss recovery's design, "Lost packets kept" and "Acknowledged after all".
-class RaihaNextQUICRecoverySpuriousLossTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoverySpuriousLossTest < Minitest::Test
+  include QUICRecovery
 
   # NewReno that keeps the bytes each ACK told it of.
   class Spy < Raiha::QUIC::Congestion::NewReno

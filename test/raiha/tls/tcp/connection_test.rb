@@ -2,10 +2,10 @@ require "test_helper"
 require "support/tcp_pair"
 require "stringio"
 
-class RaihaNextTLSTCPConnectionTest < Minitest::Test
+class RaihaTLSTCPConnectionTest < Minitest::Test
   TLS = Raiha::TLS
   TCP = TLS::TCP
-  Pair = NextTCPPair
+  Pair = TCPPair
   NOW = Pair::NOW
 
   def failed(connection) = Pair.events(connection).grep(TLS::Event::Failed).first

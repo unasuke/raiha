@@ -7,8 +7,8 @@ require "support/quic_recovery"
 # trip one carries a PING, so that the server acknowledges it and the
 # client can let go of what its ACKs acknowledged (RFC 9000 "Limiting
 # Ranges by Tracking ACK Frames").
-class RaihaNextQUICConnectionAckOnlyTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionAckOnlyTest < Minitest::Test
+  include QUICPair
 
   # A client and a server whose datagrams reach each other 10 ms later,
   # `rounds` round trips from the first Initial on; once the handshake is
@@ -17,7 +17,7 @@ class RaihaNextQUICConnectionAckOnlyTest < Minitest::Test
   # the datagrams each round trip sent. The client sends no probe of the
   # path MTU, which would elicit an ACK of its own.
   def exchange(rounds:, bytes:, writing: ->(_) { true })
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     @client = client_connection(tracer:, config: QUIC::Config.new(initial_max_data: 4 << 20, initial_max_stream_data_bidi_remote: 4 << 20,
       enable_pmtud: false))
     server = server_connection

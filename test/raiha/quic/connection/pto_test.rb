@@ -4,8 +4,8 @@ require "support/quic_pair"
 # RFC 9002 "Probe Timeout", as loss recovery's design, "Probes", has a
 # connection send them: what is new, else the oldest packet's duties
 # again, else a PING.
-class RaihaNextQUICConnectionPtoTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionPtoTest < Minitest::Test
+  include QUICPair
 
   def crypto_offsets(datagram, dcid)
     packet = QUIC::Wire::Packet.parse(datagram, dcid_length: 8)
@@ -69,7 +69,7 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
   # in no third. The client's ClientHello again lets the server send them.
   def test_a_pto_sends_two_datagrams_whatever_spaces_fit
     tls_config = server_config
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity(key: NextTestPKI.key(:rsa))], random: Random.new(2))
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity(key: TestPKI.key(:rsa))], random: Random.new(2))
     initial_window = Ractor.shareable_lambda { |max_datagram_size| 3 * max_datagram_size }
     server = QUIC::Connection.server(config: QUIC::Config.new(initial_window:), tls_config:, keyring:, time: NOW, now: 0.0)
     client = client_connection

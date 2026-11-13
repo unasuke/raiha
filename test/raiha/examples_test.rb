@@ -10,7 +10,7 @@ require "rbconfig"
 # memory use no socket. The GET to public servers, which needs the
 # network, and the loopback with the quic gem, which needs the :interop
 # group of the bundle, are run by hand.
-class RaihaNextExamplesTest < Minitest::Test
+class RaihaExamplesTest < Minitest::Test
   ROOT = File.expand_path("../..", __dir__)
   TIMEOUT = 30
 

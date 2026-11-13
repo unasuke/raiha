@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 require "pp"
 
-class RaihaNextTLSMaskedInspectTest < Minitest::Test
+class RaihaTLSMaskedInspectTest < Minitest::Test
   class Secret < Data.define(:name, :key, :parts)
     include Raiha::TLS::MaskedInspect
 
@@ -14,7 +14,7 @@ class RaihaNextTLSMaskedInspectTest < Minitest::Test
   end
 
   def test_inspect_shows_masked_members_by_size
-    assert_equal '#<data RaihaNextTLSMaskedInspectTest::Secret name="n", key=[3 bytes], parts=[[2 bytes], [3 bytes]]>', @secret.inspect
+    assert_equal '#<data RaihaTLSMaskedInspectTest::Secret name="n", key=[3 bytes], parts=[[2 bytes], [3 bytes]]>', @secret.inspect
   end
 
   def test_to_s_and_pp_are_masked_too

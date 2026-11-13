@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/http3"
 
-class RaihaNextHTTP3VarintTest < Minitest::Test
+class RaihaHTTP3VarintTest < Minitest::Test
   Varint = Raiha::HTTP3::Varint
 
   # The examples of RFC 9000 "Sample Variable-Length Integer Decoding".

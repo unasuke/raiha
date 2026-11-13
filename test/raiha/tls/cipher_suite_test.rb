@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSCipherSuiteTest < Minitest::Test
+class RaihaTLSCipherSuiteTest < Minitest::Test
   TLS = Raiha::TLS
   CipherSuite = TLS::CipherSuite
 

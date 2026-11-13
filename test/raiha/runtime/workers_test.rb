@@ -6,8 +6,8 @@ require "async"
 # The workers of a server, each in a Ractor of its own: what each is given,
 # that the end of one ends them all, and that what one raises comes out of
 # `run`.
-class RaihaNextRuntimeWorkersTest < Minitest::Test
-  include NextRuntimeOwner
+class RaihaRuntimeWorkersTest < Minitest::Test
+  include RuntimeOwner
 
   def workers(count: 2, config: QUIC::Config.new, args: [], &) = Runtime::Workers.new(count:, config:, host: "127.0.0.1", port: 0, args:, &)
 
@@ -53,7 +53,7 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
   # `run` raises it.
   def test_what_a_worker_raises
     tls = server_config
-    workers = workers(args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+    workers = workers(args: [tls, Ractor.make_shareable(TLSPair.server_identity)]) do |worker, tls, identity|
       raise "worker 0 failed" if worker.id.zero?
       keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       Sync { Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run { nil } }
@@ -66,7 +66,7 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
   # their own: the workers and the thread, once they bound their sockets.
   def serving(count: 2)
     tls = server_config
-    workers = workers(count:, args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+    workers = workers(count:, args: [tls, Ractor.make_shareable(TLSPair.server_identity)]) do |worker, tls, identity|
       keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       Sync do
         Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
@@ -141,7 +141,7 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
     workers, running = serving
     port = workers.local_address.fetch(1)
     assert_match(/\AECHO[01]:before\z/, echo(port, "before"))
-    other = Ractor.make_shareable(NextTLSPair.server_identity(names: ["DNS:other.example"]))
+    other = Ractor.make_shareable(TLSPair.server_identity(names: ["DNS:other.example"]))
     workers.reconfigure(tls_config: server_config, identities: [other])
     sleep 0.1
     assert_match(/\AECHO[01]:other\z/, echo(port, "other", server_name: "other.example"))

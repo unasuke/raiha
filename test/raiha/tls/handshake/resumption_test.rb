@@ -5,8 +5,8 @@ require "support/tls_pair"
 # opens and passes the checks against the current Config, its binder
 # verified, and a handshake without certificates; any other identity is
 # passed over with its reason traced, and a full handshake follows.
-class RaihaNextTLSResumptionTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSResumptionTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   NOW = Pair::NOW
   SEED = "\x0d".b * 32

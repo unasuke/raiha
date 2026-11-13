@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICCryptoRandomTest < Minitest::Test
+class RaihaQUICCryptoRandomTest < Minitest::Test
   Crypto = Raiha::QUIC::Crypto
 
   def test_secure_random_by_default

@@ -6,7 +6,7 @@ require "raiha/http3/qpack"
 # sections and instructions that decode with a byte changed, cut short or
 # lengthened. RAIHA_FUZZ_ITERATIONS (default 300) and RAIHA_FUZZ_SEED
 # change the number of inputs to each target and the seed.
-class RaihaNextQPACKFuzzTest < Minitest::Test
+class RaihaQPACKFuzzTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "300"))

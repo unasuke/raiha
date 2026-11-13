@@ -5,8 +5,8 @@ require "support/http3_pair"
 # Framing"): DATA after the header section, a trailer section at most,
 # the content counted against Content-Length, and the trailers against
 # what the header section left of the limit.
-class RaihaNextHTTP3ConnectionRequestBodyTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionRequestBodyTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

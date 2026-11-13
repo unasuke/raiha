@@ -5,7 +5,7 @@ require "timeout"
 # A TCP::Connection of the next release of raiha over a TCP socket, driven
 # by hand so that a test can write 0-RTT before the handshake completes and
 # keep every event, which TCP::Socket does not let it.
-class NextTCPDrive
+class TCPDrive
   TLS = Raiha::TLS
 
   attr_reader :connection, :events

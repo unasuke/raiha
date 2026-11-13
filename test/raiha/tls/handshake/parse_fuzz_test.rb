@@ -9,7 +9,7 @@ require "raiha/tls/test"
 # a known type so they reach the message parsers, and RFC 8448 messages with
 # one byte changed. RAIHA_FUZZ_ITERATIONS (default 10000) and
 # RAIHA_FUZZ_SEED change the number of inputs and the seed.
-class RaihaNextTLSHandshakeParseFuzzTest < Minitest::Test
+class RaihaTLSHandshakeParseFuzzTest < Minitest::Test
   TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448
   REGISTRY = TLS::Extension::Registry::BUILTIN

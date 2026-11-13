@@ -3,9 +3,9 @@ require "support/tcp_pair"
 require "stringio"
 
 # KeyUpdate over TCP::Connection.
-class RaihaNextTLSTCPKeyUpdateTest < Minitest::Test
+class RaihaTLSTCPKeyUpdateTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTCPPair
+  Pair = TCPPair
   NOW = Pair::NOW
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256
 

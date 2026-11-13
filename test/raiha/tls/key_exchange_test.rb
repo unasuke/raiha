@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSKeyExchangeTest < Minitest::Test
+class RaihaTLSKeyExchangeTest < Minitest::Test
   TLS = Raiha::TLS
   Provider = TLS::KeyExchange::OpenSSL
 

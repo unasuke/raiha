@@ -4,7 +4,7 @@ require "raiha/tls"
 # The in-memory anti-replay record: each binder accepted once, kept for 11
 # to 22 seconds by the clock it is given, and nothing accepted for the
 # first 11 seconds unless told the keys are new.
-class RaihaNextTLSAntiReplayTest < Minitest::Test
+class RaihaTLSAntiReplayTest < Minitest::Test
   Memory = Raiha::TLS::AntiReplay::Memory
   NOW = Time.at(1_800_000_000)
   A = ("\x01".b * 32).freeze

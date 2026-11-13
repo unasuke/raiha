@@ -2,8 +2,8 @@ require "test_helper"
 require "support/quic_pair"
 
 # RFC 9001 "Discarding Unused Keys".
-class RaihaNextQUICConnectionKeysTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionKeysTest < Minitest::Test
+  include QUICPair
 
   def closed(connection) = [].tap { |events| connection.each_event { events << _1 } }.grep(QUIC::Event::Closed)
 

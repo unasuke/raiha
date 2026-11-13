@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic/test"
 
-class RaihaNextQUICTestReorderTest < Minitest::Test
+class RaihaQUICTestReorderTest < Minitest::Test
   Test = Raiha::QUIC::Test
 
   def datagram(n) = Test::Datagram.new(payload: n.to_s, source: ["192.0.2.1", 1], destination: ["192.0.2.2", 2], ecn: :not_ect)

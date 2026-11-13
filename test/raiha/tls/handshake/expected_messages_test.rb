@@ -4,10 +4,10 @@ require "support/tls_pair"
 # The tables of expected messages, checked against the states and against a
 # Machine in each state: every handshake type a state does not expect,
 # unknown types 0 and 255 included, fails with unexpected_message.
-class RaihaNextTLSExpectedMessagesTest < Minitest::Test
+class RaihaTLSExpectedMessagesTest < Minitest::Test
   TLS = Raiha::TLS
   Handshake = TLS::Handshake
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
 
   TYPES = (Handshake::TYPES.keys - [254] + [0, 255, 25]).sort.freeze

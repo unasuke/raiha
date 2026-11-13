@@ -4,8 +4,8 @@ require "support/quic_transfer"
 # Rapid Start over a bottleneck (the congestion control design's "Tests"):
 # a download ends sooner than with CUBIC's own slow start, and once the
 # first recovery period is over the path goes on with CUBIC.
-class RaihaNextQUICTestRapidStartScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestRapidStartScenariosTest < Minitest::Test
+  include QUICTransfer
 
   RapidStart = QUIC::Congestion::Startup::RapidStart
 

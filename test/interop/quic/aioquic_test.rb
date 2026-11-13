@@ -12,8 +12,8 @@ require "fileutils"
 # connects twice, the second time resuming in 0-RTT; both print, for each
 # connection, whether it resumed and 0-RTT was taken. uv fetches aioquic
 # when it first runs.
-class NextQUICAioquicInteropTest < Minitest::Test
-  include NextQUICUDP
+class QUICAioquicInteropTest < Minitest::Test
+  include QUICUDP
 
   SERVER = File.expand_path("../../support/aioquic_server.py", __dir__)
   CLIENT = File.expand_path("../../support/aioquic_client.py", __dir__)

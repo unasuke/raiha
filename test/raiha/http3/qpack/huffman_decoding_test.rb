@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # The Huffman code of RFC 7541 Appendix B, decoding side: a byte at a time
 # through the transitions of a DFA.
-class RaihaNextQPACKHuffmanDecodingTest < Minitest::Test
+class RaihaQPACKHuffmanDecodingTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   Huffman = QPACK::Huffman
 

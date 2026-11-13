@@ -5,11 +5,11 @@ require "support/quic_recovery"
 
 # Loss recovery in handshakes on a Test::Network, on virtual time: the
 # scenarios that need no streams.
-class RaihaNextQUICTestRecoveryScenariosTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICTestRecoveryScenariosTest < Minitest::Test
+  include QUICPair
 
   Test = QUIC::Test
-  RecordingTracer = NextQUICRecovery::RecordingTracer
+  RecordingTracer = QUICRecovery::RecordingTracer
 
   # A path model that drops the datagrams whose places, counted from 0 as
   # they enter, are in `drop`.
@@ -66,7 +66,7 @@ class RaihaNextQUICTestRecoveryScenariosTest < Minitest::Test
     net = Test::Network.new(seed: 1)
     client = net.add(client_connection(tracer: client_tracer), address: CLIENT)
     tls_config = server_config
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(2))
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity], random: Random.new(2))
     host = net.add_server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, address: SERVER, **server)
     net.link(client, host, forward:, reverse:)
     [net, client, host]

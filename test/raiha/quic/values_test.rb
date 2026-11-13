@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICValuesTest < Minitest::Test
+class RaihaQUICValuesTest < Minitest::Test
   QUIC = Raiha::QUIC
   TLS = Raiha::TLS
 

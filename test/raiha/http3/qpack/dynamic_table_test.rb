@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/http3/qpack"
 
 # RFC 9204 "Dynamic Table", as the decoder keeps it.
-class RaihaNextQPACKDynamicTableTest < Minitest::Test
+class RaihaQPACKDynamicTableTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   def test_starts_empty_with_no_capacity

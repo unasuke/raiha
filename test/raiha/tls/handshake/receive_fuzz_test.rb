@@ -11,9 +11,9 @@ require "support/tls_pair"
 # the real flight with one byte changed, a piece cut out, or bytes put in.
 # RAIHA_FUZZ_ITERATIONS (default 300 per target) and RAIHA_FUZZ_SEED change
 # the number of inputs and the seed.
-class RaihaNextTLSReceiveFuzzTest < Minitest::Test
+class RaihaTLSReceiveFuzzTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "300"))

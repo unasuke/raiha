@@ -5,15 +5,15 @@ require "support/quic_recovery"
 # The tracer hears how the paths stand (qlog `migration_state_updated`): a
 # path besides the one in use as it is validated, and one the server moves
 # to.
-class RaihaNextQUICConnectionMigrationTraceTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionMigrationTraceTest < Minitest::Test
+  include QUICPair
 
   NEW = ["198.51.100.7", 61_000].freeze
 
   # A server done with the handshake and given three more IDs of the
   # client's, its tracer, the client's key log, and the time.
   def connected
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     keylog = Keylog.new
     client = client_connection(keylog:)
     server = server_connection(source_connection_id: "s".b * 8, tracer:)

@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # An HTTP/3 Connection made and given its streams: the control stream
 # with this end's SETTINGS, the QPACK streams, and their priority.
-class RaihaNextHTTP3ConnectionStartTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionStartTest < Minitest::Test
+  include HTTP3Pair
 
   def test_the_streams_of_a_client
     client = HTTP3::Connection.client

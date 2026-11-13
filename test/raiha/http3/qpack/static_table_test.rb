@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/http3/qpack"
 
 # RFC 9204 Appendix A.
-class RaihaNextQPACKStaticTableTest < Minitest::Test
+class RaihaQPACKStaticTableTest < Minitest::Test
   StaticTable = Raiha::HTTP3::QPACK::StaticTable
 
   def test_entries

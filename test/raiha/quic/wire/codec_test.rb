@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICWireCodecTest < Minitest::Test
+class RaihaQUICWireCodecTest < Minitest::Test
   Wire = Raiha::QUIC::Wire
   ErrorCode = Raiha::QUIC::ErrorCode
 

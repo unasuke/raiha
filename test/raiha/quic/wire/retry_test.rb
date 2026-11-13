@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 require "raiha/quic/test"
 
-class RaihaNextQUICWireRetryTest < Minitest::Test
+class RaihaQUICWireRetryTest < Minitest::Test
   Wire = Raiha::QUIC::Wire
   V1 = Raiha::QUIC::Version::V1
   V = Raiha::QUIC::Test::Vectors

@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # GOAWAY (RFC 9114 "Connection Shutdown") both ways, and the frames of
 # push, which this end never uses.
-class RaihaNextHTTP3ConnectionGoAwayTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionGoAwayTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

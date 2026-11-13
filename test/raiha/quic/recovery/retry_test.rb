@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9002 "Handling Retry Packets", as loss recovery's design, "On a
 # Retry", applies it.
-class RaihaNextQUICRecoveryRetryTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryRetryTest < Minitest::Test
+  include QUICRecovery
 
   Duty = QUIC::Recovery::Duty
 

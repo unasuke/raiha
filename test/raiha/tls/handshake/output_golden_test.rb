@@ -5,9 +5,9 @@ require "support/tls_pair"
 # Profile and handshake. Without 0-RTT there is no EndOfEarlyData, so TCP
 # and QUIC come out the same. RFC 8448 confirms the TCP sequences byte for
 # byte (test/rfc8448_handshake_test.rb), for the client of section 4 too.
-class RaihaNextTLSOutputGoldenTest < Minitest::Test
+class RaihaTLSOutputGoldenTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
 
   CLIENT_HELLO = [:message, :initial, 1].freeze
   HANDSHAKE_KEYS = [[:secret, :handshake, :read], [:secret, :handshake, :write]].freeze

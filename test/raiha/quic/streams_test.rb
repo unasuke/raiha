@@ -4,7 +4,7 @@ require "raiha/quic"
 # The streams of a connection receiving STREAM frames: which streams a
 # frame may name, and the checks every frame passes before its data is
 # kept.
-class RaihaNextQUICStreamsTest < Minitest::Test
+class RaihaQUICStreamsTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   def streams(role: :client, events: [], **config) = QUIC::Streams.new(role:, config: QUIC::Config.new(**config), events:, now: 0.0)

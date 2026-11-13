@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICWirePacketNumberTest < Minitest::Test
+class RaihaQUICWirePacketNumberTest < Minitest::Test
   PacketNumber = Raiha::QUIC::Wire::PacketNumber
 
   # RFC 9000 appendix A.2.

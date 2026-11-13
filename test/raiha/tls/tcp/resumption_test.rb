@@ -4,10 +4,8 @@ require "support/tcp_pair"
 # Resumption over TCP: each ticket the server sends becomes a session the
 # client may resume, of which the connection holds the newest 8 until
 # they are taken.
-class RaihaNextTLSTCPResumptionTest < Minitest::Test
+class RaihaTLSTCPResumptionTest < Minitest::Test
   TLS = Raiha::TLS
-  TCPPair = NextTCPPair
-  TLSPair = NextTLSPair
   NOW = TCPPair::NOW
   SEED = "\x14".b * 32
 

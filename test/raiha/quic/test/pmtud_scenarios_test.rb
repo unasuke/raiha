@@ -4,8 +4,8 @@ require "support/quic_transfer"
 # DPLPMTUD on virtual time (RFC 8899): through a path that drops what is
 # larger than its MTU, each end searches its path once the handshake is
 # confirmed, and sends as large as it found from then on.
-class RaihaNextQUICTestPMTUDScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestPMTUDScenariosTest < Minitest::Test
+  include QUICTransfer
 
   SIZE = 1_000_000
 

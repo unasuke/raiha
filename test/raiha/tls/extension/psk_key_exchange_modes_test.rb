@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionPskKeyExchangeModesTest < Minitest::Test
+class RaihaTLSExtensionPskKeyExchangeModesTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   PskKeyExchangeModes = Raiha::TLS::Extension::PskKeyExchangeModes
 

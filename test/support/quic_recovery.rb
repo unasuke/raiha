@@ -1,7 +1,7 @@
 require "raiha/quic"
 
 # Helpers for the tests of loss recovery.
-module NextQUICRecovery
+module QUICRecovery
   QUIC = Raiha::QUIC
 
   # A tracer that keeps every event as [name, keywords], and asks for the

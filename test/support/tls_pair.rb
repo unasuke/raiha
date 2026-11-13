@@ -3,9 +3,9 @@ require "support/test_pki"
 
 # A client and a server Machine of the next release of raiha, built from a
 # test PKI and run against each other with nothing in between.
-module NextTLSPair
+module TLSPair
   TLS = Raiha::TLS
-  PKI = NextTestPKI
+  PKI = TestPKI
   NOW = PKI::NOW
 
   Pair = Data.define(:client, :server, :client_outputs, :server_outputs)

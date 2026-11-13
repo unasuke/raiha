@@ -4,10 +4,8 @@ require "support/tcp_pair"
 # 0-RTT over TCP: a client sends it through write_early_data only when
 # asked, under the 0-RTT key from the start, until the server answers; a
 # server that does not take it skips it and the handshake goes on.
-class RaihaNextTLSTCPEarlyDataTest < Minitest::Test
+class RaihaTLSTCPEarlyDataTest < Minitest::Test
   TLS = Raiha::TLS
-  TCPPair = NextTCPPair
-  TLSPair = NextTLSPair
   NOW = TCPPair::NOW
   SEED = "\x13".b * 32
 

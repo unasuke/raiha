@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionRecordSizeLimitTest < Minitest::Test
+class RaihaTLSExtensionRecordSizeLimitTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   RecordSizeLimit = Raiha::TLS::Extension::RecordSizeLimit
 

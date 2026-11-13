@@ -4,8 +4,8 @@ require "support/quic_recovery"
 
 # RFC 9000 "Authenticating Connection IDs": the connection IDs in the
 # transport parameters are the ones the Initial packets used.
-class RaihaNextQUICConnectionTransportParametersTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionTransportParametersTest < Minitest::Test
+  include QUICPair
 
   # A Config whose transport parameters say `claims`, otherwise than the
   # packets.
@@ -46,7 +46,7 @@ class RaihaNextQUICConnectionTransportParametersTest < Minitest::Test
   # A server told of a Retry by its Endpoint names the client's first
   # Destination Connection ID and the Retry's Source Connection ID.
   def test_after_a_retry
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     server = server_connection(original_destination_connection_id: "o".b * 8, retry_source_connection_id: "r".b * 8, tracer:)
     server.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0)
     local = tracer.of(:parameters_set).find { _1[:owner] == :local }[:parameters]
@@ -57,7 +57,7 @@ class RaihaNextQUICConnectionTransportParametersTest < Minitest::Test
   # server the stateless reset token of it, which the transport parameters
   # carry.
   def test_what_an_endpoint_chooses
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     client = client_connection(source_connection_id: "c".b * 8)
     server = server_connection(source_connection_id: "s".b * 8, stateless_reset_token: "t".b * 16, tracer:)
     first = client.transmits(now: 0.0).first.payload

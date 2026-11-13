@@ -9,9 +9,9 @@ require "support/tcp_pair"
 # header, and the real records with one byte changed, a piece cut out, or
 # bytes put in. RAIHA_FUZZ_ITERATIONS (default 300 per target) and
 # RAIHA_FUZZ_SEED change the number of inputs and the seed.
-class RaihaNextTLSTCPReceiveFuzzTest < Minitest::Test
+class RaihaTLSTCPReceiveFuzzTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTCPPair
+  Pair = TCPPair
   NOW = Pair::NOW
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "300"))

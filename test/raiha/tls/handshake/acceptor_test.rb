@@ -1,7 +1,7 @@
 require "test_helper"
 require "support/tls_pair"
 
-class RaihaNextTLSAcceptorTest < Minitest::Test
+class RaihaTLSAcceptorTest < Minitest::Test
   TLS = Raiha::TLS
   Acceptor = TLS::Handshake::Acceptor
   Extension = TLS::Extension
@@ -9,9 +9,9 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     require "raiha/tls/test"
     TLS::Test::RFC8448
   end
-  NOW = NextTLSPair::NOW
+  NOW = TLSPair::NOW
 
-  def client_hello(**options) = NextTLSPair.client(config: NextTLSPair.client_config(**options)).outputs.first.bytes
+  def client_hello(**options) = TLSPair.client(config: TLSPair.client_config(**options)).outputs.first.bytes
 
   def outputs(acceptor) = [].tap { |list| acceptor.each_output { |output| list << output } }
 
@@ -56,7 +56,7 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
     acceptor.receive(without_versions.encode, epoch: :initial, now: NOW)
     assert_nil acceptor.accepted
     assert_equal [:protocol_version, :supported_versions], [acceptor.alert, acceptor.reason]
-    assert_equal [[:alert, :initial, :protocol_version]], NextTLSPair.shape(outputs(acceptor))
+    assert_equal [[:alert, :initial, :protocol_version]], TLSPair.shape(outputs(acceptor))
   end
 
   # RFC 8449: a record_size_limit under 64 is illegal_parameter.
@@ -102,7 +102,7 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
       acceptor = Acceptor.new
       acceptor.receive(client_hello, epoch: :initial, now: NOW)
       acceptor.reject(alert)
-      assert_equal [[:alert, :initial, alert]], NextTLSPair.shape(outputs(acceptor))
+      assert_equal [[:alert, :initial, alert]], TLSPair.shape(outputs(acceptor))
     end
     %i[access_denied decode_error illegal_parameter close_notify].each do |alert|
       assert_raises(ArgumentError) { Acceptor.new.reject(alert) }
@@ -135,11 +135,11 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
   # A server Machine without a ClientHello uses an Acceptor of its own, and
   # reports its failure as its own.
   def test_machine_with_its_own_acceptor
-    config = NextTLSPair.server_config
-    server = TLS::Handshake::Machine.server(config:, keyring: NextTLSPair.server_keyring(config:), now: NOW)
+    config = TLSPair.server_config
+    server = TLS::Handshake::Machine.server(config:, keyring: TLSPair.server_keyring(config:), now: NOW)
     server.receive("\x02\x00\x00\x00".b, epoch: :initial, now: NOW)
     assert server.failed?
-    assert_equal [[:alert, :initial, :unexpected_message]], NextTLSPair.shape(server.outputs)
+    assert_equal [[:alert, :initial, :unexpected_message]], TLSPair.shape(server.outputs)
     assert_equal [TLS::Event::Failed.new(alert: :unexpected_message, reason: :unexpected_message)], server.each_event.to_a
     server.receive(client_hello, epoch: :initial, now: NOW)
     assert_empty server.outputs
@@ -148,9 +148,9 @@ class RaihaNextTLSAcceptorTest < Minitest::Test
   def test_machine_takes_an_accepted
     acceptor = Acceptor.new
     acceptor.receive(client_hello, epoch: :initial, now: NOW)
-    config = NextTLSPair.server_config
-    server = TLS::Handshake::Machine.server(config:, keyring: NextTLSPair.server_keyring(config:), client_hello: acceptor.accepted, now: NOW)
-    assert_equal [:message, :initial, 2], NextTLSPair.shape(server.outputs).fetch(3)
+    config = TLSPair.server_config
+    server = TLS::Handshake::Machine.server(config:, keyring: TLSPair.server_keyring(config:), client_hello: acceptor.accepted, now: NOW)
+    assert_equal [:message, :initial, 2], TLSPair.shape(server.outputs).fetch(3)
   end
 
   def client_hello_with_sni(name) = client_hello_with_sni_list(Extension::ServerName::CH.new(host_name: name).encode)
@@ -164,9 +164,9 @@ end
 
 # A server choosing its Config and Keyring by SNI, in the ten lines the API
 # design promises.
-class RaihaNextTLSAcceptByServerNameTest < Minitest::Test
+class RaihaTLSAcceptByServerNameTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
   Site = Data.define(:config, :keyring)
 

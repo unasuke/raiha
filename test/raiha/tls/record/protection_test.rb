@@ -3,7 +3,7 @@ require "raiha/tls"
 require "raiha/tls/test"
 
 # Record protection against every protected record of RFC 8448 section 3.
-class RaihaNextTLSRecordProtectionTest < Minitest::Test
+class RaihaTLSRecordProtectionTest < Minitest::Test
   TLS = Raiha::TLS
   Protection = TLS::Record::Protection
   RFC8448 = TLS::Test::RFC8448::Simple1RTT

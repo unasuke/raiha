@@ -4,8 +4,8 @@ require "support/http3_pair"
 # Request streams stopped part of the way (RFC 9114 "Request Cancellation
 # and Rejection"): the peer resetting what it sends, the peer stopping
 # what this end sends, and either end cancelling both.
-class RaihaNextHTTP3ConnectionResetTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionResetTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

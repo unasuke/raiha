@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9002 "Acknowledgment-Based Detection", as loss recovery's design
 # applies it on an ACK.
-class RaihaNextQUICRecoveryLossDetectionTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryLossDetectionTest < Minitest::Test
+  include QUICRecovery
 
   # NewReno that keeps the order of what it was told.
   class Spy < Raiha::QUIC::Congestion::NewReno

@@ -4,8 +4,8 @@ require "support/quic_recovery"
 
 # RFC 9001 "Key Update", with the client's packets made from its key log
 # once the handshake is done.
-class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionKeyUpdateTest < Minitest::Test
+  include QUICPair
 
   PING = "\x01".b
 
@@ -40,7 +40,7 @@ class RaihaNextQUICConnectionKeyUpdateTest < Minitest::Test
 
   # The tracer is told of the update (qlog `key_updated`).
   def test_the_tracer_is_told
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     server, keylog, server_id, now = connected(tracer:)
     server.receive(client_one_rtt(keylog, dcid: server_id, payload: PING, phase: 1), from: CLIENT, now:)
     assert_equal [{ level: :one_rtt, now: }], tracer.of(:key_updated)

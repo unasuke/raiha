@@ -6,8 +6,8 @@ require "async"
 # in a fiber of its own with its pseudo-header and header fields, its body
 # as it comes and its trailers, answered whole; a request left without a
 # response is answered with 500.
-class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeHTTP3ServerTest < Minitest::Test
+  include RuntimeHTTP3
 
   # A server of HTTP/3 on a free port with `handler` for each request, for
   # the block, which is given its port, the server and the fiber running

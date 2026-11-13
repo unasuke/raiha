@@ -6,8 +6,8 @@ require "json"
 # (test/support/h3i_harness), which connects as a client, sends what the
 # named case says and prints what came back as a ConnectionSummary in
 # JSON. The server answers every request that has come whole with 200.
-class NextHTTP3H3iTest < Minitest::Test
-  include NextHTTP3UDP
+class HTTP3H3iTest < Minitest::Test
+  include HTTP3UDP
 
   HARNESS = File.expand_path("../../../tmp/h3i_harness/release/h3i_harness", __dir__)
 

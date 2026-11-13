@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls/test"
 
-class RaihaNextTLSExtensionListTest < Minitest::Test
+class RaihaTLSExtensionListTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   Extension = Raiha::TLS::Extension
   Registry = Extension::Registry

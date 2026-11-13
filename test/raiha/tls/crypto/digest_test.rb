@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSCryptoDigestTest < Minitest::Test
+class RaihaTLSCryptoDigestTest < Minitest::Test
   Crypto = Raiha::TLS::Crypto
 
   def test_digest_keeps_accumulating

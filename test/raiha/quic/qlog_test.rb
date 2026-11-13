@@ -5,8 +5,8 @@ require "json"
 
 # The qlog a connection writes: a JSON Text Sequence that qlog readers and
 # qvis take.
-class RaihaNextQUICQlogTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICQlogTest < Minitest::Test
+  include QUICPair
 
   # The records of `io`, each after a Record Separator and before a line
   # feed, as JSON.

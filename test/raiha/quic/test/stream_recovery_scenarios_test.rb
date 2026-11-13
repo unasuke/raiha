@@ -4,10 +4,10 @@ require "support/quic_recovery"
 
 # Loss recovery in transfers on a Test::Network, on virtual time: the
 # scenarios that need streams.
-class RaihaNextQUICTestStreamRecoveryScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestStreamRecoveryScenariosTest < Minitest::Test
+  include QUICTransfer
 
-  RecordingTracer = NextQUICRecovery::RecordingTracer
+  RecordingTracer = QUICRecovery::RecordingTracer
 
   # 10 Mbps and 20 ms each way, with a queue that never fills.
   DEEP = Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 100_000_000)

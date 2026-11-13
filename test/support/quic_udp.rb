@@ -8,8 +8,8 @@ require "tmpdir"
 # on a UDP socket of the loopback interface, run with the loop an
 # application writes, against another implementation of QUIC run as a
 # process of its own.
-module NextQUICUDP
-  include NextQUICTLS
+module QUICUDP
+  include QUICTLS
 
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
@@ -99,8 +99,8 @@ module NextQUICUDP
   # The files of a server certificate for "localhost" the test CA issues,
   # with the CA after it in the chain, and of its key: [chain, key].
   def certificate_files(dir)
-    leaf = NextTestPKI.leaf(NextTLSPair.ca)
-    chain = File.join(dir, "chain.pem").tap { File.write(_1, leaf.certificate.to_pem + NextTLSPair.ca.certificate.to_pem) }
+    leaf = TestPKI.leaf(TLSPair.ca)
+    chain = File.join(dir, "chain.pem").tap { File.write(_1, leaf.certificate.to_pem + TLSPair.ca.certificate.to_pem) }
     key = File.join(dir, "key.pem").tap { File.write(_1, leaf.key.private_to_pem) }
     [chain, key]
   end
@@ -155,7 +155,7 @@ module NextQUICUDP
   # of its own, for the block, with `options` of Connection.client
   # (session:, early_data:). The connection closes after.
   def client(port, alpn:, **options)
-    tls_config = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
+    tls_config = TLSPair.client_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY)
     socket = UDPSocket.new
     socket.bind("127.0.0.1", 0)
     connection = QUIC::Connection.client(config: QUIC::Config.new, tls_config:, keyring: TLS::Keyring.client(config: tls_config),
@@ -175,8 +175,8 @@ module NextQUICUDP
   # from them, so its record needs no time to warm up.
   def server(alpn:, resumption: false)
     tickets = resumption ? { ticket_key: SecureRandom.bytes(32), max_early_data_size: 1 } : {}
-    tls_config = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, **tickets)
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity])
+    tls_config = TLSPair.server_config(profile: TLS::Profile::QUIC, alpn:, registry: REGISTRY, **tickets)
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity])
     anti_replay = TLS::AntiReplay::Memory.new(now: Time.now, warmup: false) if resumption
     socket = UDPSocket.new
     socket.bind("127.0.0.1", 0)

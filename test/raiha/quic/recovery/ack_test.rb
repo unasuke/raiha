@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # Loss recovery's design, "Processing ACKs" and "RTT samples", up to the
 # congestion controller's on_ack; losses have tests of their own.
-class RaihaNextQUICRecoveryAckTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryAckTest < Minitest::Test
+  include QUICRecovery
 
   # NewReno that keeps what on_ack was told.
   class Spy < Raiha::QUIC::Congestion::NewReno

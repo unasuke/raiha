@@ -5,8 +5,8 @@ require "async"
 # The client of the runtime against a server on the loopback interface: a
 # Session for the block, the next address after one that does not answer
 # in time, and every failure told when none does.
-class RaihaNextRuntimeClientTest < Minitest::Test
-  include NextRuntimeOwner
+class RaihaRuntimeClientTest < Minitest::Test
+  include RuntimeOwner
 
   # A client that tries the addresses it is given instead of a name's.
   class Addressed < Runtime::Client

@@ -6,8 +6,8 @@ require "json"
 # The peer's limits on what a Connection sends: a write cut short by them
 # tells the peer with a BLOCKED frame, and goes on once MAX_DATA or
 # MAX_STREAM_DATA comes.
-class RaihaNextQUICConnectionStreamLimitsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamLimitsTest < Minitest::Test
+  include QUICPair
 
   # A client and a server done with the handshake and confirmed on both
   # ends, and the time then.

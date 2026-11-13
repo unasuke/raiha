@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # Streams between two Connections: opened, written as far as there is
 # room, sent in turn, and sent again when lost.
-class RaihaNextQUICConnectionStreamSendTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamSendTest < Minitest::Test
+  include QUICPair
 
   # A client and a server done with the handshake, and the time then.
   def connected(client_config: QUIC::Config.new, server_config: QUIC::Config.new)

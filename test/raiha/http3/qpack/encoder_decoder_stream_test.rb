@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # The encoder follows the decoder stream (RFC 9204 "Decoder
 # Instructions"). It never refers to the dynamic table, so only a Stream
 # Cancellation is in order.
-class RaihaNextQPACKEncoderDecoderStreamTest < Minitest::Test
+class RaihaQPACKEncoderDecoderStreamTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   def setup

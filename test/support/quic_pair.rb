@@ -2,8 +2,8 @@ require "support/quic_tls"
 
 # A client and a server Connection of the next release of raiha, wired to
 # each other with nothing in between.
-module NextQUICPair
-  include NextQUICTLS
+module QUICPair
+  include QUICTLS
 
   CLIENT = ["192.0.2.1", 50_000].freeze
   SERVER = ["192.0.2.2", 443].freeze
@@ -28,7 +28,7 @@ module NextQUICPair
   end
 
   def server_connection(config: QUIC::Config.new, tls_config: server_config, now: 0.0, time: NOW, random: Random.new(2), **options)
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random:)
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity], random:)
     QUIC::Connection.server(config:, tls_config:, keyring:, time:, now:, **options)
   end
 

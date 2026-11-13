@@ -4,8 +4,8 @@ require "support/http3_pair"
 # The peer's streams going one way (RFC 9114 "Unidirectional Streams",
 # RFC 9204 "Encoder and Decoder Streams"): one each of the control and
 # QPACK streams, never closed; no push; a type not known passed over.
-class RaihaNextHTTP3ConnectionUnidirectionalTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionUnidirectionalTest < Minitest::Test
+  include HTTP3Pair
 
   def server
     server = HTTP3::Connection.server

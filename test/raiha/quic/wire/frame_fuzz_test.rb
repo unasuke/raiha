@@ -10,7 +10,7 @@ require "support/quic_frames"
 # a random packet type with a random ACK Delay exponent.
 # RAIHA_FUZZ_ITERATIONS (default 10000) and RAIHA_FUZZ_SEED change the
 # number of inputs and the seed.
-class RaihaNextQUICWireFrameFuzzTest < Minitest::Test
+class RaihaQUICWireFrameFuzzTest < Minitest::Test
   QUIC = Raiha::QUIC
   Frame = QUIC::Wire::Frame
 
@@ -26,8 +26,8 @@ class RaihaNextQUICWireFrameFuzzTest < Minitest::Test
   end
 
   def mutated_input(rng)
-    frames = NextQUICFrames.random_frames(rng, rng.rand(1..4))
-    encoded = Frame.encode(frames, ack_delay_exponent: NextQUICFrames::ACK_DELAY_EXPONENT)
+    frames = QUICFrames.random_frames(rng, rng.rand(1..4))
+    encoded = Frame.encode(frames, ack_delay_exponent: QUICFrames::ACK_DELAY_EXPONENT)
     encoded.setbyte(rng.rand(encoded.bytesize), rng.rand(256))
     encoded
   end

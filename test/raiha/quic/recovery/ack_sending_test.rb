@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9000 "Sending ACK Frames", as loss recovery's design, "When to send an
 # ACK" and "When only ACKs go", applies it.
-class RaihaNextQUICRecoveryAckSendingTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryAckSendingTest < Minitest::Test
+  include QUICRecovery
 
   def receive(recovery, packet_type, number, now:, ack_eliciting: true, ecn: :not_ect, received_at: now)
     recovery.on_packet_received(packet_type:, packet_number: number, ecn:, ack_eliciting:, now:, received_at:)

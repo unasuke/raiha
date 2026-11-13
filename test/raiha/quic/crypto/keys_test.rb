@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 require "raiha/quic/test"
 
-class RaihaNextQUICCryptoKeysTest < Minitest::Test
+class RaihaQUICCryptoKeysTest < Minitest::Test
   Keys = Raiha::QUIC::Crypto::Keys
   Suite = Raiha::TLS::CipherSuite
   V1 = Raiha::QUIC::Version::V1

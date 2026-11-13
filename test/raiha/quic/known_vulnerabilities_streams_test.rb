@@ -8,8 +8,8 @@ require "objspace"
 # limit of retired connection IDs waiting for their acknowledgment is
 # tested with PeerConnectionIDs, and DATAGRAMs the application does not
 # take with the Connection.
-class RaihaNextQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICKnownVulnerabilitiesStreamsTest < Minitest::Test
+  include QUICPair
 
   # A server done with the handshake, and its connection ID.
   def connected_server

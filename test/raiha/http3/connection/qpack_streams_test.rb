@@ -4,8 +4,8 @@ require "support/http3_pair"
 # The QPACK streams between two HTTP/3 Connections: the peer's encoder
 # stream goes to this end's decoder, its decoder stream to this end's
 # encoder, and what this end's have to write goes on its own streams.
-class RaihaNextHTTP3ConnectionQPACKStreamsTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionQPACKStreamsTest < Minitest::Test
+  include HTTP3Pair
 
   QPACK = HTTP3::QPACK
 

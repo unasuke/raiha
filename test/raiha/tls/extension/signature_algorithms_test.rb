@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionSignatureAlgorithmsTest < Minitest::Test
+class RaihaTLSExtensionSignatureAlgorithmsTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   Extension = Raiha::TLS::Extension
 

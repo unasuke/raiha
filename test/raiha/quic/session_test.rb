@@ -5,8 +5,8 @@ require "support/quic_pair"
 # QUIC::Session holds the TLS session, the server's transport parameters
 # that 0-RTT may use, the ALPN protocol and the version, of which the
 # connection holds the newest 8 until they are taken.
-class RaihaNextQUICSessionTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICSessionTest < Minitest::Test
+  include QUICPair
 
   SEED = "\x19".b * 32
 

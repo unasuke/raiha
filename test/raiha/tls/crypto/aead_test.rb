@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 require "raiha/tls/test"
 
-class RaihaNextTLSCryptoAEADTest < Minitest::Test
+class RaihaTLSCryptoAEADTest < Minitest::Test
   AEAD = Raiha::TLS::Crypto::AEAD
   RFC8448 = Raiha::TLS::Test::RFC8448::Simple1RTT
 

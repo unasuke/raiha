@@ -6,8 +6,8 @@ require "support/tls_pair"
 # and early_data_context, a ticket age within the window, and the
 # anti-replay record's :accepted, in that order; any other way rejected with
 # the reason, the handshake going on.
-class RaihaNextTLSServerEarlyDataTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSServerEarlyDataTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   NOW = Pair::NOW
   SEED = "\x11".b * 32

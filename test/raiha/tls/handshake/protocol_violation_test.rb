@@ -4,9 +4,9 @@ require "support/tls_pair"
 # Profile::QUIC.protocol_violation_reasons, each caused for real: a QUIC
 # binding maps these reasons to PROTOCOL_VIOLATION, so every value must be
 # one the Machine actually reports, under its exact name.
-class RaihaNextTLSProtocolViolationTest < Minitest::Test
+class RaihaTLSProtocolViolationTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
   TRANSPORT_PARAMETERS = TLS::Extension::Opaque.new(type: 0x39, data: "tp".b)
   REGISTRY = TLS::Extension::Registry::BUILTIN

@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9002 "Discarding Keys and Packet State", as loss recovery's design,
 # "Discarding Initial and Handshake keys", applies it.
-class RaihaNextQUICRecoveryDiscardTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryDiscardTest < Minitest::Test
+  include QUICRecovery
 
   # NewReno that keeps whether it heard anything.
   class Spy < Raiha::QUIC::Congestion::NewReno

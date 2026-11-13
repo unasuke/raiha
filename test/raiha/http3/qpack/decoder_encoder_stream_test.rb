@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # The decoder follows the encoder stream (RFC 9204 "Encoder
 # Instructions"). What each instruction inserts is checked by decoding
 # references to it; here, which instructions are taken and which fail.
-class RaihaNextQPACKDecoderEncoderStreamTest < Minitest::Test
+class RaihaQPACKDecoderEncoderStreamTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   ENCODER_STREAM_ERROR = QPACK::ErrorCode::ENCODER_STREAM_ERROR
 

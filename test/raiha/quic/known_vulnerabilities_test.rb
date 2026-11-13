@@ -8,8 +8,8 @@ require "objspace"
 # of the calls of the application. The bounds of CRYPTO reassembly in
 # themselves are tested with CryptoStream, the end of an offer with the
 # Endpoint, and HANDSHAKE_DONE from a client with the handshake.
-class RaihaNextQUICKnownVulnerabilitiesTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICKnownVulnerabilitiesTest < Minitest::Test
+  include QUICPair
 
   # A client's Initial to `dcid` with `frames`, padded to 1200 bytes.
   def initial(dcid:, frames:, packet_number: 1)
@@ -78,8 +78,8 @@ class RaihaNextQUICKnownVulnerabilitiesTest < Minitest::Test
   # the datagram, not for each packet in it (CVE-2026-35191). The server's
   # certificate chain makes it want to send far more.
   def test_the_amplification_limit_counts_each_datagram_once
-    identity = NextTLSPair.server_identity
-    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [NextTLSPair.ca.der] * 8, key_der: identity.key_der)
+    identity = TLSPair.server_identity
+    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [TLSPair.ca.der] * 8, key_der: identity.key_der)
     tls_config = server_config
     keyring = TLS::Keyring.server(config: tls_config, identities: [long], random: Random.new(2))
     server = QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0)

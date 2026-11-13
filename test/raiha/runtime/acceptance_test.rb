@@ -5,8 +5,8 @@ require "async"
 # The third acceptance test of the API of the next release of raiha: an
 # HTTP/3 GET under a Fiber scheduler, written as the design writes it, to
 # a server of the runtime on the loopback interface.
-class RaihaNextRuntimeAcceptanceTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeAcceptanceTest < Minitest::Test
+  include RuntimeHTTP3
 
   def test_an_http3_get_under_a_fiber_scheduler
     server_tls = h3_server_config
@@ -14,7 +14,7 @@ class RaihaNextRuntimeAcceptanceTest < Minitest::Test
       keyring: server_keyring(config: server_tls), host: "::", port: 0)
     config = QUIC::Config.new
     # A Keyring is for the Config it was built with.
-    tls_config = NextTLSPair.client_config(profile: TLS::Profile::QUIC, registry: REGISTRY).with(alpn: ["h3"])
+    tls_config = TLSPair.client_config(profile: TLS::Profile::QUIC, registry: REGISTRY).with(alpn: ["h3"])
     keyring = TLS::Keyring.client(config: tls_config)
     body = nil
     Async do

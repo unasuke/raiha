@@ -4,7 +4,7 @@ require "raiha/quic"
 # The connection IDs of a worker: each tells, to every worker that shares
 # the key, which worker issued it, while its first byte looks as random as
 # the rest to anyone without the key.
-class RaihaNextQUICWorkerConnectionIDsTest < Minitest::Test
+class RaihaQUICWorkerConnectionIDsTest < Minitest::Test
   QUIC = Raiha::QUIC
   KEY = ("k" * 32).b
 

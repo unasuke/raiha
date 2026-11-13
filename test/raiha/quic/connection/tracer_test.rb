@@ -3,10 +3,10 @@ require "support/quic_pair"
 require "support/quic_recovery"
 
 # What a connection tells its tracer.
-class RaihaNextQUICConnectionTracerTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionTracerTest < Minitest::Test
+  include QUICPair
 
-  RecordingTracer = NextQUICRecovery::RecordingTracer
+  RecordingTracer = QUICRecovery::RecordingTracer
 
   # A tracer that takes TLS's traces too.
   class TLSRecordingTracer < RecordingTracer

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICCongestionAlgorithmsTest < Minitest::Test
+class RaihaQUICCongestionAlgorithmsTest < Minitest::Test
   Congestion = Raiha::QUIC::Congestion
 
   def test_resolve

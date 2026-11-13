@@ -4,7 +4,7 @@ require "prism"
 # Each kind of change in the state machine has exactly one place, so that a
 # reader can trust it and a new code path cannot slip past it. These tests
 # find every place that makes the change and compare with the one allowed.
-class RaihaNextTLSHandshakeHygieneTest < Minitest::Test
+class RaihaTLSHandshakeHygieneTest < Minitest::Test
   TLS_DIR = File.expand_path("../../../../lib/raiha/tls", __dir__)
 
   # Where something happens: [file under lib/raiha/tls, enclosing method].

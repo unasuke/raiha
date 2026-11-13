@@ -6,8 +6,8 @@ require "raiha/tls/test"
 # a key from the PSK over the whole ClientHello, and rejected, with the
 # reason, by a HelloRetryRequest, a ServerHello that does not select the PSK,
 # or EncryptedExtensions without early_data.
-class RaihaNextTLSClientEarlyDataTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSClientEarlyDataTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   NOW = Pair::NOW
   SEED = "\x0f".b * 32

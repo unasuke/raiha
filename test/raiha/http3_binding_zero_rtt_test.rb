@@ -6,8 +6,8 @@ require "support/http3_side"
 # streams open at once, so the client's SETTINGS go at the beginning of the
 # connection (RFC 9114 "Control Streams"), and a request goes with them
 # before the handshake completes, to a server that reads it as early data.
-class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
-  include NextQUICPair
+class RaihaHTTP3BindingZeroRTTTest < Minitest::Test
+  include QUICPair
 
   HTTP3 = Raiha::HTTP3
   GET = [[":method", "GET"], [":scheme", "https"], [":authority", "localhost"], [":path", "/"]].freeze
@@ -18,7 +18,7 @@ class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
   def tls_config = @tls_config ||= server_config(ticket_key: SEED, max_early_data_size: 1)
 
   def server(now: LATER, anti_replay: TLS::AntiReplay::Memory.new(now: NOW, warmup: false))
-    NextHTTP3Side.new(server_connection(tls_config:, anti_replay:, now:, time: NOW + now), HTTP3::Connection.server)
+    HTTP3Side.new(server_connection(tls_config:, anti_replay:, now:, time: NOW + now), HTTP3::Connection.server)
   end
 
   # Turns both ends and passes datagrams each way, a millisecond apart.
@@ -34,7 +34,7 @@ class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
 
   # The ticket of a first connection, and the server's SETTINGS on it.
   def first
-    client = NextHTTP3Side.new(client_connection, HTTP3::Connection.client)
+    client = HTTP3Side.new(client_connection, HTTP3::Connection.client)
     exchange(client, server(now: 0.0), 0.0, rounds: 20)
     [client.quic_events.grep(QUIC::Event::SessionTicket).first.session, client.http3.peer_settings]
   end
@@ -42,7 +42,7 @@ class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
   def test_a_request_in_0rtt
     session, settings = first
     connection = client_connection(session:, early_data: true, now: LATER, time: NOW + LATER, random: Random.new(5))
-    client = NextHTTP3Side.new(connection, HTTP3::Connection.client(remembered: settings))
+    client = HTTP3Side.new(connection, HTTP3::Connection.client(remembered: settings))
     server = server()
     stream_id = nil
     client.turn(LATER) do
@@ -68,7 +68,7 @@ class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
   def test_a_rejected_0rtt
     session, settings = first
     connection = client_connection(session:, early_data: true, now: LATER, time: NOW + LATER, random: Random.new(5))
-    client = NextHTTP3Side.new(connection, HTTP3::Connection.client(remembered: settings))
+    client = HTTP3Side.new(connection, HTTP3::Connection.client(remembered: settings))
     server = server(anti_replay: TLS::AntiReplay::Memory.new(now: NOW + LATER))
     client.turn(LATER) { client.http3.send_request(connection.open_stream, GET, fin: true) }
     restarted = false

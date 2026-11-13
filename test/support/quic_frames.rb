@@ -2,7 +2,7 @@ require "raiha/quic"
 
 # Random QUIC frames of every kind, with values spread over every length of
 # varint, for the round-trip and fuzz tests of Wire::Frame.
-module NextQUICFrames
+module QUICFrames
   Frame = Raiha::QUIC::Wire::Frame
 
   # The exponent the frames' ACK Delay is chosen for, so that it survives a

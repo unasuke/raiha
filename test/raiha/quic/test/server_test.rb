@@ -4,8 +4,8 @@ require "support/quic_pair"
 
 # Handshakes on a Test::Network, the client a Connection and the server an
 # Endpoint that takes every offer, over paths that lose, reorder and delay.
-class RaihaNextQUICTestServerTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICTestServerTest < Minitest::Test
+  include QUICPair
 
   Test = QUIC::Test
 
@@ -16,7 +16,7 @@ class RaihaNextQUICTestServerTest < Minitest::Test
     time: NOW, **server)
     net = Test::Network.new(seed:)
     client = net.add(client, address: CLIENT)
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(seed + 1))
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity], random: Random.new(seed + 1))
     host = net.add_server(config: QUIC::Config.new, tls_config:, keyring:, time:, address: SERVER, **server)
     net.link(client, host, forward:, reverse:)
     [net, client, host]

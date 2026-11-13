@@ -4,8 +4,8 @@ require "support/quic_pair"
 # A server Connection taking the client's NEW_CONNECTION_ID frames: it
 # sends to the ID in use, retires what Retire Prior To asks, and takes no
 # RETIRE_CONNECTION_ID, having issued no ID to retire.
-class RaihaNextQUICConnectionConnectionIDsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionConnectionIDsTest < Minitest::Test
+  include QUICPair
 
   def setup
     @keylog = Keylog.new

@@ -7,8 +7,8 @@ require "support/runtime_owner"
 # trailer fields after its body, "/echo" with the request's body,
 # "/priority" with its priority field, "/reset" is cancelled, and the
 # connection closed at once after the answer to "/last".
-module NextRuntimeHTTP3
-  include NextRuntimeOwner
+module RuntimeHTTP3
+  include RuntimeOwner
 
   HTTP3 = Raiha::HTTP3
   H3 = ["h3"].freeze
@@ -91,9 +91,9 @@ module NextRuntimeHTTP3
     end
   end
 
-  def h3_server_config = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY)
+  def h3_server_config = TLSPair.server_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY)
 
-  def h3_client_config = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY)
+  def h3_client_config = TLSPair.client_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY)
 
   # A Runtime::Server on a free port answering with `bodies`, for the block,
   # which is given its port and the server's sessions as they come.

@@ -6,7 +6,7 @@ require "raiha/runtime"
 # QUEUE_BYTES of them; what comes to
 # a worker's control port goes to the block, but a request for stats; and
 # closing a worker ends its thread.
-class RaihaNextRuntimeWorkerTest < Minitest::Test
+class RaihaRuntimeWorkerTest < Minitest::Test
   Worker = Raiha::Runtime::Worker
 
   def setup

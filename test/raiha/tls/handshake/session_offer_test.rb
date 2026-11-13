@@ -4,8 +4,8 @@ require "support/tls_pair"
 # A client given a session: checked against its settings first, offered as a
 # PSK whose binder is a MAC over the ClientHello up to the binders, or not
 # offered, with the reason of the first check it fails.
-class RaihaNextTLSSessionOfferTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSSessionOfferTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   PKI = Pair::PKI
   NOW = Pair::NOW

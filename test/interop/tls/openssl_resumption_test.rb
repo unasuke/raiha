@@ -12,10 +12,10 @@ require "tmpdir"
 # openssl command, both ways: a client resuming a session of
 # `openssl s_server` with 0-RTT, and a server resuming `openssl s_client`
 # and taking its 0-RTT.
-class NextTLSOpenSSLResumptionInteropTest < Minitest::Test
+class TLSOpenSSLResumptionInteropTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
-  PKI = NextTestPKI
+  Pair = TLSPair
+  PKI = TestPKI
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   SEED = "\x17".b * 32
@@ -60,7 +60,7 @@ class NextTLSOpenSSLResumptionInteropTest < Minitest::Test
     config = Pair.client_config
     connection = TLS::TCP::Connection.client(config:, keyring: TLS::Keyring.client(config:), server_name: "localhost", now: Time.now,
       **options)
-    NextTCPDrive.new(TCPSocket.new("localhost", port), connection)
+    TCPDrive.new(TCPSocket.new("localhost", port), connection)
   end
 
   # A page from s_server -www, and the sessions of the tickets it sent.
@@ -111,7 +111,7 @@ class NextTLSOpenSSLResumptionInteropTest < Minitest::Test
     results = Thread::Queue.new
     thread = Thread.new do
       count.times do
-        drive = NextTCPDrive.new(listener.accept, TLS::TCP::Connection.server(config:, keyring:, now: Time.now, anti_replay:))
+        drive = TCPDrive.new(listener.accept, TLS::TCP::Connection.server(config:, keyring:, now: Time.now, anti_replay:))
         drive.until { drive.connection.handshake_complete? }
         early = drive.connection.read_early_data(65_536)
         data = drive.read_all(timeout: 10)

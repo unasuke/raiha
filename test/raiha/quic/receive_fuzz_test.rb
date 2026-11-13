@@ -8,8 +8,8 @@ require "support/quic_pair"
 # or real frames with random values: so that what comes after the
 # decryption is reached too. RAIHA_FUZZ_ITERATIONS (default 300) and
 # RAIHA_FUZZ_SEED change the number of inputs to each target and the seed.
-class RaihaNextQUICReceiveFuzzTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICReceiveFuzzTest < Minitest::Test
+  include QUICPair
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "300"))
   SEED = Integer(ENV.fetch("RAIHA_FUZZ_SEED", "9000"))

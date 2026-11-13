@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICRecoveryDutyTest < Minitest::Test
+class RaihaQUICRecoveryDutyTest < Minitest::Test
   QUIC = Raiha::QUIC
   Duty = QUIC::Recovery::Duty
 

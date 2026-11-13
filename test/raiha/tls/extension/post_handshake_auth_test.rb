@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionPostHandshakeAuthTest < Minitest::Test
+class RaihaTLSExtensionPostHandshakeAuthTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   PostHandshakeAuth = Raiha::TLS::Extension::PostHandshakeAuth
 

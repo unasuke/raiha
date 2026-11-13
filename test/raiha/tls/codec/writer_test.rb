@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSCodecWriterTest < Minitest::Test
+class RaihaTLSCodecWriterTest < Minitest::Test
   Codec = Raiha::TLS::Codec
 
   def test_integers

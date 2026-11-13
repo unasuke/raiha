@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # RFC 9000 "Handling Version Negotiation Packets", for a client of version
 # 1 alone.
-class RaihaNextQUICConnectionVersionNegotiationTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionVersionNegotiationTest < Minitest::Test
+  include QUICPair
 
   # A client that has sent its first Initial, and the header of it.
   def started

@@ -4,11 +4,11 @@ require "support/tls_pair"
 # The server's checks of the state machine's table, row by row, PSK rows
 # aside: the row's violation gives its alert and reason, and with an
 # earlier row violated too, the earlier row wins.
-class RaihaNextTLSServerChecksTest < Minitest::Test
+class RaihaTLSServerChecksTest < Minitest::Test
   TLS = Raiha::TLS
   Extension = TLS::Extension
   Handshake = TLS::Handshake
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
   REGISTRY = Extension::Registry::BUILTIN
   QUIC_TP = Extension::Opaque.new(type: 0x39, data: "tp".b)
@@ -140,8 +140,8 @@ class RaihaNextTLSServerChecksTest < Minitest::Test
     server, failed = client_flight(mode: :optional, identities: [])
     assert_nil failed
     assert server.complete?
-    stranger = NextTestPKI.ca(name: "Stranger CA", key: NextTestPKI.key(:stranger_ca))
-    leaf = NextTestPKI.leaf(stranger, names: [], purpose: "clientAuth")
+    stranger = TestPKI.ca(name: "Stranger CA", key: TestPKI.key(:stranger_ca))
+    leaf = TestPKI.leaf(stranger, names: [], purpose: "clientAuth")
     unknown = TLS::Keyring::Identity.new(cert_der: [leaf.der], key_der: leaf.key_der)
     %i[optional required].each do |mode|
       assert_equal [:unknown_ca, :certificate_rejected], client_flight(mode:, identities: [unknown]).last, mode

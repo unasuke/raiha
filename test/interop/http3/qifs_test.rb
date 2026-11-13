@@ -6,8 +6,8 @@ require "support/qpack_offline_interop"
 # those of qpack-05, the corpus's latest; qpack-02 and qpack-03 are of
 # drafts older than RFC 9204's wire format. `rake test:qifs` fetches
 # the corpus into tmp/qifs.
-class NextQPACKQifsTest < Minitest::Test
-  include NextQPACKOfflineInterop
+class QPACKQifsTest < Minitest::Test
+  include QPACKOfflineInterop
 
   ENCODED = File.join(QIFS_DIR, "encoded", "qpack-05")
   IMPLEMENTATIONS = %w[f5 ls-qpack nghttp3 proxygen qthingey quinn].freeze

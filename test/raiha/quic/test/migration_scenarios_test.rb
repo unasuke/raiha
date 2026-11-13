@@ -10,8 +10,8 @@ require "support/quic_recovery"
 # shrink the new path's window (RFC 9000 "Loss Detection and Congestion
 # Control"). The client's windows are wide enough that flow control never
 # holds the server back.
-class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestMigrationScenariosTest < Minitest::Test
+  include QUICTransfer
 
   WIDE = QUIC::Config.new(initial_max_data: 16 << 20, initial_max_stream_data_bidi_local: 16 << 20,
     max_stream_receive_window: 16 << 20, max_receive_window: 24 << 20)
@@ -105,7 +105,7 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
   def offered(addresses, client_config: WIDE)
     path = QUIC::Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 200_000)
     sent = []
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     net, client, server, reads = download(SIZE, forward: [Tap.new(sent), path], reverse: path, client_config:, client_tracer: tracer,
       client_issuer: issuer, server_config: QUIC::Config.new(preferred_address: { ipv4: PREFERRED }), server_addresses: addresses)
     assert net.run_until { client.handshake_confirmed? }

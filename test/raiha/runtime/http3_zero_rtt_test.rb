@@ -4,14 +4,14 @@ require "async"
 
 # Resumption and 0-RTT of the runtime's HTTP/3: a server's 0-RTT bound to
 # its SETTINGS.
-class RaihaNextRuntimeHTTP3ZeroRTTTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeHTTP3ZeroRTTTest < Minitest::Test
+  include RuntimeHTTP3
 
   SEED = "\x22".b * 32
 
   # One TLS Config for every server, so that a ticket of one resumes
   # another.
-  def tls = @tls ||= NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY, ticket_key: SEED, max_early_data_size: 16_384)
+  def tls = @tls ||= TLSPair.server_config(profile: TLS::Profile::QUIC, alpn: H3, registry: REGISTRY, ticket_key: SEED, max_early_data_size: 16_384)
 
   # A server of HTTP/3 on a free port answering each request with
   # `handler`, for the block, which is given its port; stopped after. It

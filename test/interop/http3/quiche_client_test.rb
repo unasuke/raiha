@@ -7,8 +7,8 @@ require "json"
 # client (quiche-client of tmp/quiche), which checks the server's
 # certificate against the test CA, sends GREASE, and prints the responses
 # as JSON. The server answers every request with 200 and BODY.
-class NextHTTP3QuicheClientTest < Minitest::Test
-  include NextHTTP3UDP
+class HTTP3QuicheClientTest < Minitest::Test
+  include HTTP3UDP
 
   CLIENT = File.expand_path("../../../tmp/quiche/target/release/quiche-client", __dir__)
   BODY = (0...100_000).map { ("a".ord + (_1 % 26)).chr }.join.b.freeze
@@ -16,7 +16,7 @@ class NextHTTP3QuicheClientTest < Minitest::Test
   def setup
     skip "quiche-client not found" unless File.executable?(CLIENT)
     @dir = Dir.mktmpdir("next-interop-quiche-client-", TMP)
-    @ca = File.join(@dir, "ca.pem").tap { File.write(_1, NextTLSPair.ca.certificate.to_pem) }
+    @ca = File.join(@dir, "ca.pem").tap { File.write(_1, TLSPair.ca.certificate.to_pem) }
   end
 
   def teardown

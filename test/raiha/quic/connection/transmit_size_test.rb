@@ -3,8 +3,8 @@ require "support/quic_transfer"
 
 # A connection with the Config's max_transmit_size puts the datagrams of
 # one size it sends in one Transmit, for GSO; without, a datagram each.
-class RaihaNextQUICConnectionTransmitSizeTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICConnectionTransmitSizeTest < Minitest::Test
+  include QUICTransfer
 
   # The datagrams of `transmit`, cut at its segment size.
   def datagrams(transmit)

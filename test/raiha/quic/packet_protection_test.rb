@@ -3,7 +3,7 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 # RFC 9001 "Packet Protection": the keys of each encryption level.
-class RaihaNextQUICPacketProtectionTest < Minitest::Test
+class RaihaQUICPacketProtectionTest < Minitest::Test
   QUIC = Raiha::QUIC
   V = QUIC::Test::Vectors
   SUITE = Raiha::TLS::CipherSuite::TLS_AES_128_GCM_SHA256

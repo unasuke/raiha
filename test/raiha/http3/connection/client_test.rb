@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # A client's requests and their responses: interim responses before the
 # response, content, trailers, and the checks a response must pass.
-class RaihaNextHTTP3ConnectionClientTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionClientTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

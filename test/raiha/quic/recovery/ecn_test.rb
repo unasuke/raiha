@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9000 "ECN Validation" and RFC 9002 "Congestion Control" with ECN, as
 # loss recovery's design, "ECN validation and CE", applies them.
-class RaihaNextQUICRecoveryEcnTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryEcnTest < Minitest::Test
+  include QUICRecovery
 
   ECNCounts = QUIC::Wire::Frame::Ack::ECNCounts
 

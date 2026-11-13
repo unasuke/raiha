@@ -3,7 +3,7 @@ require "raiha/quic"
 
 # The connection IDs this end issues: how many, in which frames, what goes
 # again, and how the peer retires them.
-class RaihaNextQUICIssuedConnectionIDsTest < Minitest::Test
+class RaihaQUICIssuedConnectionIDsTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   # An issuer that makes IDs "00000001", "00000002" and so on, the token of

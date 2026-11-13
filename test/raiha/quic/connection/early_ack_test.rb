@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # A server connection takes the packets of only an ACK its Endpoint sent
 # the client before the connection was made as its own.
-class RaihaNextQUICConnectionEarlyAckTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionEarlyAckTest < Minitest::Test
+  include QUICPair
 
   EARLY = [QUIC::Connection::EarlyAck.new(packet_number: 0, bytes: 50, time: 0.0)].freeze
 

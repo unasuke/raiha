@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionServerNameTest < Minitest::Test
+class RaihaTLSExtensionServerNameTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   ServerName = Raiha::TLS::Extension::ServerName
 

@@ -6,8 +6,8 @@ require "fileutils"
 # server (quiche-server of tmp/quiche), which serves the files of a
 # directory with a certificate of the test CA, sends a Retry first and
 # sends GREASE. The client asks for two files at once.
-class NextHTTP3QuicheServerTest < Minitest::Test
-  include NextHTTP3UDP
+class HTTP3QuicheServerTest < Minitest::Test
+  include HTTP3UDP
 
   SERVER = File.expand_path("../../../tmp/quiche/target/release/quiche-server", __dir__)
   FILES = { "/index.html" => "<p>raiha</p>\n".b, "/large" => Random.new(1).bytes(500_000) }.freeze

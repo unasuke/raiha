@@ -7,8 +7,8 @@ require "json"
 # The qlog of an HTTP/3 connection (draft-ietf-quic-qlog-h3-events-12):
 # its events, what the peer sent cut short in them, and the same trace as
 # the QUIC connection under it.
-class RaihaNextHTTP3QlogTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3QlogTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

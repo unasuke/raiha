@@ -8,8 +8,8 @@ require "support/quic_udp"
 # when what comes back is "ECHO:" and the data. Without data, it would end
 # as soon as its own handshake is done, before its Finished goes, so the
 # handshake is tried with the echo alone.
-class NextQUICQuicGemInteropTest < Minitest::Test
-  include NextQUICUDP
+class QUICQuicGemInteropTest < Minitest::Test
+  include QUICUDP
 
   CLIENT = File.expand_path("../../support/quic_gem_echo_client.rb", __dir__)
   ALPN = ["raiha-interop"].freeze

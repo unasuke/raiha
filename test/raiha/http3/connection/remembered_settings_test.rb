@@ -5,8 +5,8 @@ require "support/http3_pair"
 # SETTINGS it remembered: they stand for the server's until those come,
 # which must then keep a QPACK capacity remembered (RFC 9204 "Maximum
 # Dynamic Table Capacity") and H3_DATAGRAM (RFC 9297).
-class RaihaNextHTTP3ConnectionRememberedSettingsTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionRememberedSettingsTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
 

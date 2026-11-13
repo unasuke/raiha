@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # A server's responses: interim responses, the response, its content as
 # the stream takes it, and its trailers.
-class RaihaNextHTTP3ConnectionResponseTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionResponseTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

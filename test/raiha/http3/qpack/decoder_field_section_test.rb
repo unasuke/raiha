@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # The decoder decodes field sections (RFC 9204 "Field Line
 # Representations") against the static table and the dynamic table the
 # encoder stream fills.
-class RaihaNextQPACKDecoderFieldSectionTest < Minitest::Test
+class RaihaQPACKDecoderFieldSectionTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   DECOMPRESSION_FAILED = QPACK::ErrorCode::DECOMPRESSION_FAILED
 

@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 require "raiha/quic/test"
 
-class RaihaNextQUICCongestionCubicTest < Minitest::Test
+class RaihaQUICCongestionCubicTest < Minitest::Test
   include Raiha::QUIC::Test::CongestionContract
 
   Cubic = Raiha::QUIC::Congestion::Cubic

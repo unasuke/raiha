@@ -4,8 +4,8 @@ require "support/quic_pair"
 # RFC 9000 "Address Validation" and RFC 9002 "Handling Anti-Amplification
 # Limits": a server sends at most three times what it received until the
 # client's address is validated.
-class RaihaNextQUICConnectionAmplificationTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionAmplificationTest < Minitest::Test
+  include QUICPair
 
   # Runs the server's timers out for ten seconds, short of the idle
   # timeout, and gives what it sent.
@@ -25,8 +25,8 @@ class RaihaNextQUICConnectionAmplificationTest < Minitest::Test
   # A server whose certificate chain makes its flight longer than three
   # datagrams.
   def long_flight_server(**options)
-    identity = NextTLSPair.server_identity
-    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [NextTLSPair.ca.der] * 8, key_der: identity.key_der)
+    identity = TLSPair.server_identity
+    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [TLSPair.ca.der] * 8, key_der: identity.key_der)
     tls_config = server_config
     keyring = TLS::Keyring.server(config: tls_config, identities: [long], random: Random.new(2))
     QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0, **options)

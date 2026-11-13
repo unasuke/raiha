@@ -10,8 +10,8 @@ require "fileutils"
 # it, and quic-go's client prints what came back as STREAM_DATA. For
 # resumption, quic-go's programs connect or take connections twice and
 # print, for each, whether it resumed and 0-RTT was taken.
-class NextQUICQuicgoInteropTest < Minitest::Test
-  include NextQUICUDP
+class QUICQuicgoInteropTest < Minitest::Test
+  include QUICUDP
 
   SERVER = File.expand_path("../../support/quicgo/server_bin", __dir__)
   CLIENT = File.expand_path("../../support/quicgo/client_bin", __dir__)

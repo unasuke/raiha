@@ -4,7 +4,7 @@ require "raiha/quic/test"
 
 # Rapid Start (draft-kazuho-ccwg-rapid-start-02) wrapping NewReno or CUBIC:
 # its growth, its pacing, the first recovery period and the hand-over.
-class RaihaNextQUICCongestionRapidStartTest < Minitest::Test
+class RaihaQUICCongestionRapidStartTest < Minitest::Test
   include Raiha::QUIC::Test::CongestionContract
 
   QUIC = Raiha::QUIC

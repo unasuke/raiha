@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic/test"
 
 # One bottleneck link: bandwidth, delay, a tail-drop queue and CE marks.
-class RaihaNextQUICTestBottleneckTest < Minitest::Test
+class RaihaQUICTestBottleneckTest < Minitest::Test
   Test = Raiha::QUIC::Test
 
   def datagram(size, ecn: :ect0, name: size.to_s)

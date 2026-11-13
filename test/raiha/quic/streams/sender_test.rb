@@ -4,7 +4,7 @@ require "raiha/quic"
 # The sending part of a stream: frames cut from what was lost and what has
 # not gone, FIN with the last data or alone, and the bytes let go as they
 # are acknowledged.
-class RaihaNextQUICStreamsSenderTest < Minitest::Test
+class RaihaQUICStreamsSenderTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   def sender(limit: 1000) = QUIC::Streams::Sender.new(stream_id: 4, limit:)

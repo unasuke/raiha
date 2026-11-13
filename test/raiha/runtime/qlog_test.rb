@@ -8,8 +8,8 @@ require "tmpdir"
 # The qlog of the runtime: a file for each connection of a client and a
 # server, written after the turn that traced it and closed once the
 # connection is over, and one budget for the traces of a worker.
-class RaihaNextRuntimeQlogTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeQlogTest < Minitest::Test
+  include RuntimeHTTP3
 
   # The records of a JSON Text Sequence.
   def records(path) = File.binread(path).split("\x1e").reject(&:empty?).map { JSON.parse(_1) }

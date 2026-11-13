@@ -4,7 +4,7 @@ require "raiha/tls"
 # Sealing a session ticket and opening it again: what it holds comes back,
 # and a ticket of another binding, key or version, a forged one and one of
 # a size out of range do not open, each for its own reason.
-class RaihaNextTLSTicketTest < Minitest::Test
+class RaihaTLSTicketTest < Minitest::Test
   TLS = Raiha::TLS
   Ticket = TLS::Ticket
   NOW = Time.at(1_800_000_000)

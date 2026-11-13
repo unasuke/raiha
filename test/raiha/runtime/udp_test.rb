@@ -7,7 +7,7 @@ require "raiha/runtime"
 # to, IPv4's told as IPv4's; a Transmit with a source goes from there;
 # the datagrams of a Transmit go in one with GSO, and one by one where it
 # is refused.
-class RaihaNextRuntimeUDPTest < Minitest::Test
+class RaihaRuntimeUDPTest < Minitest::Test
   UDP = Raiha::Runtime::UDP
   QUIC = Raiha::QUIC
 

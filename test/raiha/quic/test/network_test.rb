@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic/test"
 
 # Nodes on a virtual clock, with path models between them.
-class RaihaNextQUICTestNetworkTest < Minitest::Test
+class RaihaQUICTestNetworkTest < Minitest::Test
   QUIC = Raiha::QUIC
   Test = QUIC::Test
 

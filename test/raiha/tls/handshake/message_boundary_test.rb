@@ -3,9 +3,9 @@ require "support/tls_pair"
 
 # Handshake messages split across inputs, several in one input, and the
 # size limits per message type, decided from the header alone.
-class RaihaNextTLSMessageBoundaryTest < Minitest::Test
+class RaihaTLSMessageBoundaryTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
 
   def server_flight

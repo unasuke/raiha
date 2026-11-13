@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSIANATest < Minitest::Test
+class RaihaTLSIANATest < Minitest::Test
   IANA = Raiha::TLS::IANA
 
   def test_cipher_suite_name

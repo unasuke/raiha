@@ -5,7 +5,7 @@ require "raiha/quic"
 # the sender was held back, 50 ms at least, the latest ten kept; nothing
 # while it was not. The times are binary fractions, so that the periods add
 # up exactly.
-class RaihaNextQUICRecoveryRateMeterTest < Minitest::Test
+class RaihaQUICRecoveryRateMeterTest < Minitest::Test
   RateMeter = Raiha::QUIC::Recovery::RateMeter
 
   def test_nothing_while_not_held_back

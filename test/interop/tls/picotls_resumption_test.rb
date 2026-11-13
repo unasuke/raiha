@@ -19,10 +19,10 @@ require "tmpdir"
 # and then its outer ClientHello carries a random PSK identity, which no
 # server without ECH can resume. `-S` has it offer psk_dhe_ke, the only
 # mode we take.
-class NextTLSPicotlsResumptionInteropTest < Minitest::Test
+class TLSPicotlsResumptionInteropTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
-  PKI = NextTestPKI
+  Pair = TLSPair
+  PKI = TestPKI
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   PICOTLS = File.join(TMP, "picotls", "cli")
@@ -74,7 +74,7 @@ class NextTLSPicotlsResumptionInteropTest < Minitest::Test
     config = Pair.client_config
     connection = TLS::TCP::Connection.client(config:, keyring: TLS::Keyring.client(config:), server_name: "localhost", now: Time.now,
       **options)
-    NextTCPDrive.new(TCPSocket.new("127.0.0.1", port), connection)
+    TCPDrive.new(TCPSocket.new("127.0.0.1", port), connection)
   end
 
   def test_client_resumes_with_0rtt
@@ -104,7 +104,7 @@ class NextTLSPicotlsResumptionInteropTest < Minitest::Test
     results = Thread::Queue.new
     thread = Thread.new do
       count.times do
-        drive = NextTCPDrive.new(listener.accept, TLS::TCP::Connection.server(config:, keyring:, now: Time.now, anti_replay:))
+        drive = TCPDrive.new(listener.accept, TLS::TCP::Connection.server(config:, keyring:, now: Time.now, anti_replay:))
         drive.until { drive.connection.handshake_complete? }
         early = drive.connection.read_early_data(65_536)
         data = drive.read_all(timeout: 10)

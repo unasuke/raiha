@@ -4,11 +4,11 @@ require "support/tls_pair"
 # The client's checks of the state machine's table, row by row: the row's
 # violation gives its alert and reason, and with the row before it violated
 # too, the earlier row wins.
-class RaihaNextTLSClientChecksTest < Minitest::Test
+class RaihaTLSClientChecksTest < Minitest::Test
   TLS = Raiha::TLS
   Extension = TLS::Extension
   Handshake = TLS::Handshake
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
   REGISTRY = Extension::Registry::BUILTIN
 
@@ -225,7 +225,7 @@ class RaihaNextTLSClientChecksTest < Minitest::Test
     }
   end
 
-  PKI_OTHER = NextTestPKI.ca(name: "Unrelated CA", key: NextTestPKI.key(:unrelated_ca))
+  PKI_OTHER = TestPKI.ca(name: "Unrelated CA", key: TestPKI.key(:unrelated_ca))
 
   # RFC 9846 "Certificate": chains longer than the Config allows are not
   # walked.

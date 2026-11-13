@@ -7,8 +7,8 @@ require "stringio"
 # last time: their times, directions, sizes and SHA-256 are kept under
 # golden/. A change to what goes on the wire shows here first; when it is
 # meant, run with RAIHA_GOLDEN=update to write the files again.
-class RaihaNextQUICTestGoldenTest < Minitest::Test
-  include NextQUICGolden
+class RaihaQUICTestGoldenTest < Minitest::Test
+  include QUICGolden
 
   DIRECTORY = File.join(__dir__, "golden")
 

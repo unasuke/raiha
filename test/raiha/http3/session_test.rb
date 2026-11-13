@@ -5,8 +5,8 @@ require "raiha/http3/session"
 
 # An HTTP/3 session: the QUIC session and the server's SETTINGS, as plain
 # values and back.
-class RaihaNextHTTP3SessionTest < Minitest::Test
-  include NextQUICPair
+class RaihaHTTP3SessionTest < Minitest::Test
+  include QUICPair
 
   HTTP3 = Raiha::HTTP3
 

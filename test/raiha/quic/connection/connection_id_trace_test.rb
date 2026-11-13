@@ -5,8 +5,8 @@ require "support/quic_recovery"
 # The tracer hears each change of the connection IDs in use (qlog
 # `connection_id_updated`): the peer's this end sends with, and this end's
 # the peer sends with.
-class RaihaNextQUICConnectionConnectionIDTraceTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionConnectionIDTraceTest < Minitest::Test
+  include QUICPair
 
   def updates(tracer) = tracer.of(:connection_id_updated).map { _1.values_at(:owner, :old, :new) }
 
@@ -14,8 +14,8 @@ class RaihaNextQUICConnectionConnectionIDTraceTest < Minitest::Test
   # takes the client's next one when Retire Prior To retires the first, and
   # hears the client send with another of the server's IDs.
   def test_the_ids_in_use
-    client_tracer = NextQUICRecovery::RecordingTracer.new(frames: false)
-    server_tracer = NextQUICRecovery::RecordingTracer.new(frames: false)
+    client_tracer = QUICRecovery::RecordingTracer.new(frames: false)
+    server_tracer = QUICRecovery::RecordingTracer.new(frames: false)
     keylog = Keylog.new
     client = client_connection(keylog:, tracer: client_tracer, source_connection_id: "c".b * 8)
     server = server_connection(source_connection_id: "s".b * 8, tracer: server_tracer)

@@ -4,7 +4,7 @@ require "raiha/quic"
 # The search of a path for the largest datagram it carries: the largest
 # first, then halfway between, one probe at a time, a size given up on
 # after three losses in a row.
-class RaihaNextQUICMTUSearchTest < Minitest::Test
+class RaihaQUICMTUSearchTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   def search(from: 1200, up_to: 1472) = QUIC::MTUSearch.new(from:, up_to:)

@@ -12,7 +12,7 @@ require "raiha/quic"
 # elsewhere. A run that breaks one is kept as a case of its own, with its
 # seed. RAIHA_FLOW_SEEDS (default 30) and RAIHA_FLOW_STEPS (default 300)
 # change how many runs and how long.
-class RaihaNextQUICStreamsInvariantsTest < Minitest::Test
+class RaihaQUICStreamsInvariantsTest < Minitest::Test
   QUIC = Raiha::QUIC
   SEEDS = Integer(ENV.fetch("RAIHA_FLOW_SEEDS", "30"))
   STEPS = Integer(ENV.fetch("RAIHA_FLOW_STEPS", "300"))

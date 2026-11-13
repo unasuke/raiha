@@ -8,7 +8,7 @@ require "raiha/tls"
 # accepts and rejects the same lengths. A length that does not fit the
 # length prefix, or would make the whole message longer than 2^24-1, cannot
 # be built and is skipped.
-class RaihaNextTLSHandshakeVectorBoundsTest < Minitest::Test
+class RaihaTLSHandshakeVectorBoundsTest < Minitest::Test
   TLS = Raiha::TLS
   Handshake = TLS::Handshake
   Extension = TLS::Extension

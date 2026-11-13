@@ -8,8 +8,8 @@ require "stringio"
 # header section and the trailers together, and refuses past it, 431 for
 # a request it has not given the application, H3_EXCESSIVE_LOAD for one it
 # has. Each runs again with the qlog written, which stays small.
-class RaihaNextHTTP3HeaderAccordionsTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3HeaderAccordionsTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

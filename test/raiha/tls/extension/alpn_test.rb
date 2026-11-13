@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionAlpnTest < Minitest::Test
+class RaihaTLSExtensionAlpnTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   Alpn = Raiha::TLS::Extension::Alpn
 

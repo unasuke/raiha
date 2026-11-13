@@ -11,10 +11,10 @@ require "tmpdir"
 # ways: a client against `openssl s_server`, a server against
 # `openssl s_client`. OpenSSL is a RFC 8446 implementation, so these also
 # check that what RFC 8446 allowed and RFC 9846 does not is taken.
-class NextTLSOpenSSLInteropTest < Minitest::Test
+class TLSOpenSSLInteropTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
-  PKI = NextTestPKI
+  Pair = TLSPair
+  PKI = TestPKI
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 

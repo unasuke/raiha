@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # What waits for the transport: given a stream at a time, kept when the
 # transport takes less, and held until the stream is writable again.
-class RaihaNextHTTP3ConnectionSendTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionSendTest < Minitest::Test
+  include HTTP3Pair
 
   def started
     client = HTTP3::Connection.client

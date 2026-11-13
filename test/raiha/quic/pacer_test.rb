@@ -5,7 +5,7 @@ require "raiha/quic"
 # datagram at a time as the rate fills it, the wait rounded up to the
 # granularity, and no saving up past one burst, a burst being what the
 # rate gives in one granularity when that is more than the capacity.
-class RaihaNextQUICPacerTest < Minitest::Test
+class RaihaQUICPacerTest < Minitest::Test
   Pacer = Raiha::QUIC::Pacer
   MDS = 1200
   # 1,200 bytes a millisecond.

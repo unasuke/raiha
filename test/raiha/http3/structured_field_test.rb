@@ -3,7 +3,7 @@ require "raiha/http3"
 
 # Dictionaries of Structured Field Values (RFC 8941), as Priority carries
 # them.
-class RaihaNextHTTP3StructuredFieldTest < Minitest::Test
+class RaihaHTTP3StructuredFieldTest < Minitest::Test
   StructuredField = Raiha::HTTP3::StructuredField
 
   def test_the_priority_of_rfc_9218

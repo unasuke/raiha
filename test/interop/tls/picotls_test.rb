@@ -11,10 +11,10 @@ require "tmpdir"
 # tmp/picotls by `rake interop:build:picotls`), both ways. picotls's `-u`
 # asks for a KeyUpdate as soon as the handshake completes, and sends it with
 # its first data.
-class NextTLSPicotlsInteropTest < Minitest::Test
+class TLSPicotlsInteropTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
-  PKI = NextTestPKI
+  Pair = TLSPair
+  PKI = TestPKI
   # tmp/ is not in git, so a fresh checkout has none.
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   PICOTLS = File.join(TMP, "picotls", "cli")

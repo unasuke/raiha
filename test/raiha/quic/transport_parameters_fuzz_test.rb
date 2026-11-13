@@ -10,7 +10,7 @@ require "raiha/quic"
 # known IDs, and the encoding of a client's and a server's parameters with
 # one byte changed, from a random sender. RAIHA_FUZZ_ITERATIONS (default
 # 10000) and RAIHA_FUZZ_SEED change the number of inputs and the seed.
-class RaihaNextQUICTransportParametersFuzzTest < Minitest::Test
+class RaihaQUICTransportParametersFuzzTest < Minitest::Test
   QUIC = Raiha::QUIC
   TP = QUIC::TransportParameters
 

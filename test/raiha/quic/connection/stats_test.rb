@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # What `Connection#stats` gives: the path's RTT and window, the packets and
 # bytes each way, the handshake's time, and flow control's numbers.
-class RaihaNextQUICConnectionStatsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStatsTest < Minitest::Test
+  include QUICPair
 
   def exchange(client, server, now:, rounds: 10)
     rounds.times do

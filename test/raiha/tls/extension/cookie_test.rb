@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSExtensionCookieTest < Minitest::Test
+class RaihaTLSExtensionCookieTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   Cookie = Raiha::TLS::Extension::Cookie
 

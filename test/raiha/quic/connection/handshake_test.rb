@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # Two connections back to back complete the handshake with no socket,
 # Fiber or real time.
-class RaihaNextQUICConnectionHandshakeTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionHandshakeTest < Minitest::Test
+  include QUICPair
 
   def test_two_connections_complete_the_handshake
     client = client_connection

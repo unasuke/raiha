@@ -4,8 +4,8 @@ require "support/quic_recovery"
 # Loss recovery's design, "Malformed ACKs": what a peer may send to break
 # loss recovery or wear the endpoint out, each rejected or held within its
 # bound.
-class RaihaNextQUICRecoveryMalformedAckTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryMalformedAckTest < Minitest::Test
+  include QUICRecovery
 
   ECNCounts = QUIC::Wire::Frame::Ack::ECNCounts
 

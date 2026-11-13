@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # RFC 9204 "String Literals": the string of RFC 7541, which may start
 # mid-byte after an N-bit prefix.
-class RaihaNextQPACKStringLiteralTest < Minitest::Test
+class RaihaQPACKStringLiteralTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   # RFC 7541 Appendix C.4.1 and C.3.1.

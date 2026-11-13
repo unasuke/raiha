@@ -6,8 +6,8 @@ require "async"
 # interface: a Session for the block in a fiber of each connection, the
 # connection closed when the block is over or raises, and no more
 # connections than it takes at a time.
-class RaihaNextRuntimeServerTest < Minitest::Test
-  include NextRuntimeOwner
+class RaihaRuntimeServerTest < Minitest::Test
+  include RuntimeOwner
 
   def connect(port, **options, &)
     tls = client_config
@@ -160,7 +160,7 @@ class RaihaNextRuntimeServerTest < Minitest::Test
     Sync do
       serving(method(:echoes)) do |port, server|
         connect(port) do |first|
-          other = NextTLSPair.server_config(profile: TLS::Profile::QUIC, alpn: ["h3"], registry: REGISTRY)
+          other = TLSPair.server_config(profile: TLS::Profile::QUIC, alpn: ["h3"], registry: REGISTRY)
           server.reconfigure(tls_config: other, keyring: server_keyring(config: other))
           error = assert_raises(Runtime::ConnectError) { connect(port) { flunk } }
           assert_equal [QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:no_application_protocol))],

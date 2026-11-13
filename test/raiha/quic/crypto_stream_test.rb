@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 # RFC 9000 "CRYPTO Frames" and "Cryptographic Message Buffering".
-class RaihaNextQUICCryptoStreamTest < Minitest::Test
+class RaihaQUICCryptoStreamTest < Minitest::Test
   QUIC = Raiha::QUIC
   Duty = QUIC::Recovery::Duty
 

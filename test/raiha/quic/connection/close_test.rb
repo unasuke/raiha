@@ -2,8 +2,8 @@ require "test_helper"
 require "support/quic_pair"
 
 # RFC 9000 "Connection Termination".
-class RaihaNextQUICConnectionCloseTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionCloseTest < Minitest::Test
+  include QUICPair
 
   def events(connection) = [].tap { |events| connection.each_event { events << _1 } }
 

@@ -6,8 +6,8 @@ require "support/http3_udp"
 # into tmp/h3spec), which opens a connection for each of its cases and
 # sends what QUIC and HTTP/3 must refuse, checking that the server does.
 # Every case passes.
-class NextHTTP3H3specTest < Minitest::Test
-  include NextHTTP3UDP
+class HTTP3H3specTest < Minitest::Test
+  include HTTP3UDP
 
   H3SPEC = File.expand_path("../../../tmp/h3spec/h3spec", __dir__)
 

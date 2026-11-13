@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/http3"
 
-class RaihaNextHTTP3SettingsTest < Minitest::Test
+class RaihaHTTP3SettingsTest < Minitest::Test
   HTTP3 = Raiha::HTTP3
   Settings = HTTP3::Settings
 

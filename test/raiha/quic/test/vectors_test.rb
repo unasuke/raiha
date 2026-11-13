@@ -4,7 +4,7 @@ require "raiha/quic/test"
 # The RFC 9001 appendix A values as taken from the text, checked against
 # each other and against the TLS layer's key schedule, before any QUIC code
 # uses them.
-class RaihaNextQUICTestVectorsTest < Minitest::Test
+class RaihaQUICTestVectorsTest < Minitest::Test
   V = Raiha::QUIC::Test::Vectors
   KeySchedule = Raiha::TLS::KeySchedule
 

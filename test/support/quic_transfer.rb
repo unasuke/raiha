@@ -5,8 +5,8 @@ require "raiha/quic/test"
 # wrapped so that the application's step runs whenever the connection may
 # have something new for it, after a datagram or a timer and before
 # sending, so that what it reads and writes goes at once.
-module NextQUICTransfer
-  include NextQUICPair
+module QUICTransfer
+  include QUICPair
 
   Test = QUIC::Test
 
@@ -51,7 +51,7 @@ module NextQUICTransfer
     net = Test::Network.new(seed:)
     client = client_connection(config: client_config, tracer: client_tracer, issuer: client_issuer)
     tls_config = server_config_for_transfer
-    keyring = TLS::Keyring.server(config: tls_config, identities: [NextTLSPair.server_identity], random: Random.new(2))
+    keyring = TLS::Keyring.server(config: tls_config, identities: [TLSPair.server_identity], random: Random.new(2))
     endpoint = QUIC::Endpoint.server(config: server_config, random: Random.new(seed), time: NOW, now: 0.0)
     server = Test::Server.new(endpoint, tls_config:, keyring:, tracer: server_tracer)
     client_node = net.add(App.new(client, wake: client_wake) { |now|

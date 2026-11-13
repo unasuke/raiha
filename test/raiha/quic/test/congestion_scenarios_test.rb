@@ -8,10 +8,10 @@ require "support/quic_recovery"
 # trip, and CUBIC's window does not jump after the sender has been idle.
 # The client's windows are wide enough that flow control never holds the
 # server back.
-class RaihaNextQUICTestCongestionScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestCongestionScenariosTest < Minitest::Test
+  include QUICTransfer
 
-  RecordingTracer = NextQUICRecovery::RecordingTracer
+  RecordingTracer = QUICRecovery::RecordingTracer
 
   WIDE = QUIC::Config.new(initial_max_data: 16 << 20, initial_max_stream_data_bidi_local: 16 << 20,
     max_stream_receive_window: 16 << 20, max_receive_window: 24 << 20)

@@ -2,9 +2,9 @@ require "support/tls_pair"
 
 # Two TCP::Connections of the next release of raiha, joined without a
 # socket: what one outputs, the other receives.
-module NextTCPPair
+module TCPPair
   TLS = Raiha::TLS
-  TLSPair = NextTLSPair
+  TLSPair = ::TLSPair
   NOW = TLSPair::NOW
 
   Pair = Data.define(:client, :server)

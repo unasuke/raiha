@@ -11,10 +11,10 @@ require "support/quic_recovery_reference"
 # within one space (once Recovery establishes it the reference takes its
 # minimum RTT again too), the lost packets kept, which come back as
 # acknowledged after all, and ECN, which Appendix A has not.
-class RaihaNextQUICRecoveryDifferentialTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryDifferentialTest < Minitest::Test
+  include QUICRecovery
 
-  Reference = NextQUICRecoveryReference
+  Reference = QUICRecoveryReference
   PACKET_TYPES = { initial: :initial, handshake: :handshake, application_data: :one_rtt }.freeze
   # The spaces sent in at each stage of the handshake.
   SPACES = {

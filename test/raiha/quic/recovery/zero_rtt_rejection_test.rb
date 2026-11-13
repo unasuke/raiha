@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9001 "Rejecting 0-RTT", as loss recovery's design, "On a rejected
 # 0-RTT", applies it.
-class RaihaNextQUICRecoveryZeroRttRejectionTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryZeroRttRejectionTest < Minitest::Test
+  include QUICRecovery
 
   def test_the_0rtt_packets_go
     recovery = recovery(role: :client)

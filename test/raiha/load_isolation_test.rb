@@ -11,7 +11,7 @@ require "rbconfig"
 # A fully qualified reference such as `Raiha::QUIC` written inside the
 # TLS layer is not caught here unless the file is also required; that is left
 # to review.
-class RaihaNextLoadIsolationTest < Minitest::Test
+class RaihaLoadIsolationTest < Minitest::Test
   LIB = File.expand_path("../../lib", __dir__)
 
   LAYERS = %i[TLS QUIC HTTP3 Runtime].freeze

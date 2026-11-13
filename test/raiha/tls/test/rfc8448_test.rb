@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls/test"
 
-class RaihaNextTLSTestRFC8448Test < Minitest::Test
+class RaihaTLSTestRFC8448Test < Minitest::Test
   RFC8448 = Raiha::TLS::Test::RFC8448
 
   def test_not_loaded_by_the_tls_entry_point

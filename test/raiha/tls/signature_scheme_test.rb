@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSSignatureSchemeTest < Minitest::Test
+class RaihaTLSSignatureSchemeTest < Minitest::Test
   SignatureScheme = Raiha::TLS::SignatureScheme
 
   def test_rfc9846_schemes

@@ -7,8 +7,8 @@ require "stringio"
 # of the runtime: a GET read whole, an informational response passed over,
 # trailer fields, a cancelled request raised where it waits, and requests
 # in fibers of their own over one connection.
-class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
-  include NextRuntimeHTTP3
+class RaihaRuntimeHTTP3ClientTest < Minitest::Test
+  include RuntimeHTTP3
 
   BODIES = {
     "/hello" => "hello world".b, "/last" => "last words".b, "/early" => "after a hint".b, "/trailers" => "checked".b,
@@ -126,7 +126,7 @@ class RaihaNextRuntimeHTTP3ClientTest < Minitest::Test
   def test_another_alpn
     Sync do
       server = server_owner
-      tls = NextTLSPair.client_config(profile: TLS::Profile::QUIC, alpn: ["h3", *ALPN], registry: REGISTRY)
+      tls = TLSPair.client_config(profile: TLS::Profile::QUIC, alpn: ["h3", *ALPN], registry: REGISTRY)
       error = Runtime::Client.connect("127.0.0.1", server.port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
         server_name: "localhost") do |session|
         assert_equal ALPN.first, session.handshake&.alpn

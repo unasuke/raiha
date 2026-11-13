@@ -3,7 +3,7 @@ require "raiha/quic"
 require "objspace"
 
 # The packets a connection keeps until their keys come, and their bounds.
-class RaihaNextQUICKeptPacketsTest < Minitest::Test
+class RaihaQUICKeptPacketsTest < Minitest::Test
   QUIC = Raiha::QUIC
   FROM = ["192.0.2.1", 50_000].freeze
 

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSHandshakeCertificateRequestTest < Minitest::Test
+class RaihaTLSHandshakeCertificateRequestTest < Minitest::Test
   TLS = Raiha::TLS
   Extension = TLS::Extension
   REGISTRY = Extension::Registry::BUILTIN

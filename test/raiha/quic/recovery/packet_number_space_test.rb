@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICRecoveryPacketNumberSpaceTest < Minitest::Test
+class RaihaQUICRecoveryPacketNumberSpaceTest < Minitest::Test
   QUIC = Raiha::QUIC
   Space = QUIC::Recovery::PacketNumberSpace
 

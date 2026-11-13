@@ -4,7 +4,7 @@ require "raiha/quic"
 # The token of a NEW_TOKEN frame: valid for the IP address and version it
 # was made for until it expires, whatever the port, each one of its own,
 # and nothing of the connection it came on in the clear.
-class RaihaNextQUICNewTokenTest < Minitest::Test
+class RaihaQUICNewTokenTest < Minitest::Test
   NewToken = Raiha::QUIC::NewToken
   KEY = NewToken.key("\x01".b * 32)
   NOW = Time.at(1_800_000_000)

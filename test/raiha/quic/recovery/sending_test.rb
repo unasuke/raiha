@@ -1,8 +1,8 @@
 require "test_helper"
 require "support/quic_recovery"
 
-class RaihaNextQUICRecoverySendingTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoverySendingTest < Minitest::Test
+  include QUICRecovery
 
   # Loss recovery's design, "Tracer": the constants, once at the start.
   def test_recovery_parameters_are_traced

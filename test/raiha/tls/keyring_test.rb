@@ -2,10 +2,10 @@ require "test_helper"
 require "support/test_pki"
 require "raiha/tls/test"
 
-class RaihaNextTLSKeyringTest < Minitest::Test
+class RaihaTLSKeyringTest < Minitest::Test
   TLS = Raiha::TLS
   Keyring = TLS::Keyring
-  PKI = NextTestPKI
+  PKI = TestPKI
 
   def ca = @ca ||= PKI.ca
 
@@ -102,10 +102,10 @@ class RaihaNextTLSKeyringTest < Minitest::Test
 end
 
 # Choosing an identity to answer with (RFC 9846 "Certificate Selection").
-class RaihaNextTLSKeyringSelectionTest < Minitest::Test
+class RaihaTLSKeyringSelectionTest < Minitest::Test
   TLS = Raiha::TLS
   Keyring = TLS::Keyring
-  PKI = NextTestPKI
+  PKI = TestPKI
 
   def ca = @ca ||= PKI.ca
 

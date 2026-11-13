@@ -4,8 +4,8 @@ require "support/http3_pair"
 # HTTP Datagrams (RFC 9297 "HTTP/3 Datagrams"): a Quarter Stream ID and a
 # payload, only for requests that have a use for them, only once both
 # ends took them.
-class RaihaNextHTTP3ConnectionDatagramTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionDatagramTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

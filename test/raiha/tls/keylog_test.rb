@@ -4,11 +4,11 @@ require "support/tls_pair"
 require "stringio"
 require "tmpdir"
 
-class RaihaNextTLSKeylogTest < Minitest::Test
+class RaihaTLSKeylogTest < Minitest::Test
   TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448
   S = RFC8448::Simple1RTT
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Time.utc(2018, 1, 1)
 
   def hex(bytes) = bytes.unpack1("H*")

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls/test"
 
-class RaihaNextTLSTestFixedRandomTest < Minitest::Test
+class RaihaTLSTestFixedRandomTest < Minitest::Test
   FixedRandom = Raiha::TLS::Test::FixedRandom
 
   def test_hands_out_the_chunks_in_order

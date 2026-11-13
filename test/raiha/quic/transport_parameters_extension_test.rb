@@ -4,7 +4,7 @@ require "raiha/tls/test"
 
 # quic_transport_parameters registered in the TLS layer's Extension::Registry
 # as QUIC's TransportParameters::Extension.
-class RaihaNextQUICTransportParametersExtensionTest < Minitest::Test
+class RaihaQUICTransportParametersExtensionTest < Minitest::Test
   TLS = Raiha::TLS
   QUIC = Raiha::QUIC
   RFC8448 = TLS::Test::RFC8448::Simple1RTT

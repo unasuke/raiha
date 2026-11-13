@@ -5,8 +5,8 @@ require "support/quic_pair"
 # address: the probe is answered with a probe on that path, with an ID of
 # the client's no path sent with; the challenge goes again, twice as late
 # each time, until it is answered or the path fails.
-class RaihaNextQUICConnectionPathValidationTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionPathValidationTest < Minitest::Test
+  include QUICPair
 
   NEW = ["198.51.100.7", 61_000].freeze
 

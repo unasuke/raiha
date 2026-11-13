@@ -4,7 +4,7 @@ require "raiha/tls/test"
 # Appendix B 4: an extension registered from outside, shaped like QUIC's
 # quic_transport_parameters, is parsed and encoded exactly like a built-in
 # one, with no special case.
-class RaihaNextTLSHandshakeRegisteredExtensionTest < Minitest::Test
+class RaihaTLSHandshakeRegisteredExtensionTest < Minitest::Test
   TLS = Raiha::TLS
   Extension = TLS::Extension
   RFC8448 = TLS::Test::RFC8448::Simple1RTT

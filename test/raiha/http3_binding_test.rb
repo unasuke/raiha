@@ -6,8 +6,8 @@ require "support/http3_side"
 # response, HTTP Datagrams and a stream left unread on a Test::Network; a
 # reset that comes with the stream's data; and a peer that does not allow
 # HTTP/3 its streams.
-class RaihaNextHTTP3BindingTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaHTTP3BindingTest < Minitest::Test
+  include QUICTransfer
 
   HTTP3 = Raiha::HTTP3
   GET = [[":method", "GET"], [":scheme", "https"], [":authority", "localhost"], [":path", "/"]].freeze
@@ -21,10 +21,10 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
   # the Sides by :client and :server.
   def h3_network(on_server_event: nil, settings: HTTP3::Settings.new, **options)
     sides = {}
-    client_step = ->(connection, now) { (sides[:client] ||= NextHTTP3Side.new(connection, HTTP3::Connection.client(settings:))).turn(now) }
+    client_step = ->(connection, now) { (sides[:client] ||= HTTP3Side.new(connection, HTTP3::Connection.client(settings:))).turn(now) }
     server_step = lambda do |endpoint, now|
       connection = endpoint.connections.first or next
-      sides[:server] ||= NextHTTP3Side.new(connection, HTTP3::Connection.server(settings: settings.with(enable_connect_protocol: true)))
+      sides[:server] ||= HTTP3Side.new(connection, HTTP3::Connection.server(settings: settings.with(enable_connect_protocol: true)))
       sides[:server].turn(now, on_server_event)
     end
     net, client, = transfer_network(client_step:, server_step:, **options)
@@ -127,8 +127,8 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     client_quic = client_connection
     server_quic = server_connection
     now = handshake(client_quic, server_quic)
-    client = NextHTTP3Side.new(client_quic, HTTP3::Connection.client)
-    server = NextHTTP3Side.new(server_quic, HTTP3::Connection.server)
+    client = HTTP3Side.new(client_quic, HTTP3::Connection.client)
+    server = HTTP3Side.new(server_quic, HTTP3::Connection.server)
     stream_id = client_quic.open_stream
     client.turn(now) { client.http3.send_request(stream_id, POST) }
     deliver(client_quic, server_quic, now)
@@ -149,8 +149,8 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     client_quic = client_connection
     server_quic = server_connection
     now = handshake(client_quic, server_quic)
-    client = NextHTTP3Side.new(client_quic, HTTP3::Connection.client)
-    server = NextHTTP3Side.new(server_quic, HTTP3::Connection.server)
+    client = HTTP3Side.new(client_quic, HTTP3::Connection.client)
+    server = HTTP3Side.new(server_quic, HTTP3::Connection.server)
     stream_id = client_quic.open_stream
     client.turn(now) { client.http3.send_request(stream_id, GET, fin: true) }
     deliver(client_quic, server_quic, now)

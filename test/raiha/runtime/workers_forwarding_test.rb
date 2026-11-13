@@ -11,9 +11,9 @@ require "async"
 # What the client sent comes back whole either way. The client is a bare
 # Connection with an issuer of its own, as an Endpoint's would be, so that
 # the server has a connection ID to answer a new port with.
-class RaihaNextRuntimeWorkersForwardingTest < Minitest::Test
-  include NextRuntimeOwner
-  include NextQUICUDP
+class RaihaRuntimeWorkersForwardingTest < Minitest::Test
+  include RuntimeOwner
+  include QUICUDP
 
   # How many times the client moves to another port at most: each move
   # lands on the other worker about half of the time.
@@ -31,7 +31,7 @@ class RaihaNextRuntimeWorkersForwardingTest < Minitest::Test
   def serving(count:)
     tls = server_config
     workers = Runtime::Workers.new(count:, config: QUIC::Config.new, host: "127.0.0.1", port: 0,
-      args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
+      args: [tls, Ractor.make_shareable(TLSPair.server_identity)]) do |worker, tls, identity|
       keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       Sync do
         Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|

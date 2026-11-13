@@ -9,8 +9,8 @@ require "support/http3_pair"
 # responses with a byte changed, cut short or lengthened.
 # RAIHA_FUZZ_ITERATIONS (default 300) and RAIHA_FUZZ_SEED change the
 # number of inputs to each target and the seed.
-class RaihaNextHTTP3FuzzTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3FuzzTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

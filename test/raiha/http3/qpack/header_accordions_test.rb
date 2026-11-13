@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # Header Accordions (FoxIO, 2026): field sections that make a decoder
 # expand a few bytes on the wire into far more memory. The decoder stops
 # at the budget, 64 KiB by default, and expands no more than that.
-class RaihaNextQPACKHeaderAccordionsTest < Minitest::Test
+class RaihaQPACKHeaderAccordionsTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   MIB = 1 << 20
 

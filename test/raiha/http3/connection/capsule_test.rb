@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # The Capsule Protocol on Extended CONNECT (RFC 9297, RFC 9220): the data
 # stream carries Capsules, DATAGRAM ones being HTTP Datagrams.
-class RaihaNextHTTP3ConnectionCapsuleTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionCapsuleTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

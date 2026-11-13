@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # A field section that refers to entries yet to come waits for them (RFC
 # 9204 "Blocked Decoding"), as many at once as SETTINGS_QPACK_BLOCKED_STREAMS
 # allows.
-class RaihaNextQPACKDecoderBlockingTest < Minitest::Test
+class RaihaQPACKDecoderBlockingTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   DECOMPRESSION_FAILED = QPACK::ErrorCode::DECOMPRESSION_FAILED
 

@@ -7,8 +7,8 @@ require "async"
 # loopback interface in fibers of the scheduler: a client and a server each
 # on one complete a handshake, and the timers of the core run with no
 # datagram to wake them.
-class RaihaNextRuntimeDriverTest < Minitest::Test
-  include NextQUICTLS
+class RaihaRuntimeDriverTest < Minitest::Test
+  include QUICTLS
 
   Runtime = Raiha::Runtime
 

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSServerNameTest < Minitest::Test
+class RaihaTLSServerNameTest < Minitest::Test
   ServerName = Raiha::TLS::ServerName
 
   def test_client_normalizes_dns_names

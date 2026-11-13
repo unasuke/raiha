@@ -11,7 +11,7 @@ require "raiha/quic/test"
 # Negotiation packet, alone or coalesced, with one byte changed.
 # RAIHA_FUZZ_ITERATIONS (default 10000) and RAIHA_FUZZ_SEED change the
 # number of inputs and the seed.
-class RaihaNextQUICWirePacketFuzzTest < Minitest::Test
+class RaihaQUICWirePacketFuzzTest < Minitest::Test
   QUIC = Raiha::QUIC
   Wire = QUIC::Wire
   V = QUIC::Test::Vectors

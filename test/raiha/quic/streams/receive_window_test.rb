@@ -3,7 +3,7 @@ require "raiha/quic"
 
 # The receive window of a stream or of the connection: when credit goes,
 # what it is, and how the window grows.
-class RaihaNextQUICStreamsReceiveWindowTest < Minitest::Test
+class RaihaQUICStreamsReceiveWindowTest < Minitest::Test
   QUIC = Raiha::QUIC
   ReceiveWindow = QUIC::Streams::ReceiveWindow
   STREAM = 0x0a

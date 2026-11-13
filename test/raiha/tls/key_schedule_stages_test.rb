@@ -3,7 +3,7 @@ require "raiha/tls/test"
 
 # A KeySchedule instance walking RFC 8448 through its stages, and the order
 # it enforces.
-class RaihaNextTLSKeyScheduleStagesTest < Minitest::Test
+class RaihaTLSKeyScheduleStagesTest < Minitest::Test
   TLS = Raiha::TLS
   KeySchedule = TLS::KeySchedule
   S = TLS::Test::RFC8448::Simple1RTT

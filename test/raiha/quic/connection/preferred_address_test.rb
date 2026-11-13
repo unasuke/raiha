@@ -4,8 +4,8 @@ require "support/quic_pair"
 # RFC 9000 "Migration to a Preferred Address", at the server: what comes to
 # the address it offered moves it there only once it has validated the
 # path itself.
-class RaihaNextQUICConnectionPreferredAddressTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionPreferredAddressTest < Minitest::Test
+  include QUICPair
 
   PREFERRED = ["192.0.2.2", 4434].freeze
   ELSEWHERE = ["198.51.100.7", 61_000].freeze

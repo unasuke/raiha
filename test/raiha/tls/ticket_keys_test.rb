@@ -3,7 +3,7 @@ require "raiha/tls"
 
 # The keys of session tickets: where each comes from, pinned against HKDF
 # computed here by hand, and which a static set seals and opens with.
-class RaihaNextTLSTicketKeysTest < Minitest::Test
+class RaihaTLSTicketKeysTest < Minitest::Test
   TicketKeys = Raiha::TLS::TicketKeys
   SEED = (1..32).to_a.pack("C*")
   OTHER = (33..64).to_a.pack("C*")
@@ -54,7 +54,7 @@ end
 # Keys of a ratchet: every worker computes the same ones, seals with the
 # current epoch's until past the horizon, and opens a ticket only within the
 # epochs a ticket can live, one ahead for clocks that differ.
-class RaihaNextTLSTicketKeysRatchetTest < Minitest::Test
+class RaihaTLSTicketKeysRatchetTest < Minitest::Test
   TicketKeys = Raiha::TLS::TicketKeys
   BASE = (1..32).to_a.pack("C*")
   ORIGIN = Time.at(1_700_000_000)

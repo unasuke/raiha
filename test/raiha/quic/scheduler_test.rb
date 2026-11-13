@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICSchedulerTest < Minitest::Test
+class RaihaQUICSchedulerTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   # The turns `scheduler` gives, `count` of them.

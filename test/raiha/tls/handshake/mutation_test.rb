@@ -9,9 +9,9 @@ require "support/tls_oracle"
 # close with the alert the rules below expect, never raise, and a
 # handshake that still completes must satisfy the oracle. Closing some
 # other way would mean an unchecked path was taken.
-class RaihaNextTLSMutationTest < Minitest::Test
+class RaihaTLSMutationTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
 
   Mutation = Data.define(:name, :inputs, :expected)
@@ -118,7 +118,7 @@ class RaihaNextTLSMutationTest < Minitest::Test
       [{ identities: [Pair.client_identity] }, { config: Pair.server_config(client_auth: :required) }, :required],
       [{}, { config: Pair.server_config(client_auth: :optional) }, :optional]
     ].each do |client_options, server_options, client_auth|
-      oracle = NextTLSOracle.new
+      oracle = TLSOracle.new
       client = Pair.client(**client_options, tracer: oracle.client)
       pair = Pair.run(client, { **server_options, tracer: oracle.server })
       assert pair.client.complete?
@@ -130,7 +130,7 @@ class RaihaNextTLSMutationTest < Minitest::Test
   # The oracle itself: a completed handshake without the traces of its
   # checks is reported.
   def test_oracle_reports_missing_checks
-    oracle = NextTLSOracle.new
+    oracle = TLSOracle.new
     pair = Pair.run(Pair.client, {})
     found = oracle.violations(client: pair.client, server: pair.server)
     assert_includes found, "the client completed without verifying the server's certificate and signature"

@@ -4,8 +4,8 @@ require "support/quic_pair"
 # RFC 9000 "Path Validation Responses": a PATH_CHALLENGE is answered with
 # a PATH_RESPONSE of its data, once, in a datagram of its own, past the
 # congestion window; only the last challenge waits for its answer.
-class RaihaNextQUICConnectionPathChallengeTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionPathChallengeTest < Minitest::Test
+  include QUICPair
 
   # A server done with the handshake, its connection ID "s" * 8, the
   # client's key log, and the time.

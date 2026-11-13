@@ -4,8 +4,8 @@ require "support/quic_pair"
 # RFC 9000 "Sending ACK Frames": an admitted offer acknowledges the
 # client's Initial packets while the ClientHello is not whole, from the
 # server's connection ID, which the client sends to from then.
-class RaihaNextQUICEndpointEarlyAckTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICEndpointEarlyAckTest < Minitest::Test
+  include QUICPair
 
   SCID = "c".b * 8
 

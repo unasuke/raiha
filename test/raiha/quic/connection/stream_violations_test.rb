@@ -6,8 +6,8 @@ require "support/quic_pair"
 # RFC 9000 gives it, a frame that breaks two with the code of the check
 # made first, and data sent a byte at a time with a hole after each with
 # INTERNAL_ERROR, once the holes are more than the limit.
-class RaihaNextQUICConnectionStreamViolationsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamViolationsTest < Minitest::Test
+  include QUICPair
 
   Frame = QUIC::Wire::Frame
   ErrorCode = QUIC::ErrorCode

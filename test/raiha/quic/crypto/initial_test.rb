@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 require "raiha/quic/test"
 
-class RaihaNextQUICCryptoInitialTest < Minitest::Test
+class RaihaQUICCryptoInitialTest < Minitest::Test
   Initial = Raiha::QUIC::Crypto::Initial
   V1 = Raiha::QUIC::Version::V1
   V = Raiha::QUIC::Test::Vectors

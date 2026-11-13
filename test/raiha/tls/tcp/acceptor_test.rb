@@ -1,10 +1,10 @@
 require "test_helper"
 require "support/tcp_pair"
 
-class RaihaNextTLSTCPAcceptorTest < Minitest::Test
+class RaihaTLSTCPAcceptorTest < Minitest::Test
   TLS = Raiha::TLS
   TCP = TLS::TCP
-  Pair = NextTCPPair
+  Pair = TCPPair
   TLSPair = Pair::TLSPair
   NOW = Pair::NOW
   CHANGE_CIPHER_SPEC = "\x14\x03\x03\x00\x01\x01".b

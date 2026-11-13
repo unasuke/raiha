@@ -4,13 +4,13 @@ require "support/quic_pair"
 # Why a connection stopped sending tells its path whether the congestion
 # window went unused, which keeps the congestion controller from growing it
 # (RFC 9002 "Underutilizing the Congestion Window").
-class RaihaNextQUICConnectionAppLimitedTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionAppLimitedTest < Minitest::Test
+  include QUICPair
 
   # A server whose certificate chain takes `copies` more certificates.
   def long_flight_server(copies, **options)
-    identity = NextTLSPair.server_identity
-    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [NextTLSPair.ca.der] * copies, key_der: identity.key_der)
+    identity = TLSPair.server_identity
+    long = TLS::Keyring::Identity.new(cert_der: identity.cert_der + [TLSPair.ca.der] * copies, key_der: identity.key_der)
     tls_config = server_config
     keyring = TLS::Keyring.server(config: tls_config, identities: [long], random: Random.new(2))
     QUIC::Connection.server(config: QUIC::Config.new, tls_config:, keyring:, time: NOW, now: 0.0, **options)

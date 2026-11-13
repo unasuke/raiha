@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9002 "Persistent Congestion", as loss recovery's design, "Persistent
 # congestion", applies it.
-class RaihaNextQUICRecoveryPersistentCongestionTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryPersistentCongestionTest < Minitest::Test
+  include QUICRecovery
 
   # NewReno that keeps whether each loss was persistent congestion.
   class Spy < Raiha::QUIC::Congestion::NewReno

@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # RFC 9000 "Connection Migration": what a connection takes from an address
 # its path does not go to.
-class RaihaNextQUICConnectionMigrationTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionMigrationTest < Minitest::Test
+  include QUICPair
 
   ELSEWHERE = ["198.51.100.7", 61_000].freeze
 

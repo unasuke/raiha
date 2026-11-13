@@ -10,8 +10,8 @@ require "tmpdir"
 # with ls-qpack, through pylsqpack, which uv resolves when the test runs.
 # The encoder refers to no dynamic table, so both decoders allow none.
 # `rake test:qifs` fetches the corpus into tmp/qifs.
-class NextQPACKQifsEncodingTest < Minitest::Test
-  include NextQPACKOfflineInterop
+class QPACKQifsEncodingTest < Minitest::Test
+  include QPACKOfflineInterop
 
   PYTHON = %w[uv run --with pylsqpack python3].freeze
   DECODE = File.expand_path("../../support/pylsqpack_decode.py", __dir__)

@@ -4,8 +4,8 @@ require "support/quic_pair"
 # The priorities of RFC 9218 on the streams a Connection sends: the
 # streams of a lower urgency go first, and those not incremental of one
 # urgency one by one.
-class RaihaNextQUICConnectionStreamPriorityTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamPriorityTest < Minitest::Test
+  include QUICPair
 
   # A client and a server done with the handshake, and the time then.
   def connected

@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # RFC 9000 "Address Validation Using Retry Packets", as a client takes a
 # Retry from a server's Endpoint.
-class RaihaNextQUICConnectionRetryTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionRetryTest < Minitest::Test
+  include QUICPair
 
   def endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: Random.new(3), time: NOW, now: 0.0)
 

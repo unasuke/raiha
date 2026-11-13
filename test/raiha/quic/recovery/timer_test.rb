@@ -3,8 +3,8 @@ require "support/quic_recovery"
 
 # RFC 9002 "Setting the Loss Detection Timer" and "On Timeout", as loss
 # recovery's design, "Loss detection timer and PTO", applies them.
-class RaihaNextQUICRecoveryTimerTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryTimerTest < Minitest::Test
+  include QUICRecovery
 
   Probe = QUIC::Recovery::Probe
   # The first PTO period: 0.333 + 4 * 0.1665.

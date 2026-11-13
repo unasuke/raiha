@@ -4,8 +4,8 @@ require "support/quic_recovery"
 
 # A client's Endpoint, against a server's: what it routes to its
 # connections.
-class RaihaNextQUICEndpointClientTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICEndpointClientTest < Minitest::Test
+  include QUICPair
 
   CONFIG = QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32)
   SEED = "\x1b".b * 32
@@ -75,7 +75,7 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
   def test_each_end_issues_connection_ids
     client = client_endpoint
     server = server_endpoint
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     connection = connect(client, tracer:)
     exchange(client, server, connection)
     frames = ->(event) { tracer.of(event).flat_map { _1[:frames] || [] }.grep(QUIC::Wire::Frame::NewConnectionID) }
@@ -99,7 +99,7 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     client = client_endpoint
     server = QUIC::Endpoint.server(config: CONFIG.with(preferred_address: { ipv6: ["2001:db8::2", 4434] }), random: Random.new(3), time: NOW,
       now: 0.0)
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     connection = connect(client, tracer:)
     exchange(client, server, connection)
     preferred = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters].preferred_address

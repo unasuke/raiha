@@ -4,8 +4,8 @@ require "support/quic_pair"
 # DATAGRAM frames (RFC 9221) between two Connections: sent only to a peer
 # that takes them, never again, in order of urgency; received as events
 # while the application keeps up, and dropped when it does not.
-class RaihaNextQUICConnectionDatagramTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionDatagramTest < Minitest::Test
+  include QUICPair
 
   WITH_DATAGRAMS = QUIC::Config.new(max_datagram_frame_size: 65_535)
 

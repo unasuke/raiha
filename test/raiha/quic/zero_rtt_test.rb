@@ -5,8 +5,8 @@ require "support/quic_pair"
 # its streams carry before the handshake completes in 0-RTT packets, to the
 # limits the session remembers, and a server that takes it reads it before
 # the handshake completes.
-class RaihaNextQUICZeroRTTTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICZeroRTTTest < Minitest::Test
+  include QUICPair
 
   SEED = "\x1a".b * 32
 

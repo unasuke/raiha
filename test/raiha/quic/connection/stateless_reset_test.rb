@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # RFC 9000 "Detecting a Stateless Reset", with the token of the server's
 # transport parameters.
-class RaihaNextQUICConnectionStatelessResetTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStatelessResetTest < Minitest::Test
+  include QUICPair
 
   TOKEN = "t".b * 16
 

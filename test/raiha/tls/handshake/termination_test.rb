@@ -5,9 +5,9 @@ require "support/tls_pair"
 # Protocol" requires the secrets of a failed connection to be forgotten,
 # whether the failure is found here, decided outside (`discard`), or raised
 # by an object the caller gave.
-class RaihaNextTLSTerminationTest < Minitest::Test
+class RaihaTLSTerminationTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
 
   def conductor(machine) = machine.instance_variable_get(:@conductor)

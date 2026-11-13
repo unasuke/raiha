@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICTransportParametersTest < Minitest::Test
+class RaihaQUICTransportParametersTest < Minitest::Test
   QUIC = Raiha::QUIC
   TP = QUIC::TransportParameters
 

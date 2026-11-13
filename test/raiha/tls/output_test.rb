@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSOutputTest < Minitest::Test
+class RaihaTLSOutputTest < Minitest::Test
   TLS = Raiha::TLS
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256
 

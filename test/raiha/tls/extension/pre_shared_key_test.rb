@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls/test"
 
-class RaihaNextTLSExtensionPreSharedKeyTest < Minitest::Test
+class RaihaTLSExtensionPreSharedKeyTest < Minitest::Test
   Codec = Raiha::TLS::Codec
   PreSharedKey = Raiha::TLS::Extension::PreSharedKey
   RFC8448 = Raiha::TLS::Test::RFC8448::Resumed0RTT

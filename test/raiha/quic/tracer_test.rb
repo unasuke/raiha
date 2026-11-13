@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICTracerTest < Minitest::Test
+class RaihaQUICTracerTest < Minitest::Test
   # Only the events it cares about; the rest are there and do nothing.
   class LossOnly
     include Raiha::QUIC::Tracer

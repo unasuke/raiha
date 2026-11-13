@@ -2,8 +2,8 @@ require "test_helper"
 require "support/quic_recovery"
 
 # Loss recovery's design, "Packet numbers received" and "Duplicates".
-class RaihaNextQUICRecoveryReceivingTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryReceivingTest < Minitest::Test
+  include QUICRecovery
 
   Space = QUIC::Recovery::PacketNumberSpace
 

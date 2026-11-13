@@ -10,7 +10,7 @@ require "raiha/tls"
 # ClientHello after a HelloRetryRequest, a Chrome-like ClientHello, and the
 # smallest valid messages. A failure message carries the seed and the
 # iteration, and RAIHA_FUZZ_SEED replays a seed.
-class RaihaNextTLSHandshakeRoundTripPropertyTest < Minitest::Test
+class RaihaTLSHandshakeRoundTripPropertyTest < Minitest::Test
   TLS = Raiha::TLS
   Handshake = TLS::Handshake
   Extension = TLS::Extension

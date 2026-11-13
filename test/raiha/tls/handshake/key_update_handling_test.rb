@@ -3,9 +3,9 @@ require "support/tls_pair"
 
 # KeyUpdate after a TCP handshake: answered once, right before our next
 # application data, and limited to a run of 32 without application data.
-class RaihaNextTLSKeyUpdateHandlingTest < Minitest::Test
+class RaihaTLSKeyUpdateHandlingTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTLSPair
+  Pair = TLSPair
   NOW = Pair::NOW
   KeyUpdate = TLS::Handshake::KeyUpdate
   REQUESTED = KeyUpdate.new(request_update: KeyUpdate::UPDATE_REQUESTED).encode

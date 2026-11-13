@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 require "support/quic_recovery"
 
-class RaihaNextQUICPathTest < Minitest::Test
+class RaihaQUICPathTest < Minitest::Test
   QUIC = Raiha::QUIC
 
   def path(**config) = QUIC::Path.new(config: QUIC::Config.new(**config))
@@ -158,7 +158,7 @@ class RaihaNextQUICPathTest < Minitest::Test
   # its search: through at the largest, given up on halfway, or gone back
   # to 1200 on persistent congestion.
   def test_mtu_updates_traced
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     path = QUIC::Path.new(config: QUIC::Config.new, tracer:)
     path.search_mtu(up_to: 1472)
     path.mtu_probe_acked(1472, now: 1.0)

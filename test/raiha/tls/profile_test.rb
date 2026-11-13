@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/tls"
 
-class RaihaNextTLSProfileTest < Minitest::Test
+class RaihaTLSProfileTest < Minitest::Test
   TLS = Raiha::TLS
   Profile = TLS::Profile
 

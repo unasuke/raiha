@@ -7,8 +7,8 @@ require "support/quic_recovery"
 # gives less than that in a millisecond, a burst of that initial window
 # goes at once, and the rest as the pacer's bucket fills, the connection's
 # next timeout saying when. A datagram of ACKs alone waits on nothing.
-class RaihaNextQUICConnectionPacingTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionPacingTest < Minitest::Test
+  include QUICPair
 
   # A window of a hundred datagrams, ten times the pacer's bucket, of 1200
   # bytes each: no probe of the path MTU grows them.
@@ -51,7 +51,7 @@ class RaihaNextQUICConnectionPacingTest < Minitest::Test
   # datagrams of the client goes at once (RFC 9002 "Pacing"), and nothing
   # of the response with it.
   def test_an_ack_alone_is_not_paced
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     client, server, now = connected(tracer:)
     server.stream_write(server.open_stream, "y".b * 60_000, fin: true)
     sent(server, now)

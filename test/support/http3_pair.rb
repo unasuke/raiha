@@ -3,7 +3,7 @@ require "raiha/http3"
 # HTTP/3 Connections of the next release of raiha with no transport under
 # them: what one gives to send is read off, or handed to the other end
 # stream by stream, the IDs being the same on both ends as in QUIC.
-module NextHTTP3Pair
+module HTTP3Pair
   HTTP3 = Raiha::HTTP3
 
   # The client's streams for the control stream and QPACK, and the

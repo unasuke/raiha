@@ -6,8 +6,8 @@ require "async"
 # interface: streams read and written as an IO would be, waiting on the
 # peer's flow control and stream limits, and what the peer resets, stops or
 # closes raised where the application waits.
-class RaihaNextRuntimeSessionTest < Minitest::Test
-  include NextRuntimeOwner
+class RaihaRuntimeSessionTest < Minitest::Test
+  include RuntimeOwner
 
   # A client's Session and the server's Owner, connected, for the block.
   def connected(server: QUIC::Config.new, client: QUIC::Config.new, server_tls: server_config)

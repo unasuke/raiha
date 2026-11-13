@@ -5,7 +5,7 @@ require "raiha/runtime"
 # document's table of them ("資源の上限") gives them: a value changed in
 # the code is to be changed in the table as well, and this fails until it
 # is. Whether each bound holds is the test of its own layer.
-class RaihaNextResourceLimitsTest < Minitest::Test
+class RaihaResourceLimitsTest < Minitest::Test
   CONSTANTS = {
     # TLS
     "TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE" => 16 * 1024,

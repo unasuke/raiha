@@ -3,7 +3,7 @@ require "openssl"
 # Certificates for tests of the next release of raiha: a CA and the leaves it
 # issues, with the names and validity a test asks for. Keys are generated
 # once per process and reused, since RSA generation is slow.
-module NextTestPKI
+module TestPKI
   # The time the certificates are valid around: when the tests run, so that
   # a peer checking them against its own clock accepts them too. Tests pass
   # it as `now:`. Whole seconds, as a certificate keeps no finer time.

@@ -4,8 +4,8 @@ require "support/quic_pair"
 # What the Endpoint of one of a server's workers hands on to another: the
 # short header, Handshake and 0-RTT packets whose connection ID another
 # worker issued, and nothing it takes itself or was handed already.
-class RaihaNextQUICEndpointForeignTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICEndpointForeignTest < Minitest::Test
+  include QUICPair
 
   KEYS = { retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32 }.freeze
   SCID = "s".b * 8

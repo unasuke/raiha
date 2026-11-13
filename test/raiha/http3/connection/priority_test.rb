@@ -4,8 +4,8 @@ require "support/http3_pair"
 # The priorities of RFC 9218 on HTTP/3 requests: the Priority header
 # field, PRIORITY_UPDATE before and after a request opens, a server's
 # response overriding, and the order the streams are given to send in.
-class RaihaNextHTTP3ConnectionPriorityTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionPriorityTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   QPACK = HTTP3::QPACK

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICRecoveryRttEstimatorTest < Minitest::Test
+class RaihaQUICRecoveryRttEstimatorTest < Minitest::Test
   RttEstimator = Raiha::QUIC::Recovery::RttEstimator
 
   def sample(rtt, latest, ack_delay: 0.0, max_ack_delay: 0.025, confirmed: true, now: 1.0)

@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 # RFC 9000 "Address Validation Using Retry Packets".
-class RaihaNextQUICRetryTokenTest < Minitest::Test
+class RaihaQUICRetryTokenTest < Minitest::Test
   RetryToken = Raiha::QUIC::RetryToken
 
   KEY = ("k" * 32).b

@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # What the decoder writes on the decoder stream (RFC 9204 "Decoder
 # Instructions"), taken with `take_instructions`.
-class RaihaNextQPACKDecoderInstructionsTest < Minitest::Test
+class RaihaQPACKDecoderInstructionsTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   def setup

@@ -6,10 +6,10 @@ require "support/quic_pair"
 # of its datagrams are the same on every run: certificates of fixed Ed25519
 # keys and times, whose signatures are deterministic, key shares of fixed
 # private keys, random bytes from fixed seeds and a fixed wall clock.
-module NextQUICGolden
-  include NextQUICPair
+module QUICGolden
+  include QUICPair
 
-  PKI = NextTestPKI
+  PKI = TestPKI
   TIME = Time.utc(2026, 1, 1)
   VALIDITY = { not_before: TIME - 86_400, not_after: TIME + 86_400 * 3650 }.freeze
 

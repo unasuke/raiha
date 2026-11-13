@@ -3,9 +3,9 @@ require "support/tcp_pair"
 require "stringio"
 
 # How a TCP::Connection ends: RFC 9846 "Closure Alerts" and "Error Alerts".
-class RaihaNextTLSTCPClosureTest < Minitest::Test
+class RaihaTLSTCPClosureTest < Minitest::Test
   TLS = Raiha::TLS
-  Pair = NextTCPPair
+  Pair = TCPPair
   NOW = Pair::NOW
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256
 

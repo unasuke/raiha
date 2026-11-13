@@ -4,8 +4,8 @@ require "support/quic_recovery"
 # Loss recovery's design, "Duties": the acknowledged and lost packets
 # handed back are told to the owner of what they carried, one branch for
 # each kind of duty.
-class RaihaNextQUICRecoveryDispatchTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryDispatchTest < Minitest::Test
+  include QUICRecovery
 
   Duty = QUIC::Recovery::Duty
   Outcome = QUIC::Recovery::Outcome

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICCryptoMacTest < Minitest::Test
+class RaihaQUICCryptoMacTest < Minitest::Test
   Mac = Raiha::QUIC::Crypto::Mac
 
   # RFC 4231 test case 2.

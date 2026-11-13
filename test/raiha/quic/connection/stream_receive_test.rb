@@ -4,8 +4,8 @@ require "support/quic_pair"
 # A server Connection receiving a stream: the application hears when there
 # is something to read, reads it as IO#read reads, and the peer gets
 # credit back as it does.
-class RaihaNextQUICConnectionStreamReceiveTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamReceiveTest < Minitest::Test
+  include QUICPair
 
   def setup
     @keylog = Keylog.new

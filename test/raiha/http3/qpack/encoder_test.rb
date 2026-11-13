@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # The encoder refers to the static table and sends the rest as literals
 # (RFC 9204 "Field Line Representations"); it never inserts into the
 # dynamic table.
-class RaihaNextQPACKEncoderTest < Minitest::Test
+class RaihaQPACKEncoderTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
   Huffman = QPACK::Huffman
 

@@ -4,8 +4,8 @@ require "support/tls_pair"
 # A server's NewSessionTickets: how many it issues right after the client
 # Finished, what each holds and is bound to, and when it issues none, with the
 # reason traced.
-class RaihaNextTLSTicketIssuanceTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSTicketIssuanceTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   NOW = Pair::NOW
 
@@ -162,8 +162,8 @@ end
 # A client's side of the tickets: each becomes an Event::NewSessionTicket
 # whose Session gives the PSK the server sealed in the ticket, unless the
 # client does not resume.
-class RaihaNextTLSTicketReceiptTest < Minitest::Test
-  Pair = NextTLSPair
+class RaihaTLSTicketReceiptTest < Minitest::Test
+  Pair = TLSPair
   TLS = Pair::TLS
   NOW = Pair::NOW
   SEED = "\x0b".b * 32

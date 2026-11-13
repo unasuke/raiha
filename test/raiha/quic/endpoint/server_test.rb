@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # What a server's Endpoint does with datagrams that belong to no
 # connection.
-class RaihaNextQUICEndpointServerTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICEndpointServerTest < Minitest::Test
+  include QUICPair
 
   KEYS = { retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32 }.freeze
   DCID = "d".b * 8

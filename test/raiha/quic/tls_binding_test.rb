@@ -3,8 +3,8 @@ require "support/quic_tls"
 
 # The handshake carried in CRYPTO frames, with the
 # Machine's outputs and events told to the connection.
-class RaihaNextQUICTLSBindingTest < Minitest::Test
-  include NextQUICTLS
+class RaihaQUICTLSBindingTest < Minitest::Test
+  include QUICTLS
 
   # Keeps what the binding tells it.
   class Connection
@@ -94,7 +94,7 @@ class RaihaNextQUICTLSBindingTest < Minitest::Test
   end
 
   def test_a_tcp_profile_is_refused
-    assert_raises(ArgumentError) { client(Connection.new, config: NextTLSPair.client_config(alpn: ALPN)) }
+    assert_raises(ArgumentError) { client(Connection.new, config: TLSPair.client_config(alpn: ALPN)) }
   end
 
   # A server given the ClientHello an Acceptor took does not read it again

@@ -3,8 +3,8 @@ require "support/quic_pair"
 
 # Streams abandoned on either end: RESET_STREAM and STOP_SENDING, what the
 # application hears, and the credit that goes back.
-class RaihaNextQUICConnectionStreamResetTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionStreamResetTest < Minitest::Test
+  include QUICPair
 
   def connected(server_config: QUIC::Config.new)
     client = client_connection

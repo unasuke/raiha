@@ -4,8 +4,8 @@ require "support/quic_recovery"
 
 # RFC 9001 "Receiving Out-of-Order Protected Packets": a packet whose keys
 # have not come is kept until they do, and opened then.
-class RaihaNextQUICConnectionKeptPacketsTest < Minitest::Test
-  include NextQUICPair
+class RaihaQUICConnectionKeptPacketsTest < Minitest::Test
+  include QUICPair
 
   # The packets of `datagram` as datagrams of their own, with their types.
   def packets(datagram)
@@ -67,7 +67,7 @@ class RaihaNextQUICConnectionKeptPacketsTest < Minitest::Test
   # Past what is kept, a packet with no keys is dropped, and so is one of a
   # level whose keys are gone.
   def test_what_is_not_kept
-    tracer = NextQUICRecovery::RecordingTracer.new
+    tracer = QUICRecovery::RecordingTracer.new
     client = client_connection(tracer:)
     server = server_connection
     client.transmits(now: 0.0).each { server.receive(_1.payload, from: CLIENT, now: 0.0) }

@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/http3/qpack"
 
-class RaihaNextQPACKValuesTest < Minitest::Test
+class RaihaQPACKValuesTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   # RFC 9204 "Error Code Registration".

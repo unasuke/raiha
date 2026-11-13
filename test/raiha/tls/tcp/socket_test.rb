@@ -3,9 +3,8 @@ require "support/tcp_pair"
 require "socket"
 require "timeout"
 
-class RaihaNextTLSTCPSocketTest < Minitest::Test
+class RaihaTLSTCPSocketTest < Minitest::Test
   TLS = Raiha::TLS
-  TLSPair = NextTLSPair
 
   # Runs `serve` with the socket a server thread accepts, yields the port
   # to the client, and returns what `serve` returned or raised.
@@ -47,7 +46,7 @@ class RaihaNextTLSTCPSocketTest < Minitest::Test
   # A client that trusts another CA: CertificateError here, and the alert
   # it sends is the server's AlertError.
   def test_certificate_error
-    other = NextTestPKI.ca(name: "Other CA", key: NextTestPKI.key(:other_ca))
+    other = TestPKI.ca(name: "Other CA", key: TestPKI.key(:other_ca))
     config = TLS::Config.client(trust_anchors: [other.der], alpn: ["echo"])
     served = with_server(->(sock) { sock.read(1) }) do |port|
       error = assert_raises(TLS::CertificateError) { connect(port, config:) }

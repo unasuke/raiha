@@ -4,8 +4,8 @@ require "support/quic_recovery"
 # A probe of the path MTU, acknowledged or lost, goes to the search of the
 # path that sent it, with its size; a probe declared lost and acknowledged
 # after all is through.
-class RaihaNextQUICRecoveryMTUProbeTest < Minitest::Test
-  include NextQUICRecovery
+class RaihaQUICRecoveryMTUProbeTest < Minitest::Test
+  include QUICRecovery
 
   # A server's loss recovery on a path searching up to 1472 bytes.
   def searching

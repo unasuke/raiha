@@ -3,8 +3,8 @@ require "support/http3_pair"
 
 # The peer's control stream (RFC 9114 "Control Streams"): SETTINGS first
 # and once, and only the frames a control stream carries.
-class RaihaNextHTTP3ConnectionControlStreamTest < Minitest::Test
-  include NextHTTP3Pair
+class RaihaHTTP3ConnectionControlStreamTest < Minitest::Test
+  include HTTP3Pair
 
   Frame = HTTP3::Frame
   SETTINGS = Frame.encode(HTTP3::Settings.new(max_field_section_size: 1000).to_frame)

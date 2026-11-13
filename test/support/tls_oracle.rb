@@ -6,12 +6,12 @@ require "raiha/tls"
 # proves little. The Machine reports each check that passed as a Trace value
 # built only where the check passes, and this reads those.
 #
-#   oracle = NextTLSOracle.new
+#   oracle = TLSOracle.new
 #   client = Machine.client(..., tracer: oracle.client)
 #   server = Machine.server(..., tracer: oracle.server)
 #   ... run ...
 #   assert_empty oracle.violations(client:, server:)
-class NextTLSOracle
+class TLSOracle
   TLS = Raiha::TLS
   Trace = TLS::Trace
 

@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # RFC 9204 Appendix B, "Encoding and Decoding Examples", from the
 # decoder's side: the encoder's instructions and sections in, the fields
 # and the decoder's instructions out, with a table of 220 octets.
-class RaihaNextQPACKRFC9204ExamplesTest < Minitest::Test
+class RaihaQPACKRFC9204ExamplesTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   def setup

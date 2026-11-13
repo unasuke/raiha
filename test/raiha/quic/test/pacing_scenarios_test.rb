@@ -5,8 +5,8 @@ require "support/quic_transfer"
 # granularity the pacer wakes at changes how often it sends, not how much
 # goes or how fast the transfer ends; and a window paced out over a round
 # trip does not overflow a queue that the same window sent at once does.
-class RaihaNextQUICTestPacingScenariosTest < Minitest::Test
-  include NextQUICTransfer
+class RaihaQUICTestPacingScenariosTest < Minitest::Test
+  include QUICTransfer
 
   SIZE = 1_000_000
 

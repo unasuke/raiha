@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # The decoder counts the fields against a budget as they come out, each
 # its name and value and 32 more (RFC 9114 "Header Size Constraints"),
 # and stops at the line that passes it.
-class RaihaNextQPACKDecoderBudgetTest < Minitest::Test
+class RaihaQPACKDecoderBudgetTest < Minitest::Test
   QPACK = Raiha::HTTP3::QPACK
 
   def test_64_kib_by_default

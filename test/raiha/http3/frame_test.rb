@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/http3"
 
-class RaihaNextHTTP3FrameTest < Minitest::Test
+class RaihaHTTP3FrameTest < Minitest::Test
   Frame = Raiha::HTTP3::Frame
 
   # Each frame and its bytes: the type, the length, then the payload.

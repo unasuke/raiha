@@ -3,8 +3,8 @@ require "support/http3_side"
 
 # HTTP/3 of the next release of raiha on UDP sockets of the loopback
 # interface, against another implementation run as a process of its own.
-module NextHTTP3UDP
-  include NextQUICUDP
+module HTTP3UDP
+  include QUICUDP
 
   HTTP3 = Raiha::HTTP3
   ALPN = ["h3"].freeze
@@ -23,7 +23,7 @@ module NextHTTP3UDP
     # A turn of the application.
     def step(now)
       @server.connections.each do |connection|
-        side = @sides[connection] ||= NextHTTP3Side.new(connection, HTTP3::Connection.server)
+        side = @sides[connection] ||= HTTP3Side.new(connection, HTTP3::Connection.server)
         whole = []
         side.turn(now, ->(_, event) { take(side, event, whole) }) do
           whole.each { |stream_id| respond(side, stream_id) }
@@ -63,7 +63,7 @@ module NextHTTP3UDP
 
     def initialize(connection, authority:, paths:)
       @connection = connection
-      @side = NextHTTP3Side.new(connection, HTTP3::Connection.client)
+      @side = HTTP3Side.new(connection, HTTP3::Connection.client)
       @authority = authority
       @paths = paths
       @streams = {}

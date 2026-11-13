@@ -18,7 +18,7 @@ require "openssl"
 require "support/custom_assertion"
 require "minitest/autorun"
 
-module NextTestCertificate
+module TestCertificate
   # A self-signed certificate and its key, both in DER, shaped to be passed
   # as `Raiha::TLS::Keyring::Identity.new(**generate_self_signed_certificate)`.
   private def generate_self_signed_certificate(common_name: "localhost")

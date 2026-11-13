@@ -5,7 +5,7 @@ require "prism"
 # the TLS binding alone drives the Machine and reads its Outputs and Events,
 # and the Endpoint alone holds an Acceptor, so that a reader can trust
 # what each of the two does with them.
-class RaihaNextQUICHygieneTest < Minitest::Test
+class RaihaQUICHygieneTest < Minitest::Test
   QUIC_DIR = File.expand_path("../../../lib/raiha/quic", __dir__)
 
   PLACES = {

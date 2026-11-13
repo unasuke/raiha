@@ -1,7 +1,7 @@
 require "test_helper"
 require "raiha/quic"
 
-class RaihaNextQUICConfigTest < Minitest::Test
+class RaihaQUICConfigTest < Minitest::Test
   QUIC = Raiha::QUIC
   Config = QUIC::Config
 

@@ -5,7 +5,7 @@ require "raiha"
 # constant that is not shareable cannot be read: every constant under
 # Raiha must be shareable, so that nothing the workers reach fails with
 # Ractor::IsolationError.
-class RaihaNextRactorShareableTest < Minitest::Test
+class RaihaRactorShareableTest < Minitest::Test
   # Module#name, called as the class's own, which a module that defines a
   # `name` of its own does not change.
   NAME = Module.instance_method(:name)

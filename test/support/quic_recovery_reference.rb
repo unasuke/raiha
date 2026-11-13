@@ -14,7 +14,7 @@
 #   packet is not lost at its own loss time.
 #
 # Each event gives a Result of what it did, by packet numbers.
-class NextQUICRecoveryReference
+class QUICRecoveryReference
   K_PACKET_THRESHOLD = 3
   K_TIME_THRESHOLD = 9.0 / 8
   K_GRANULARITY = 0.001

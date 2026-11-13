@@ -5,7 +5,7 @@ require "raiha/tls"
 # in one Ractor is a replay in another, and a check that the record does
 # not answer, as it has stopped, cannot be read, or takes too long, is
 # :unavailable rather than waiting for ever.
-class RaihaNextTLSAntiReplaySharedTest < Minitest::Test
+class RaihaTLSAntiReplaySharedTest < Minitest::Test
   Shared = Raiha::TLS::AntiReplay::Shared
   NOW = Time.at(1_800_000_000)
   A = ("\x01".b * 32).freeze
