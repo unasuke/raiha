@@ -147,4 +147,34 @@ class RaihaNextQUICConnectionPtoTest < Minitest::Test
     client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
     assert server.handshake_complete?
   end
+
+  # The frames of the server's 1-RTT packet in each datagram, PADDING left
+  # out.
+  def one_rtt_frames(keylog, datagrams)
+    datagrams.map { |transmit| (server_one_rtt(keylog, transmit.payload, phase: 0)&.last || []).grep_v(QUIC::Wire::Frame::Padding) }
+  end
+
+  # A server done with the handshake sends a PMTU probe of a PING, then
+  # HANDSHAKE_DONE, and neither comes, nor any ACK: its probes carry
+  # HANDSHAKE_DONE again, not a PING for the PMTU probe that is older.
+  def test_probes_carry_what_was_lost_past_a_pmtu_probe
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection
+    now = 0.0
+    10.times do
+      break if server.handshake_complete?
+      client.transmits(now:).each { server.receive(_1.payload, from: CLIENT, now:) }
+      break if server.handshake_complete?
+      server.transmits(now:).each { client.receive(_1.payload, from: SERVER, now:) }
+      now += 0.001
+    end
+    lost = one_rtt_frames(keylog, server.transmits(now:))
+    assert_equal [QUIC::Wire::Frame::Ping], lost.first.map(&:class), "the first is a PMTU probe"
+    assert(lost.flatten.any?(QUIC::Wire::Frame::HandshakeDone))
+    now = server.next_timeout
+    server.handle_timeout(now:)
+    probes = one_rtt_frames(keylog, server.transmits(now:))
+    assert(probes.flatten.any?(QUIC::Wire::Frame::HandshakeDone), probes.inspect)
+  end
 end

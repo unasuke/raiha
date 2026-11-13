@@ -1246,11 +1246,11 @@ module Raiha::Next::QUIC
 
     # A probe of `level`, or what a server sends again at once, carries what
     # is new when there is some, else the duties of the oldest packet in
-    # flight again, its record left as it is, else (a probe) a PING (loss
-    # recovery's design, "Probes").
+    # flight that has any again, its record left as it is, else (a probe) a
+    # PING (loss recovery's design, "Probes").
     private def fill_probe(level)
       return if binding.crypto_pending?(level) || (level == :one_rtt && @handshake_done_due)
-      oldest = @recovery.oldest_ack_eliciting(SPACES.fetch(level)) or return
+      oldest = @recovery.oldest_to_send_again(SPACES.fetch(level)) or return
       Recovery::Duty.dispatch(Recovery::Outcome.new(acked: Recovery::Outcome::NO_PACKETS, lost: [oldest], probe: nil), to: self)
     end
 

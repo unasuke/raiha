@@ -234,6 +234,12 @@ module Raiha::Next::QUIC
     # recovery's design, "Probes"). It stays recorded as it is.
     def oldest_ack_eliciting(space) = @spaces.fetch(space).oldest_ack_eliciting
 
+    # The oldest packet in flight in `space` that elicits an ACK and carries
+    # something to send again, nil when none: what a probe carries again,
+    # so that a PMTU probe or an earlier probe of only a PING does not make
+    # every probe a PING while what was lost waits for an ACK.
+    def oldest_to_send_again(space) = @spaces.fetch(space).oldest_to_send_again
+
     # The largest packet number received in the space of `packet_type`, nil
     # before any, which the packet number of the next is decoded against.
     def largest_received(packet_type) = space_of(packet_type).largest_received

@@ -251,6 +251,11 @@ module Raiha::Next::QUIC
       # The oldest record in flight that elicits an ACK, nil when none.
       def oldest_ack_eliciting = @sent.each_value.find { |packet| packet.ack_eliciting && packet.in_flight }
 
+      # The oldest record in flight that elicits an ACK and carries
+      # something to send again, nil when none: a PING, a PMTU probe or a
+      # probe of nothing but a PING carries nothing.
+      def oldest_to_send_again = @sent.each_value.find { |packet| packet.ack_eliciting && packet.in_flight && !packet.duties.empty? }
+
       # Takes the ranges of an ACK frame of `frame_type`, from the largest
       # down, and gives the records they acknowledge for the first time,
       # taken out, in packet number order. An ACK of a packet never sent, the
