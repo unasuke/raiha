@@ -190,10 +190,26 @@ module Raiha::Runtime
     GSO_UNAVAILABLE: Array[singleton(SystemCallError)]
     MAX_TRANSMIT: Integer
 
+    class Features < Data
+      attr_reader receive_buffer: Integer
+      attr_reader send_buffer: Integer
+      attr_reader ipv4: bool
+      attr_reader ecn_in: bool
+      attr_reader destination: bool
+      attr_reader source: bool
+      attr_reader ecn_out: bool
+
+      def self.new: (receive_buffer: Integer, send_buffer: Integer, ipv4: bool, ecn_in: bool, destination: bool, source: bool, ecn_out: bool) -> Features
+    end
+
     @socket: UDPSocket
     @family: Integer
     @port: Integer
     @gso: bool
+    @ecn_in: bool
+    @destination: bool
+    @source: bool
+    @ecn_out: bool
 
     def self.bind: (String host, Integer port, ?reuse_port: bool) -> UDP
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
@@ -204,6 +220,8 @@ module Raiha::Runtime
     def self.pmtud: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
 
     def initialize: (UDPSocket socket) -> void
+
+    def features: () -> Features
 
     def local_address: () -> address
     def sends_from?: (address address) -> bool
@@ -219,6 +237,8 @@ module Raiha::Runtime
     def closed?: () -> bool
 
     def to_io: () -> UDPSocket
+
+    private def takes_ipv4?: () -> bool
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Array[Socket::AncillaryData] controls) -> bool

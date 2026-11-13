@@ -55,6 +55,14 @@ module Raiha::Runtime
     # IPv4, a Config's max_transmit_size when the application leaves it.
     MAX_TRANSMIT = 65_507
 
+    # What a socket has here: the sizes of its buffers as the OS keeps
+    # them, whether it takes IPv4, and the control messages it uses now,
+    # those it reads (the ECN codepoint and the address a datagram came
+    # to) and those it sends (the address and the ECN mark a datagram goes
+    # with). The runtime logs none of this; it is there to look at a socket
+    # on an OS that differs.
+    Features = Data.define(:receive_buffer, :send_buffer, :ipv4, :ecn_in, :destination, :source, :ecn_out)
+
     # `config` with MAX_TRANSMIT for max_transmit_size, unless it has one:
     # a socket here sends the datagrams of a Transmit as they are cut.
     def self.batching(config) = config.max_transmit_size ? config : config.with(max_transmit_size: MAX_TRANSMIT)
@@ -109,6 +117,14 @@ module Raiha::Runtime
         @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER, PMTUDISC_PROBE) if @family == Socket::AF_INET6
       end
       @gso = RUBY_PLATFORM.include?("linux")
+      @ecn_in = @destination = @source = @ecn_out = true
+    end
+
+    # The Features of this socket now.
+    def features
+      Features.new(receive_buffer: @socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF).int,
+        send_buffer: @socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF).int, ipv4: takes_ipv4?,
+        ecn_in: @ecn_in, destination: @destination, source: @source, ecn_out: @ecn_out)
     end
 
     # [address, port] the socket is bound to.
@@ -189,6 +205,16 @@ module Raiha::Runtime
     # The socket, so that IO.select waits on this with others, as a loop of
     # an application's own that reads several does.
     def to_io = @socket
+
+    # Whether IPv4 comes to this socket: one bound to an address of IPv4,
+    # or of IPv6 bound to "::" (or an IPv4-mapped address) and not IPv6
+    # alone, which an OS may not allow.
+    private def takes_ipv4?
+      local = @socket.local_address
+      return true if local.ipv4?
+      return false unless local.ipv6_unspecified? || local.ipv6_v4mapped?
+      @socket.getsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY).int.zero?
+    end
 
     # All the datagrams in one sendmsg: nil when they went, else what it
     # failed with.

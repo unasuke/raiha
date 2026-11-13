@@ -2,6 +2,23 @@
 # which the bundled declaration types as a Symbol like the other three.
 # Added to it with `| ...`. Linux's IPV6_MTU_DISCOVER, which Socket defines
 # there, the bundled declaration does not name.
+#
+# BasicSocket#getsockopt returns a Socket::Option, which the bundled
+# declaration has as the value inside it (Integer | boolish | String) and
+# does not declare.
+class Socket
+  class Option
+    def int: () -> Integer
+    def bool: () -> bool
+    def data: () -> String
+  end
+end
+
+class BasicSocket
+  def getsockopt: (Symbol | Integer level, Symbol | Integer optname) -> Socket::Option
+                | ...
+end
+
 class Socket
   IPV6_MTU_DISCOVER: Integer
 
