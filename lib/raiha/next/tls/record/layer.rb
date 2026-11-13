@@ -86,6 +86,10 @@ module Raiha::Next::TLS
           # application_data is ever protected, so any other is held to the
           # plaintext limit as soon as its header is in.
           type, length = @buffer.unpack("Cx2n").map(&:to_i)
+          # A type no record has is unexpected_message as soon as the header
+          # is in, so that what is no TLS record, an SSL 2.0 ClientHello say,
+          # is not waited on for a length it does not have.
+          return Failure.new(alert: :unexpected_message, reason: :unexpected_record) unless CONTENT_TYPE_NAMES.key?(type)
           limit = type == CONTENT_TYPES.fetch(:application_data) ? MAX_PLAINTEXT + MAX_EXPANSION : MAX_PLAINTEXT
           return Failure.new(alert: :record_overflow, reason: :record_too_large) if length > limit # steep:ignore
           return nil if @buffer.bytesize < HEADER_LENGTH + length # steep:ignore

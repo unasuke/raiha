@@ -120,6 +120,15 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
     assert_nil rec.read(epoch: :initial)
   end
 
+  # A header of a type no record has fails at once, before the length it
+  # gives is in: an SSL 2.0 ClientHello, whose bytes read as a length of
+  # 772 here.
+  def test_a_type_no_record_has
+    layer = Record::Layer.new(profile: TLS::Profile::TCP)
+    layer << "\x80\x2e\x01\x03\x04".b
+    assert_equal failure(:unexpected_message, :unexpected_record), layer.read(epoch: :initial)
+  end
+
   def test_protected_epoch_rules
     reader, sealer = reader_and_sealer
     cases = {
