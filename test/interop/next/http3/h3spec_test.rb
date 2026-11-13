@@ -21,11 +21,15 @@ class NextHTTP3H3specTest < Minitest::Test
       peer(H3SPEC, "--no-validate", "127.0.0.1", socket.addr[1].to_s) do |output|
         done = drive(socket, quic, seconds: 300) do
           app.step(mono)
-          output.match?(/^\d+ examples?, \d+ failures?/)
+          plain(output).match?(/^\d+ examples?, \d+ failures?/)
         end
         assert done, output
-        assert_match(/^\d+ examples?, 0 failures/, output, output)
+        assert_match(/^\d+ examples?, 0 failures/, plain(output), output)
       end
     end
   end
+
+  # h3spec colours its summary on GitHub Actions, where it takes stdout for
+  # a terminal.
+  private def plain(output) = output.gsub(/\e\[[\d;]*m/, "")
 end
