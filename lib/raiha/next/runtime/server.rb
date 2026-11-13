@@ -91,7 +91,8 @@ module Raiha::Next::Runtime
       @worker_failure = nil #: StandardError?
       @max_connections = max_connections
       @max_unvalidated = max_unvalidated
-      # The offers admitted whose ClientHello is not whole yet.
+      # The offers admitted whose ClientHello is not whole yet and whose
+      # client's address is not validated, let go each turn once over.
       @admitted = [] #: Array[Raiha::Next::QUIC::Endpoint::Handle]
       @qlog = qlog_dir && Qlog.new(qlog_dir)
       @traces = {} #: Hash[Session, Qlog::Pending]
@@ -175,7 +176,8 @@ module Raiha::Next::Runtime
         return endpoint.refuse(route.handle) if @stop || @sessions.size >= @max_connections
         return endpoint.retry(route.handle, now:) if !route.address_validated && unvalidated(now) >= @max_unvalidated
         hello = endpoint.admit(route.handle, now:)
-        hello ? route(hello, now) : @admitted << route.handle
+        return route(hello, now) if hello
+        @admitted << route.handle unless route.address_validated
       when Raiha::Next::QUIC::Route::ClientHello
         @admitted.delete(route.handle)
         advance_ticket_keys
@@ -192,6 +194,7 @@ module Raiha::Next::Runtime
     # has completed, and the sessions of connections over let go.
     def turn(now)
       failure = @worker_failure and raise failure
+      @admitted.reject! { |handle| handle.expired?(now) || handle.failed? }
       while (message = @controls.pop(timeout: 0))
         control(message)
       end
@@ -212,10 +215,9 @@ module Raiha::Next::Runtime
     def next_timeout = @stop_deadline
 
     # How many of the offers admitted and the connections taken have
-    # addresses not validated; offers that ended are let go.
+    # addresses not validated.
     private def unvalidated(now)
-      @admitted.reject! { |handle| handle.expired?(now) || handle.failed? }
-      @admitted.count { |handle| !handle.address_validated } + @sessions.count { |session| !session.connection.address_validated? }
+      @admitted.count { |handle| !handle.expired?(now) && !handle.failed? } + @sessions.count { |session| !session.connection.address_validated? }
     end
 
     def stopped(failure)
