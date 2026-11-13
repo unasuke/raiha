@@ -6,8 +6,9 @@
 # handshake; then it answers an HTTP GET with a short response, and other
 # data, each line as it ends, with the same bytes back, as tlsfuzzer's
 # scripts expect of an echo server; it reads until the client closes, and
-# closes with close_notify. What fails in one connection is printed and the
-# server goes on. Its certificate is a self-signed RSA one made on start,
+# closes with close_notify. It issues session tickets and takes ALPN
+# "http/1.1". What fails in one connection is printed and the server goes
+# on. Its certificate is a self-signed RSA one made on start,
 # unless `cert_file` and `key_file` (PEM) are given.
 #
 # Usage:
@@ -17,6 +18,7 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "socket"
 require "openssl"
+require "securerandom"
 require "raiha/next/tls"
 
 TLS = Raiha::Next::TLS
@@ -47,7 +49,9 @@ else
   cert.sign(key, "SHA256")
 end
 
-config = TLS::Config.server
+# A ticket key and an ALPN protocol, so that a tester sees resumption and
+# ALPN to test; a client that offers no ALPN is taken as well.
+config = TLS::Config.server(ticket_key: SecureRandom.bytes(32), alpn: ["http/1.1"])
 keyring = TLS::Keyring.server(config:, identities: [TLS::Keyring::Identity.new(cert_der: [cert.to_der], key_der: key.private_to_der)])
 
 HTTP_RESPONSE = <<~RESPONSE.gsub("\n", "\r\n")
