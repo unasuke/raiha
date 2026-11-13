@@ -9,7 +9,7 @@ require "tmpdir"
 # decodes back to them with the decoder of the next release of raiha and
 # with ls-qpack, through pylsqpack, which uv resolves when the test runs.
 # The encoder refers to no dynamic table, so both decoders allow none.
-# `rake test:next:qifs` fetches the corpus into tmp/qifs.
+# `rake test:qifs` fetches the corpus into tmp/qifs.
 class NextQPACKQifsEncodingTest < Minitest::Test
   include NextQPACKOfflineInterop
 
@@ -19,7 +19,7 @@ class NextQPACKQifsEncodingTest < Minitest::Test
   TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 
   def setup
-    skip "the qifs corpus is not in #{QIFS_DIR}; run rake test:next:qifs" unless Dir.exist?(File.join(QIFS_DIR, "qifs"))
+    skip "the qifs corpus is not in #{QIFS_DIR}; run rake test:qifs" unless Dir.exist?(File.join(QIFS_DIR, "qifs"))
     @qifs = Dir[File.join(QIFS_DIR, "qifs", "*.qif")].sort
     refute_empty @qifs
   end

@@ -1,7 +1,6 @@
-# The next release of raiha (lib/raiha).
-target :next do
+target :lib do
   signature "sig"
-  check "lib/raiha"
+  check "lib"
   library "ipaddr"
   library "securerandom"
   library "socket"

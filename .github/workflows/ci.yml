@@ -25,9 +25,9 @@ jobs:
           ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec rbs collection install
-      - run: bundle exec steep check --group=next
+      - run: bundle exec steep check
 
-  next-interop-openssl:
+  interop-openssl:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -35,9 +35,9 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
-      - run: bundle exec rake test:next:interop:openssl
+      - run: bundle exec rake test:interop:openssl
 
-  next-interop-picotls:
+  interop-picotls:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -48,9 +48,9 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y cmake pkg-config libssl-dev
-      - run: bundle exec rake test:next:interop:picotls
+      - run: bundle exec rake test:interop:picotls
 
-  next-interop-quicgo:
+  interop-quicgo:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -62,9 +62,9 @@ jobs:
         with:
           go-version: '1.23'
           cache-dependency-path: test/support/quicgo/go.sum
-      - run: bundle exec rake test:next:interop:quicgo
+      - run: bundle exec rake test:interop:quicgo
 
-  next-interop-aioquic:
+  interop-aioquic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -73,9 +73,9 @@ jobs:
           ruby-version: '4.0'
           bundler-cache: true
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
-      - run: bundle exec rake test:next:interop:aioquic
+      - run: bundle exec rake test:interop:aioquic
 
-  next-interop-quic-gem:
+  interop-quic-gem:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -86,9 +86,9 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool pkg-config build-essential
-      - run: bundle exec rake test:next:interop:quic_gem
+      - run: bundle exec rake test:interop:quic_gem
 
-  next-interop-h3i:
+  interop-h3i:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -103,9 +103,9 @@ jobs:
           workspaces: |
             tmp/quiche
             test/support/h3i_harness -> ../../../tmp/h3i_harness
-      - run: bundle exec rake test:next:interop:h3i
+      - run: bundle exec rake test:interop:h3i
 
-  next-interop-quiche-http3:
+  interop-quiche-http3:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -118,9 +118,9 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: tmp/quiche
-      - run: bundle exec rake test:next:interop:quiche_http3_client test:next:interop:quiche_http3_server
+      - run: bundle exec rake test:interop:quiche_http3_client test:interop:quiche_http3_server
 
-  next-interop-h3spec:
+  interop-h3spec:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -128,9 +128,9 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
-      - run: bundle exec rake test:next:interop:h3spec
+      - run: bundle exec rake test:interop:h3spec
 
-  next-qifs:
+  qifs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -139,9 +139,9 @@ jobs:
           ruby-version: '4.0'
           bundler-cache: true
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
-      - run: bundle exec rake test:next:qifs
+      - run: bundle exec rake test:qifs
 
-  next-interop-runner:
+  interop-runner:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -190,6 +190,6 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: quic-interop-runner-next-logs
+          name: quic-interop-runner-logs
           path: tmp/quic-interop-runner/logs
           retention-days: 7

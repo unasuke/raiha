@@ -17,11 +17,13 @@ namespace :test do
     t.test_files = FileList["test/**/*_test.rb"].exclude("test/interop/**/*_test.rb")
   end
 
-  Rake::TestTask.new(:next) do |t|
-    t.description = "Run tests for the next release of raiha (lib/raiha)"
-    t.libs << "test"
-    t.libs << "lib"
-    t.test_files = FileList["test/raiha/**/*_test.rb"]
+  { tls: "TLS", quic: "QUIC", http3: "HTTP/3", runtime: "Runtime" }.each do |layer, name|
+    Rake::TestTask.new(layer) do |t|
+      t.description = "Run the tests of the #{name} layer"
+      t.libs << "test"
+      t.libs << "lib"
+      t.test_files = FileList["test/raiha/#{layer}/**/*_test.rb"]
+    end
   end
 
   Rake::TestTask.new(:interop) do |t|
@@ -30,44 +32,40 @@ namespace :test do
     t.libs << "lib"
     t.test_files = FileList["test/interop/**/*_test.rb"]
   end
-end
 
-namespace :test do
-  namespace :next do
-    namespace :interop do
-      NEXT_INTEROP_SPEC = {
-        openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
-        picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
-        quicgo: { file: "test/interop/quic/quicgo_test.rb", build: :quicgo },
-        aioquic: { file: "test/interop/quic/aioquic_test.rb", build: :aioquic },
-        quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem },
-        h3i: { file: "test/interop/http3/h3i_test.rb", build: :h3i },
-        quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
-        quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
-        h3spec: { file: "test/interop/http3/h3spec_test.rb", build: :h3spec },
-        # A gem in the bundle: nothing to build.
-        tttls13: { file: "test/interop/tls/tttls13_test.rb", build: nil }
-      }.freeze
+  namespace :interop do
+    INTEROP_SPEC = {
+      openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
+      picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
+      quicgo: { file: "test/interop/quic/quicgo_test.rb", build: :quicgo },
+      aioquic: { file: "test/interop/quic/aioquic_test.rb", build: :aioquic },
+      quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem },
+      h3i: { file: "test/interop/http3/h3i_test.rb", build: :h3i },
+      quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
+      quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
+      h3spec: { file: "test/interop/http3/h3spec_test.rb", build: :h3spec },
+      # A gem in the bundle: nothing to build.
+      tttls13: { file: "test/interop/tls/tttls13_test.rb", build: nil }
+    }.freeze
 
-      NEXT_INTEROP_SPEC.each do |name, spec|
-        Rake::TestTask.new(name) do |t|
-          t.description = "Run #{name} interop tests of the next release of raiha (auto-builds the peer implementation)"
-          t.libs << "test"
-          t.libs << "lib"
-          t.test_files = [spec[:file]]
-        end
-        task name => "interop:build:#{spec[:build]}" if spec[:build]
+    INTEROP_SPEC.each do |name, spec|
+      Rake::TestTask.new(name) do |t|
+        t.description = "Run #{name} interop tests (auto-builds the peer implementation)"
+        t.libs << "test"
+        t.libs << "lib"
+        t.test_files = [spec[:file]]
       end
+      task name => "interop:build:#{spec[:build]}" if spec[:build]
     end
-
-    Rake::TestTask.new(:qifs) do |t|
-      t.description = "Run QPACK of the next release of raiha against the qifs corpus (fetches it into tmp/qifs)"
-      t.libs << "test"
-      t.libs << "lib"
-      t.test_files = FileList["test/interop/http3/qifs*_test.rb"]
-    end
-    task qifs: "interop:build:qifs"
   end
+
+  Rake::TestTask.new(:qifs) do |t|
+    t.description = "Run QPACK against the qifs corpus (fetches it into tmp/qifs)"
+    t.libs << "test"
+    t.libs << "lib"
+    t.test_files = FileList["test/interop/http3/qifs*_test.rb"]
+  end
+  task qifs: "interop:build:qifs"
 end
 
 namespace :interop do

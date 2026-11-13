@@ -4,7 +4,7 @@ require "support/qpack_offline_interop"
 # The QPACK decoder against the qifs corpus: what other implementations'
 # encoders made of the QIF files decodes back to them. The encodings are
 # those of qpack-05, the corpus's latest; qpack-02 and qpack-03 are of
-# drafts older than RFC 9204's wire format. `rake test:next:qifs` fetches
+# drafts older than RFC 9204's wire format. `rake test:qifs` fetches
 # the corpus into tmp/qifs.
 class NextQPACKQifsTest < Minitest::Test
   include NextQPACKOfflineInterop
@@ -13,7 +13,7 @@ class NextQPACKQifsTest < Minitest::Test
   IMPLEMENTATIONS = %w[f5 ls-qpack nghttp3 proxygen qthingey quinn].freeze
 
   def setup
-    skip "the qifs corpus is not in #{QIFS_DIR}; run rake test:next:qifs" unless Dir.exist?(ENCODED)
+    skip "the qifs corpus is not in #{QIFS_DIR}; run rake test:qifs" unless Dir.exist?(ENCODED)
   end
 
   # File names are <QIF>.out.<table capacity>.<blocked streams>.<whether
