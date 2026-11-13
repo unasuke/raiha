@@ -51,10 +51,11 @@ module Raiha::Next::TLS
       # to be absent, that is, when the server claims TLS 1.2 or lower.
       #
       # 5 needs no context: this implementation offers only TLS 1.3, so any
-      # other selected_version was not offered.
+      # other selected_version was not offered. 1 holds only without
+      # supported_versions: with it, a client ignores legacy_version (RFC
+      # 8446 "Supported Versions": "clients MUST ignore the
+      # ServerHello.legacy_version value").
       def validate
-        # 1
-        return Violation.new(alert: :protocol_version, reason: :legacy_version) unless legacy_version == 0x0303
         # 2
         unless legacy_compression_method == 0
           return Violation.new(alert: :illegal_parameter, reason: :legacy_compression_method)
@@ -64,6 +65,8 @@ module Raiha::Next::TLS
           # 5
           return Violation.new(alert: :illegal_parameter, reason: :selected_version) unless versions.selected_version == 0x0304
         else
+          # 1
+          return Violation.new(alert: :protocol_version, reason: :legacy_version) unless legacy_version == 0x0303
           # 3
           tail = random.byteslice(24, 8)
           if tail == DOWNGRADE_TLS12 || tail == DOWNGRADE_TLS11

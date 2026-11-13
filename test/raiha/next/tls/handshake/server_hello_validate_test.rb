@@ -32,16 +32,20 @@ class RaihaNextTLSHandshakeServerHelloValidateTest < Minitest::Test
     assert_nil HRR.validate
   end
 
+  # With supported_versions, legacy_version is ignored (RFC 8446
+  # "Supported Versions").
   def test_row1_legacy_version
-    assert_equal violation(:protocol_version, :legacy_version), row1(SH).validate
+    assert_equal violation(:protocol_version, :legacy_version), row1(without_versions(SH)).validate
+    assert_nil row1(SH).validate
+    assert_nil row1(HRR).validate
   end
 
   def test_row2_compression
     assert_equal violation(:illegal_parameter, :legacy_compression_method), row2(SH).validate
   end
 
-  def test_row2_after_row1
-    assert_equal violation(:protocol_version, :legacy_version), row2(row1(SH)).validate
+  def test_row2_with_legacy_version_ignored
+    assert_equal violation(:illegal_parameter, :legacy_compression_method), row2(row1(SH)).validate
   end
 
   def test_row3_downgrade_sentinel
