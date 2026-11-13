@@ -9,7 +9,7 @@ module Raiha::Next::QUIC
 
     # The first stage of a new connection, from what the headers of a
     # client's first Initial alone say: the application `retry`s, `refuse`s
-    # or `admit`s `handle`. `address_validated` is whether a token showed
+    # or `admit`s `handle`, and can retry it at this stage alone. `address_validated` is whether a token showed
     # the client receives at `remote`.
     class Incoming < Data.define(:handle, :remote, :address_validated)
     end

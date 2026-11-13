@@ -259,6 +259,15 @@ class RaihaNextQUICEndpointAcceptTest < Minitest::Test
     assert_raises(QUIC::Error::Usage) { endpoint.retry(route.handle, now: 0.1) }
   end
 
+  # An admitted offer cannot have a Retry: the client drops one after the
+  # server's Initial, which the second stage may have sent.
+  def test_no_retry_once_admitted
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: "r".b * 32), random: Random.new(3), time: NOW, now: 0.0)
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::Usage) { endpoint.retry(handle, now: 0.0) }
+  end
+
   def test_reject_takes_the_alerts_of_the_acceptor
     endpoint = endpoint()
     handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
