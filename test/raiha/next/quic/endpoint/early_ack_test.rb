@@ -107,28 +107,40 @@ class RaihaNextQUICEndpointEarlyAckTest < Minitest::Test
     assert_equal 0, endpoint.instance_variable_get(:@buffered)
   end
 
-  # Initial packets of a few bytes, each eliciting an ACK, and with gaps
-  # between their numbers, which make each ACK longer, are answered no
-  # further than three times what came: some go unanswered.
-  def test_the_acks_keep_to_the_amplification_limit
+  # RFC 9000 "Datagram Size": an Initial of the offer's in a datagram
+  # under 1200 bytes is dropped, and not acknowledged.
+  def test_no_ack_of_a_short_datagram
     (one, _), first = halves
     endpoint = endpoint()
-    datagram = initial(first:, dcid: first, packet_number: 0, frames: [crypto(0, one)])
-    received = datagram.bytesize
-    handle = endpoint.receive(datagram, from: CLIENT, now: 0.0).handle
+    handle = endpoint.receive(initial(first:, dcid: first, packet_number: 0, frames: [crypto(0, one)]), from: CLIENT, now: 0.0).handle
     endpoint.admit(handle, now: 0.0)
-    sent = sent(endpoint, first).sum(&:last)
-    acks = 1
-    server_id = handle.server_connection_id
-    (1..300).each do |number|
-      ping = initial(first:, dcid: server_id, packet_number: number * 2, frames: [QUIC::Wire::Frame::Ping.new], size: 0)
-      received += ping.bytesize
-      endpoint.receive(ping, from: CLIENT, now: 0.0)
-      answers = sent(endpoint, first)
-      acks += answers.size
-      sent += answers.sum(&:last)
-      assert_operator sent, :<=, 3 * received
+    sent(endpoint, first)
+    ping = initial(first:, dcid: handle.server_connection_id, packet_number: 1, frames: [QUIC::Wire::Frame::Ping.new], size: 0)
+    assert_equal QUIC::Route::Drop.new(reason: :too_short), endpoint.receive(ping, from: CLIENT, now: 0.0)
+    assert_empty sent(endpoint, first)
+  end
+
+  # Initial packets of a few bytes, each eliciting an ACK, and with gaps
+  # between their numbers, which make each ACK longer, are answered no
+  # further than three times what the offer kept: some go unanswered. The
+  # Endpoint drops such datagrams before an offer reads them, so they are
+  # given to the offer itself here.
+  def test_the_acks_keep_to_the_amplification_limit
+    (one, _), first = halves
+    handle = QUIC::Endpoint::Handle.new(remote: CLIENT, version: QUIC::Version::V1, destination_connection_id: first, source_connection_id: SCID,
+      original_destination_connection_id: first, retry_source_connection_id: nil, expires_at: 3.0, address_validated: false)
+    give = lambda do |datagram|
+      handle.keep(datagram, from: CLIENT, to: nil, ecn: :not_ect)
+      handle.admitted? ? handle.read(datagram, time: NOW, dcid_length: 8, ecn: :not_ect, now: 0.0) : handle.admit(time: NOW, dcid_length: 8, now: 0.0)
+      handle.choose_connection_id("s".b * 8) unless handle.server_connection_id
+      handle.acknowledgment(now: 0.0)
     end
-    assert_operator acks, :<, 301
+    sent = [give.(initial(first:, dcid: first, packet_number: 0, frames: [crypto(0, one)]))]
+    (1..300).each do |number|
+      sent << give.(initial(first:, dcid: "s".b * 8, packet_number: number * 2, frames: [QUIC::Wire::Frame::Ping.new], size: 0))
+      assert_operator sent.compact.sum(&:bytesize), :<=, 3 * handle.buffered
+    end
+    assert_includes sent, nil
+    assert_equal sent.compact.size, handle.early_acks.size
   end
 end

@@ -506,6 +506,9 @@ module Raiha::Next::QUIC
         # packets, from where its first came.
         return Route::Drop.new(reason: :address_mismatch) unless from == handle.remote
         return Route::Drop.new(reason: :unexpected_packet) if header.type == :handshake
+        # RFC 9000 "Datagram Size": a server drops an Initial in a datagram
+        # under 1200 bytes, the offer's later ones too.
+        return Route::Drop.new(reason: :too_short) if header.type == :initial && datagram.bytesize < Connection::MIN_INITIAL_DATAGRAM
         if (dropped = keep(handle, datagram, from:, to:, ecn:))
           return dropped
         end
