@@ -18,6 +18,8 @@ group :test do
   # Rack::Lint for its Rack adapter, which itself does not depend on rack.
   gem "async"
   gem "rack"
+  # A TLS 1.3 in Ruby, for the interop test against it.
+  gem "tttls1.3"
 end
 
 # Peer implementation for the quic gem interop test. It builds ngtcp2 +
