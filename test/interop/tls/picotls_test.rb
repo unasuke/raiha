@@ -7,7 +7,7 @@ require "socket"
 require "timeout"
 require "tmpdir"
 
-# The next release of raiha over TCP against picotls's cli (built into
+# raiha over TCP against picotls's cli (built into
 # tmp/picotls by `rake interop:build:picotls`), both ways. picotls's `-u`
 # asks for a KeyUpdate as soon as the handshake completes, and sends it with
 # its first data.

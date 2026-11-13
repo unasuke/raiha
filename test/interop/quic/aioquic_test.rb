@@ -2,7 +2,7 @@ require "test_helper"
 require "support/quic_udp"
 require "fileutils"
 
-# The next release of raiha over UDP against aioquic, both ways: a client
+# raiha over UDP against aioquic, both ways: a client
 # against aioquic's server with a certificate of the test CA, a server
 # against aioquic's client, which closes once its handshake is done unless
 # it has data to send. Both scripts print HANDSHAKE_COMPLETE then. The

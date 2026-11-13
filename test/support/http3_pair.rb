@@ -1,6 +1,6 @@
 require "raiha/http3"
 
-# HTTP/3 Connections of the next release of raiha with no transport under
+# HTTP/3 Connections of raiha with no transport under
 # them: what one gives to send is read off, or handed to the other end
 # stream by stream, the IDs being the same on both ends as in QUIC.
 module HTTP3Pair

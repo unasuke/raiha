@@ -1,6 +1,6 @@
 require "support/quic_tls"
 
-# A client and a server Connection of the next release of raiha, wired to
+# A client and a server Connection of raiha, wired to
 # each other with nothing in between.
 module QUICPair
   include QUICTLS

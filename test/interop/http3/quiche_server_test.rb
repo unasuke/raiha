@@ -2,7 +2,7 @@ require "test_helper"
 require "support/http3_udp"
 require "fileutils"
 
-# A client of the next release of raiha over UDP against quiche's HTTP/3
+# A client of raiha over UDP against quiche's HTTP/3
 # server (quiche-server of tmp/quiche), which serves the files of a
 # directory with a certificate of the test CA, sends a Retry first and
 # sends GREASE. The client asks for two files at once.

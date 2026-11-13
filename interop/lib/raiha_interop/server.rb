@@ -3,7 +3,7 @@
 require_relative "common"
 
 module RaihaInterop
-  # The server of hq-interop on the next release of raiha: an Endpoint on
+  # The server of hq-interop on raiha: an Endpoint on
   # UDP port 443 of IPv4 and IPv6 that takes every client, after a Retry
   # for the retry testcase, and answers each request, "GET /path\r\n" on a stream the
   # client opens, with the file of the path under WWW, ending the stream.

@@ -21,7 +21,7 @@ if [ "$(git -C "$TLSFUZZER_DIR" rev-parse HEAD)" != "$TLSFUZZER_COMMIT" ]; then
   git -C "$TLSFUZZER_DIR" checkout -q "$TLSFUZZER_COMMIT"
 fi
 
-# Start the fuzzing server of the next release of raiha
+# Start the fuzzing server of raiha
 rm -rf "$LOG_DIR"
 mkdir -p "$LOG_DIR"
 (cd "$PROJECT_DIR" && exec bundle exec ruby "${SCRIPT_DIR}/fuzzing_server.rb" "$PORT") 2> "${LOG_DIR}/server.log" &

@@ -4,7 +4,7 @@ require "raiha/quic/test"
 require "socket"
 require "tmpdir"
 
-# A client Connection or a server's Endpoint of the next release of raiha
+# A client Connection or a server's Endpoint of raiha
 # on a UDP socket of the loopback interface, run with the loop an
 # application writes, against another implementation of QUIC run as a
 # process of its own.

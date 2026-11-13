@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# A TLS 1.3 client over TCP of the next release of raiha (TLS::TCP::Socket)
+# A TLS 1.3 client over TCP of raiha (TLS::TCP::Socket)
 # for TLS-Anvil's client tests: TLS-Anvil runs a trigger before each
 # handshake, an HTTP request to `trigger_port` here, and the client then
 # connects to TLS-Anvil's server at `anvil_port`, sends a GET and reads

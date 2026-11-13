@@ -4,7 +4,7 @@ require "raiha/http3_binding"
 require_relative "server"
 
 module RaihaInterop
-  # The server of the http3 testcase on the next release of raiha: as
+  # The server of the http3 testcase on raiha: as
   # Server, over HTTP/3. Each connection's HTTP/3 is joined to it by
   # HTTP3Binding, and each request is answered with 200 and the file of
   # its path under WWW, written as fast as HTTP/3 takes it.

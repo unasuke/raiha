@@ -3,7 +3,7 @@ require "support/http3_udp"
 require "fileutils"
 require "json"
 
-# A server of the next release of raiha over UDP against quiche's HTTP/3
+# A server of raiha over UDP against quiche's HTTP/3
 # client (quiche-client of tmp/quiche), which checks the server's
 # certificate against the test CA, sends GREASE, and prints the responses
 # as JSON. The server answers every request with 200 and BODY.

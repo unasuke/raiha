@@ -1,6 +1,6 @@
 require "raiha/tls"
 
-# The security oracle of the next release's TLS tests: what must hold once
+# The security oracle of raiha's TLS tests: what must hold once
 # a handshake completes, whatever was fed to it. Bugs in this layer rarely
 # raise; they complete without a check, so passing without an exception
 # proves little. The Machine reports each check that passed as a Trace value

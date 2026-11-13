@@ -1,6 +1,6 @@
 require "openssl"
 
-# Certificates for tests of the next release of raiha: a CA and the leaves it
+# Certificates for tests of raiha: a CA and the leaves it
 # issues, with the names and validity a test asks for. Keys are generated
 # once per process and reused, since RSA generation is slow.
 module TestPKI

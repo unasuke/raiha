@@ -2,7 +2,7 @@ require "test_helper"
 require "support/quic_udp"
 require "fileutils"
 
-# The next release of raiha over UDP against quic-go, both ways: a client
+# raiha over UDP against quic-go, both ways: a client
 # against quic-go's server with a certificate of the test CA, a server
 # against quic-go's client. Both programs print HANDSHAKE_COMPLETE when
 # their handshake is done; the echo of a stream goes on from there. The

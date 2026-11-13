@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# A TLS 1.3 server over TCP of the next release of raiha (TLS::TCP::Socket)
+# A TLS 1.3 server over TCP of raiha (TLS::TCP::Socket)
 # for tlsfuzzer: it takes connections on `port` and completes each
 # handshake; then it answers an HTTP GET with a short response, and other
 # data, each line as it ends, with the same bytes back, as tlsfuzzer's

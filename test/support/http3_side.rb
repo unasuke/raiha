@@ -1,6 +1,6 @@
 require "raiha/http3_binding"
 
-# One end's application over HTTP/3 of the next release of raiha: its
+# One end's application over HTTP/3 of raiha: its
 # QUIC connection joined to an HTTP/3 connection by HTTP3Binding, run in
 # turns, with the events of each it was left with.
 class HTTP3Side

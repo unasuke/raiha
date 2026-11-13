@@ -8,7 +8,7 @@ require "raiha/quic"
 require "raiha/runtime"
 
 module RaihaInterop
-  # What the client and the server of the next release of raiha share:
+  # What the client and the server of raiha share:
   # the TLS extensions with the QUIC transport parameters, hq-interop
   # (HTTP/0.9 over QUIC) for ALPN, the runtime's UDP socket, and the keylog
   # and the qlog quic-interop-runner asks for. With

@@ -2,7 +2,7 @@ require "raiha/tls"
 require "socket"
 require "timeout"
 
-# A TCP::Connection of the next release of raiha over a TCP socket, driven
+# A TCP::Connection of raiha over a TCP socket, driven
 # by hand so that a test can write 0-RTT before the handshake completes and
 # keep every event, which TCP::Socket does not let it.
 class TCPDrive

@@ -6,7 +6,7 @@
 # as environment variables; raiha-interop reads them and either
 # binds a UDP server or runs a one-shot client.
 #
-# The image runs the next release of raiha with hq-interop, or HTTP/3
+# The image runs raiha with hq-interop, or HTTP/3
 # for http3. Built with --build-arg RAIHA_STARTUP=rapid_start, its paths
 # start with Rapid Start.
 #

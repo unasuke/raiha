@@ -8,7 +8,7 @@ require "socket"
 require "timeout"
 require "tmpdir"
 
-# Resumption and 0-RTT of the next release of raiha over TCP against
+# Resumption and 0-RTT of raiha over TCP against
 # picotls's cli (built into tmp/picotls by `rake interop:build:picotls`),
 # both ways. The cli keeps a session in the file given by `-s`, and with
 # `-e` sends what it is given as 0-RTT when it resumes one.

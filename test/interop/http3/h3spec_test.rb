@@ -1,7 +1,7 @@
 require "test_helper"
 require "support/http3_udp"
 
-# A server of the next release of raiha over UDP against h3spec
+# A server of raiha over UDP against h3spec
 # (kazu-yamamoto/h3spec, the release `rake interop:build:h3spec` fetches
 # into tmp/h3spec), which opens a connection for each of its cases and
 # sends what QUIC and HTTP/3 must refuse, checking that the server does.

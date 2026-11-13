@@ -1,7 +1,7 @@
 require "support/quic_udp"
 require "support/http3_side"
 
-# HTTP/3 of the next release of raiha on UDP sockets of the loopback
+# HTTP/3 of raiha on UDP sockets of the loopback
 # interface, against another implementation run as a process of its own.
 module HTTP3UDP
   include QUICUDP

@@ -4,7 +4,7 @@ require "raiha/http3_binding"
 require_relative "client"
 
 module RaihaInterop
-  # The client of the http3 testcase on the next release of raiha: as
+  # The client of the http3 testcase on raiha: as
   # Client, over HTTP/3. Its HTTP/3 is joined to the connection by
   # HTTP3Binding, a GET for each path goes on a stream of its own, and
   # each response is saved once whole.

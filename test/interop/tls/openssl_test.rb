@@ -7,7 +7,7 @@ require "socket"
 require "timeout"
 require "tmpdir"
 
-# The next release of raiha over TCP against the openssl command, both
+# raiha over TCP against the openssl command, both
 # ways: a client against `openssl s_server`, a server against
 # `openssl s_client`. OpenSSL is a RFC 8446 implementation, so these also
 # check that what RFC 8446 allowed and RFC 9846 does not is taken.

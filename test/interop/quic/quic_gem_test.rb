@@ -1,7 +1,7 @@
 require "test_helper"
 require "support/quic_udp"
 
-# The next release of raiha over UDP against the quic gem (github:
+# raiha over UDP against the quic gem (github:
 # unasuke/quic-ruby, ngtcp2 and picotls bound to Ruby), which has a client
 # only: a server against its client, run as a process of its own as it
 # runs its own loop. The client sends data on a stream and prints ECHO_OK

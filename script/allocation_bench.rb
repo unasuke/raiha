@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Allocations of the next release of raiha's QUIC, to see regressions by
+# Allocations of raiha's QUIC, to see regressions by
 # hand: a handshake, a client and a server Connection passing datagrams to
 # each other in memory, and a transfer of TRANSFER bytes between them, a
 # packet of which goes through streams, packet protection, loss recovery

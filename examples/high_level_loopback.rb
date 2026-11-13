@@ -1,4 +1,4 @@
-# A server and a client of the runtime of the next release of raiha on the
+# A server and a client of the runtime of raiha on the
 # loopback interface, in fibers of the scheduler of the async gem: the
 # server takes each connection and echoes each stream its client opens,
 # and the client sends a payload on a stream of its own and reads it back.

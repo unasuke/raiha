@@ -140,7 +140,7 @@ issue on this.
 
 ## Supported testcases
 
-The image runs the next release of raiha (`Raiha::QUIC`) with
+The image runs raiha (`Raiha::QUIC`) with
 hq-interop (HTTP/0.9 over QUIC), and HTTP/3 (`Raiha::HTTP3`) for
 http3: `interop/lib/raiha_interop/runner.rb` hands the role to
 `Server` or `Client`, or to `HTTP3Server` or `HTTP3Client` for http3.

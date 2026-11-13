@@ -6,7 +6,7 @@ require "open3"
 require "tmpdir"
 
 # The QPACK encoder on the QIF files of the qifs corpus: what it writes
-# decodes back to them with the decoder of the next release of raiha and
+# decodes back to them with the decoder of raiha and
 # with ls-qpack, through pylsqpack, which uv resolves when the test runs.
 # The encoder refers to no dynamic table, so both decoders allow none.
 # `rake test:qifs` fetches the corpus into tmp/qifs.

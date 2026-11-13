@@ -1,6 +1,6 @@
 require "support/tls_pair"
 
-# Two TCP::Connections of the next release of raiha, joined without a
+# Two TCP::Connections of raiha, joined without a
 # socket: what one outputs, the other receives.
 module TCPPair
   TLS = Raiha::TLS

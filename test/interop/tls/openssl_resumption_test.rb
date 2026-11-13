@@ -8,7 +8,7 @@ require "socket"
 require "timeout"
 require "tmpdir"
 
-# Resumption and 0-RTT of the next release of raiha over TCP against the
+# Resumption and 0-RTT of raiha over TCP against the
 # openssl command, both ways: a client resuming a session of
 # `openssl s_server` with 0-RTT, and a server resuming `openssl s_client`
 # and taking its 0-RTT.

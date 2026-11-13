@@ -2,7 +2,7 @@ require "test_helper"
 require "support/http3_udp"
 require "json"
 
-# A server of the next release of raiha over UDP against the h3i harness
+# A server of raiha over UDP against the h3i harness
 # (test/support/h3i_harness), which connects as a client, sends what the
 # named case says and prints what came back as a ConnectionSummary in
 # JSON. The server answers every request that has come whole with 200.

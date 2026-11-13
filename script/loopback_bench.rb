@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# The runtime of the next release of raiha on the loopback interface, to
+# The runtime of raiha on the loopback interface, to
 # see regressions by hand: the throughput of one connection the server
 # sends MEGABYTES on, and the handshakes a second one server takes, a
 # client connecting again and again for SECONDS. The server runs in a

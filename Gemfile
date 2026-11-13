@@ -14,7 +14,7 @@ end
 group :test do
   gem "minitest"
   gem "simplecov", require: false
-  # A Fiber scheduler for the tests of the runtime of the next release, and
+  # A Fiber scheduler for the tests of the runtime of raiha, and
   # Rack::Lint for its Rack adapter, which itself does not depend on rack.
   gem "async"
   gem "rack"

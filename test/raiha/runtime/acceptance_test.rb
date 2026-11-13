@@ -2,7 +2,7 @@ require "test_helper"
 require "support/runtime_http3"
 require "async"
 
-# The third acceptance test of the API of the next release of raiha: an
+# The third acceptance test of the API of raiha: an
 # HTTP/3 GET under a Fiber scheduler, written as the design writes it, to
 # a server of the runtime on the loopback interface.
 class RaihaRuntimeAcceptanceTest < Minitest::Test

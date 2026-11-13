@@ -4,7 +4,7 @@ require "uri"
 require_relative "common"
 
 module RaihaInterop
-  # The client of hq-interop on the next release of raiha: one connection
+  # The client of hq-interop on raiha: one connection
   # to the server of the first of REQUESTS, a stream for each of them,
   # "GET /path\r\n" on it, and what comes back saved under DOWNLOADS by the
   # name of the path. The chacha20 testcase offers ChaCha20-Poly1305 alone,

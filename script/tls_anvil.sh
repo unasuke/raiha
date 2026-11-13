@@ -1,6 +1,6 @@
 #!/bin/bash
 # TLS-Anvil (https://github.com/tls-attacker/TLS-Anvil) against the TLS of
-# the next release of raiha over TCP, in docker on the host's network, of
+# raiha over TCP, in docker on the host's network, of
 # the version pinned here. `server` tests script/fuzzing_server.rb, and
 # `client` script/tls_anvil_client.rb, which TLS-Anvil triggers before
 # each handshake. The results go to tmp/tls-anvil/<mode>; at strength 1

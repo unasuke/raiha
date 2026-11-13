@@ -7,7 +7,7 @@ require "timeout"
 require "tmpdir"
 require "tttls1.3"
 
-# The next release of raiha over TCP against tttls1.3, a TLS 1.3 in Ruby,
+# raiha over TCP against tttls1.3, a TLS 1.3 in Ruby,
 # both ways, in one process.
 class TLSTttls13InteropTest < Minitest::Test
   TLS = Raiha::TLS
