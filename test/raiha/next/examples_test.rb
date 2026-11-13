@@ -6,7 +6,7 @@ require "rbconfig"
 # out what the "Expected output:" of its header comment says. The UDP
 # handshake runs a client and a server over real sockets on the loopback
 # interface, and so does the loopback of the runtime, under the scheduler
-# of async.
+# of async; the handshake and the stream echo in memory use no socket.
 class RaihaNextExamplesTest < Minitest::Test
   ROOT = File.expand_path("../../..", __dir__)
   TIMEOUT = 30
@@ -44,5 +44,14 @@ class RaihaNextExamplesTest < Minitest::Test
     output, status = run_example(path)
     assert status.success?, output
     assert_equal expected_output(path), output
+  end
+
+  %w[in_memory_handshake stream_echo].each do |name|
+    define_method(:"test_#{name}") do
+      path = File.join(ROOT, "examples/next/#{name}.rb")
+      output, status = run_example(path)
+      assert status.success?, output
+      assert_equal expected_output(path), output
+    end
   end
 end
