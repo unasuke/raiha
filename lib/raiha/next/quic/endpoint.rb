@@ -45,7 +45,10 @@ module Raiha::Next::QUIC
     RESET_TOTAL_RATE = 100.0
     # How long an offer lasts unless the application decides on it, from
     # its first datagram, so that one the application forgets goes too.
-    HANDLE_LIFETIME = 3.0
+    # It is long enough for a client to send the rest of a ClientHello
+    # again a few times after losses, as an offer that sent an ACK is
+    # refused when it goes, not forgotten.
+    HANDLE_LIFETIME = 10.0
     # The bytes of datagrams an offer keeps until it becomes a connection,
     # and all offers together, so that what an attacker can make an
     # Endpoint keep is bounded whatever the application does.

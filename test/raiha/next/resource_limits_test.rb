@@ -38,7 +38,7 @@ class RaihaNextResourceLimitsTest < Minitest::Test
     "QUIC::Datagrams::MAX_RECEIVED_BYTES" => 1024 * 1024,
     "QUIC::Qlog::Tracer::DEFAULT_MAX_BYTES" => 64 * 1024 * 1024,
     # QUIC, an Endpoint
-    "QUIC::Endpoint::HANDLE_LIFETIME" => 3.0,
+    "QUIC::Endpoint::HANDLE_LIFETIME" => 10.0,
     "QUIC::Endpoint::HANDLE_BUFFER" => 64 * 1024,
     "QUIC::Endpoint::HANDLES_BUFFER" => 16 * 1024 * 1024,
     "QUIC::Endpoint::RESET_ADDRESSES" => 1024,
