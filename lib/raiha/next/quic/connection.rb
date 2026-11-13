@@ -83,6 +83,11 @@ module Raiha::Next::QUIC
     # A packet put together, not yet protected.
     Pending = Data.define(:level, :header, :packet_number, :packet_number_length, :frames, :duties)
 
+    # A packet of only an ACK in the Initial space an Endpoint sent the
+    # client before the connection was made: its number, its size, and
+    # when it went.
+    EarlyAck = Data.define(:packet_number, :bytes, :time)
+
     attr_reader :role, :path
 
     # A client connection to `remote` ([host, port]), with its first
@@ -122,7 +127,11 @@ module Raiha::Next::QUIC
     # Source Connection ID, which the transport parameters name, and that
     # the client's address is validated. It also chooses the connection's
     # Source Connection ID, and gives its `stateless_reset_token`, which the
-    # transport parameters carry (RFC 9000 "Stateless Reset").
+    # transport parameters carry (RFC 9000 "Stateless Reset"). Its
+    # `early_acks` (EarlyAck) are the packets it acknowledged the client's
+    # Initials with, which the connection takes as its own: its Initial
+    # packet numbers follow theirs, an ACK of them is of packets it sent,
+    # and their bytes count toward the amplification limit.
     #
     # Its tickets are bound to the QUIC version, so that a ticket of another
     # opens on none of it (RFC 9369 "TLS Resumption and NEW_TOKEN Tokens").
@@ -133,11 +142,12 @@ module Raiha::Next::QUIC
     # token for a new address of the client the connection validates.
     def self.server(config:, tls_config:, keyring:, time:, now:, tracer: nil, keylog: nil, client_hello: nil,
       original_destination_connection_id: nil, retry_source_connection_id: nil, address_validated: false, source_connection_id: nil,
-      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil, peers: nil, tokens: nil)
+      stateless_reset_token: nil, new_token: nil, anti_replay: nil, app_early_data_context: "".b, issuer: nil, peers: nil, tokens: nil,
+      early_acks: [])
       raise ArgumentError, "app_early_data_context must be a String" unless app_early_data_context.is_a?(String)
       new(role: :server, config:, now:, time:, remote: nil, tracer:, random: keyring.random, original_destination_connection_id:,
         retry_source_connection_id:, address_validated:, source_connection_id:, stateless_reset_token:, new_token:,
-        issuer:, peers:, tokens:) do |connection, parameters|
+        issuer:, peers:, tokens:, early_acks:) do |connection, parameters|
         TLSBinding.server(connection:, config: tls_config, keyring:, transport_parameters: parameters, time:, client_hello:, tracer:, keylog:,
           version: config.versions.fetch(0), anti_replay:, app_early_data_context:)
       end
@@ -147,7 +157,7 @@ module Raiha::Next::QUIC
 
     def initialize(role:, config:, now:, time:, remote:, tracer:, random:, original_destination_connection_id: nil,
       retry_source_connection_id: nil, address_validated: role == :client, source_connection_id: nil, stateless_reset_token: nil, token: nil,
-      new_token: nil, session: nil, issuer: nil, peers: nil, tokens: nil, &start)
+      new_token: nil, session: nil, issuer: nil, peers: nil, tokens: nil, early_acks: [], &start)
       @role = role
       @config = config
       @random = random
@@ -157,6 +167,7 @@ module Raiha::Next::QUIC
       @tracer = tracer
       @path = Path.new(config:, remote:, validated: address_validated, tracer:)
       @recovery = Recovery.new(role:, config:, path: @path, random:, now:, tracer:)
+      early_acks.each { |ack| take_early_ack(ack) }
       # The paths besides the one in use, being validated or validated, the
       # oldest first, and the one last validated, which the connection goes
       # back to when a new one fails; the first is, by the handshake.
@@ -793,6 +804,16 @@ module Raiha::Next::QUIC
     private def dropped(reason, length, now)
       @tracer.packet_dropped(reason:, raw_length: length, now:) if @tracer # steep:ignore
       nil
+    end
+
+    # An Endpoint's packet of only an ACK, which went before the connection,
+    # is one the connection sent.
+    private def take_early_ack(ack)
+      number = @recovery.next_packet_number(:initial)
+      raise ArgumentError, "early ACK #{ack.packet_number} is not packet #{number}" unless ack.packet_number == number
+      @recovery.on_packet_sent(packet_type: :initial, packet_number: number, sent_bytes: ack.bytes, ack_eliciting: false, in_flight: false,
+        duties: [], now: ack.time)
+      @path.datagram_sent(ack.bytes)
     end
 
     # Keeps a Handshake or 1-RTT packet whose keys have not come yet, as
