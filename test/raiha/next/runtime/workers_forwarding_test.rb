@@ -78,7 +78,8 @@ class RaihaNextRuntimeWorkersForwardingTest < Minitest::Test
 
   # A client with no issuer gives the server no connection ID to spare:
   # each move is a NAT rebinding to the server, which goes on with the ID
-  # in use, the first move before any 1-RTT packet came as well.
+  # in use, the first move before any 1-RTT packet came as well, and
+  # validates the path it left with that ID.
   def test_a_rebinding_with_no_id_to_spare
     workers, running = serving(count: 1)
     socket, sent = moving(workers, issuer: nil) { |moves| moves < 3 }

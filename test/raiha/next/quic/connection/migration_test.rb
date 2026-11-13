@@ -123,12 +123,14 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     end
   end
 
-  # With no ID left that no path sent with, the path left is not
-  # validated again: one ID would go to two addresses.
+  # With no ID left that no path sent with, the path left is validated
+  # again with the ID in use, which its address has seen already, so that
+  # a packet an attacker sent again from elsewhere does not keep the
+  # connection there (RFC 9000 "Off-Path Packet Forwarding").
   def test_a_rebinding_with_no_id_for_the_path_left
     server, keylog, id, now = connected(ids: 0)
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
-    assert_equal({ ELSEWHERE => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
+    assert_equal({ ELSEWHERE => id, CLIENT => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
   end
 
   # A rebinding before any 1-RTT packet came is one all the same: the
@@ -311,9 +313,9 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal CLIENT, server.path.remote
   end
 
-  # Rebindings one after another, with no ID left for the paths left to
-  # be validated again with, leave those paths for good, and their
-  # addresses go with them.
+  # Rebindings one after another leave no more than MAX_VALIDATING_PATHS
+  # paths besides the one in use, those with no ID left validated again
+  # with the ID in use; the paths left for good take their addresses out.
   def test_paths_left_for_good_take_their_addresses_out
     peers = Peers.new
     keylog = Keylog.new
@@ -327,10 +329,11 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     server.receive(packet(keylog, ping, *issued, number: 999), from: CLIENT, to: SERVER, now:)
     addresses = (1..4).map { ["198.51.100.#{_1}", 61_000] }
     addresses.each_with_index { |address, index| server.receive(packet(keylog, ping, number: 1000 + index), from: address, to: SERVER, now:) }
-    assert_equal [addresses[0], addresses[3]], peers.addresses
+    assert_equal addresses, peers.addresses
   end
 
-  # A path that fails and is left for good takes its address out.
+  # A path that fails and is left for good takes its address out; the
+  # client answers on the path left, which the server goes back to.
   def test_a_failed_path_takes_its_address_out
     peers = Peers.new
     keylog = Keylog.new
@@ -340,8 +343,9 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     server.receive(packet(keylog, ping, number: 999), from: CLIENT, to: SERVER, now:)
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
     assert_equal [ELSEWHERE], peers.addresses
-    sent(server, keylog, now)
-    run_timers(server, keylog, now) { |datagrams| datagrams.any? { _1.first == CLIENT } }
+    _, data = challenges(sent(server, keylog, now)).fetch(CLIENT)
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1001), from: CLIENT, to: SERVER, now:)
+    run_timers(server, keylog, now) { server.path.remote == CLIENT }
     refute server.closed?
     assert_empty peers.addresses
   end

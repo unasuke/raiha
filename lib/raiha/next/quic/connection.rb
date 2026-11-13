@@ -1568,11 +1568,13 @@ module Raiha::Next::QUIC
     # The connection sends on `path` from now on, and the path left stays
     # the one last validated when it was. A path with an ID of its own
     # sends with it, and the path left keeps the ID in use before; else
-    # the path left takes an ID no path sent with, if there is one. When
-    # the peer moved (`revalidate`), the path left is validated again with
-    # its ID, as RFC 9000 "Off-Path Packet Forwarding" asks, so that a
-    # path an attacker forwarded packets to does not keep the connection;
-    # with no ID, it is not.
+    # the path left takes an ID no path sent with, or, with none, the ID in
+    # use, which its address has seen already: RFC 9000 "Privacy
+    # Implications of Connection Migration" lets the ID in use go on with
+    # the new address. When the peer moved (`revalidate`), the path left is
+    # validated again with its ID, as RFC 9000 "Off-Path Packet Forwarding"
+    # asks, so that a path an attacker forwarded packets to does not keep
+    # the connection.
     private def switch_to(path, now, revalidate: true)
       @validating.delete(path)
       start_validation(path, now) unless path.validating? || (path.validated? && !path.validation_owed?)
@@ -1585,7 +1587,7 @@ module Raiha::Next::QUIC
         left.send_with(@destination_connection_id)
         use_peer_connection_id(connection_id, now)
       elsif revalidate
-        left.send_with(@peer_ids&.claim)
+        left.send_with(@peer_ids&.claim || @destination_connection_id)
       end
       lift_amplification_limit(now)
       @path = path
