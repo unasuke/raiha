@@ -22,8 +22,10 @@ module Raiha::Next::QUIC
   # number was issued goes by the highest issued, and no set of those
   # retired is kept.
   class IssuedConnectionIDs
-    # The most IDs this end keeps active, sequence number 0 among them.
-    MAX = 4
+    # The most IDs this end keeps active, sequence number 0 among them:
+    # enough that a server, which moves on a NAT rebinding only with an ID
+    # to validate the path left with, follows a few rebindings in a row.
+    MAX = 8
     # The most IDs retired that wait to be forgotten.
     MAX_RETIRED = 2 * MAX
     FRAME_TYPE = Wire::Frame::RetireConnectionID::TYPES.fetch(0)

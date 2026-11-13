@@ -54,9 +54,9 @@ class RaihaNextQUICIssuedConnectionIDsTest < Minitest::Test
     ids = QUIC::IssuedConnectionIDs.new("0".b * 8, issuer:, connection: :connection)
     ids.issue(2)
     assert_equal [[1, 0, "00000001", "00000001" * 2]], frames(ids).map { [_1.sequence_number, _1.retire_prior_to, _1.connection_id, _1.stateless_reset_token] }
-    ids.issue(8)
-    assert_equal [2, 3], frames(ids).map(&:sequence_number)
-    assert_equal [:connection] * 3, issuer.connections
+    ids.issue(16)
+    assert_equal (2..7).to_a, frames(ids).map(&:sequence_number)
+    assert_equal [:connection] * 7, issuer.connections
   end
 
   # A server's preferred address takes sequence number 1, with no frame,

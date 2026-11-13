@@ -7,7 +7,7 @@ class RaihaNextQUICConfigTest < Minitest::Test
 
   def test_defaults
     config = Config.new
-    assert_equal [30.0, 65_527, 768 * 1024, 512 * 1024, 100, 100, 0.025, 3, 4, false, nil],
+    assert_equal [30.0, 65_527, 768 * 1024, 512 * 1024, 100, 100, 0.025, 3, 8, false, nil],
       config.to_h.values_at(:max_idle_timeout, :max_udp_payload_size, :initial_max_data, :initial_max_stream_data_uni,
         :initial_max_streams_bidi, :initial_max_streams_uni, :max_ack_delay, :ack_delay_exponent, :active_connection_id_limit,
         :disable_active_migration, :max_datagram_frame_size)

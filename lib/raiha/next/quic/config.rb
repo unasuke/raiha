@@ -97,7 +97,7 @@ module Raiha::Next::QUIC
       initial_max_data: 768 * 1024, initial_max_stream_data_bidi_local: 512 * 1024,
       initial_max_stream_data_bidi_remote: 512 * 1024, initial_max_stream_data_uni: 512 * 1024,
       initial_max_streams_bidi: 100, initial_max_streams_uni: 100,
-      max_ack_delay: 0.025, ack_delay_exponent: 3, active_connection_id_limit: 4, disable_active_migration: false,
+      max_ack_delay: 0.025, ack_delay_exponent: 3, active_connection_id_limit: 8, disable_active_migration: false,
       max_datagram_frame_size: nil,
       versions: [Version::V1], connection_id_length: 8, initial_max_datagram_size: 1200, enable_pmtud: true,
       max_stream_receive_window: 6 * 1024 * 1024, max_receive_window: 15 * 1024 * 1024, max_send_buffer: 15 * 1024 * 1024,

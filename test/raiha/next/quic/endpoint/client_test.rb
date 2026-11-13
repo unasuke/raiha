@@ -82,13 +82,13 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
     to = ->(frame) { "\x40".b + frame.connection_id + "\0".b * 30 }
 
     from_server = frames.(:packet_received)
-    assert_equal [[1, 0], [2, 0], [3, 0]], from_server.map { [_1.sequence_number, _1.retire_prior_to] }
+    assert_equal (1..7).map { [_1, 0] }, from_server.map { [_1.sequence_number, _1.retire_prior_to] }
     from_server.each do |frame|
       assert_equal QUIC::StatelessReset.token(key: CONFIG.stateless_reset_key, connection_id: frame.connection_id), frame.stateless_reset_token
       assert_kind_of QUIC::Route::Deliver, server.receive(to.(frame), from: CLIENT, to: SERVER, now: 1.0)
     end
     from_client = frames.(:packet_sent)
-    assert_equal [1, 2, 3], from_client.map(&:sequence_number)
+    assert_equal (1..7).to_a, from_client.map(&:sequence_number)
     from_client.each { assert_equal QUIC::Route::Deliver.new(connection:), client.receive(to.(_1), from: SERVER, to: CLIENT, now: 1.0) }
   end
 
@@ -108,7 +108,7 @@ class RaihaNextQUICEndpointClientTest < Minitest::Test
       preferred.stateless_reset_token
     assert_kind_of QUIC::Route::Deliver, server.receive("\x40".b + preferred.connection_id + "\0".b * 30, from: CLIENT, to: SERVER, now: 1.0)
     issued = tracer.of(:packet_received).flat_map { _1[:frames] || [] }.grep(QUIC::Wire::Frame::NewConnectionID)
-    assert_equal [2, 3], issued.map(&:sequence_number)
+    assert_equal (2..7).to_a, issued.map(&:sequence_number)
   end
 
   # A Retry goes to the connection it is for, which takes it.

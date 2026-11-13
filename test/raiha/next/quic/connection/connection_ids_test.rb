@@ -54,9 +54,9 @@ class RaihaNextQUICConnectionConnectionIDsTest < Minitest::Test
     assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, @server.close_reason&.code
   end
 
-  # More IDs than the server's active_connection_id_limit, 4.
+  # More IDs than the server's active_connection_id_limit, 8.
   def test_over_the_limit
-    frames = (1..4).map do |sequence_number|
+    frames = (1..8).map do |sequence_number|
       QUIC::Wire::Frame::NewConnectionID.new(sequence_number:, retire_prior_to: 0, connection_id: [sequence_number].pack("C") * 8,
         stateless_reset_token: [sequence_number].pack("C") * 16)
     end
