@@ -2,7 +2,7 @@
 
 require_relative "structured_field"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The checks of RFC 9114 "Malformed Requests and Responses" on the field
   # sections of a message: what fields and pseudo-header fields it holds,
   # in what order, and with what names and values. A message that fails

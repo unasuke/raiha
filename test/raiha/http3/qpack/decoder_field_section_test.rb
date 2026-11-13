@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # Representations") against the static table and the dynamic table the
 # encoder stream fills.
 class RaihaNextQPACKDecoderFieldSectionTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   DECOMPRESSION_FAILED = QPACK::ErrorCode::DECOMPRESSION_FAILED
 
   def test_decodes_what_the_encoder_writes

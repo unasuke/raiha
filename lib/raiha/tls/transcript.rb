@@ -3,7 +3,7 @@
 require_relative "crypto"
 require_relative "error"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The running transcript hash (RFC 9846 "Transcript Hash").
   #
   # It takes handshake messages as the bytes that went over the wire, header

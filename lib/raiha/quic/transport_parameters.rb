@@ -2,7 +2,7 @@
 
 require "ipaddr"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The transport parameters of one end (RFC 9000 "Transport Parameter
   # Definitions", and max_datagram_frame_size of RFC 9221), as the
   # quic_transport_parameters extension carries them. The names are the
@@ -200,8 +200,8 @@ module Raiha::Next::QUIC
     module Extension
       TYPE = 0x39
       CODECS = {
-        client_hello: Raiha::Next::TLS::Extension::Opaque::Parser.new(type: TYPE),
-        encrypted_extensions: Raiha::Next::TLS::Extension::Opaque::Parser.new(type: TYPE)
+        client_hello: Raiha::TLS::Extension::Opaque::Parser.new(type: TYPE),
+        encrypted_extensions: Raiha::TLS::Extension::Opaque::Parser.new(type: TYPE)
       }.freeze
     end
   end

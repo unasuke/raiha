@@ -52,8 +52,8 @@ module NextQUICUDP
 
     private def take(event)
       case event
-      when Raiha::Next::QUIC::Event::SessionTicket then @tickets << event.session
-      when Raiha::Next::QUIC::Event::Connected then @handshake = event.handshake
+      when Raiha::QUIC::Event::SessionTicket then @tickets << event.session
+      when Raiha::QUIC::Event::Connected then @handshake = event.handshake
       end
     end
   end

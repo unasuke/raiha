@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionCompressCertificateTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  CompressCertificate = Raiha::Next::TLS::Extension::CompressCertificate
+  Codec = Raiha::TLS::Codec
+  CompressCertificate = Raiha::TLS::Extension::CompressCertificate
 
   def test_parse_and_encode
     ext = CompressCertificate.parse("\x04\x00\x01\x00\x02".b)

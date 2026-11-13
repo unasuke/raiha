@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # RFC 9204 Appendix A.
 class RaihaNextQPACKStaticTableTest < Minitest::Test
-  StaticTable = Raiha::Next::HTTP3::QPACK::StaticTable
+  StaticTable = Raiha::HTTP3::QPACK::StaticTable
 
   def test_entries
     assert_equal 99, StaticTable::ENTRIES.size

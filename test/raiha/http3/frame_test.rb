@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/http3"
 
 class RaihaNextHTTP3FrameTest < Minitest::Test
-  Frame = Raiha::Next::HTTP3::Frame
+  Frame = Raiha::HTTP3::Frame
 
   # Each frame and its bytes: the type, the length, then the payload.
   FRAMES = {
@@ -21,8 +21,8 @@ class RaihaNextHTTP3FrameTest < Minitest::Test
   def test_encoding_and_decoding
     FRAMES.each do |frame, bytes|
       assert_equal bytes, Frame.encode(frame), frame.inspect
-      type, offset = Raiha::Next::HTTP3::Varint.decode(bytes)
-      length, offset = Raiha::Next::HTTP3::Varint.decode(bytes, offset)
+      type, offset = Raiha::HTTP3::Varint.decode(bytes)
+      length, offset = Raiha::HTTP3::Varint.decode(bytes, offset)
       assert_equal bytes.bytesize - offset, length
       assert_equal frame, Frame.decode(type, bytes.byteslice(offset..))
     end

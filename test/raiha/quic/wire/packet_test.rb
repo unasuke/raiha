@@ -3,7 +3,7 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICWirePacketTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Wire = QUIC::Wire
   V1 = QUIC::Version::V1
   V = QUIC::Test::Vectors
@@ -19,7 +19,7 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
   def client_payload = V::ClientInitial::FRAMES.ljust(V::ClientInitial::PAYLOAD_LENGTH, "\0".b)
 
   def chacha20_keys
-    QUIC::Crypto::Keys.derive(suite: Raiha::Next::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256, secret: V::ChaCha20ShortHeader::SECRET, version: V1)
+    QUIC::Crypto::Keys.derive(suite: Raiha::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256, secret: V::ChaCha20ShortHeader::SECRET, version: V1)
   end
 
   # RFC 9001 appendix A.2: the packet number in four bytes.
@@ -165,7 +165,7 @@ class RaihaNextQUICWirePacketTest < Minitest::Test
     error = assert_raises(Wire::Malformed) { unmasked.open(keys.aead) }
     assert_equal QUIC::ErrorCode::PROTOCOL_VIOLATION, error.code
     # A packet that does not open is dropped before the bits count.
-    assert_nil unmasked.open(QUIC::Crypto::Keys.derive(suite: Raiha::Next::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256, secret: "\0".b * 32, version: V1).aead)
+    assert_nil unmasked.open(QUIC::Crypto::Keys.derive(suite: Raiha::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256, secret: "\0".b * 32, version: V1).aead)
   end
 
   # The datagram is left as it was, so the packets coalesced with this one

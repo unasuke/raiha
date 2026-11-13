@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # The rate a window is paced at (RFC 9002 "Pacing"): N times the window
     # over the smoothed RTT, N small but above 1 so that variations in RTT

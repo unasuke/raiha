@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # The first check a message fails on its own, without knowing what was
     # sent, the configuration or the role: the alert to send and a Symbol

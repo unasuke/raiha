@@ -1,2 +1,2 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
 end

@@ -4,7 +4,7 @@ require_relative "codec"
 require_relative "crypto"
 require_relative "error"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The TLS 1.3 key schedule (RFC 9846 "Key Schedule").
   #
   # The class methods are the derivation functions. They are public because

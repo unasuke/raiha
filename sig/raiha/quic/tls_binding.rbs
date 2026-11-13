@@ -1,19 +1,19 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class TLSBinding
     # What the binding tells the connection it binds.
     interface _Connection
       def install_keys: (PacketProtection::level level, PacketProtection::direction direction, secret: String,
-                         suite: ::Raiha::Next::TLS::CipherSuite) -> void
+                         suite: ::Raiha::TLS::CipherSuite) -> void
       def peer_transport_parameters: (String data) -> void
-      def handshake_completed: (::Raiha::Next::TLS::Event::HandshakeComplete event) -> void
+      def handshake_completed: (::Raiha::TLS::Event::HandshakeComplete event) -> void
       def tls_failed: (Integer code, Symbol reason) -> void
-      def tls_event: (::Raiha::Next::TLS::Event::t event) -> void
-      def session_ticket: (::Raiha::Next::TLS::Session tls_session) -> void
+      def tls_event: (::Raiha::TLS::Event::t event) -> void
+      def session_ticket: (::Raiha::TLS::Session tls_session) -> void
       def zero_rtt_rejected: (Symbol reason) -> void
     end
 
-    LEVEL: Hash[::Raiha::Next::TLS::epoch, PacketProtection::level]
-    EPOCH: Hash[PacketProtection::level, ::Raiha::Next::TLS::epoch]
+    LEVEL: Hash[::Raiha::TLS::epoch, PacketProtection::level]
+    EPOCH: Hash[PacketProtection::level, ::Raiha::TLS::epoch]
     RANK: Hash[PacketProtection::level, Integer]
     SPACES: Hash[PacketProtection::level, space]
     LEVEL_OF_SPACE: Hash[space, PacketProtection::level]
@@ -21,25 +21,25 @@ module Raiha::Next::QUIC
     TRANSPORT_PARAMETERS: Integer
 
     @connection: _Connection
-    @machine: ::Raiha::Next::TLS::Handshake::Machine
-    @profile: ::Raiha::Next::TLS::Profile
+    @machine: ::Raiha::TLS::Handshake::Machine
+    @profile: ::Raiha::TLS::Profile
     @streams: Hash[PacketProtection::level, CryptoStream]
 
-    def self.client: (connection: _Connection, config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
+    def self.client: (connection: _Connection, config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
                       server_name: String, transport_parameters: TransportParameters, time: Time,
-                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?session: ::Raiha::Next::TLS::Session?,
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::TLS::Keylog::_Writer?, ?session: ::Raiha::TLS::Session?,
                       ?early_data: bool) -> TLSBinding
-    def self.server: (connection: _Connection, config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
+    def self.server: (connection: _Connection, config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
                       transport_parameters: TransportParameters, time: Time, version: Version,
-                      ?client_hello: ::Raiha::Next::TLS::Handshake::Accepted?,
-                      ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?,
-                      ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> TLSBinding
-    def self.error_code: (::Raiha::Next::TLS::Profile profile, Symbol? alert, Symbol? reason) -> Integer
-    private def self.check: (::Raiha::Next::TLS::Config config) -> void
-    private def self.tls_tracer: (_Tracer? tracer) -> ::Raiha::Next::TLS::Trace::_Tracer?
-    private def self.extension: (TransportParameters transport_parameters) -> ::Raiha::Next::TLS::Extension::Opaque
+                      ?client_hello: ::Raiha::TLS::Handshake::Accepted?,
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::TLS::Keylog::_Writer?,
+                      ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> TLSBinding
+    def self.error_code: (::Raiha::TLS::Profile profile, Symbol? alert, Symbol? reason) -> Integer
+    private def self.check: (::Raiha::TLS::Config config) -> void
+    private def self.tls_tracer: (_Tracer? tracer) -> ::Raiha::TLS::Trace::_Tracer?
+    private def self.extension: (TransportParameters transport_parameters) -> ::Raiha::TLS::Extension::Opaque
 
-    def initialize: (_Connection connection, ::Raiha::Next::TLS::Handshake::Machine machine, ::Raiha::Next::TLS::Profile profile,
+    def initialize: (_Connection connection, ::Raiha::TLS::Handshake::Machine machine, ::Raiha::TLS::Profile profile,
                      ?consumed: Integer) -> void
     def complete?: () -> bool
     def receive_crypto: (PacketProtection::level level, Wire::Frame::Crypto frame, time: Time) -> bool

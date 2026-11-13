@@ -18,7 +18,7 @@ require_relative "handshake/reassembler"
 require_relative "handshake/client_hello_builder"
 require_relative "handshake/machine"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Handshake messages as values (RFC 9846 "Handshake Protocol"). Fields keep
   # the RFC's names, `legacy_` prefixes included, and enumerated values stay
   # Integers so unknown ones survive a round trip.

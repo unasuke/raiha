@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Verifier
     # Accepts any chain. For tests only: a handshake that used it reports
     # `peer_verified: false` in Event::HandshakeComplete, so it shows if it

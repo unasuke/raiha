@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class SignatureScheme < Data
     type family = :rsa_pkcs1 | :ecdsa | :rsa_pss_rsae | :rsa_pss_pss | :eddsa
 

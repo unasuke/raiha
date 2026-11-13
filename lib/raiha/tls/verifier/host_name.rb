@@ -2,7 +2,7 @@
 
 require "ipaddr"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Verifier
     # Whether a certificate is valid for a name, by RFC 9525.
     #

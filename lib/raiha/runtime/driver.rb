@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # Runs an Endpoint on a UDP socket, and on others besides, as a server's
   # at its preferred addresses, with fibers of its own under the Fiber
   # scheduler: a reader for each socket waits for datagrams and gives them
@@ -61,7 +61,7 @@ module Raiha::Next::Runtime
     # Sends what there is to send now from the calling fiber, as the last
     # datagrams of a connection closed before the driver stops.
     def flush
-      transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
+      transmits = [] #: Array[Raiha::QUIC::Transmit]
       @endpoint.each_transmit(now: Driver.clock) { |transmit| transmits << transmit }
       transmits.each { |transmit| emit(transmit) }
     end
@@ -93,11 +93,11 @@ module Raiha::Next::Runtime
     # Gives each datagram to the Endpoint, and each Route to the owner; the
     # responses the Endpoint sends itself.
     private def take(datagrams, now)
-      responses = [] #: Array[Raiha::Next::QUIC::Transmit]
+      responses = [] #: Array[Raiha::QUIC::Transmit]
       datagrams.each do |data, from, to, ecn|
         case (route = @endpoint.receive(data, from:, to:, ecn:, now:))
-        when Raiha::Next::QUIC::Route::Respond then responses << route.transmit
-        when Raiha::Next::QUIC::Route::Foreign then @worker&.forward(route.worker, [data, from, to, ecn, now])
+        when Raiha::QUIC::Route::Respond then responses << route.transmit
+        when Raiha::QUIC::Route::Foreign then @worker&.forward(route.worker, [data, from, to, ecn, now])
         when nil then nil
         else @owner.route(route, now)
         end
@@ -108,10 +108,10 @@ module Raiha::Next::Runtime
     # What other workers handed on to this one, given to the Endpoint as
     # it came then, never to be handed on again; the responses it sends.
     private def take_forwarded
-      responses = [] #: Array[Raiha::Next::QUIC::Transmit]
+      responses = [] #: Array[Raiha::QUIC::Transmit]
       @worker&.take&.each do |data, from, to, ecn, received_at|
         case (route = @endpoint.receive(data, from:, to:, ecn:, now: received_at, forwarded: true))
-        when Raiha::Next::QUIC::Route::Respond then responses << route.transmit
+        when Raiha::QUIC::Route::Respond then responses << route.transmit
         when nil then nil
         else @owner.route(route, received_at)
         end
@@ -140,7 +140,7 @@ module Raiha::Next::Runtime
       deadline = @endpoint.next_timeout
       @endpoint.handle_timeout(now:) if deadline && deadline <= now
       @owner.turn(now)
-      transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
+      transmits = [] #: Array[Raiha::QUIC::Transmit]
       @endpoint.each_transmit(now:) { |transmit| transmits << transmit }
       transmits
     end

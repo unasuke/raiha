@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionOpaqueTest < Minitest::Test
-  Extension = Raiha::Next::TLS::Extension
+  Extension = Raiha::TLS::Extension
 
   def test_keeps_the_type_and_raw_data
     ext = Extension::Opaque.new(type: 0xff01, data: "\x00".b)

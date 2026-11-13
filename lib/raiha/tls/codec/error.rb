@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS::Codec
+module Raiha::TLS::Codec
   # A byte string from the peer that cannot be a valid message. `#alert` is the
   # TLS alert to abort the handshake with.
   class Malformed < StandardError

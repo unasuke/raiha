@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICWireVersionNegotiationTest < Minitest::Test
-  Wire = Raiha::Next::QUIC::Wire
+  Wire = Raiha::QUIC::Wire
 
   def negotiation = Wire::VersionNegotiation.new(dcid: "abc".b, scid: "".b, versions: [0x0000_0001, 0x0a1a_2a3a])
 

@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   module Message
     class Malformed < StandardError
     end

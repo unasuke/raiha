@@ -10,7 +10,7 @@ require_relative "../transcript"
 require_relative "key_update"
 require_relative "reassembler"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # The part of a handshake that does not depend on the role. It feeds the
     # peer's bytes through a Reassembler per epoch, the transcript and the

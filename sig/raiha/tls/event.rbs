@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Event
     class HandshakeComplete < Data
       attr_reader server_name: String?

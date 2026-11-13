@@ -16,7 +16,7 @@ require_relative "settings"
 require_relative "tracer"
 require_relative "varint"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # One HTTP/3 connection (RFC 9114), sans-IO and over no transport in
   # particular: it takes the bytes of streams and gives back what to write
   # to them, what else to ask of the transport (Action), and what happened

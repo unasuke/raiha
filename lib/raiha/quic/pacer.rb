@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The pacer of a path (RFC 9002 "Pacing"): a token bucket that fills at
   # the congestion controller's pacing rate, up to `capacity`, the most RFC
   # 9002 lets go in a burst, or up to what the rate gives in `granularity`

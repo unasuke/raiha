@@ -13,7 +13,7 @@ require_relative "authentication_messages"
 require_relative "client_hello_builder"
 require_relative "key_update_handling"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # The client's states, table of expected messages and handlers, and what
     # it keeps for one connection. The checks in each handler follow the

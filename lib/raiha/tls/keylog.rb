@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Lines of the SSLKEYLOGFILE format (RFC 9850 "The SSLKEYLOGFILE Format
   # for TLS") for the `keylog:` of a Machine: a label, the ClientHello
   # random and a traffic secret, in hex. Only the traffic secrets are

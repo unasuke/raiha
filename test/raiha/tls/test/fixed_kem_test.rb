@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSTestFixedKEMTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   FixedKEM = TLS::Test::FixedKEM
   RFC8448 = TLS::Test::RFC8448
 

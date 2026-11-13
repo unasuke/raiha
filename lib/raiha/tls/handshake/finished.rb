@@ -5,7 +5,7 @@ require_relative "../masked_inspect"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # verify_data has no length prefix: it is the whole body, and its length
     # must equal the negotiated hash's. Only the state machine knows the hash,

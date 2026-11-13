@@ -3,7 +3,7 @@ require "raiha/tls/test"
 
 # Each row of the ServerHello table gets two tests, as for the ClientHello.
 class RaihaNextTLSHandshakeServerHelloValidateTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Extension = TLS::Extension
   Violation = TLS::Handshake::Violation
   RFC8448 = TLS::Test::RFC8448

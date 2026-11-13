@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     module Frame
       type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream | ResetStream | StopSending

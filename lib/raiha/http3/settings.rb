@@ -3,7 +3,7 @@
 require_relative "error"
 require_relative "frame"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The settings one end tells the other on its control stream (RFC 9114
   # "SETTINGS"): those of HTTP/3, of QPACK (RFC 9204 "Configuration"), of
   # Extended CONNECT (RFC 9220) and of HTTP Datagrams (RFC 9297).

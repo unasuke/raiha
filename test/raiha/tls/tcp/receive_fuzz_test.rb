@@ -10,7 +10,7 @@ require "support/tcp_pair"
 # bytes put in. RAIHA_FUZZ_ITERATIONS (default 300 per target) and
 # RAIHA_FUZZ_SEED change the number of inputs and the seed.
 class RaihaNextTLSTCPReceiveFuzzTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTCPPair
   NOW = Pair::NOW
 

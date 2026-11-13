@@ -2,7 +2,7 @@
 
 require_relative "varint"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # A Capsule of the Capsule Protocol (RFC 9297 "The Capsule Protocol"): a
   # type and a value, which the request's data stream carries in place of
   # content. This layer reads and writes any type; what a type means is

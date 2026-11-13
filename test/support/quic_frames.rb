@@ -3,7 +3,7 @@ require "raiha/quic"
 # Random QUIC frames of every kind, with values spread over every length of
 # varint, for the round-trip and fuzz tests of Wire::Frame.
 module NextQUICFrames
-  Frame = Raiha::Next::QUIC::Wire::Frame
+  Frame = Raiha::QUIC::Wire::Frame
 
   # The exponent the frames' ACK Delay is chosen for, so that it survives a
   # round trip exactly.
@@ -12,7 +12,7 @@ module NextQUICFrames
   module_function
 
   # A value that takes 1, 2, 4 or 8 bytes as a varint, up to `max`.
-  def varint(rng, max = Raiha::Next::QUIC::Wire::Varint::MAX)
+  def varint(rng, max = Raiha::QUIC::Wire::Varint::MAX)
     [rng.rand(64), rng.rand(16_384), rng.rand(1 << 30), rng.rand(1 << 62)].sample(random: rng).clamp(0, max)
   end
 

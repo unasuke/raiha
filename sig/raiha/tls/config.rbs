@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class Config
     type role = :client | :server
     type client_auth = :none | :optional | :required

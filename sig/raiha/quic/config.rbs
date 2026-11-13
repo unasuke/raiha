@@ -1,8 +1,8 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   type address_family = :ipv4 | :ipv6
 
   class Config < Data
-    include ::Raiha::Next::TLS::MaskedInspect
+    include ::Raiha::TLS::MaskedInspect
 
     MIN_KEY_LENGTH: Integer
     ADDRESS_FAMILIES: Array[address_family]

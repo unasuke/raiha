@@ -2,13 +2,13 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
-  NewReno = Raiha::Next::QUIC::Congestion::NewReno
+  NewReno = Raiha::QUIC::Congestion::NewReno
   MDS = 1200
   # RFC 9002 "Initial and Minimum Congestion Window".
   INITIAL_WINDOW = ->(mds) { [10 * mds, [14_720, 2 * mds].max].min }
 
   class Recorder
-    include Raiha::Next::QUIC::Tracer
+    include Raiha::QUIC::Tracer
 
     attr_reader :states
 
@@ -18,7 +18,7 @@ class RaihaNextQUICCongestionNewRenoTest < Minitest::Test
   end
 
   def new_reno(tracer: nil, **config)
-    NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::Next::QUIC::Config.new(**config), tracer:)
+    NewReno.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::QUIC::Config.new(**config), tracer:)
   end
 
   def ack(cc, bytes, sent_at:, now:, app_limited: false)

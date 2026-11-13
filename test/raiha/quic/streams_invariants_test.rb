@@ -13,7 +13,7 @@ require "raiha/quic"
 # seed. RAIHA_FLOW_SEEDS (default 30) and RAIHA_FLOW_STEPS (default 300)
 # change how many runs and how long.
 class RaihaNextQUICStreamsInvariantsTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   SEEDS = Integer(ENV.fetch("RAIHA_FLOW_SEEDS", "30"))
   STEPS = Integer(ENV.fetch("RAIHA_FLOW_STEPS", "300"))
   CONFIG = QUIC::Config.new(initial_max_data: 8000, initial_max_stream_data_bidi_local: 3000, initial_max_stream_data_bidi_remote: 3000,

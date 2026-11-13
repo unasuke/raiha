@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSCipherSuiteTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   CipherSuite = TLS::CipherSuite
 
   def test_descriptors

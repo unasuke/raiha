@@ -2,7 +2,7 @@
 
 require "strscan"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # Reads a Dictionary of Structured Field Values (RFC 8941), the form of
   # the Priority header field and of PRIORITY_UPDATE (RFC 9218 "Priority
   # Parameters"), and an Item, the form of Capsule-Protocol (RFC 9297).

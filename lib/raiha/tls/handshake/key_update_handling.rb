@@ -2,7 +2,7 @@
 
 require_relative "key_update"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # KeyUpdate over TCP, the same for both roles (RFC 9846 "Key and
     # Initialization Vector Update"). QUIC updates keys on its own and never

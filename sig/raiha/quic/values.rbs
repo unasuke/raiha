@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Error
     class Base < StandardError
     end
@@ -106,10 +106,10 @@ module Raiha::Next::QUIC
 
   module Event
     class Connected < Data
-      attr_reader handshake: ::Raiha::Next::TLS::Event::HandshakeComplete
+      attr_reader handshake: ::Raiha::TLS::Event::HandshakeComplete
 
-      def self.new: (handshake: ::Raiha::Next::TLS::Event::HandshakeComplete) -> instance
-                  | (::Raiha::Next::TLS::Event::HandshakeComplete handshake) -> instance
+      def self.new: (handshake: ::Raiha::TLS::Event::HandshakeComplete) -> instance
+                  | (::Raiha::TLS::Event::HandshakeComplete handshake) -> instance
     end
 
     class StreamReadable < Data
@@ -179,10 +179,10 @@ module Raiha::Next::QUIC
     end
 
     class TLSEvent < Data
-      attr_reader event: ::Raiha::Next::TLS::Event::t
+      attr_reader event: ::Raiha::TLS::Event::t
 
-      def self.new: (event: ::Raiha::Next::TLS::Event::t) -> instance
-                  | (::Raiha::Next::TLS::Event::t event) -> instance
+      def self.new: (event: ::Raiha::TLS::Event::t) -> instance
+                  | (::Raiha::TLS::Event::t event) -> instance
     end
 
     class Closed < Data

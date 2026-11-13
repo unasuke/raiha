@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSConfigTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Config = TLS::Config
   Opaque = TLS::Extension::Opaque
 

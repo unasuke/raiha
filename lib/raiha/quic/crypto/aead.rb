@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Crypto
     # The packet protection of one key (RFC 9001 "AEAD Usage"): the nonce is
     # the IV with the packet number XORed into its low bytes, and the header

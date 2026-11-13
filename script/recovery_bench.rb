@@ -14,7 +14,7 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "raiha/quic"
 
-QUIC = Raiha::Next::QUIC
+QUIC = Raiha::QUIC
 PACKETS = 200_000
 IN_FLIGHT = 64
 LOSS_RATE = 0.01

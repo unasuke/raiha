@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICValuesTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
-  TLS = Raiha::Next::TLS
+  QUIC = Raiha::QUIC
+  TLS = Raiha::TLS
 
   # RFC 9000 "Transport Error Codes".
   def test_error_codes

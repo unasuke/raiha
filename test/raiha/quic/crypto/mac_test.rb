@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICCryptoMacTest < Minitest::Test
-  Mac = Raiha::Next::QUIC::Crypto::Mac
+  Mac = Raiha::QUIC::Crypto::Mac
 
   # RFC 4231 test case 2.
   def test_hmac_sha256

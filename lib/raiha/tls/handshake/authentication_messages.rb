@@ -9,7 +9,7 @@ require_relative "certificate"
 require_relative "certificate_verify"
 require_relative "finished"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # Certificate, CertificateVerify and Finished, which RFC 9846 groups as
     # the "Authentication Messages": verifying the peer's and building our

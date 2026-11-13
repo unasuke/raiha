@@ -32,9 +32,9 @@ class RaihaNextRuntimeWorkersForwardingTest < Minitest::Test
     tls = server_config
     workers = Runtime::Workers.new(count:, config: QUIC::Config.new, host: "127.0.0.1", port: 0,
       args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
-      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
+      keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       Sync do
-        Raiha::Next::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
+        Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
           session.each_stream { |stream| (stream << "ECHO#{worker.id}:" << stream.read).close_write }
         end
       end

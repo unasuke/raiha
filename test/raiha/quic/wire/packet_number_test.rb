@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICWirePacketNumberTest < Minitest::Test
-  PacketNumber = Raiha::Next::QUIC::Wire::PacketNumber
+  PacketNumber = Raiha::QUIC::Wire::PacketNumber
 
   # RFC 9000 appendix A.2.
   def test_rfc9000_encoding_examples

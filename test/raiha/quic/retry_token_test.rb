@@ -3,7 +3,7 @@ require "raiha/quic"
 
 # RFC 9000 "Address Validation Using Retry Packets".
 class RaihaNextQUICRetryTokenTest < Minitest::Test
-  RetryToken = Raiha::Next::QUIC::RetryToken
+  RetryToken = Raiha::QUIC::RetryToken
 
   KEY = ("k" * 32).b
   ADDRESS = ["192.0.2.1", 4433].freeze
@@ -38,14 +38,14 @@ class RaihaNextQUICRetryTokenTest < Minitest::Test
     assert_nil verify(flipped)
     # Another kind, with a MAC that matches it.
     other = "\x01".b + token.byteslice(1, token.bytesize - 33)
-    other += Raiha::Next::QUIC::Crypto::Mac.digest(KEY, other + "192.0.2.1\0".b + [4433].pack("n"))
+    other += Raiha::QUIC::Crypto::Mac.digest(KEY, other + "192.0.2.1\0".b + [4433].pack("n"))
     assert_nil verify(other)
   end
 
   # A length that does not match the bytes there, with a valid MAC.
   def test_a_wrong_length
     body = [0, NOW.to_i + 10, 9].pack("CQ>C") + "o".b * 8
-    token = body + Raiha::Next::QUIC::Crypto::Mac.digest(KEY, body + "192.0.2.1\0".b + [4433].pack("n"))
+    token = body + Raiha::QUIC::Crypto::Mac.digest(KEY, body + "192.0.2.1\0".b + [4433].pack("n"))
     assert_nil verify(token)
   end
 end

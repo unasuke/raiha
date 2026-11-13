@@ -6,7 +6,7 @@ require "timeout"
 # by hand so that a test can write 0-RTT before the handshake completes and
 # keep every event, which TCP::Socket does not let it.
 class NextTCPDrive
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
 
   attr_reader :connection, :events
 

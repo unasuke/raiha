@@ -4,9 +4,9 @@ require "raiha/quic/test"
 
 # RFC 9001 "Packet Protection": the keys of each encryption level.
 class RaihaNextQUICPacketProtectionTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   V = QUIC::Test::Vectors
-  SUITE = Raiha::Next::TLS::CipherSuite::TLS_AES_128_GCM_SHA256
+  SUITE = Raiha::TLS::CipherSuite::TLS_AES_128_GCM_SHA256
 
   CLIENT_SECRET = "c".b * 32
   SERVER_SECRET = "s".b * 32
@@ -271,7 +271,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
   # counted across all keys, and one more than the integrity limit is
   # AEAD_LIMIT_REACHED.
   def test_the_integrity_limit
-    limits = { quic: Raiha::Next::TLS::CipherSuite::Limits.new(confidentiality: nil, integrity: 2) }
+    limits = { quic: Raiha::TLS::CipherSuite::Limits.new(confidentiality: nil, integrity: 2) }
     suite = SUITE.with(limits:)
     server = protection(:server)
     server.install(:handshake, :read, secret: CLIENT_SECRET, suite:)
@@ -289,7 +289,7 @@ class RaihaNextQUICPacketProtectionTest < Minitest::Test
   # A server whose 1-RTT keys are of a suite that allows 3 packets per key,
   # its handshake confirmed and a packet of the client opened.
   def limited_server
-    limits = { quic: Raiha::Next::TLS::CipherSuite::Limits.new(confidentiality: 3, integrity: nil) }
+    limits = { quic: Raiha::TLS::CipherSuite::Limits.new(confidentiality: 3, integrity: nil) }
     suite = SUITE.with(limits:)
     protection(:server).tap do |server|
       server.install(:one_rtt, :write, secret: SERVER_SECRET, suite:)

@@ -6,7 +6,7 @@ require_relative "../profile"
 require_relative "../record"
 require_relative "../handshake/acceptor"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module TCP
     # The start of a TCP server's handshake, before a Config is chosen: the
     # Handshake::Acceptor behind the record layer. It reads plaintext records

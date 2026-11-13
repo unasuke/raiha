@@ -4,7 +4,7 @@ require "raiha/quic"
 # The connection IDs the peer issues: how many are kept, which are retired
 # and sent back, and what breaks the rules.
 class RaihaNextQUICPeerConnectionIDsTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   def ids(limit: 4, first: "\x00".b * 8) = QUIC::PeerConnectionIDs.new(first, stateless_reset_token: "t".b * 16, limit:)
 

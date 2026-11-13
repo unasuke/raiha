@@ -141,8 +141,8 @@ issue on this.
 
 ## Supported testcases
 
-The image runs the next release of raiha (`Raiha::Next::QUIC`) with
-hq-interop (HTTP/0.9 over QUIC), and HTTP/3 (`Raiha::Next::HTTP3`) for
+The image runs the next release of raiha (`Raiha::QUIC`) with
+hq-interop (HTTP/0.9 over QUIC), and HTTP/3 (`Raiha::HTTP3`) for
 http3: `interop/lib/raiha_interop/next_runner.rb` hands the role to
 `NextServer` or `NextClient`, or to `NextHTTP3Server` or
 `NextHTTP3Client` for http3.

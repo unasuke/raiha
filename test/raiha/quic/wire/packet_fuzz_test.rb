@@ -12,7 +12,7 @@ require "raiha/quic/test"
 # RAIHA_FUZZ_ITERATIONS (default 10000) and RAIHA_FUZZ_SEED change the
 # number of inputs and the seed.
 class RaihaNextQUICWirePacketFuzzTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Wire = QUIC::Wire
   V = QUIC::Test::Vectors
 
@@ -26,7 +26,7 @@ class RaihaNextQUICWirePacketFuzzTest < Minitest::Test
   ].freeze
 
   INITIAL = QUIC::Crypto::Initial.derive(dcid: V::Keys::DCID, version: QUIC::Version::V1)
-  SHORT = QUIC::Crypto::Keys.derive(suite: Raiha::Next::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256,
+  SHORT = QUIC::Crypto::Keys.derive(suite: Raiha::TLS::CipherSuite::TLS_CHACHA20_POLY1305_SHA256,
     secret: V::ChaCha20ShortHeader::SECRET, version: QUIC::Version::V1)
 
   def random_input(rng)

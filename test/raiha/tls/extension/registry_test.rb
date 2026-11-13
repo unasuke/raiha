@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionRegistryTest < Minitest::Test
-  Extension = Raiha::Next::TLS::Extension
+  Extension = Raiha::TLS::Extension
   Registry = Extension::Registry
 
   # The extensions this implementation knows and the messages RFC 9846 (and

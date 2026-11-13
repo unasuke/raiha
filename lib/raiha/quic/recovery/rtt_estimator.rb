@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     # The RTT of a path (RFC 9002 "Estimating the Round-Trip Time"): the
     # latest sample, the smoothed RTT and its variation, and the minimum,

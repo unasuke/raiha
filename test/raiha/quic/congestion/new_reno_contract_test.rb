@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic/test"
 
 class RaihaNextQUICCongestionNewRenoContractTest < Minitest::Test
-  include Raiha::Next::QUIC::Test::CongestionContract
+  include Raiha::QUIC::Test::CongestionContract
 
-  def congestion_control = Raiha::Next::QUIC::Congestion::NewReno
+  def congestion_control = Raiha::QUIC::Congestion::NewReno
 end

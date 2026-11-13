@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Shows the members named by `#masked_members` only by size in `inspect`,
   # `to_s` and `pp`, so secrets stay out of logs. `==` and `to_h` still see
   # every member.

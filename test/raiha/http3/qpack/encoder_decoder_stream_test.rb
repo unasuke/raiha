@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # Instructions"). It never refers to the dynamic table, so only a Stream
 # Cancellation is in order.
 class RaihaNextQPACKEncoderDecoderStreamTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   def setup
     @encoder = QPACK::Encoder.new

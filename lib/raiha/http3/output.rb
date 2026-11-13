@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # What waits to go on one stream: the bytes of its frames in order, and
   # whether the stream ends after them. Given to the transport a piece at
   # a time; when it takes less than a piece, the rest waits, and so does

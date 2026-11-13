@@ -4,7 +4,7 @@ require_relative "../quic"
 
 # Test support shipped with the gem. `require "raiha/quic"` does not
 # load it; use `require "raiha/quic/test"`.
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
 end
 
 require_relative "test/vectors"

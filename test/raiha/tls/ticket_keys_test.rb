@@ -4,7 +4,7 @@ require "raiha/tls"
 # The keys of session tickets: where each comes from, pinned against HKDF
 # computed here by hand, and which a static set seals and opens with.
 class RaihaNextTLSTicketKeysTest < Minitest::Test
-  TicketKeys = Raiha::Next::TLS::TicketKeys
+  TicketKeys = Raiha::TLS::TicketKeys
   SEED = (1..32).to_a.pack("C*")
   OTHER = (33..64).to_a.pack("C*")
   NOW = Time.at(1_800_000_000)
@@ -55,7 +55,7 @@ end
 # current epoch's until past the horizon, and opens a ticket only within the
 # epochs a ticket can live, one ahead for clocks that differ.
 class RaihaNextTLSTicketKeysRatchetTest < Minitest::Test
-  TicketKeys = Raiha::Next::TLS::TicketKeys
+  TicketKeys = Raiha::TLS::TicketKeys
   BASE = (1..32).to_a.pack("C*")
   ORIGIN = Time.at(1_700_000_000)
   HOUR = 3600
@@ -93,7 +93,7 @@ class RaihaNextTLSTicketKeysRatchetTest < Minitest::Test
     assert_equal 97, keys.base_epoch
     assert_equal seed(97), keys.base
     assert_raises(ArgumentError) { TicketKeys.ratchet(base: BASE, base_epoch: 0, origin: ORIGIN, now:, retain: 1).for_ticket_lifetime(7200) }
-    assert_raises(Raiha::Next::TLS::UsageError) { TicketKeys.ratchet(base: BASE, base_epoch: 0, origin: ORIGIN, now:).sealing(now) }
+    assert_raises(Raiha::TLS::UsageError) { TicketKeys.ratchet(base: BASE, base_epoch: 0, origin: ORIGIN, now:).sealing(now) }
   end
 
   def test_sealing_stops_past_the_horizon

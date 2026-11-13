@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # supported_versions.
     module SupportedVersions

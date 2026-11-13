@@ -3,7 +3,7 @@ require "raiha/quic"
 
 # RFC 9000 "Stateless Reset".
 class RaihaNextQUICStatelessResetTest < Minitest::Test
-  StatelessReset = Raiha::Next::QUIC::StatelessReset
+  StatelessReset = Raiha::QUIC::StatelessReset
 
   KEY = ("r" * 32).b
 

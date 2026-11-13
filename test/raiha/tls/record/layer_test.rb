@@ -3,7 +3,7 @@ require "raiha/tls"
 require "raiha/tls/test"
 
 class RaihaNextTLSRecordLayerTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Record = TLS::Record
   RFC8448 = TLS::Test::RFC8448::Simple1RTT
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256

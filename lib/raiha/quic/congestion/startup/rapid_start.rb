@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     module Startup
       # Rapid Start (draft-kazuho-ccwg-rapid-start-02): the start of a

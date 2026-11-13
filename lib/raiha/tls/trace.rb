@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Diagnostic values for the `tracer:` of a handshake, one `#tls_trace(value)`
   # call each. None of them carries a secret. A tracer ignores the kinds it
   # does not know, so new kinds do not break it, and with no tracer the

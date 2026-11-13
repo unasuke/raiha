@@ -4,7 +4,7 @@ require_relative "key_schedule"
 require_relative "masked_inspect"
 require_relative "error"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The keys a server seals its session tickets with. Each comes from a
   # 32-byte seed through HKDF-Expand-Label with a prefix of this
   # implementation's own in place of "tls13 ", so that no label of TLS can

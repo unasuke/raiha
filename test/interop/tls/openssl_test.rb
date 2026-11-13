@@ -12,7 +12,7 @@ require "tmpdir"
 # `openssl s_client`. OpenSSL is a RFC 8446 implementation, so these also
 # check that what RFC 8446 allowed and RFC 9846 does not is taken.
 class NextTLSOpenSSLInteropTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
   # tmp/ is not in git, so a fresh checkout has none.

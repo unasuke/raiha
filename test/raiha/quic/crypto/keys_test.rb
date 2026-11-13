@@ -3,10 +3,10 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICCryptoKeysTest < Minitest::Test
-  Keys = Raiha::Next::QUIC::Crypto::Keys
-  Suite = Raiha::Next::TLS::CipherSuite
-  V1 = Raiha::Next::QUIC::Version::V1
-  V = Raiha::Next::QUIC::Test::Vectors
+  Keys = Raiha::QUIC::Crypto::Keys
+  Suite = Raiha::TLS::CipherSuite
+  V1 = Raiha::QUIC::Version::V1
+  V = Raiha::QUIC::Test::Vectors
 
   # RFC 9001 appendix A.5: a 1-RTT secret of ChaCha20-Poly1305.
   def test_chacha20_poly1305

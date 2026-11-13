@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # supported_groups: `NamedGroup named_group_list<2..2^16-1>`.
     class SupportedGroups < Data.define(:named_group_list)

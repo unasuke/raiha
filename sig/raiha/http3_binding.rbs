@@ -1,4 +1,4 @@
-module Raiha::Next
+module Raiha
   class HTTP3Binding
     HTTP3_EVENTS: Array[singleton(QUIC::Event::StreamReadable) | singleton(QUIC::Event::StreamWritable) | singleton(QUIC::Event::StreamReset) | singleton(QUIC::Event::StopSending) | singleton(QUIC::Event::DatagramReceived)]
     READ_SIZE: Integer

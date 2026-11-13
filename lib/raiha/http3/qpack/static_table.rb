@@ -1,7 +1,7 @@
 # encoding: binary
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The static table of RFC 9204 Appendix A, indexed from 0.
   module StaticTable
     # [name, value] of each entry. The literals of this file are binary, so

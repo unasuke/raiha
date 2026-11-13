@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # A SignatureScheme of RFC 9846: the signature algorithm, the hash it uses
   # and, for ECDSA and EdDSA, the curve the key must be on.
   #

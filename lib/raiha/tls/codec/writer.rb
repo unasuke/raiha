@@ -2,7 +2,7 @@
 
 require_relative "error"
 
-module Raiha::Next::TLS::Codec
+module Raiha::TLS::Codec
   # An append-only BINARY buffer. `#vector` writes a zero length prefix,
   # yields, and then fills the prefix in with `setbyte`, so nested vectors are
   # written in one pass without allocating a String per length.

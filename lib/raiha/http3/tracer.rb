@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # What an HTTP/3 connection tells of itself as it goes, for a qlog or
   # anything else: a tracer includes this and overrides what it wants;
   # what it does not is ignored.

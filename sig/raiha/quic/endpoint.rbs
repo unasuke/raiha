@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What a connection tells the addresses of its paths' peers to.
   # What seals a NEW_TOKEN token for a new address of the client.
   interface _Tokens
@@ -32,7 +32,7 @@ module Raiha::Next::QUIC
       @expires_at: Float
       @datagrams: Array[[String, address, address?, ecn | :ce]]
       @buffered: Integer
-      @acceptor: ::Raiha::Next::TLS::Handshake::Acceptor?
+      @acceptor: ::Raiha::TLS::Handshake::Acceptor?
       @keys: Crypto::Keys?
       @crypto: CryptoStream
       @largest: Integer?
@@ -74,8 +74,8 @@ module Raiha::Next::QUIC
       def failed?: () -> bool
       def reject: (Symbol description) -> ConnectionError
       def local: () -> address?
-      def accepted: () -> ::Raiha::Next::TLS::Handshake::Accepted?
-      def take_client_hello: () -> ::Raiha::Next::TLS::Handshake::Accepted?
+      def accepted: () -> ::Raiha::TLS::Handshake::Accepted?
+      def take_client_hello: () -> ::Raiha::TLS::Handshake::Accepted?
 
       private def parse: (String datagram, Integer offset, Integer dcid_length) -> Wire::Packet::Parsed?
 
@@ -134,16 +134,16 @@ module Raiha::Next::QUIC
 
     def initialize: (role: :client | :server, config: Config, random: Crypto::_Random, time: Time, now: Float, connection_ids: _ConnectionIDs) -> void
     def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float, ?forwarded: bool) -> Route::t?
-    def connect: (tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, server_name: String, remote: address, now: Float,
-                  ?tracer: _Tracer?, ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?, ?token: String?,
+    def connect: (tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring, server_name: String, remote: address, now: Float,
+                  ?tracer: _Tracer?, ?keylog: ::Raiha::TLS::Keylog::_Writer?, ?token: String?,
                   ?session: Session?, ?early_data: bool) -> Connection
     def each_transmit: (now: Float) { (Transmit) -> void } -> void
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
     def admit: (Handle handle, now: Float) -> Route::ClientHello?
-    def accept: (Handle handle, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring, now: Float, ?tracer: _Tracer?,
-                 ?keylog: ::Raiha::Next::TLS::Keylog::_Writer?,
-                 ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> Connection
+    def accept: (Handle handle, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring, now: Float, ?tracer: _Tracer?,
+                 ?keylog: ::Raiha::TLS::Keylog::_Writer?,
+                 ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String) -> Connection
     def reject: (Handle handle, Symbol description) -> void
     def refuse: (Handle handle, ?error_code: Integer) -> void
     def retry: (Handle handle, now: Float) -> void

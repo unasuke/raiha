@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # A session a QUIC client may resume, as a value: the TLS layer's, the
   # server's transport parameters that 0-RTT may use (RFC 9000 "Values of
   # Transport Parameters for 0-RTT"), and the ALPN protocol and QUIC
@@ -22,7 +22,7 @@ module Raiha::Next::QUIC
       raise ArgumentError, "version must be an Integer" unless version.is_a?(Integer)
       tls = hash.fetch(:tls)
       raise ArgumentError, "tls must be a Hash" unless tls.is_a?(Hash)
-      new(tls: Raiha::Next::TLS::Session.from_h(tls), transport_parameters: remembered(parameters), alpn: alpn&.b&.freeze, version:)
+      new(tls: Raiha::TLS::Session.from_h(tls), transport_parameters: remembered(parameters), alpn: alpn&.b&.freeze, version:)
     rescue KeyError => e
       raise ArgumentError, "a session lacks #{e.key}"
     end

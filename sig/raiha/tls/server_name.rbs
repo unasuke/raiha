@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module ServerName
     MAX_LENGTH: Integer
     LABEL: Regexp

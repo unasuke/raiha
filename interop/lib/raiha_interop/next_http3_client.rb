@@ -9,7 +9,7 @@ module RaihaInterop
   # HTTP3Binding, a GET for each path goes on a stream of its own, and
   # each response is saved once whole.
   class NextHTTP3Client < NextClient
-    HTTP3 = Raiha::Next::HTTP3
+    HTTP3 = Raiha::HTTP3
 
     def alpn = ["h3"]
 
@@ -17,7 +17,7 @@ module RaihaInterop
       @authority = server_name
       connection = super
       @http3 = HTTP3::Connection.client
-      @binding = Raiha::Next::HTTP3Binding.new(connection, @http3)
+      @binding = Raiha::HTTP3Binding.new(connection, @http3)
       connection
     end
 

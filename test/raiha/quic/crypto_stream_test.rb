@@ -3,7 +3,7 @@ require "raiha/quic"
 
 # RFC 9000 "CRYPTO Frames" and "Cryptographic Message Buffering".
 class RaihaNextQUICCryptoStreamTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Duty = QUIC::Recovery::Duty
 
   def stream(bytes = nil)

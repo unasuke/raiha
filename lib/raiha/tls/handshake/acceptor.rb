@@ -7,7 +7,7 @@ require_relative "../server_name"
 require_relative "client_hello"
 require_relative "reassembler"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # A ClientHello and what the application may choose a Config by. All of
     # it is unauthenticated, and with 0-RTT it may be replayed. PSK

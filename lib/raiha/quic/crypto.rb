@@ -2,7 +2,7 @@
 
 require "openssl"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # Everything in the QUIC layer that calls OpenSSL goes through here. Keys
   # are derived with the TLS layer's KeySchedule, so that both layers share
   # one HKDF-Expand-Label.

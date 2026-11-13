@@ -12,8 +12,8 @@
 require "raiha/quic"
 require_relative "_certificate"
 
-QUIC = Raiha::Next::QUIC
-TLS = Raiha::Next::TLS
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 ALPN = ["hq-interop"].freeze
 CLIENT = ["192.0.2.1", 50_000].freeze

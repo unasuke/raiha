@@ -2,7 +2,7 @@
 
 require_relative "hash"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     # HKDF (RFC 5869), split into its two steps as TLS 1.3 uses them.
     module HKDF

@@ -2,7 +2,7 @@
 
 require "socket"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # A UDP socket that carries QUIC: the datagrams of a Transmit go out, on
   # Linux, in one `sendmsg` that the kernel cuts at the segment size (GSO,
   # UDP_SEGMENT), elsewhere each with its own, marked with its ECN

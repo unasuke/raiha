@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The search of a path for the largest datagram it carries (RFC 8899
   # "Datagram Packetization Layer Path MTU Discovery"), one probe at a
   # time: the largest it may carry first, then halfway between the largest

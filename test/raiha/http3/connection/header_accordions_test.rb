@@ -90,7 +90,7 @@ class RaihaNextHTTP3HeaderAccordionsTest < Minitest::Test
   private def each_server(**settings)
     [false, true].each do |traced|
       io = StringIO.new if traced
-      quic = Raiha::Next::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA]) if io
+      quic = Raiha::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA]) if io
       server = HTTP3::Connection.server(settings: HTTP3::Settings.new(**settings), tracer: quic && HTTP3::Qlog::Tracer.new(quic))
       server.start(**SERVER_STREAMS)
       sent(server)

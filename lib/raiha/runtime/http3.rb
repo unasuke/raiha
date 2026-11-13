@@ -4,14 +4,14 @@ require "stringio"
 require_relative "../http3_binding"
 require_relative "../http3/session"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # The HTTP/3 the applications of the runtime use: a client over a Session
   # of Client.connect, and a server. HTTP/3 itself is the sans-IO
-  # Raiha::Next::HTTP3, joined to the QUIC connection by HTTP3Binding.
+  # Raiha::HTTP3, joined to the QUIC connection by HTTP3Binding.
   module HTTP3
     # The peer reset the request or the response a read or a write waits
     # on, with the HTTP/3 `error_code`.
-    class StreamReset < Raiha::Next::Runtime::StreamReset; end
+    class StreamReset < Raiha::Runtime::StreamReset; end
 
     # A response read whole: its status, its header fields without the
     # pseudo-header ones, its body and its trailer fields ([] for none).
@@ -142,14 +142,14 @@ module Raiha::Next::Runtime
       PIECE = 64 * 1024
       ALPN = "h3"
 
-      def initialize(session, authority: nil, settings: Raiha::Next::HTTP3::Settings.new)
+      def initialize(session, authority: nil, settings: Raiha::HTTP3::Settings.new)
         @session = session
         @settings = settings
-        @tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
-        @http3 = Raiha::Next::HTTP3::Connection.client(settings:, tracer: @tracer, remembered:)
-        @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+        @tracer = (quic = session.tracer) && Raiha::HTTP3::Qlog::Tracer.new(quic)
+        @http3 = Raiha::HTTP3::Connection.client(settings:, tracer: @tracer, remembered:)
+        @binding = Raiha::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
-        session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+        session.attach(self, close_code: Raiha::HTTP3::ErrorCode::NO_ERROR)
         @authority = authority || session.server_name || raise(Error::Usage, "no authority to request from")
       end
 
@@ -159,7 +159,7 @@ module Raiha::Next::Runtime
       # Session#tickets, the newest last.
       def tickets
         settings = @http3.peer_settings or return []
-        @session.tickets.map { |quic| Raiha::Next::HTTP3::Session.new(quic:, settings:) }
+        @session.tickets.map { |quic| Raiha::HTTP3::Session.new(quic:, settings:) }
       end
 
       # The response to a GET of `path`, its body read whole.
@@ -212,11 +212,11 @@ module Raiha::Next::Runtime
       # The Session's protocol: the events of QUIC that are HTTP/3's.
       def take(event, now)
         case event
-        when Raiha::Next::QUIC::Event::ZeroRttRejected then zero_rtt_rejected
-        when Raiha::Next::QUIC::Event::Connected
+        when Raiha::QUIC::Event::ZeroRttRejected then zero_rtt_rejected
+        when Raiha::QUIC::Event::Connected
           alpn = event.handshake.alpn
           unless alpn == ALPN
-            @session.connection.close(error_code: Raiha::Next::HTTP3::ErrorCode::GENERAL_PROTOCOL_ERROR, reason: "ALPN #{alpn.inspect}, not h3",
+            @session.connection.close(error_code: Raiha::HTTP3::ErrorCode::GENERAL_PROTOCOL_ERROR, reason: "ALPN #{alpn.inspect}, not h3",
               now:)
             return false
           end
@@ -249,8 +249,8 @@ module Raiha::Next::Runtime
           @http3.send_request(stream_id, pseudo + headers, fin:)
         rescue StandardError
           @exchanges.delete(stream_id)
-          @session.connection.stream_reset(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
-          @session.connection.stream_stop_sending(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @session.connection.stream_reset(stream_id, error_code: Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @session.connection.stream_stop_sending(stream_id, error_code: Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED)
           @session.changed
           raise
         end
@@ -262,7 +262,7 @@ module Raiha::Next::Runtime
       # resumes, which the requests keep to until the server's come.
       private def remembered
         resumed = @session.resumed
-        resumed.settings if resumed.is_a?(Raiha::Next::HTTP3::Session) && @session.connection.zero_rtt_state == :pending
+        resumed.settings if resumed.is_a?(Raiha::HTTP3::Session) && @session.connection.zero_rtt_state == :pending
       end
 
       private def priority(urgency, incremental)
@@ -297,13 +297,13 @@ module Raiha::Next::Runtime
       end
 
       private def check_stopped(stream_id, error_code)
-        raise StreamReset.new(stream_id, error_code) unless error_code == Raiha::Next::HTTP3::ErrorCode::NO_ERROR
+        raise StreamReset.new(stream_id, error_code) unless error_code == Raiha::HTTP3::ErrorCode::NO_ERROR
       end
 
       # What the server did to the request, raised where the fiber that made
       # it waits.
       private def check(stream_id, exchange)
-        raise Raiha::Next::QUIC::Error::ZeroRttRejected, "the request on stream #{stream_id} went in rejected 0-RTT" if exchange.rejected
+        raise Raiha::QUIC::Error::ZeroRttRejected, "the request on stream #{stream_id} went in rejected 0-RTT" if exchange.rejected
         reset = exchange.reset and raise StreamReset.new(stream_id, reset)
       end
 
@@ -321,7 +321,7 @@ module Raiha::Next::Runtime
       private def zero_rtt_rejected
         @exchanges.each_value { |exchange| exchange.rejected = true }
         @exchanges.clear
-        @http3 = Raiha::Next::HTTP3::Connection.client(settings: @settings, tracer: @tracer)
+        @http3 = Raiha::HTTP3::Connection.client(settings: @settings, tracer: @tracer)
         @binding.restart(@http3)
       end
 
@@ -338,24 +338,24 @@ module Raiha::Next::Runtime
 
       private def take_http3(event)
         case event
-        when Raiha::Next::HTTP3::Event::Headers
+        when Raiha::HTTP3::Event::Headers
           exchange = @exchanges[event.stream_id] or return
           status = event.headers.find { |name, _| name == ":status" }&.last.to_i
           return if status.between?(100, 199)
           exchange.status = status
           exchange.headers = event.headers.reject { |name, _| name.start_with?(":") }
           exchange.end! if event.fin
-        when Raiha::Next::HTTP3::Event::Data
+        when Raiha::HTTP3::Event::Data
           exchange = @exchanges[event.stream_id] or return
           exchange << event.data unless event.data.empty?
           exchange.end! if event.fin
           pause(event.stream_id, exchange) if exchange.full? && !exchange.paused
-        when Raiha::Next::HTTP3::Event::Trailers
+        when Raiha::HTTP3::Event::Trailers
           exchange = @exchanges[event.stream_id] or return
           exchange.trailers = event.headers
           exchange.end!
-        when Raiha::Next::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
-        when Raiha::Next::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
+        when Raiha::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
+        when Raiha::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
         end
       end
 

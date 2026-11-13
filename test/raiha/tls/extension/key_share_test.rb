@@ -2,9 +2,9 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSExtensionKeyShareTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  KeyShare = Raiha::Next::TLS::Extension::KeyShare
-  RFC8448 = Raiha::Next::TLS::Test::RFC8448::Simple1RTT
+  Codec = Raiha::TLS::Codec
+  KeyShare = Raiha::TLS::Extension::KeyShare
+  RFC8448 = Raiha::TLS::Test::RFC8448::Simple1RTT
 
   def test_client_hello
     data = "\x00\x24\x00\x1d\x00\x20".b + RFC8448::CLIENT_X25519_PUBLIC_KEY

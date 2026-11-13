@@ -2,7 +2,7 @@
 
 require_relative "reader"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # Writes the primitives of RFC 9204 "Primitives" into a binary String.
   class Writer
     def initialize

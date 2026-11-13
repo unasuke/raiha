@@ -9,7 +9,7 @@ module RaihaInterop
   # HTTP3Binding, and each request is answered with 200 and the file of
   # its path under WWW, written as fast as HTTP/3 takes it.
   class NextHTTP3Server < NextServer
-    HTTP3 = Raiha::Next::HTTP3
+    HTTP3 = Raiha::HTTP3
 
     def initialize(...)
       super
@@ -22,7 +22,7 @@ module RaihaInterop
     def alpn = ["h3"]
 
     private def serve(connection)
-      http3, binding = @http3[connection] ||= HTTP3::Connection.server.then { [_1, Raiha::Next::HTTP3Binding.new(connection, _1)] }
+      http3, binding = @http3[connection] ||= HTTP3::Connection.server.then { [_1, Raiha::HTTP3Binding.new(connection, _1)] }
       now = mono
       connection.each_event do |event|
         next if binding.receive(event, now:)

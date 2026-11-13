@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # What the handshake core tells the application, as opposed to the Output
   # queue that goes to the transport.
   module Event

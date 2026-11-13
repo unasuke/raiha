@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSOutputTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256
 
   def test_secret_hides_the_secret_from_inspect

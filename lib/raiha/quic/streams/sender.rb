@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Streams
     # The sending part of a stream (RFC 9000 "Sending Stream States"): the
     # data the application wrote until it is acknowledged, the peer's limit

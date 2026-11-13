@@ -2,7 +2,7 @@
 
 require_relative "iana"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Misuse of the API by the caller, as opposed to bad bytes from the peer,
   # which never raise.
   class UsageError < StandardError; end

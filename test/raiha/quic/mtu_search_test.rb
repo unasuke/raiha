@@ -5,7 +5,7 @@ require "raiha/quic"
 # first, then halfway between, one probe at a time, a size given up on
 # after three losses in a row.
 class RaihaNextQUICMTUSearchTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   def search(from: 1200, up_to: 1472) = QUIC::MTUSearch.new(from:, up_to:)
 

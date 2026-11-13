@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # signature_algorithms: `SignatureScheme supported_signature_algorithms<2..2^16-2>`.
     class SignatureAlgorithms < Data.define(:supported_signature_algorithms)

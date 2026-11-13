@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # The algorithms that come with the layer, by name.
     ALGORITHMS = { cubic: Cubic, new_reno: NewReno }.freeze

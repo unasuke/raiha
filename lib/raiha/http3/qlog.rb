@@ -5,7 +5,7 @@ require_relative "frame"
 require_relative "settings"
 require_relative "tracer"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # qlog for HTTP/3 (draft-ietf-quic-qlog-h3-events-12).
   module Qlog
     # The schema of these events, under the draft's number, as the draft
@@ -20,7 +20,7 @@ module Raiha::Next::HTTP3
     # rest counted, so that one event stays small however large what it
     # tells of. A name or value that is not text goes as hex.
     class Tracer
-      include Raiha::Next::HTTP3::Tracer
+      include Raiha::HTTP3::Tracer
 
       MAX_FIELD_BYTES = 256
       MAX_FIELDS = 64

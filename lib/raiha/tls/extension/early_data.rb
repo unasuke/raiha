@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # early_data.
     module EarlyData

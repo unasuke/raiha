@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # CUBIC as RFC 9438 describes it. Slow start is Reno's. In congestion
     # avoidance the window follows the cubic function of the time since the

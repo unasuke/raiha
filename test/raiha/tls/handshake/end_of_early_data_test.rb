@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSHandshakeEndOfEarlyDataTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   REGISTRY = TLS::Extension::Registry::BUILTIN
 
   # From RFC 8448 section 4.

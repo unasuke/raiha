@@ -3,7 +3,7 @@
 require_relative "namespace"
 
 # TLS 1.3. Depends on nothing but openssl.
-module Raiha::Next::TLS
+module Raiha::TLS
 end
 
 require_relative "tls/codec"

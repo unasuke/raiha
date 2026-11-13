@@ -4,7 +4,7 @@ require "raiha/http3"
 # them: what one gives to send is read off, or handed to the other end
 # stream by stream, the IDs being the same on both ends as in QUIC.
 module NextHTTP3Pair
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
 
   # The client's streams for the control stream and QPACK, and the
   # server's.

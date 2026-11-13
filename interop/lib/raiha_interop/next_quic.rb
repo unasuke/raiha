@@ -14,8 +14,8 @@ module RaihaInterop
   # and the qlog quic-interop-runner asks for. With
   # RAIHA_STARTUP=rapid_start, the paths start with Rapid Start.
   module NextQUIC
-    QUIC = Raiha::Next::QUIC
-    TLS = Raiha::Next::TLS
+    QUIC = Raiha::QUIC
+    TLS = Raiha::TLS
     REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
     ALPN = ["hq-interop"].freeze
 
@@ -36,7 +36,7 @@ module RaihaInterop
     # datagram with the ECN codepoint of its Transmit and reads the one each
     # that comes in was marked with, which ECN validation and the runner's
     # ecn testcase need, with buffers large enough for a burst.
-    def udp_socket(host, port) = Raiha::Next::Runtime::UDP.bind(host, port)
+    def udp_socket(host, port) = Raiha::Runtime::UDP.bind(host, port)
 
     # Sends what the connection or the Endpoint put out. A peer gone away is
     # no reason to stop: what does not go is dropped.

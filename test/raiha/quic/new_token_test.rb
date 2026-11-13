@@ -5,7 +5,7 @@ require "raiha/quic"
 # was made for until it expires, whatever the port, each one of its own,
 # and nothing of the connection it came on in the clear.
 class RaihaNextQUICNewTokenTest < Minitest::Test
-  NewToken = Raiha::Next::QUIC::NewToken
+  NewToken = Raiha::QUIC::NewToken
   KEY = NewToken.key("\x01".b * 32)
   NOW = Time.at(1_800_000_000)
   ADDRESS = ["192.0.2.1", 50_000].freeze

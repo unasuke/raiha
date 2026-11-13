@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # application_layer_protocol_negotiation (RFC 7301 §3.1):
     # `ProtocolName protocol_name_list<2..2^16-1>` of `opaque ProtocolName<1..2^8-1>`.

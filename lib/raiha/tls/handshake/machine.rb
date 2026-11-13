@@ -10,7 +10,7 @@ require_relative "client_side"
 require_relative "conductor"
 require_relative "server_side"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # A TLS 1.3 handshake without I/O: handshake bytes in, an ordered queue of
     # Outputs (messages, secrets, alerts) and Events out. The transport, TCP

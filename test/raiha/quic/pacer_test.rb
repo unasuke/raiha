@@ -6,7 +6,7 @@ require "raiha/quic"
 # granularity, and no saving up past one burst, a burst being what the
 # rate gives in one granularity when that is more than the capacity.
 class RaihaNextQUICPacerTest < Minitest::Test
-  Pacer = Raiha::Next::QUIC::Pacer
+  Pacer = Raiha::QUIC::Pacer
   MDS = 1200
   # 1,200 bytes a millisecond.
   RATE = 1_200_000.0

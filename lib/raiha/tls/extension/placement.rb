@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # Which extension may appear in which message, and the class that parses
     # it there: RFC 9846's table of extensions and messages, plus the

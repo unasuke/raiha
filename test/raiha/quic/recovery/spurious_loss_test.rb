@@ -6,7 +6,7 @@ class RaihaNextQUICRecoverySpuriousLossTest < Minitest::Test
   include NextQUICRecovery
 
   # NewReno that keeps the bytes each ACK told it of.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     def acked_bytes = @acked_bytes ||= []
 
     def on_ack(acked_bytes:, **)

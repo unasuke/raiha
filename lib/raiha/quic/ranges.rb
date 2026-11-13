@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # Sets of byte offsets as ranges that neither overlap nor touch, in
   # order: what of a stream has been acknowledged or must go again.
   module Ranges

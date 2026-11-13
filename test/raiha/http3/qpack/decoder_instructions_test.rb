@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # What the decoder writes on the decoder stream (RFC 9204 "Decoder
 # Instructions"), taken with `take_instructions`.
 class RaihaNextQPACKDecoderInstructionsTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   def setup
     @decoder = QPACK::Decoder.new(max_table_capacity: 4096, max_blocked_streams: 16)

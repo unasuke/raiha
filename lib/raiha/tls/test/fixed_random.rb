@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS::Test
+module Raiha::TLS::Test
   # A random source that hands out given bytes in order, so that tests can
   # reproduce the randoms of RFC 8448. Each draw must ask for exactly the
   # length of the next chunk. Never use it outside tests.

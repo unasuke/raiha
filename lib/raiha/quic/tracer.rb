@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What a tracer is told, one method per event of the qlog drafts. Every
   # method is optional: a tracer includes this module and overrides the ones
   # it wants, and the rest do nothing. The layer takes a tracer, or nil for

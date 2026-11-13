@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # A monotonic clock that moves only when told, in Float seconds like the
   # `now:` the core takes. No real time passes while a test runs on it.
   class VirtualClock

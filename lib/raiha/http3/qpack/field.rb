@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # A field line. `never_indexed` is the N bit of RFC 9204 "Literal Field
   # Line with Name Reference": the line is always sent as a literal, here
   # and on every hop after. The Strings are frozen, copied first when the

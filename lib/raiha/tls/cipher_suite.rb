@@ -2,7 +2,7 @@
 
 require_relative "crypto"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # A TLS 1.3 cipher suite: the AEAD and hash it names, and how much one key
   # may be used before it has to be updated.
   #

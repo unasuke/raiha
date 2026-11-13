@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # 9204 "Blocked Decoding"), as many at once as SETTINGS_QPACK_BLOCKED_STREAMS
 # allows.
 class RaihaNextQPACKDecoderBlockingTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   DECOMPRESSION_FAILED = QPACK::ErrorCode::DECOMPRESSION_FAILED
 
   def setup

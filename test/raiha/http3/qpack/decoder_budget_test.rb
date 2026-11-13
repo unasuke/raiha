@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # its name and value and 32 more (RFC 9114 "Header Size Constraints"),
 # and stops at the line that passes it.
 class RaihaNextQPACKDecoderBudgetTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   def test_64_kib_by_default
     assert_equal 65_536, QPACK::Decoder::DEFAULT_MAX_FIELD_SECTION_SIZE

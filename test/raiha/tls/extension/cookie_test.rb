@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionCookieTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  Cookie = Raiha::Next::TLS::Extension::Cookie
+  Codec = Raiha::TLS::Codec
+  Cookie = Raiha::TLS::Extension::Cookie
 
   def test_parse_and_encode
     ext = Cookie.parse("\x00\x03abc".b)

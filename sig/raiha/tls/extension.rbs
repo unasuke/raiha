@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # The contract every extension value meets, typed or not.
     interface _Extension

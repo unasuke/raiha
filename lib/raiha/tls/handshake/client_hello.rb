@@ -5,7 +5,7 @@ require_relative "../extension"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     class ClientHello < Data.define(
       :legacy_version, :random, :legacy_session_id, :cipher_suites, :legacy_compression_methods, :extensions

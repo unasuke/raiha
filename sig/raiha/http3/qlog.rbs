@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   interface _Tracer
     def parameters_set: (initiator: :local | :remote, settings: Settings) -> void
     def stream_type_set: (initiator: :local | :remote, stream_id: Integer, type: Integer | :request) -> void
@@ -25,7 +25,7 @@ module Raiha::Next::HTTP3
     EVENT_SCHEMA: String
 
     class Tracer
-      include Raiha::Next::HTTP3::Tracer
+      include Raiha::HTTP3::Tracer
 
       MAX_FIELD_BYTES: Integer
       MAX_FIELDS: Integer

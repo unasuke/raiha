@@ -2,9 +2,9 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSExtensionPreSharedKeyTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  PreSharedKey = Raiha::Next::TLS::Extension::PreSharedKey
-  RFC8448 = Raiha::Next::TLS::Test::RFC8448::Resumed0RTT
+  Codec = Raiha::TLS::Codec
+  PreSharedKey = Raiha::TLS::Extension::PreSharedKey
+  RFC8448 = Raiha::TLS::Test::RFC8448::Resumed0RTT
 
   # pre_shared_key is the last extension of the section 4 ClientHello, and its
   # extension_data is the last 221 bytes.

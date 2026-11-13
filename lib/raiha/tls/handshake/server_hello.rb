@@ -5,7 +5,7 @@ require_relative "../extension"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # A ServerHello, or a HelloRetryRequest: RFC 9846 defines the latter as a
     # ServerHello whose random is a fixed value, not as a message type of its

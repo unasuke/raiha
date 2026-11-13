@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   interface _MaskedMembers
     def masked_members: () -> Array[Symbol]
   end

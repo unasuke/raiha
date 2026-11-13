@@ -8,7 +8,7 @@ require_relative "result"
 require_relative "static_table"
 require_relative "writer"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The decoder of one connection: it follows the encoder stream into its
   # dynamic table and decodes field sections against it. What the peer
   # sends never raises; it comes back as a Failure.

@@ -1,4 +1,4 @@
-module Raiha::Next::Runtime
+module Raiha::Runtime
   module Error
     class Base < StandardError
     end
@@ -13,7 +13,7 @@ module Raiha::Next::Runtime
   # A protocol over a Session, HTTP/3: it takes each event of the
   # connection first, whether it was its own alone, and turns after them.
   interface _Protocol
-    def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+    def take: (Raiha::QUIC::Event::t event, Float now) -> bool
 
     def turn: (Float now) -> void
 
@@ -22,7 +22,7 @@ module Raiha::Next::Runtime
 
   # What a client or a server of the runtime is to its Driver.
   interface _Owner
-    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void
+    def route: (Raiha::QUIC::Route::t route, Float now) -> void
 
     def turn: (Float now) -> void
 
@@ -38,7 +38,7 @@ module Raiha::Next::Runtime
     type control = :close
       | [:stats, Ractor::Port[Stats?]]
       | [:stop, Float | Integer]
-      | [:reconfigure, Raiha::Next::TLS::Config, Array[Raiha::Next::TLS::Keyring::Identity]]
+      | [:reconfigure, Raiha::TLS::Config, Array[Raiha::TLS::Keyring::Identity]]
 
     QUEUE: Integer
     QUEUE_BYTES: Integer
@@ -59,8 +59,8 @@ module Raiha::Next::Runtime
     attr_reader inbox: Ractor::Port[forwarded]
     attr_reader control: Ractor::Port[control]
     attr_reader peers: Array[Ractor::Port[forwarded]]
-    attr_reader config: Raiha::Next::QUIC::Config
-    attr_reader anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay
+    attr_reader config: Raiha::QUIC::Config
+    attr_reader anti_replay: Raiha::TLS::AntiReplay::_AntiReplay
 
     @queue: Thread::Queue[forwarded]
     @queued_bytes: Integer
@@ -70,8 +70,8 @@ module Raiha::Next::Runtime
     @dropped: Integer
     @listener: Thread?
 
-    def initialize: (id: Integer, count: Integer, config: Raiha::Next::QUIC::Config, sockets: Array[UDPSocket], inbox: Ractor::Port[forwarded],
-      control: Ractor::Port[control], peers: Array[Ractor::Port[forwarded]], anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay) -> void
+    def initialize: (id: Integer, count: Integer, config: Raiha::QUIC::Config, sockets: Array[UDPSocket], inbox: Ractor::Port[forwarded],
+      control: Ractor::Port[control], peers: Array[Ractor::Port[forwarded]], anti_replay: Raiha::TLS::AntiReplay::_AntiReplay) -> void
 
     def listen: (changed: ^() -> void, failed: ^(StandardError) -> void) { (control message) -> void } -> self
 
@@ -94,7 +94,7 @@ module Raiha::Next::Runtime
 
     attr_reader count: Integer
 
-    @config: Raiha::Next::QUIC::Config
+    @config: Raiha::QUIC::Config
     @host: String
     @port: Integer
     @args: Array[top]
@@ -104,7 +104,7 @@ module Raiha::Next::Runtime
     @stop: (Float | Integer)?
     @wake: IO?
 
-    def initialize: (count: Integer, config: Raiha::Next::QUIC::Config, ?host: String, ?port: Integer, ?args: Array[top]) { (Worker worker, *top) -> void } -> void
+    def initialize: (count: Integer, config: Raiha::QUIC::Config, ?host: String, ?port: Integer, ?args: Array[top]) { (Worker worker, *top) -> void } -> void
 
     def local_address: () -> UDP::address?
 
@@ -112,7 +112,7 @@ module Raiha::Next::Runtime
 
     def stop: (?timeout: Float | Integer) -> nil
 
-    def reconfigure: (tls_config: Raiha::Next::TLS::Config, identities: Array[Raiha::Next::TLS::Keyring::Identity]) -> nil
+    def reconfigure: (tls_config: Raiha::TLS::Config, identities: Array[Raiha::TLS::Keyring::Identity]) -> nil
 
     def stats: (?timeout: Float | Integer) -> Array[Worker::Stats?]
 
@@ -121,7 +121,7 @@ module Raiha::Next::Runtime
     private def bind: () -> Array[Array[UDPSocket]]
 
     private def start: (Integer id, Ractor::Port[[Integer, Ractor::Port[Worker::forwarded], Ractor::Port[Worker::control]]] out,
-      Raiha::Next::TLS::AntiReplay::Shared shared) -> Ractor
+      Raiha::TLS::AntiReplay::Shared shared) -> Ractor
 
     private def wait: (Array[Ractor] ractors, Ractor record) -> nil
 
@@ -129,7 +129,7 @@ module Raiha::Next::Runtime
   end
 
   class Driver
-    attr_reader endpoint: Raiha::Next::QUIC::Endpoint
+    attr_reader endpoint: Raiha::QUIC::Endpoint
     attr_reader failure: StandardError?
 
     @udp: UDP
@@ -144,7 +144,7 @@ module Raiha::Next::Runtime
 
     @worker: Worker?
 
-    def initialize: (Raiha::Next::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP], ?worker: Worker?) -> void
+    def initialize: (Raiha::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP], ?worker: Worker?) -> void
 
     def start: () -> self
 
@@ -158,17 +158,17 @@ module Raiha::Next::Runtime
 
     private def read: (UDP udp) -> void
 
-    private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::Next::QUIC::Transmit]
+    private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::QUIC::Transmit]
 
-    private def take_forwarded: () -> Array[Raiha::Next::QUIC::Transmit]
+    private def take_forwarded: () -> Array[Raiha::QUIC::Transmit]
 
     private def run: () -> void
 
-    private def turn: (Float now) -> Array[Raiha::Next::QUIC::Transmit]
+    private def turn: (Float now) -> Array[Raiha::QUIC::Transmit]
 
     private def timeout: () -> Float?
 
-    private def emit: (Raiha::Next::QUIC::Transmit transmit) -> bool
+    private def emit: (Raiha::QUIC::Transmit transmit) -> bool
 
     private def fail: (StandardError error) -> void
   end
@@ -179,7 +179,7 @@ module Raiha::Next::Runtime
     RECEIVE_BATCH: Integer
     MAX_DATAGRAM: Integer
     BUFFER: Integer
-    type ecn = Raiha::Next::QUIC::ecn | :ce
+    type ecn = Raiha::QUIC::ecn | :ce
 
     ECN: Hash[Integer, ecn]
     MARKS: Hash[Symbol, Integer]
@@ -199,16 +199,16 @@ module Raiha::Next::Runtime
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
     def self.covers?: (Addrinfo bound, address address) -> bool
     def self.unmapped: (String host) -> String
-    def self.batching: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
+    def self.batching: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
     def self.unfragmented?: () -> bool
-    def self.pmtud: (Raiha::Next::QUIC::Config config) -> Raiha::Next::QUIC::Config
+    def self.pmtud: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
 
     def initialize: (UDPSocket socket) -> void
 
     def local_address: () -> address
     def sends_from?: (address address) -> bool
 
-    def send: (Raiha::Next::QUIC::Transmit transmit) -> bool
+    def send: (Raiha::QUIC::Transmit transmit) -> bool
 
     def receive: () -> Array[[String, address, address?, ecn]]
 
@@ -222,7 +222,7 @@ module Raiha::Next::Runtime
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Array[Socket::AncillaryData] controls) -> bool
-    private def datagrams: (Raiha::Next::QUIC::Transmit transmit) -> Array[String]
+    private def datagrams: (Raiha::QUIC::Transmit transmit) -> Array[String]
 
     private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?
 
@@ -234,7 +234,7 @@ module Raiha::Next::Runtime
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   class StreamReset < StandardError
     attr_reader stream_id: Integer
     attr_reader error_code: Integer
@@ -257,8 +257,8 @@ module Raiha::Next::Runtime
     MAX_ACK_DELAY: Float
     MAX_HELD: Integer
 
-    attr_reader connection: Raiha::Next::QUIC::Connection
-    attr_reader tracer: Raiha::Next::QUIC::Qlog::Tracer?
+    attr_reader connection: Raiha::QUIC::Connection
+    attr_reader tracer: Raiha::QUIC::Qlog::Tracer?
 
     @driver: Driver
     @role: :client | :server
@@ -271,22 +271,22 @@ module Raiha::Next::Runtime
     @aborted: StandardError?
     @stopping: bool
     @stop_deadline: Float?
-    @connected: Raiha::Next::QUIC::Event::Connected?
+    @connected: Raiha::QUIC::Event::Connected?
     @protocol: _Protocol?
     @close_code: Integer
-    @tickets: Array[Raiha::Next::QUIC::Session]
+    @tickets: Array[Raiha::QUIC::Session]
     @tokens: Array[String]
     @generation: Integer
 
     attr_reader server_name: String?
-    attr_reader resumed: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil
+    attr_reader resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil
 
-    def initialize: (Raiha::Next::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::Next::QUIC::Qlog::Tracer?,
-                     ?server_name: String?, ?resumed: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil) -> void
+    def initialize: (Raiha::QUIC::Connection connection, Driver driver, role: :client | :server, ?tracer: Raiha::QUIC::Qlog::Tracer?,
+                     ?server_name: String?, ?resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil) -> void
 
-    def handshake: () -> Raiha::Next::TLS::Event::HandshakeComplete?
+    def handshake: () -> Raiha::TLS::Event::HandshakeComplete?
 
-    def tickets: () -> Array[Raiha::Next::QUIC::Session]
+    def tickets: () -> Array[Raiha::QUIC::Session]
 
     def tokens: () -> Array[String]
 
@@ -339,9 +339,9 @@ module Raiha::Next::Runtime
 
     private def current!: (Integer stream_id, Integer generation) -> void
 
-    private def take: (Raiha::Next::QUIC::Event::t event) -> void
+    private def take: (Raiha::QUIC::Event::t event) -> void
 
-    private def ticket: (Raiha::Next::QUIC::Session session) -> void
+    private def ticket: (Raiha::QUIC::Session session) -> void
 
     private def arrived: (Integer stream_id) -> void
 
@@ -377,7 +377,7 @@ module Raiha::Next::Runtime
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   class ConnectError < StandardError
     attr_reader errors: Array[[UDP::address | String, StandardError]]
 
@@ -387,29 +387,29 @@ module Raiha::Next::Runtime
   class Client
     CONNECT_TIMEOUT: Float
 
-    @config: Raiha::Next::QUIC::Config
-    @tls_config: Raiha::Next::TLS::Config
-    @keyring: Raiha::Next::TLS::Keyring
+    @config: Raiha::QUIC::Config
+    @tls_config: Raiha::TLS::Config
+    @keyring: Raiha::TLS::Keyring
     @connect_timeout: Float | Integer
     @session: Session?
     @deadline: Float?
     @qlog: Qlog?
     @trace: Qlog::Pending?
 
-    def self.connect: [T] (String host, Integer port, config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config,
-                           keyring: Raiha::Next::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer,
-                           ?qlog_dir: String?, ?session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil, ?token: String?,
+    def self.connect: [T] (String host, Integer port, config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config,
+                           keyring: Raiha::TLS::Keyring, ?server_name: String, ?connect_timeout: Float | Integer,
+                           ?qlog_dir: String?, ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil, ?token: String?,
                            ?early_data: bool)
                          { (Session session) -> T } -> T
 
-    def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+    def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
                      ?connect_timeout: Float | Integer, ?qlog_dir: String?) -> void
 
-    def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil,
+    def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
                       ?token: String?,
                       ?early_data: bool) { (Session session) -> T } -> T
 
-    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> nil
+    def route: (Raiha::QUIC::Route::t route, Float now) -> nil
 
     def turn: (Float now) -> void
 
@@ -419,30 +419,30 @@ module Raiha::Next::Runtime
 
     private def finish: (Driver driver, Session session) -> void
 
-    private def bind: () -> [UDP, Raiha::Next::QUIC::Config]
+    private def bind: () -> [UDP, Raiha::QUIC::Config]
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 
-    private def attempt: (UDP::address address, String server_name, session: Raiha::Next::QUIC::Session | Raiha::Next::HTTP3::Session | nil,
+    private def attempt: (UDP::address address, String server_name, session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
                           token: String?,
                           early_data: bool) -> [Driver, Session]
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   class Server
     MAX_CONNECTIONS: Integer
     STOP_TIMEOUT: Integer
 
-    @config: Raiha::Next::QUIC::Config
-    @tls_config: Raiha::Next::TLS::Config
-    @keyring: Raiha::Next::TLS::Keyring
-    @anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay
+    @config: Raiha::QUIC::Config
+    @tls_config: Raiha::TLS::Config
+    @keyring: Raiha::TLS::Keyring
+    @anti_replay: Raiha::TLS::AntiReplay::_AntiReplay
     @app_early_data_context: String
     @host: String
     @port: Integer
     @max_connections: Integer
     @max_unvalidated: Integer
-    @admitted: Array[Raiha::Next::QUIC::Endpoint::Handle]
+    @admitted: Array[Raiha::QUIC::Endpoint::Handle]
     @qlog: Qlog?
     @traces: Hash[Session, Qlog::Pending]
     @sessions: Array[Session]
@@ -460,19 +460,19 @@ module Raiha::Next::Runtime
     @worker_failure: StandardError?
     @stop_error_code: Integer
 
-    def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+    def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
                      ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?qlog_dir: String?,
-                     ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?worker: Worker?, ?stop_error_code: Integer) -> void
+                     ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?worker: Worker?, ?stop_error_code: Integer) -> void
 
     def run: () { (Session session) -> void } -> nil
 
     def local_address: () -> UDP::address?
 
-    def reconfigure: (tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring) -> nil
+    def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
 
     def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
 
-    def route: (Raiha::Next::QUIC::Route::t route, Float now) -> void
+    def route: (Raiha::QUIC::Route::t route, Float now) -> void
 
     def turn: (Float now) -> void
 
@@ -483,7 +483,7 @@ module Raiha::Next::Runtime
     private def unvalidated: (Float now) -> Integer
     private def driver!: () -> Driver
 
-    private def sockets: () -> [UDP, Array[UDP], Raiha::Next::QUIC::_ConnectionIDs]
+    private def sockets: () -> [UDP, Array[UDP], Raiha::QUIC::_ConnectionIDs]
 
     private def control: (Worker::control message) -> void
 
@@ -499,7 +499,7 @@ module Raiha::Next::Runtime
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   class Qlog
     BUDGET: Integer
     MAX_FILES: Integer
@@ -524,7 +524,7 @@ module Raiha::Next::Runtime
       private def open_locked: () -> File?
     end
 
-    attr_reader budget: Raiha::Next::QUIC::Qlog::Budget
+    attr_reader budget: Raiha::QUIC::Qlog::Budget
 
     @dir: String
     @max_bytes: Integer
@@ -532,11 +532,11 @@ module Raiha::Next::Runtime
     @pending: Array[Pending]
     @closed: Array[[String, Integer]]
 
-    def self.budget: () -> Raiha::Next::QUIC::Qlog::Budget
+    def self.budget: () -> Raiha::QUIC::Qlog::Budget
 
-    def initialize: (String dir, ?budget: Raiha::Next::QUIC::Qlog::Budget, ?max_bytes: Integer, ?max_files: Integer) -> void
+    def initialize: (String dir, ?budget: Raiha::QUIC::Qlog::Budget, ?max_bytes: Integer, ?max_files: Integer) -> void
 
-    def trace: (:client | :server vantage_point, String name, tls_config: Raiha::Next::TLS::Config) -> [Raiha::Next::QUIC::Qlog::Tracer, Pending]
+    def trace: (:client | :server vantage_point, String name, tls_config: Raiha::TLS::Config) -> [Raiha::QUIC::Qlog::Tracer, Pending]
 
     def flush: () -> nil
 
@@ -548,9 +548,9 @@ module Raiha::Next::Runtime
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   module HTTP3
-    class StreamReset < Raiha::Next::Runtime::StreamReset
+    class StreamReset < Raiha::Runtime::StreamReset
     end
 
     class Response < Data
@@ -634,16 +634,16 @@ module Raiha::Next::Runtime
       ALPN: String
 
       @session: Session
-      @settings: Raiha::Next::HTTP3::Settings
-      @tracer: Raiha::Next::HTTP3::Qlog::Tracer?
-      @http3: Raiha::Next::HTTP3::Connection
-      @binding: Raiha::Next::HTTP3Binding
+      @settings: Raiha::HTTP3::Settings
+      @tracer: Raiha::HTTP3::Qlog::Tracer?
+      @http3: Raiha::HTTP3::Connection
+      @binding: Raiha::HTTP3Binding
       @exchanges: Hash[Integer, Exchange]
       @authority: String
 
-      def initialize: (Session session, ?authority: String?, ?settings: Raiha::Next::HTTP3::Settings) -> void
+      def initialize: (Session session, ?authority: String?, ?settings: Raiha::HTTP3::Settings) -> void
 
-      def tickets: () -> Array[Raiha::Next::HTTP3::Session]
+      def tickets: () -> Array[Raiha::HTTP3::Session]
 
       def get: (String path, ?headers: Array[[String, String]]) -> Response
 
@@ -654,7 +654,7 @@ module Raiha::Next::Runtime
 
       def cancel: (Integer stream_id) -> void
 
-      def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+      def take: (Raiha::QUIC::Event::t event, Float now) -> bool
 
       def expire: () -> nil
 
@@ -662,7 +662,7 @@ module Raiha::Next::Runtime
 
       private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> [Integer, Exchange]
 
-      private def remembered: () -> Raiha::Next::HTTP3::Settings?
+      private def remembered: () -> Raiha::HTTP3::Settings?
 
       private def priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
 
@@ -680,14 +680,14 @@ module Raiha::Next::Runtime
 
       private def flush: () -> void
 
-      private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
+      private def take_http3: (Raiha::HTTP3::Event::t event) -> void
 
       private def pause: (Integer stream_id, Exchange exchange) -> void
     end
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   module HTTP3
     class ResponseBody
       attr_reader trailers: Array[[String, String]]
@@ -742,12 +742,12 @@ module Raiha::Next::Runtime
     end
 
     class Server
-      @settings: Raiha::Next::HTTP3::Settings
-      @server: Raiha::Next::Runtime::Server
+      @settings: Raiha::HTTP3::Settings
+      @server: Raiha::Runtime::Server
 
-      def initialize: (config: Raiha::Next::QUIC::Config, tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring,
+      def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
                        ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?qlog_dir: String?,
-                       ?settings: Raiha::Next::HTTP3::Settings, ?anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay?, ?worker: Worker?) -> void
+                       ?settings: Raiha::HTTP3::Settings, ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?, ?worker: Worker?) -> void
 
       def run: () { (Request request) -> void } -> nil
 
@@ -755,7 +755,7 @@ module Raiha::Next::Runtime
 
       def stop: (?timeout: Float | Integer) -> nil
 
-      def reconfigure: (tls_config: Raiha::Next::TLS::Config, keyring: Raiha::Next::TLS::Keyring) -> nil
+      def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
     end
 
     class Serving
@@ -763,12 +763,12 @@ module Raiha::Next::Runtime
 
       @session: Session
       @fibers: Hash[Integer, Fiber?]
-      @http3: Raiha::Next::HTTP3::Connection
-      @binding: Raiha::Next::HTTP3Binding
+      @http3: Raiha::HTTP3::Connection
+      @binding: Raiha::HTTP3Binding
       @exchanges: Hash[Integer, Exchange]
       @arrived: Array[[Integer, Array[[String, String]]]]
 
-      def initialize: (Session session, Raiha::Next::HTTP3::Settings settings) -> void
+      def initialize: (Session session, Raiha::HTTP3::Settings settings) -> void
 
       def serve: () { (Request request) -> void } -> void
 
@@ -788,7 +788,7 @@ module Raiha::Next::Runtime
 
       def prioritize: (Integer stream_id, urgency: Integer?, incremental: bool?) -> void
 
-      def take: (Raiha::Next::QUIC::Event::t event, Float now) -> bool
+      def take: (Raiha::QUIC::Event::t event, Float now) -> bool
 
       def turn: (Float now) -> void
 
@@ -812,12 +812,12 @@ module Raiha::Next::Runtime
 
       private def flush: () -> void
 
-      private def take_http3: (Raiha::Next::HTTP3::Event::t event) -> void
+      private def take_http3: (Raiha::HTTP3::Event::t event) -> void
     end
   end
 end
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   class Rack
     type env_value = String | Input | IO | HTTP3::Request | Array[String]
 

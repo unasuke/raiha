@@ -20,9 +20,9 @@ require "fileutils"
 require "securerandom"
 require_relative "_certificate"
 
-Runtime = Raiha::Next::Runtime
-QUIC = Raiha::Next::QUIC
-TLS = Raiha::Next::TLS
+Runtime = Raiha::Runtime
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 ALPN = ["hq-interop"].freeze
 QLOG_DIR = "tmp/raiha-example-qlog"

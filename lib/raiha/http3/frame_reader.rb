@@ -2,7 +2,7 @@
 
 require_relative "frame"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # Reads the frames of one stream from its bytes as they come, without
   # trusting a length to set aside room first (RFC 9114 "Frame Layout").
   #

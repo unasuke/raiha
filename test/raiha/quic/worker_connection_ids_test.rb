@@ -5,7 +5,7 @@ require "raiha/quic"
 # the key, which worker issued it, while its first byte looks as random as
 # the rest to anyone without the key.
 class RaihaNextQUICWorkerConnectionIDsTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   KEY = ("k" * 32).b
 
   def worker(id, count: 4, key: KEY, random: Random.new(id)) = QUIC::WorkerConnectionIDs.new(random, worker_id: id, worker_count: count, key:)

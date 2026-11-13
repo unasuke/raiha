@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSSignatureSchemeTest < Minitest::Test
-  SignatureScheme = Raiha::Next::TLS::SignatureScheme
+  SignatureScheme = Raiha::TLS::SignatureScheme
 
   def test_rfc9846_schemes
     assert_equal [

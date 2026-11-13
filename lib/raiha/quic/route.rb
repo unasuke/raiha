@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What an Endpoint did with a datagram it received.
   module Route
     # Given to the connection it belongs to.

@@ -3,7 +3,7 @@ require "raiha/http3"
 
 # The priority parameters of RFC 9218.
 class RaihaNextHTTP3PriorityTest < Minitest::Test
-  Priority = Raiha::Next::HTTP3::Priority
+  Priority = Raiha::HTTP3::Priority
 
   def priority(urgency, incremental) = Priority.new(urgency:, incremental:)
 

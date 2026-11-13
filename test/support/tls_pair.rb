@@ -4,7 +4,7 @@ require "support/test_pki"
 # A client and a server Machine of the next release of raiha, built from a
 # test PKI and run against each other with nothing in between.
 module NextTLSPair
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   PKI = NextTestPKI
   NOW = PKI::NOW
 

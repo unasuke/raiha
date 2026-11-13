@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Datagrams
     MAX_SEND_QUEUE: Integer
     MAX_RECEIVED: Integer

@@ -5,7 +5,7 @@ require "stringio"
 require "tmpdir"
 
 class RaihaNextTLSKeylogTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448
   S = RFC8448::Simple1RTT
   Pair = NextTLSPair

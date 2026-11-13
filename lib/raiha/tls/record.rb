@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The TLS record layer, used over TCP only (Profile::TCP). QUIC carries
   # handshake messages in CRYPTO frames and protects packets itself.
   module Record

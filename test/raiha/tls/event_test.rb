@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSEventTest < Minitest::Test
-  SessionNotOffered = Raiha::Next::TLS::Event::SessionNotOffered
+  SessionNotOffered = Raiha::TLS::Event::SessionNotOffered
 
   # Expired tickets and chains that no longer verify can never be used
   # again; the other reasons depend on this connection.

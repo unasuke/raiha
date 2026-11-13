@@ -10,7 +10,7 @@ require "raiha/tls/test"
 # one byte changed. RAIHA_FUZZ_ITERATIONS (default 10000) and
 # RAIHA_FUZZ_SEED change the number of inputs and the seed.
 class RaihaNextTLSHandshakeParseFuzzTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448
   REGISTRY = TLS::Extension::Registry::BUILTIN
 

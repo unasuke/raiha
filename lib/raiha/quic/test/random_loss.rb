@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # A path model that drops each datagram with probability `rate` and lets
   # the rest through at once.
   class RandomLoss < Data.define(:rate)

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What changes between QUIC versions, in one value, so that no other code
   # writes a version's literals: the version number, the salt of the Initial
   # secrets, the prefix of the key derivation labels, the long header packet

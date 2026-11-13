@@ -2,7 +2,7 @@
 
 require_relative "error_code"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # A field section decoded: its fields in order, and their size as RFC
   # 9114 "Header Size Constraints" counts it, name and value and 32 more
   # for each.

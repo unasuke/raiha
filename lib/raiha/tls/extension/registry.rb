@@ -2,7 +2,7 @@
 
 require_relative "placement"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # The extensions a connection can parse, by type and context. `Config`
     # holds one; nothing reads a global table. The built-in extensions are

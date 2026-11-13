@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The streams of a connection and their flow control (RFC 9000 "Streams"
   # and "Flow Control"): the receiving and sending parts of each stream,
   # the connection's receive window, and the limits on how many streams

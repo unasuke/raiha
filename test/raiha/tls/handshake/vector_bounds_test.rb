@@ -9,7 +9,7 @@ require "raiha/tls"
 # length prefix, or would make the whole message longer than 2^24-1, cannot
 # be built and is skipped.
 class RaihaNextTLSHandshakeVectorBoundsTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Handshake = TLS::Handshake
   Extension = TLS::Extension
   REGISTRY = Extension::Registry::BUILTIN

@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class Transcript
     TRANSCRIPT_MESSAGES: Set[Integer]
     MESSAGE_HASH: Integer

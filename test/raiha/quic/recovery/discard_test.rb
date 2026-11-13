@@ -7,7 +7,7 @@ class RaihaNextQUICRecoveryDiscardTest < Minitest::Test
   include NextQUICRecovery
 
   # NewReno that keeps whether it heard anything.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     attr_reader :heard
 
     def on_loss(**) = (@heard = true) && super

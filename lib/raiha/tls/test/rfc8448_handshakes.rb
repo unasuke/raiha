@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS::Test::RFC8448
+module Raiha::TLS::Test::RFC8448
   # A Machine playing one side of an RFC 8448 trace: the client or the server
   # of section 3 (:simple_1rtt), 5 (:hello_retry_request) or 6
   # (:client_authentication), or the client of section 4 (:resumed_0rtt),
@@ -22,7 +22,7 @@ module Raiha::Next::TLS::Test::RFC8448
     return resumed_client(now:, keylog:) if section == :resumed_0rtt && role == :client
     vectors = { simple_1rtt: Simple1RTT, hello_retry_request: HelloRetryRequest, client_authentication: ClientAuthentication }
     trace = vectors.fetch(section)
-    tls = Raiha::Next::TLS
+    tls = Raiha::TLS
     none = tls::Verifier::None.new
     if role == :client
       client_hello = section == :hello_retry_request ? HelloRetryRequest::CLIENT_HELLO_1 : trace.const_get(:CLIENT_HELLO)
@@ -32,8 +32,8 @@ module Raiha::Next::TLS::Test::RFC8448
       config = tls::Config.deterministic(groups:)
       keyring = tls::Keyring.client(
         config:, identities: section == :client_authentication ? [server_identity] : [], verifier: none,
-        key_exchange: Raiha::Next::TLS::Test::FixedKEM.new(keys),
-        random: Raiha::Next::TLS::Test::FixedRandom.new(client_hello.byteslice(6, 32).to_s, "\x00".b * 32)
+        key_exchange: Raiha::TLS::Test::FixedKEM.new(keys),
+        random: Raiha::TLS::Test::FixedRandom.new(client_hello.byteslice(6, 32).to_s, "\x00".b * 32)
       )
       substitutions = { 1 => [client_hello] }
       substitutions[1] << HelloRetryRequest::CLIENT_HELLO_2 if section == :hello_retry_request
@@ -53,8 +53,8 @@ module Raiha::Next::TLS::Test::RFC8448
       config = tls::Config.server(groups: [group], client_auth: section == :client_authentication ? :required : :none)
       keyring = tls::Keyring.server(
         config:, identities: [server_identity], verifier: none,
-        key_exchange: Raiha::Next::TLS::Test::FixedKEM.new({ group => key }),
-        random: Raiha::Next::TLS::Test::FixedRandom.new(server_hello.byteslice(6, 32).to_s)
+        key_exchange: Raiha::TLS::Test::FixedKEM.new({ group => key }),
+        random: Raiha::TLS::Test::FixedRandom.new(server_hello.byteslice(6, 32).to_s)
       )
       substitutions = { 8 => [trace.const_get(:ENCRYPTED_EXTENSIONS)] }
       substitutions[2] = [HelloRetryRequest::HELLO_RETRY_REQUEST] if section == :hello_retry_request
@@ -76,12 +76,12 @@ module Raiha::Next::TLS::Test::RFC8448
   # one section 3's client would keep: a client offers no session from a
   # server Verifier::None let in.
   def self.resumed_client(now:, keylog:)
-    tls = Raiha::Next::TLS
+    tls = Raiha::TLS
     config = tls::Config.deterministic(groups: %i[x25519])
     keyring = tls::Keyring.client(
       config:, verifier: tls::Verifier::None.new,
-      key_exchange: Raiha::Next::TLS::Test::FixedKEM.new({ x25519: Resumed0RTT::CLIENT_X25519_PRIVATE_KEY }),
-      random: Raiha::Next::TLS::Test::FixedRandom.new(Resumed0RTT::CLIENT_HELLO.byteslice(6, 32).to_s, "\x00".b * 32)
+      key_exchange: Raiha::TLS::Test::FixedKEM.new({ x25519: Resumed0RTT::CLIENT_X25519_PRIVATE_KEY }),
+      random: Raiha::TLS::Test::FixedRandom.new(Resumed0RTT::CLIENT_HELLO.byteslice(6, 32).to_s, "\x00".b * 32)
     )
     tls::Handshake::Machine.__send__(:start_client, config:, keyring:, server_name: "server", now:, extensions: [],
       tracer: nil, keylog:, substitutions: { 1 => [Resumed0RTT::CLIENT_HELLO] }, session: section3_session(now:), early_data: true)
@@ -89,7 +89,7 @@ module Raiha::Next::TLS::Test::RFC8448
 
   # The session section 3's NewSessionTicket gives, received at `now`.
   def self.section3_session(now:)
-    tls = Raiha::Next::TLS
+    tls = Raiha::TLS
     ticket = case (message = tls::Handshake.parse(Simple1RTT::NEW_SESSION_TICKET, registry: tls::Extension::Registry::BUILTIN))
       when tls::Handshake::NewSessionTicket then message
       else raise "not a NewSessionTicket"
@@ -107,7 +107,7 @@ module Raiha::Next::TLS::Test::RFC8448
 
   # The certificate of sections 3 to 5 with the key of section 2.
   def self.server_identity
-    tls = Raiha::Next::TLS
+    tls = Raiha::TLS
     certificate = tls::Handshake.parse(Simple1RTT::CERTIFICATE, registry: tls::Extension::Registry::BUILTIN)
     der = case certificate
       when tls::Handshake::Certificate then certificate.certificate_list.fetch(0).cert_data

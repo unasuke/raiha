@@ -2,7 +2,7 @@
 
 require_relative "hash"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     # A running hash. `#digest` returns the hash of everything added so far
     # and keeps accumulating.

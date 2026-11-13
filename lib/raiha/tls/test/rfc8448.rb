@@ -4,7 +4,7 @@
 # Traces for TLS 1.3". Every value is a frozen BINARY String.
 #
 # Taken from rfcs/rfc8448.txt.
-module Raiha::Next::TLS::Test::RFC8448
+module Raiha::TLS::Test::RFC8448
   # The RSA key of the server's certificate in sections 3 to 5, from section
   # 2, as a PKCS #1 RSAPrivateKey in DER.
   SERVER_RSA_PRIVATE_KEY = [<<~HEX.delete(" \n")].pack("H*").freeze

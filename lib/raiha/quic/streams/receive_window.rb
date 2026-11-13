@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Streams
     # The receive side of flow control, of one stream or of the whole
     # connection: the limit told to the peer, how far the peer has sent,

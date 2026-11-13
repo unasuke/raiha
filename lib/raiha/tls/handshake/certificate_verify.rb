@@ -5,7 +5,7 @@ require_relative "../signature_scheme"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     class CertificateVerify < Data.define(:algorithm, :signature)
       include Message

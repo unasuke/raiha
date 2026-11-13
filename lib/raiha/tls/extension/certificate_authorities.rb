@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # certificate_authorities:
     # `DistinguishedName authorities<3..2^16-1>` of `opaque DistinguishedName<1..2^16-1>`.

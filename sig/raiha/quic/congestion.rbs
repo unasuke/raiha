@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # Turns a maximum datagram size into an initial window, in bytes.
     interface _InitialWindow

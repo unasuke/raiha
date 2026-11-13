@@ -3,7 +3,7 @@
 require_relative "../quic"
 require_relative "settings"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # A session an HTTP/3 client may resume, as a value: the QUIC layer's,
   # and the server's SETTINGS, which a 0-RTT attempt's first HTTP/3 layer
   # keeps to until the server's come (RFC 9114 "Initialization"; RFC 9204
@@ -23,7 +23,7 @@ module Raiha::Next::HTTP3
       unless settings.keys.sort == Settings.members.sort
         raise ArgumentError, "settings must name every setting"
       end
-      new(quic: Raiha::Next::QUIC::Session.from_h(quic), settings: Settings.new(**settings))
+      new(quic: Raiha::QUIC::Session.from_h(quic), settings: Settings.new(**settings))
     rescue KeyError => e
       raise ArgumentError, "a session lacks #{e.key}"
     end

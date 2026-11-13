@@ -8,8 +8,8 @@ require "raiha/runtime"
 # the datagrams of a Transmit go in one with GSO, and one by one where it
 # is refused.
 class RaihaNextRuntimeUDPTest < Minitest::Test
-  UDP = Raiha::Next::Runtime::UDP
-  QUIC = Raiha::Next::QUIC
+  UDP = Raiha::Runtime::UDP
+  QUIC = Raiha::QUIC
 
   def setup
     @sockets = []

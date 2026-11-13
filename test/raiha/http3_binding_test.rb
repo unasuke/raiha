@@ -2,14 +2,14 @@ require "test_helper"
 require "support/quic_transfer"
 require "support/http3_side"
 
-# HTTP/3 over QUIC joined by Raiha::Next::HTTP3Binding: a request and its
+# HTTP/3 over QUIC joined by Raiha::HTTP3Binding: a request and its
 # response, HTTP Datagrams and a stream left unread on a Test::Network; a
 # reset that comes with the stream's data; and a peer that does not allow
 # HTTP/3 its streams.
 class RaihaNextHTTP3BindingTest < Minitest::Test
   include NextQUICTransfer
 
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   GET = [[":method", "GET"], [":scheme", "https"], [":authority", "localhost"], [":path", "/"]].freeze
   POST = [[":method", "POST"], [":scheme", "https"], [":authority", "localhost"], [":path", "/upload"]].freeze
   CONNECT = [[":method", "CONNECT"], [":protocol", "echo"], [":scheme", "https"], [":authority", "localhost"], [":path", "/echo"]].freeze
@@ -61,7 +61,7 @@ class RaihaNextHTTP3BindingTest < Minitest::Test
     refute_empty server.of(HTTP3::Event::Writable)
     [client, server].each { |side| assert_equal 1, side.of(HTTP3::Event::Settings).size }
     assert_includes client.quic_events.map(&:class), QUIC::Event::Connected
-    assert_empty client.quic_events.map(&:class) & Raiha::Next::HTTP3Binding::HTTP3_EVENTS
+    assert_empty client.quic_events.map(&:class) & Raiha::HTTP3Binding::HTTP3_EVENTS
   end
 
   # The HTTP Datagrams of an Extended CONNECT request go both ways in

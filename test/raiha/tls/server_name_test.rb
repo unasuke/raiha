@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSServerNameTest < Minitest::Test
-  ServerName = Raiha::Next::TLS::ServerName
+  ServerName = Raiha::TLS::ServerName
 
   def test_client_normalizes_dns_names
     assert_equal ["example.com", "example.com"], ServerName.for_client("Example.COM.")

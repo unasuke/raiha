@@ -3,9 +3,9 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICCryptoHeaderProtectionTest < Minitest::Test
-  HeaderProtection = Raiha::Next::QUIC::Crypto::HeaderProtection
-  Suite = Raiha::Next::TLS::CipherSuite
-  V = Raiha::Next::QUIC::Test::Vectors
+  HeaderProtection = Raiha::QUIC::Crypto::HeaderProtection
+  Suite = Raiha::TLS::CipherSuite
+  V = Raiha::QUIC::Test::Vectors
 
   # RFC 9001 appendix A.2 and A.3.
   def test_aes

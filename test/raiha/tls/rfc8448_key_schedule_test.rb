@@ -5,7 +5,7 @@ require "raiha/tls/test"
 # FixedKEM, the transcript from the wire bytes, and every secret, key and
 # Finished value derived from them, byte for byte.
 class RaihaNextTLSRFC8448KeyScheduleTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   KeySchedule = TLS::KeySchedule
   LABELS = KeySchedule::LABELS
   RFC8448 = TLS::Test::RFC8448

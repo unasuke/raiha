@@ -111,7 +111,7 @@ class RaihaNextQUICConnectionStreamLimitsTest < Minitest::Test
 
   # Keeps what it hears of flow control blocking.
   class BlockedTracer
-    include Raiha::Next::QUIC::Tracer
+    include Raiha::QUIC::Tracer
 
     attr_reader :log
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The order the streams with something to send take turns in, a frame
   # a turn. Kept apart from Streams, which knows what each stream has to
   # send.

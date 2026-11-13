@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # Loss recovery (RFC 9002): what was sent in each packet number space,
   # what the peer acknowledged, what is lost and when to probe, and what to
   # acknowledge in turn. The RTT, the congestion controller and the bytes in

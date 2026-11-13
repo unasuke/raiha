@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # NewReno as RFC 9002 "Congestion Control" and its appendix B describe
     # it. The window grows by the bytes acknowledged in slow start and by

@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class Session < Data
     include MaskedInspect
 

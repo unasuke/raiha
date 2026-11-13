@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Trace
     # Anything with `#tls_trace(value)`.
     interface _Tracer

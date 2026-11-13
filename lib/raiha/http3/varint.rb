@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The variable-length integers of RFC 9000 "Variable-Length Integer
   # Encoding", which HTTP/3 takes for frame types, lengths and the fields
   # of frames: the two high bits of the first byte give the length, 1, 2,

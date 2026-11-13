@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # Rebuilds handshake messages from the bytes of one epoch, which may split
     # a message anywhere or carry several in one piece. One per epoch.

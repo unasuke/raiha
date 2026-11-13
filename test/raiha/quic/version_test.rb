@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICVersionTest < Minitest::Test
-  Version = Raiha::Next::QUIC::Version
+  Version = Raiha::QUIC::Version
 
   def hex(s) = [s].pack("H*")
 

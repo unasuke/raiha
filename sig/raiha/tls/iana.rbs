@@ -1,4 +1,4 @@
-module Raiha::Next::TLS::IANA
+module Raiha::TLS::IANA
   CIPHER_SUITES: Hash[Integer, Symbol]
   NAMED_GROUPS: Hash[Integer, Symbol]
   EXTENSIONS: Hash[Integer, Symbol]

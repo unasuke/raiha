@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Route
     type t = Deliver | Incoming | ClientHello | Respond | Foreign | Drop
 
@@ -20,10 +20,10 @@ module Raiha::Next::QUIC
 
     class ClientHello < Data
       attr_reader handle: Endpoint::Handle
-      attr_reader accepted: ::Raiha::Next::TLS::Handshake::Accepted
+      attr_reader accepted: ::Raiha::TLS::Handshake::Accepted
 
-      def self.new: (handle: Endpoint::Handle, accepted: ::Raiha::Next::TLS::Handshake::Accepted) -> instance
-                  | (Endpoint::Handle handle, ::Raiha::Next::TLS::Handshake::Accepted accepted) -> instance
+      def self.new: (handle: Endpoint::Handle, accepted: ::Raiha::TLS::Handshake::Accepted) -> instance
+                  | (Endpoint::Handle handle, ::Raiha::TLS::Handshake::Accepted accepted) -> instance
     end
 
     class Respond < Data

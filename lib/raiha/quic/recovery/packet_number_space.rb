@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     # One packet number space (RFC 9000 "Packet Numbers"): :initial,
     # :handshake or :application_data. On the sending side it hands out the

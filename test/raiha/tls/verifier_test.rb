@@ -3,7 +3,7 @@ require "support/test_pki"
 require "raiha/tls"
 
 class RaihaNextTLSVerifierTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Verifier = TLS::Verifier
   PKI = NextTestPKI
   NOW = PKI::NOW
@@ -92,7 +92,7 @@ class RaihaNextTLSVerifierTest < Minitest::Test
 end
 
 class RaihaNextTLSVerifierHostNameTest < Minitest::Test
-  HostName = Raiha::Next::TLS::Verifier::HostName
+  HostName = Raiha::TLS::Verifier::HostName
   PKI = NextTestPKI
 
   def match?(names, name) = HostName.match?(PKI.leaf(PKI.ca, names:).certificate, name)

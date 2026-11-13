@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class CipherSuite < Data
     type transport = :tcp | :quic
 

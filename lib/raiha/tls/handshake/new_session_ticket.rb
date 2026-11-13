@@ -6,7 +6,7 @@ require_relative "../masked_inspect"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # `ticket_lifetime` is not bounded here. The 7-day limit in RFC 9846 is a
     # rule for the sender and for how long a client may use the ticket, not a

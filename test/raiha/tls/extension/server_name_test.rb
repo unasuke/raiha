@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionServerNameTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  ServerName = Raiha::Next::TLS::Extension::ServerName
+  Codec = Raiha::TLS::Codec
+  ServerName = Raiha::TLS::Extension::ServerName
 
   # server_name from the RFC 8448 section 3 ClientHello.
   RFC8448_CH = ["0009000006736572766572"].pack("H*")

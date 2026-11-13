@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     HASHES: Hash[Symbol, String]
     HASH_LENGTHS: Hash[Symbol, Integer]
@@ -45,7 +45,7 @@ module Raiha::Next::TLS
   end
 end
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     module ECDH
       CURVES: Hash[Symbol, String]
@@ -62,7 +62,7 @@ module Raiha::Next::TLS
   end
 end
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     module Signature
       DIGESTS: Hash[Symbol, String]

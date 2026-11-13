@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Verifier
     # The verifier a Keyring uses unless told otherwise: the chain by RFC 5280
     # through OpenSSL's X509::Store, at the time given, then the server's name

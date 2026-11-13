@@ -3,7 +3,7 @@ require "raiha"
 
 # The workers of a server each run in a Ractor of their own, where a
 # constant that is not shareable cannot be read: every constant under
-# Raiha::Next must be shareable, so that nothing the workers reach fails with
+# Raiha must be shareable, so that nothing the workers reach fails with
 # Ractor::IsolationError.
 class RaihaNextRactorShareableTest < Minitest::Test
   # Module#name, called as the class's own, which a module that defines a
@@ -21,7 +21,7 @@ class RaihaNextRactorShareableTest < Minitest::Test
       mod.constants(false).each do |name|
         value = mod.const_get(name, false)
         if value.is_a?(Module)
-          walk.call(value) if NAME.bind_call(value)&.start_with?("Raiha::Next")
+          walk.call(value) if NAME.bind_call(value)&.start_with?("Raiha")
         elsif !Ractor.shareable?(value)
           found << "#{NAME.bind_call(mod)}::#{name}"
         end
@@ -32,16 +32,16 @@ class RaihaNextRactorShareableTest < Minitest::Test
   end
 
   def test_every_constant_under_the_next_release_is_shareable
-    assert_empty unshareable(Raiha::Next)
+    assert_empty unshareable(Raiha)
   end
 
   # Guards against the walk silently reaching nothing.
   def test_the_walk_finds_a_constant_that_is_not_shareable
     mod = Module.new
-    Raiha::Next.const_set(:RactorShareableTestProbe, mod)
+    Raiha.const_set(:RactorShareableTestProbe, mod)
     mod.const_set(:LIST, [+"not frozen"])
-    assert_equal ["Raiha::Next::RactorShareableTestProbe::LIST"], unshareable(Raiha::Next)
+    assert_equal ["Raiha::RactorShareableTestProbe::LIST"], unshareable(Raiha)
   ensure
-    Raiha::Next.send(:remove_const, :RactorShareableTestProbe) if Raiha::Next.const_defined?(:RactorShareableTestProbe, false)
+    Raiha.send(:remove_const, :RactorShareableTestProbe) if Raiha.const_defined?(:RactorShareableTestProbe, false)
   end
 end

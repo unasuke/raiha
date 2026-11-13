@@ -2,7 +2,7 @@
 
 require_relative "../error"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The encoding of QUIC packets and frames: values in, bytes out, and back.
   # Module functions over Reader and Writer; nothing here holds state.
   module Wire

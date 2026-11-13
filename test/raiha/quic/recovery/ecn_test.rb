@@ -9,7 +9,7 @@ class RaihaNextQUICRecoveryEcnTest < Minitest::Test
   ECNCounts = QUIC::Wire::Frame::Ack::ECNCounts
 
   # NewReno that keeps the order of what it was told.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     def calls = @calls ||= []
 
     def on_ecn_ce(**keywords)

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What makes the connection IDs an Endpoint issues: the first of each
   # connection, a Retry's, and those NEW_CONNECTION_ID frames carry. An
   # Endpoint takes one as `connection_ids:`, and its own draws random

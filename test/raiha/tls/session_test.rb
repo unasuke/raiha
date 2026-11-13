@@ -5,7 +5,7 @@ require "raiha/tls"
 # usable, the PSK and the ticket age it gives, and a store that hands each
 # out once.
 class RaihaNextTLSSessionTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Session = TLS::Session
   NOW = Time.at(1_800_000_000)
   NOW_MS = 1_800_000_000_000

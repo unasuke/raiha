@@ -7,7 +7,7 @@ class RaihaNextQUICRecoveryAckTest < Minitest::Test
   include NextQUICRecovery
 
   # NewReno that keeps what on_ack was told.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     attr_reader :acks
 
     def on_ack(**keywords)

@@ -6,7 +6,7 @@ require "raiha/quic"
 # while it was not. The times are binary fractions, so that the periods add
 # up exactly.
 class RaihaNextQUICRecoveryRateMeterTest < Minitest::Test
-  RateMeter = Raiha::Next::QUIC::Recovery::RateMeter
+  RateMeter = Raiha::QUIC::Recovery::RateMeter
 
   def test_nothing_while_not_held_back
     meter = RateMeter.new

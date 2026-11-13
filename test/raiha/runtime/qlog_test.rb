@@ -68,7 +68,7 @@ class RaihaNextRuntimeQlogTest < Minitest::Test
       end
       %w[server client].each do |vantage_point|
         header, *events = records(Dir[File.join(dir, vantage_point, "*.sqlog")].fetch(0))
-        assert_includes header.dig("trace", "event_schemas"), Raiha::Next::HTTP3::Qlog::EVENT_SCHEMA
+        assert_includes header.dig("trace", "event_schemas"), Raiha::HTTP3::Qlog::EVENT_SCHEMA
         assert_includes events.map { _1["name"] }, "http3:frame_parsed"
       end
     end

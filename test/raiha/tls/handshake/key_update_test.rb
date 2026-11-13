@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSHandshakeKeyUpdateTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   REGISTRY = TLS::Extension::Registry::BUILTIN
 
   def test_parse_and_encode

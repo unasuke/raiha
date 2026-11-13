@@ -2,7 +2,7 @@
 
 require "ipaddr"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What connections are set up with, one value for every connection of an
   # Endpoint and shareable between Ractors: the transport parameters this
   # end sends, named as RFC 9000 names them, and settings of this
@@ -60,7 +60,7 @@ module Raiha::Next::QUIC
     :congestion_control, :initial_window, :startup, :pacing_granularity, :max_transmit_size, :fast_convergence, :beta_ecn,
     :retry_token_key, :stateless_reset_key, :preferred_address, :address_families
   )
-    include Raiha::Next::TLS::MaskedInspect
+    include Raiha::TLS::MaskedInspect
 
     DEFAULT_CONGESTION_CONTROL = Congestion::Cubic
     # RFC 9002 "Initial and Minimum Congestion Window". Made shareable here,

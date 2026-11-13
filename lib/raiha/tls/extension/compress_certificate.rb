@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # compress_certificate (RFC 8879 §3):
     # `CertificateCompressionAlgorithm algorithms<2..2^8-2>`.

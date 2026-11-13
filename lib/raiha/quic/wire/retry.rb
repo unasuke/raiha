@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # A Retry packet (RFC 9000 "Retry Packet") and its integrity tag (RFC
     # 9001 "Retry Packet Integrity"): AES-128-GCM under the version's fixed
@@ -55,7 +55,7 @@ module Raiha::Next::QUIC
       private def pseudo_packet(original_dcid) = Writer.new.u8(original_dcid.bytesize).bytes(original_dcid).bytes(body).to_s
 
       private def integrity
-        Crypto::AEAD.new(suite: Raiha::Next::TLS::CipherSuite::TLS_AES_128_GCM_SHA256, key: version.retry_key, iv: version.retry_nonce)
+        Crypto::AEAD.new(suite: Raiha::TLS::CipherSuite::TLS_AES_128_GCM_SHA256, key: version.retry_key, iv: version.retry_nonce)
       end
     end
   end

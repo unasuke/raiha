@@ -2,7 +2,7 @@
 
 require "securerandom"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # The server of the runtime: an Endpoint on a UDP socket of its own that
   # takes every client up to `max_connections` at a time, refusing more
   # with CONNECTION_REFUSED, and gives the block of `run` the Session of
@@ -81,7 +81,7 @@ module Raiha::Next::Runtime
       @config = UDP.pmtud(UDP.batching(config))
       @tls_config = tls_config
       @keyring = keyring
-      @anti_replay = anti_replay || worker&.anti_replay || Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)
+      @anti_replay = anti_replay || worker&.anti_replay || Raiha::TLS::AntiReplay::Memory.new(now: Time.now)
       @app_early_data_context = app_early_data_context
       @host = host || "::"
       @port = port || 443
@@ -93,7 +93,7 @@ module Raiha::Next::Runtime
       @max_unvalidated = max_unvalidated
       # The offers admitted whose ClientHello is not whole yet and whose
       # client's address is not validated, let go each turn once over.
-      @admitted = [] #: Array[Raiha::Next::QUIC::Endpoint::Handle]
+      @admitted = [] #: Array[Raiha::QUIC::Endpoint::Handle]
       @qlog = qlog_dir && Qlog.new(qlog_dir)
       @traces = {} #: Hash[Session, Qlog::Pending]
       @traces.compare_by_identity
@@ -120,7 +120,7 @@ module Raiha::Next::Runtime
       raise Error::Usage, "the runtime waits through a Fiber scheduler; this thread has none" unless Fiber.scheduler
       @handler = handler
       udp, others, connection_ids = sockets
-      endpoint = Raiha::Next::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock, connection_ids:)
+      endpoint = Raiha::QUIC::Endpoint.server(config: @config, random: SecureRandom, time: Time.now, now: Driver.clock, connection_ids:)
       # Known before it starts, so that leaving `run` while it starts stops
       # it too.
       driver = @driver = Driver.new(endpoint, udp, self, others:, worker: @worker)
@@ -172,13 +172,13 @@ module Raiha::Next::Runtime
     def route(route, now)
       endpoint = @driver&.endpoint or return
       case route
-      when Raiha::Next::QUIC::Route::Incoming
+      when Raiha::QUIC::Route::Incoming
         return endpoint.refuse(route.handle) if @stop || @sessions.size >= @max_connections
         return endpoint.retry(route.handle, now:) if !route.address_validated && unvalidated(now) >= @max_unvalidated
         hello = endpoint.admit(route.handle, now:)
         return route(hello, now) if hello
         @admitted << route.handle unless route.address_validated
-      when Raiha::Next::QUIC::Route::ClientHello
+      when Raiha::QUIC::Route::ClientHello
         @admitted.delete(route.handle)
         advance_ticket_keys
         tracer, pending = @qlog&.trace(:server, route.handle.original_destination_connection_id.unpack1("H*"), tls_config: @tls_config)
@@ -235,21 +235,21 @@ module Raiha::Next::Runtime
     private def sockets
       if (worker = @worker)
         first, *others = worker.sockets.map { |socket| UDP.new(socket) }
-        ids = Raiha::Next::QUIC::WorkerConnectionIDs.new(SecureRandom, worker_id: worker.id, worker_count: worker.count,
+        ids = Raiha::QUIC::WorkerConnectionIDs.new(SecureRandom, worker_id: worker.id, worker_count: worker.count,
           key: @config.stateless_reset_key || raise(Error::Usage, "a worker's Config has no stateless_reset_key"))
         udp = first or raise Error::Usage, "the worker has no socket"
         @udp = udp
         return [udp, others, ids]
       end
       udp = @udp = UDP.bind(@host, @port)
-      [udp, preferred_sockets(udp), Raiha::Next::QUIC::RandomConnectionIDs.new(SecureRandom)]
+      [udp, preferred_sockets(udp), Raiha::QUIC::RandomConnectionIDs.new(SecureRandom)]
     end
 
     # What Workers asked through the worker's control port.
     private def control(message)
       case message
       in [:stop, timeout] then stop(timeout:, error_code: @stop_error_code)
-      in [:reconfigure, tls_config, identities] then reconfigure(tls_config:, keyring: Raiha::Next::TLS::Keyring.server(config: tls_config, identities:))
+      in [:reconfigure, tls_config, identities] then reconfigure(tls_config:, keyring: Raiha::TLS::Keyring.server(config: tls_config, identities:))
       else nil
       end
     end
@@ -316,10 +316,10 @@ module Raiha::Next::Runtime
       Fiber.schedule do
         handler.call(session)
         session.close_when_acknowledged
-      rescue Raiha::Next::QUIC::ClosedError
+      rescue Raiha::QUIC::ClosedError
         nil
       rescue StandardError
-        session.connection.close(error_code: Raiha::Next::QUIC::ErrorCode::INTERNAL_ERROR, application: false, now: Driver.clock)
+        session.connection.close(error_code: Raiha::QUIC::ErrorCode::INTERNAL_ERROR, application: false, now: Driver.clock)
         driver!.changed
         raise
       end

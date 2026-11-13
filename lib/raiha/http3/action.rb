@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # What the HTTP/3 layer asks of the transport below it besides writing
   # to streams, for whatever joins the two to do (HTTP/3 does not know
   # QUIC).

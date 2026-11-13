@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The packets a connection cannot open yet, as their keys have not come
   # (RFC 9001 "Receiving Out-of-Order Protected Packets"): no more than
   # PACKETS of them, nor BYTES in all, so that what a peer can make a

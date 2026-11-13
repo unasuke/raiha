@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionRecordSizeLimitTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  RecordSizeLimit = Raiha::Next::TLS::Extension::RecordSizeLimit
+  Codec = Raiha::TLS::Codec
+  RecordSizeLimit = Raiha::TLS::Extension::RecordSizeLimit
 
   # record_size_limit from the RFC 8448 section 3 ClientHello.
   def test_parse_and_encode

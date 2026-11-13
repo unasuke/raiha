@@ -7,7 +7,7 @@ class RaihaNextQUICRecoveryLossDetectionTest < Minitest::Test
   include NextQUICRecovery
 
   # NewReno that keeps the order of what it was told.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     def calls = @calls ||= []
 
     def on_loss(**keywords)

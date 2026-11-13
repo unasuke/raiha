@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # In QUIC version 1 a connection ID has 20 bytes at most (RFC 9000 "Long
     # Header Packets").

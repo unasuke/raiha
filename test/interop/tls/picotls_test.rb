@@ -12,7 +12,7 @@ require "tmpdir"
 # asks for a KeyUpdate as soon as the handshake completes, and sends it with
 # its first data.
 class NextTLSPicotlsInteropTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
   # tmp/ is not in git, so a fresh checkout has none.

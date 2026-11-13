@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The DATAGRAM frames of a connection (RFC 9221): those the application
   # gave to send, and those received that it has not taken yet.
   #

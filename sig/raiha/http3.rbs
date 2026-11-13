@@ -1,2 +1,2 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
 end

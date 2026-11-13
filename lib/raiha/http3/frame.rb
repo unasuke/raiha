@@ -3,7 +3,7 @@
 require_relative "error"
 require_relative "varint"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The frames of HTTP/3 (RFC 9114 "Frame Definitions"), and those of
   # PRIORITY_UPDATE (RFC 9218 "HTTP/3 PRIORITY_UPDATE Frame"): a type and
   # a length, both varints, then the payload. Values in, bytes out, and

@@ -2,7 +2,7 @@
 
 require_relative "structured_field"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The priority of a response (RFC 9218 "Priority Parameters"): its
   # urgency, from 0, the most urgent, to 7, and whether it is incremental.
   class Priority < Data.define(:urgency, :incremental)

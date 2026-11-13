@@ -2,7 +2,7 @@
 
 require_relative "error"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The static Huffman code of RFC 7541 Appendix B, which QPACK uses
   # unmodified for string literals (RFC 9204 "String Literals").
   module Huffman

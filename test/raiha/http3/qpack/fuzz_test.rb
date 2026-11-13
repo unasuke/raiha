@@ -7,7 +7,7 @@ require "raiha/http3/qpack"
 # lengthened. RAIHA_FUZZ_ITERATIONS (default 300) and RAIHA_FUZZ_SEED
 # change the number of inputs to each target and the seed.
 class RaihaNextQPACKFuzzTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "300"))
   SEED = Integer(ENV.fetch("RAIHA_FUZZ_SEED", "9204"))

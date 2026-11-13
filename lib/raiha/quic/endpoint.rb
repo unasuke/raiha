@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The connections of one UDP socket. It finds the
   # connection a datagram belongs to by its Destination Connection ID and
   # decides for one that belongs to none: the offer of a new connection,
@@ -94,7 +94,7 @@ module Raiha::Next::QUIC
         @expires_at = expires_at
         @datagrams = [] #: Array[[String, address, address?, ecn | :ce]]
         @buffered = 0
-        @acceptor = nil #: Raiha::Next::TLS::Handshake::Acceptor?
+        @acceptor = nil #: Raiha::TLS::Handshake::Acceptor?
         @keys = nil #: Crypto::Keys?
         @crypto = CryptoStream.new(:initial)
         @largest = nil #: Integer?
@@ -123,7 +123,7 @@ module Raiha::Next::QUIC
       # `time` is the wall clock; short header packets have connection IDs
       # of `dcid_length` bytes.
       def admit(time:, dcid_length:, now:)
-        @acceptor = Raiha::Next::TLS::Handshake::Acceptor.new
+        @acceptor = Raiha::TLS::Handshake::Acceptor.new
         keys = Crypto::Initial.derive(dcid: @destination_connection_id, version: @version)
         @keys = keys.client
         @server_keys = keys.server
@@ -192,7 +192,7 @@ module Raiha::Next::QUIC
           frames = Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: Connection::DEFAULT_ACK_DELAY_EXPONENT)
           space.receive(unmasked.packet_number, ecn:, ack_eliciting: frames.any?(&:ack_eliciting?), now:)
           frames.each do |frame|
-            @crypto.receive(frame.offset, frame.data, limit: Raiha::Next::TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE) if frame.is_a?(Wire::Frame::Crypto)
+            @crypto.receive(frame.offset, frame.data, limit: Raiha::TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE) if frame.is_a?(Wire::Frame::Crypto)
           end
           bytes = @crypto.read
           acceptor.receive(bytes, epoch: :initial, now: time) unless bytes.empty?
@@ -208,7 +208,7 @@ module Raiha::Next::QUIC
         if (violation = @violation)
           ConnectionError.new(code: violation.code, frame_type: violation.frame_type || 0, reason: violation.message, application: false)
         elsif (acceptor = @acceptor)&.failed?
-          code = TLSBinding.error_code(Raiha::Next::TLS::Profile::QUIC, acceptor.alert, acceptor.reason)
+          code = TLSBinding.error_code(Raiha::TLS::Profile::QUIC, acceptor.alert, acceptor.reason)
           ConnectionError.new(code:, frame_type: CryptoStream::FRAME_TYPE, reason: acceptor.reason.to_s, application: false)
         end
       end

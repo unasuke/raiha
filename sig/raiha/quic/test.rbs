@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   module Vectors
     module Keys
       DCID: String
@@ -59,12 +59,12 @@ module Raiha::Next::QUIC::Test
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   module CongestionContract : _ContractTest
     # What a test class that includes the contract provides: Minitest's
     # assertions and the algorithm under test.
     interface _ContractTest
-      def congestion_control: () -> ::Raiha::Next::QUIC::Congestion::_Algorithm
+      def congestion_control: () -> ::Raiha::QUIC::Congestion::_Algorithm
       def assert_operator: (top left, Symbol operator, top right, ?String? message) -> true
       def assert_equal: (top expected, top actual, ?String? message) -> true
       def assert_includes: (top collection, top object, ?String? message) -> true
@@ -84,12 +84,12 @@ module Raiha::Next::QUIC::Test
     def test_congestion_contract_states_are_known: () -> void
     def test_congestion_contract_metrics_carry_the_window: () -> void
 
-    private def new_controller: () -> ::Raiha::Next::QUIC::Congestion::_Controller
-    private def acknowledge: (::Raiha::Next::QUIC::Congestion::_Controller cc, Integer bytes, sent_at: Float, now: Float, ?app_limited: bool) -> void
+    private def new_controller: () -> ::Raiha::QUIC::Congestion::_Controller
+    private def acknowledge: (::Raiha::QUIC::Congestion::_Controller cc, Integer bytes, sent_at: Float, now: Float, ?app_limited: bool) -> void
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   class VirtualClock
     attr_reader now: Float
 
@@ -100,21 +100,21 @@ module Raiha::Next::QUIC::Test
 
   class Datagram < Data
     attr_reader payload: String
-    attr_reader source: ::Raiha::Next::QUIC::address
-    attr_reader destination: ::Raiha::Next::QUIC::address
-    attr_reader ecn: ::Raiha::Next::QUIC::ecn | :ce
+    attr_reader source: ::Raiha::QUIC::address
+    attr_reader destination: ::Raiha::QUIC::address
+    attr_reader ecn: ::Raiha::QUIC::ecn | :ce
 
-    def self.new: (payload: String, source: ::Raiha::Next::QUIC::address, destination: ::Raiha::Next::QUIC::address,
-                   ecn: ::Raiha::Next::QUIC::ecn | :ce) -> instance
-                | (String payload, ::Raiha::Next::QUIC::address source, ::Raiha::Next::QUIC::address destination,
-                   ::Raiha::Next::QUIC::ecn | :ce ecn) -> instance
+    def self.new: (payload: String, source: ::Raiha::QUIC::address, destination: ::Raiha::QUIC::address,
+                   ecn: ::Raiha::QUIC::ecn | :ce) -> instance
+                | (String payload, ::Raiha::QUIC::address source, ::Raiha::QUIC::address destination,
+                   ::Raiha::QUIC::ecn | :ce ecn) -> instance
   end
 
   # What a network carries datagrams between.
   interface _Node
-    def receive: (String payload, from: ::Raiha::Next::QUIC::address, to: ::Raiha::Next::QUIC::address?,
-                  ecn: ::Raiha::Next::QUIC::ecn | :ce, now: Float) -> top
-    def each_transmit: (now: Float) { (::Raiha::Next::QUIC::Transmit) -> void } -> top
+    def receive: (String payload, from: ::Raiha::QUIC::address, to: ::Raiha::QUIC::address?,
+                  ecn: ::Raiha::QUIC::ecn | :ce, now: Float) -> top
+    def each_transmit: (now: Float) { (::Raiha::QUIC::Transmit) -> void } -> top
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> top
   end
@@ -141,33 +141,33 @@ module Raiha::Next::QUIC::Test
 
     @random: Random
     @clock: VirtualClock
-    @nodes: Hash[::Raiha::Next::QUIC::address, _Node]
-    @addresses: Hash[_Node, ::Raiha::Next::QUIC::address]
-    @links: Hash[[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address], _Path]
-    @outside: Hash[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address]
-    @inside: Hash[::Raiha::Next::QUIC::address, ::Raiha::Next::QUIC::address]
+    @nodes: Hash[::Raiha::QUIC::address, _Node]
+    @addresses: Hash[_Node, ::Raiha::QUIC::address]
+    @links: Hash[[::Raiha::QUIC::address, ::Raiha::QUIC::address], _Path]
+    @outside: Hash[::Raiha::QUIC::address, ::Raiha::QUIC::address]
+    @inside: Hash[::Raiha::QUIC::address, ::Raiha::QUIC::address]
     @direct: Direct
 
     attr_reader clock: VirtualClock
 
     def initialize: (seed: Integer, ?clock: VirtualClock) -> void
     def now: () -> Float
-    def add: [N < _Node] (N node, address: ::Raiha::Next::QUIC::address) -> N
-    def address_of: (_Node node) -> ::Raiha::Next::QUIC::address
-    def add_address: (_Node node, address: ::Raiha::Next::QUIC::address) -> self
-    def rebind: (::Raiha::Next::QUIC::address inside, to: ::Raiha::Next::QUIC::address) -> self
-    def add_server: (config: ::Raiha::Next::QUIC::Config, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
-                     time: Time, address: ::Raiha::Next::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?,
-                     ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> Server
+    def add: [N < _Node] (N node, address: ::Raiha::QUIC::address) -> N
+    def address_of: (_Node node) -> ::Raiha::QUIC::address
+    def add_address: (_Node node, address: ::Raiha::QUIC::address) -> self
+    def rebind: (::Raiha::QUIC::address inside, to: ::Raiha::QUIC::address) -> self
+    def add_server: (config: ::Raiha::QUIC::Config, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
+                     time: Time, address: ::Raiha::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?) -> Server
     def link: (_Node a, _Node b, ?model: model?, ?forward: model?, ?reverse: model?) -> self
     def run_until: (?within: Float) { () -> boolish } -> bool
     def advance: (Float seconds) -> void
 
     private def settle: () -> void
-    private def transmit_from: (_Node node, ::Raiha::Next::QUIC::Transmit transmit) -> void
+    private def transmit_from: (_Node node, ::Raiha::QUIC::Transmit transmit) -> void
     private def deliver: (Datagram datagram) -> void
-    private def inside: (::Raiha::Next::QUIC::address address) -> ::Raiha::Next::QUIC::address?
-    private def take: (::Raiha::Next::QUIC::address address, _Node node) -> _Node
+    private def inside: (::Raiha::QUIC::address address) -> ::Raiha::QUIC::address?
+    private def take: (::Raiha::QUIC::address address, _Node node) -> _Node
     private def each_path: () { (_Path) -> void } -> void
     private def next_event: () -> Float?
     private def start: (model model) -> _Path
@@ -192,7 +192,7 @@ module Raiha::Next::QUIC::Test
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   class RandomLoss < Data
     attr_reader rate: Float
 
@@ -214,7 +214,7 @@ module Raiha::Next::QUIC::Test
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   class Reorder < Data
     attr_reader rate: Float
     attr_reader hold: Float
@@ -239,7 +239,7 @@ module Raiha::Next::QUIC::Test
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   class Bottleneck < Data
     attr_reader bandwidth: Integer
     attr_reader delay: Float
@@ -265,28 +265,28 @@ module Raiha::Next::QUIC::Test
   end
 end
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   class Server
-    @endpoint: ::Raiha::Next::QUIC::Endpoint
-    @tls_config: ::Raiha::Next::TLS::Config
-    @keyring: ::Raiha::Next::TLS::Keyring
+    @endpoint: ::Raiha::QUIC::Endpoint
+    @tls_config: ::Raiha::TLS::Config
+    @keyring: ::Raiha::TLS::Keyring
     @retry_unvalidated: bool
-    @tracer: ::Raiha::Next::QUIC::_Tracer?
-    @anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?
-    @transmits: Array[::Raiha::Next::QUIC::Transmit]
+    @tracer: ::Raiha::QUIC::_Tracer?
+    @anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?
+    @transmits: Array[::Raiha::QUIC::Transmit]
 
-    attr_reader endpoint: ::Raiha::Next::QUIC::Endpoint
+    attr_reader endpoint: ::Raiha::QUIC::Endpoint
 
-    def initialize: (::Raiha::Next::QUIC::Endpoint endpoint, tls_config: ::Raiha::Next::TLS::Config, keyring: ::Raiha::Next::TLS::Keyring,
-                     ?retry_unvalidated: bool, ?tracer: ::Raiha::Next::QUIC::_Tracer?,
-                     ?anti_replay: ::Raiha::Next::TLS::AntiReplay::_AntiReplay?) -> void
-    def receive: (String payload, from: ::Raiha::Next::QUIC::address, to: ::Raiha::Next::QUIC::address?,
-                  ecn: ::Raiha::Next::QUIC::ecn | :ce, now: Float) -> void
-    def each_transmit: (now: Float) { (::Raiha::Next::QUIC::Transmit) -> void } -> void
+    def initialize: (::Raiha::QUIC::Endpoint endpoint, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
+                     ?retry_unvalidated: bool, ?tracer: ::Raiha::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?) -> void
+    def receive: (String payload, from: ::Raiha::QUIC::address, to: ::Raiha::QUIC::address?,
+                  ecn: ::Raiha::QUIC::ecn | :ce, now: Float) -> void
+    def each_transmit: (now: Float) { (::Raiha::QUIC::Transmit) -> void } -> void
     def next_timeout: () -> Float?
     def handle_timeout: (now: Float) -> void
-    def connections: () -> Array[::Raiha::Next::QUIC::Connection]
+    def connections: () -> Array[::Raiha::QUIC::Connection]
 
-    private def dispatch: (::Raiha::Next::QUIC::Route::t? route, Float now) -> void
+    private def dispatch: (::Raiha::QUIC::Route::t? route, Float now) -> void
   end
 end

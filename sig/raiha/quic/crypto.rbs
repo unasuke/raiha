@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Crypto
     # A source of random bytes: SecureRandom, or a seeded ::Random in tests.
     interface _Random
@@ -20,7 +20,7 @@ module Raiha::Next::QUIC
 
       attr_reader tag_length: Integer
 
-      def initialize: (suite: ::Raiha::Next::TLS::CipherSuite, key: String, iv: String) -> void
+      def initialize: (suite: ::Raiha::TLS::CipherSuite, key: String, iv: String) -> void
       def seal: (packet_number: Integer, header: String, plaintext: String) -> String
       def open: (packet_number: Integer, header: String, ciphertext: String) -> String?
 
@@ -39,7 +39,7 @@ module Raiha::Next::QUIC
       @chacha20: bool
       @cipher: OpenSSL::Cipher
 
-      def initialize: (suite: ::Raiha::Next::TLS::CipherSuite, key: String) -> void
+      def initialize: (suite: ::Raiha::TLS::CipherSuite, key: String) -> void
       def mask: (String sample) -> String
 
       private def instance_variables_to_inspect: () -> Array[Symbol]
@@ -51,14 +51,14 @@ module Raiha::Next::QUIC
 
       def self.new: (aead: AEAD, header_protection: HeaderProtection) -> instance
                   | (AEAD aead, HeaderProtection header_protection) -> instance
-      def self.derive: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> Keys
-      def self.derive_aead: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> AEAD
-      def self.next_secret: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> String
-      def update: (suite: ::Raiha::Next::TLS::CipherSuite, secret: String, version: Version) -> Keys
+      def self.derive: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> Keys
+      def self.derive_aead: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> AEAD
+      def self.next_secret: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> String
+      def update: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> Keys
     end
 
     class Initial < Data
-      SUITE: ::Raiha::Next::TLS::CipherSuite
+      SUITE: ::Raiha::TLS::CipherSuite
 
       attr_reader client: Keys
       attr_reader server: Keys

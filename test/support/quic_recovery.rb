@@ -2,12 +2,12 @@ require "raiha/quic"
 
 # Helpers for the tests of loss recovery.
 module NextQUICRecovery
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   # A tracer that keeps every event as [name, keywords], and asks for the
   # frames unless `frames` is false.
   class RecordingTracer
-    include Raiha::Next::QUIC::Tracer
+    include Raiha::QUIC::Tracer
 
     attr_reader :events
 
@@ -16,7 +16,7 @@ module NextQUICRecovery
       @frames = frames
     end
 
-    (Raiha::Next::QUIC::Tracer.instance_methods(false) - [:trace_frames?]).each do |name|
+    (Raiha::QUIC::Tracer.instance_methods(false) - [:trace_frames?]).each do |name|
       define_method(name) { |**keywords| @events << [name, keywords] }
     end
 

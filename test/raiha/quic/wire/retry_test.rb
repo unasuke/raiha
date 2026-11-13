@@ -3,9 +3,9 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICWireRetryTest < Minitest::Test
-  Wire = Raiha::Next::QUIC::Wire
-  V1 = Raiha::Next::QUIC::Version::V1
-  V = Raiha::Next::QUIC::Test::Vectors
+  Wire = Raiha::QUIC::Wire
+  V1 = Raiha::QUIC::Version::V1
+  V = Raiha::QUIC::Test::Vectors
 
   def retry_packet = Wire::Retry.new(version: V1, dcid: "".b, scid: V::Retry::SOURCE_CONNECTION_ID, token: V::Retry::TOKEN)
 

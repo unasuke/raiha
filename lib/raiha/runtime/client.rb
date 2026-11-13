@@ -4,7 +4,7 @@ require "socket"
 require "securerandom"
 require_relative "../http3/session"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # No address of a host took a connection. `errors` has, for each address
   # tried, [address, what failed]: the QUIC::ClosedError of a connection
   # that closed or ran out of time, or the error of a name that did not
@@ -100,7 +100,7 @@ module Raiha::Next::Runtime
           driver.start
           opened.wait_ready
           connected = true
-        rescue Raiha::Next::QUIC::ClosedError => error
+        rescue Raiha::QUIC::ClosedError => error
           errors << [address, error]
           next
         ensure
@@ -128,7 +128,7 @@ module Raiha::Next::Runtime
       return @deadline = nil if session.connection.handshake_complete?
       return if now < deadline
       @deadline = nil
-      session.connection.close(error_code: Raiha::Next::QUIC::ErrorCode::NO_ERROR, reason: "no handshake in #{@connect_timeout} seconds",
+      session.connection.close(error_code: Raiha::QUIC::ErrorCode::NO_ERROR, reason: "no handshake in #{@connect_timeout} seconds",
         application: false, now:)
     end
 
@@ -147,7 +147,7 @@ module Raiha::Next::Runtime
         session.close_when_acknowledged
         driver.flush
       end
-    rescue Raiha::Next::QUIC::ClosedError
+    rescue Raiha::QUIC::ClosedError
       nil
     ensure
       driver.stop
@@ -172,10 +172,10 @@ module Raiha::Next::Runtime
     private def attempt(address, server_name, session:, token:, early_data:)
       made = false
       udp, config = bind
-      endpoint = Raiha::Next::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
+      endpoint = Raiha::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
-      quic = session.is_a?(Raiha::Next::HTTP3::Session) ? session.quic : session
+      quic = session.is_a?(Raiha::HTTP3::Session) ? session.quic : session
       connection = endpoint.connect(tls_config: @tls_config, keyring: @keyring, server_name:, remote: address, now: Driver.clock, tracer:,
         session: quic, token:, early_data:)
       opened = @session = Session.new(connection, driver, role: :client, tracer:, server_name:, resumed: session)

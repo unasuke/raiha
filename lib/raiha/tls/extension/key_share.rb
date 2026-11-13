@@ -3,7 +3,7 @@
 require_relative "../codec"
 require_relative "../masked_inspect"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # key_share. A HelloRetryRequest carries only the group it wants, so that
     # is a class of its own and cannot hold a key.

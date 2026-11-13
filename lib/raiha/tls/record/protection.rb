@@ -3,7 +3,7 @@
 require_relative "../crypto"
 require_relative "../key_schedule"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Record
     # One direction's protection under one traffic secret (RFC 9846 "Record
     # Payload Protection" and "Per-Record Nonce"): the AEAD keyed from the

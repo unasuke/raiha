@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Path
     AMPLIFICATION_FACTOR: Integer
     MIN_DATAGRAM_SIZE: Integer

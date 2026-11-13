@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     INITIAL_RTT: Float
     GRANULARITY: Float
@@ -77,7 +77,7 @@ module Raiha::Next::QUIC
 
     def on_ack_received: (packet_type: packet_type, ack: Wire::Frame::Ack, now: Float, ?received_at: Float) -> Outcome
     def peer_completed_address_validation?: () -> bool
-    def on_packet_received: (packet_type: packet_type, packet_number: Integer, ecn: ::Raiha::Next::QUIC::ecn | :ce, ack_eliciting: bool,
+    def on_packet_received: (packet_type: packet_type, packet_number: Integer, ecn: ::Raiha::QUIC::ecn | :ce, ack_eliciting: bool,
                              now: Float, ?received_at: Float) -> bool
     def ack_due?: (space space, now: Float) -> bool
     def ack_owed?: (space space) -> bool
@@ -297,10 +297,10 @@ module Raiha::Next::QUIC
       attr_reader path: Path
       attr_reader duties: Array[Duty::t]
       attr_reader pmtu_probe: bool
-      attr_reader ecn: ::Raiha::Next::QUIC::ecn
+      attr_reader ecn: ::Raiha::QUIC::ecn
 
-      def self.new: (packet_number: Integer, time_sent: Float, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool, path: Path, duties: Array[Duty::t], pmtu_probe: bool, ecn: ::Raiha::Next::QUIC::ecn) -> instance
-                  | (Integer packet_number, Float time_sent, Integer sent_bytes, bool ack_eliciting, bool in_flight, Path path, Array[Duty::t] duties, bool pmtu_probe, ::Raiha::Next::QUIC::ecn ecn) -> instance
+      def self.new: (packet_number: Integer, time_sent: Float, sent_bytes: Integer, ack_eliciting: bool, in_flight: bool, path: Path, duties: Array[Duty::t], pmtu_probe: bool, ecn: ::Raiha::QUIC::ecn) -> instance
+                  | (Integer packet_number, Float time_sent, Integer sent_bytes, bool ack_eliciting, bool in_flight, Path path, Array[Duty::t] duties, bool pmtu_probe, ::Raiha::QUIC::ecn ecn) -> instance
     end
 
     class PacketNumberSpace
@@ -355,7 +355,7 @@ module Raiha::Next::QUIC
       attr_accessor max_ack_delay: Float
       attr_reader ack_deadline: Float?
 
-      def receive: (Integer packet_number, ecn: ::Raiha::Next::QUIC::ecn | :ce, ack_eliciting: bool, now: Float) -> bool
+      def receive: (Integer packet_number, ecn: ::Raiha::QUIC::ecn | :ce, ack_eliciting: bool, now: Float) -> bool
       def ack_sent: () -> void
       def ack_owed?: () -> bool
       def ack_frame: (now: Float) -> Wire::Frame::Ack?

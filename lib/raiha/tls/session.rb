@@ -4,7 +4,7 @@ require_relative "cipher_suite"
 require_relative "key_schedule"
 require_relative "masked_inspect"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # A session a client may resume, as a value: what a NewSessionTicket gave
   # and what of the connection it came on a resumption needs. The
   # application keeps it where it likes, `to_h` and `from_h` turning it

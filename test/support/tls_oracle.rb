@@ -12,7 +12,7 @@ require "raiha/tls"
 #   ... run ...
 #   assert_empty oracle.violations(client:, server:)
 class NextTLSOracle
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Trace = TLS::Trace
 
   # A tracer that keeps every value.

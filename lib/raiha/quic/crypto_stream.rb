@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The CRYPTO frames of one encryption level (RFC 9000 "CRYPTO Frames").
   #
   # Sending, the bytes TLS writes stay until acknowledged; frames are cut

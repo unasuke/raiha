@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The keys that protect a connection's packets, one pair for each
   # encryption level (:initial, :zero_rtt, :handshake, :one_rtt): the
   # Initial keys derived from the client's first Destination Connection ID,

@@ -3,7 +3,7 @@
 require_relative "error"
 require_relative "huffman"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # Reads the primitives of RFC 9204 "Primitives" from `bytes` between
   # `offset` and `limit` without copying them first. A field past the limit
   # raises Truncated.

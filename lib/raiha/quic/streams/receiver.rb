@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Streams
     # The receiving part of a stream (RFC 9000 "Receiving Stream States"):
     # its receive window, the data received but not read, and the final

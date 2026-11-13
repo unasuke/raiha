@@ -4,7 +4,7 @@ require "objspace"
 
 # The packets a connection keeps until their keys come, and their bounds.
 class RaihaNextQUICKeptPacketsTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   FROM = ["192.0.2.1", 50_000].freeze
 
   def keep(kept, bytes, level: :handshake, received_at: 0.0)

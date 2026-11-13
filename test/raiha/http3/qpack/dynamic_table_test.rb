@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # RFC 9204 "Dynamic Table", as the decoder keeps it.
 class RaihaNextQPACKDynamicTableTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   def test_starts_empty_with_no_capacity
     table = QPACK::DynamicTable.new(4096)

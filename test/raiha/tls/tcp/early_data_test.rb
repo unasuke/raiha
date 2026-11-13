@@ -5,7 +5,7 @@ require "support/tcp_pair"
 # asked, under the 0-RTT key from the start, until the server answers; a
 # server that does not take it skips it and the handshake goes on.
 class RaihaNextTLSTCPEarlyDataTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TCPPair = NextTCPPair
   TLSPair = NextTLSPair
   NOW = TCPPair::NOW

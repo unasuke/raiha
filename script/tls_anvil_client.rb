@@ -17,7 +17,7 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "socket"
 require "raiha/tls"
 
-TLS = Raiha::Next::TLS
+TLS = Raiha::TLS
 
 trigger_port = (ARGV[0] || 4477).to_i
 anvil_port = (ARGV[1] || 4478).to_i

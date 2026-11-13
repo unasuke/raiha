@@ -5,7 +5,7 @@ require "raiha/tls/test"
 # the violation together with one from an earlier row, which must win. The
 # second kind catches a reordering of the checks.
 class RaihaNextTLSHandshakeClientHelloValidateTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Extension = TLS::Extension
   Violation = TLS::Handshake::Violation
   RFC8448 = TLS::Test::RFC8448

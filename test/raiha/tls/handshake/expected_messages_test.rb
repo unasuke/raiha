@@ -5,7 +5,7 @@ require "support/tls_pair"
 # Machine in each state: every handshake type a state does not expect,
 # unknown types 0 and 255 included, fails with unexpected_message.
 class RaihaNextTLSExpectedMessagesTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Handshake = TLS::Handshake
   Pair = NextTLSPair
   NOW = Pair::NOW

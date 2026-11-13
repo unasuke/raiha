@@ -2,7 +2,7 @@
 
 require_relative "error_code"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # Exceptions are for misuse of the API only. What the peer sends never
   # raises; it closes the connection, or resets a stream.
   module Error

@@ -1,4 +1,4 @@
-# Test helper for the next release of raiha (`Raiha::Next`).
+# Test helper for the next release of raiha (`Raiha`).
 
 if ENV["COVERAGE"]
   require "simplecov"
@@ -20,7 +20,7 @@ require "minitest/autorun"
 
 module NextTestCertificate
   # A self-signed certificate and its key, both in DER, shaped to be passed
-  # as `Raiha::Next::TLS::Keyring::Identity.new(**generate_self_signed_certificate)`.
+  # as `Raiha::TLS::Keyring::Identity.new(**generate_self_signed_certificate)`.
   private def generate_self_signed_certificate(common_name: "localhost")
     key = OpenSSL::PKey::RSA.generate(2048)
     cert = OpenSSL::X509::Certificate.new

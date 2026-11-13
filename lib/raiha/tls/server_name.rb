@@ -2,7 +2,7 @@
 
 require_relative "verifier"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The normal form of server_name at the edges of a handshake: ASCII
   # lowercase without a trailing dot. ClientHelloInfo, HandshakeComplete,
   # certificate selection and RFC 9525 matching all see this form.

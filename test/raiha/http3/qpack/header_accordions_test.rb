@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # expand a few bytes on the wire into far more memory. The decoder stops
 # at the budget, 64 KiB by default, and expands no more than that.
 class RaihaNextQPACKHeaderAccordionsTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   MIB = 1 << 20
 
   # About 150,000 fields of unique names in 1 MiB, each 7 octets on the

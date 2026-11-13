@@ -5,7 +5,7 @@ require "support/tcp_pair"
 # client may resume, of which the connection holds the newest 8 until
 # they are taken.
 class RaihaNextTLSTCPResumptionTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TCPPair = NextTCPPair
   TLSPair = NextTLSPair
   NOW = TCPPair::NOW

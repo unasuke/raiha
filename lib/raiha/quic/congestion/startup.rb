@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Congestion
     # The parts that wrap a path's controller while the connection starts,
     # in place of its slow start, and hand it back for the rest

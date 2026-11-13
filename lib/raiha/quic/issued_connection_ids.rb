@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The connection IDs this end issued for the peer to send to (RFC 9000
   # "Issuing Connection IDs"): the one of the handshake, sequence number 0,
   # that of a server's preferred address, sequence number 1, and those

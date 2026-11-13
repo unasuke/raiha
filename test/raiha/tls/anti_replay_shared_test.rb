@@ -6,7 +6,7 @@ require "raiha/tls"
 # not answer, as it has stopped, cannot be read, or takes too long, is
 # :unavailable rather than waiting for ever.
 class RaihaNextTLSAntiReplaySharedTest < Minitest::Test
-  Shared = Raiha::Next::TLS::AntiReplay::Shared
+  Shared = Raiha::TLS::AntiReplay::Shared
   NOW = Time.at(1_800_000_000)
   A = ("\x01".b * 32).freeze
 

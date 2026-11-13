@@ -2,7 +2,7 @@
 
 require "openssl"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Everything in the TLS layer that calls OpenSSL goes through here (or
   # Verifier). Keeping the calls in one place keeps OpenSSL's API quirks and
   # version checks out of the protocol code.

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     # A packet sent and not yet acknowledged, named as RFC 9002 "Sent Packet
     # Fields" names them. `sent_bytes` counts the QUIC header and frames, not

@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   module Error
     class Usage < StandardError
     end

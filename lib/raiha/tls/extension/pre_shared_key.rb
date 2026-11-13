@@ -3,7 +3,7 @@
 require_relative "../codec"
 require_relative "../masked_inspect"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # pre_shared_key.
     module PreSharedKey

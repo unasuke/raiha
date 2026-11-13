@@ -4,7 +4,7 @@ require_relative "../codec"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # `request_update` is kept as received; a value other than 0 or 1 is a
     # violation that `#validate` reports, not a parse error.

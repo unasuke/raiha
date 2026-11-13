@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Ranges
     def self?.empty?: (Range[Integer] range) -> bool
     def self?.add: (Array[Range[Integer]] ranges, Range[Integer] range) -> Array[Range[Integer]]

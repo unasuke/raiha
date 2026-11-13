@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The limits of the peer's transport parameters streams keep to: the
   # server's, or a client's remembered ones for 0-RTT.
   interface _PeerLimits

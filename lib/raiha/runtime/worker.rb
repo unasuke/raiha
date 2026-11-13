@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # One of the workers of a server, as Workers gives each its own Ractor:
   # its ID of `count`, the sockets bound for it, its `inbox`, where other
   # workers hand on what came for its connections, the `control` port

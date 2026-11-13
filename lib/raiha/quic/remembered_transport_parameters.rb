@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The server's transport parameters that a client remembers for 0-RTT
   # (RFC 9000 "Values of Transport Parameters for 0-RTT"): every one but the
   # seven a client must not use remembered values of, which this type does

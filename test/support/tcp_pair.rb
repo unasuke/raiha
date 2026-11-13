@@ -3,7 +3,7 @@ require "support/tls_pair"
 # Two TCP::Connections of the next release of raiha, joined without a
 # socket: what one outputs, the other receives.
 module NextTCPPair
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TLSPair = NextTLSPair
   NOW = TLSPair::NOW
 

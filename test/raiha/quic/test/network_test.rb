@@ -3,7 +3,7 @@ require "raiha/quic/test"
 
 # Nodes on a virtual clock, with path models between them.
 class RaihaNextQUICTestNetworkTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Test = QUIC::Test
 
   A = ["192.0.2.1", 4433].freeze

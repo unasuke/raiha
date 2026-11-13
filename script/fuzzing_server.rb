@@ -21,7 +21,7 @@ require "openssl"
 require "securerandom"
 require "raiha/tls"
 
-TLS = Raiha::Next::TLS
+TLS = Raiha::TLS
 # Connections handled at once, each in a thread of its own.
 THREADS = 4
 

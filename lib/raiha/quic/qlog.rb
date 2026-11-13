@@ -2,7 +2,7 @@
 
 require "json"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # qlog (draft-ietf-quic-qlog-main-schema-13 and quic-events-12).
   module Qlog
     # The bytes the traces given it may write together. What they write is
@@ -50,7 +50,7 @@ module Raiha::Next::QUIC
     # the files apart, and taking the old ones away, is up to whoever
     # gives each trace its `io`.
     class Tracer
-      include Raiha::Next::QUIC::Tracer
+      include Raiha::QUIC::Tracer
 
       RECORD_SEPARATOR = "\x1e"
       PACKET_TYPES = { initial: "initial", zero_rtt: "0RTT", handshake: "handshake", one_rtt: "1RTT" }.freeze

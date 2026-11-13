@@ -6,7 +6,7 @@ require_relative "static_table"
 require_relative "reader"
 require_relative "writer"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The encoder of one connection. It refers to the static table and sends
   # the rest as literals: it inserts nothing into the dynamic table, so a
   # field section never waits on the encoder stream and no entry is held

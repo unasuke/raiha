@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # (RFC 9204 "Field Line Representations"); it never inserts into the
 # dynamic table.
 class RaihaNextQPACKEncoderTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   Huffman = QPACK::Huffman
 
   # RFC 9204 Appendix B.1, but with the value in the Huffman code, which is

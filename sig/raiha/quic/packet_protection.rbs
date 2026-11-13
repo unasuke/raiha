@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class PacketProtection
     type level = :initial | :zero_rtt | :handshake | :one_rtt
     type direction = :read | :write
@@ -12,7 +12,7 @@ module Raiha::Next::QUIC
     @keys: Hash[level, Hash[direction, Crypto::Keys]]
     @discarded: Array[level]
     @updated: (^(Integer phase) -> void)?
-    @suite: ::Raiha::Next::TLS::CipherSuite
+    @suite: ::Raiha::TLS::CipherSuite
     @failures: Integer
     @next_secrets: Hash[direction, String]
     @next_read: Crypto::Keys?
@@ -33,7 +33,7 @@ module Raiha::Next::QUIC
 
     def initialize: (role: :client | :server, version: Version) ?{ (Integer phase) -> void } -> void
     def install_initial: (String dcid) -> Hash[direction, Crypto::Keys]
-    def install: (level level, direction direction, secret: String, suite: ::Raiha::Next::TLS::CipherSuite) -> void
+    def install: (level level, direction direction, secret: String, suite: ::Raiha::TLS::CipherSuite) -> void
     def read_keys: (level level) -> Crypto::Keys?
     def write_keys: (level level) -> Crypto::Keys?
     def can_read?: (level level) -> bool

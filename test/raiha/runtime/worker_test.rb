@@ -7,14 +7,14 @@ require "raiha/runtime"
 # a worker's control port goes to the block, but a request for stats; and
 # closing a worker ends its thread.
 class RaihaNextRuntimeWorkerTest < Minitest::Test
-  Worker = Raiha::Next::Runtime::Worker
+  Worker = Raiha::Runtime::Worker
 
   def setup
     inboxes = Array.new(2) { Ractor::Port.new }
     @workers = Array.new(2) do |id|
       Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes,
-        config: Raiha::Next::QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32),
-      anti_replay: Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now))
+        config: Raiha::QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32),
+      anti_replay: Raiha::TLS::AntiReplay::Memory.new(now: Time.now))
     end
     @changes = Thread::Queue.new
     @controls = Thread::Queue.new

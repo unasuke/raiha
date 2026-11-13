@@ -11,7 +11,7 @@ require "raiha/quic"
 # one byte changed, from a random sender. RAIHA_FUZZ_ITERATIONS (default
 # 10000) and RAIHA_FUZZ_SEED change the number of inputs and the seed.
 class RaihaNextQUICTransportParametersFuzzTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   TP = QUIC::TransportParameters
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "10000"))

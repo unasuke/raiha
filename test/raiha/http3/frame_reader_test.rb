@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/http3"
 
 class RaihaNextHTTP3FrameReaderTest < Minitest::Test
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   Frame = HTTP3::Frame
   Reader = HTTP3::FrameReader
 

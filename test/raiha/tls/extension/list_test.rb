@@ -2,10 +2,10 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSExtensionListTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  Extension = Raiha::Next::TLS::Extension
+  Codec = Raiha::TLS::Codec
+  Extension = Raiha::TLS::Extension
   Registry = Extension::Registry
-  RFC8448 = Raiha::Next::TLS::Test::RFC8448::Simple1RTT
+  RFC8448 = Raiha::TLS::Test::RFC8448::Simple1RTT
 
   # The extension block of the RFC 8448 section 3 ClientHello: after the
   # header, version, random, empty session id, three suites and one

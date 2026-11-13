@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # What differs between TLS over TCP and TLS inside QUIC, as one set of
   # flags. RFC 9001 puts a number of "must not"s on the TLS side; gathering
   # them here keeps them out of the state machine's branches, and reading

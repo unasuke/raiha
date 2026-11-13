@@ -2,7 +2,7 @@
 
 require_relative "http3"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   module HTTP3
     # The body of a response as the block of Request#respond writes it,
     # each write waiting while the stream holds back, and its trailer
@@ -137,11 +137,11 @@ module Raiha::Next::Runtime
     # Workers as Runtime::Server is, and stops with H3_NO_ERROR when they
     # are told to.
     class Server
-      def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: Raiha::Next::Runtime::Server::MAX_CONNECTIONS,
-        max_unvalidated: max_connections / 2, qlog_dir: nil, settings: Raiha::Next::HTTP3::Settings.new, anti_replay: nil, worker: nil)
+      def initialize(config:, tls_config:, keyring:, host: nil, port: nil, max_connections: Raiha::Runtime::Server::MAX_CONNECTIONS,
+        max_unvalidated: max_connections / 2, qlog_dir: nil, settings: Raiha::HTTP3::Settings.new, anti_replay: nil, worker: nil)
         @settings = settings
-        @server = Raiha::Next::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, max_unvalidated:, qlog_dir:, anti_replay:,
-          app_early_data_context: settings.early_data_context, worker:, stop_error_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+        @server = Raiha::Runtime::Server.new(config:, tls_config:, keyring:, host:, port:, max_connections:, max_unvalidated:, qlog_dir:, anti_replay:,
+          app_early_data_context: settings.early_data_context, worker:, stop_error_code: Raiha::HTTP3::ErrorCode::NO_ERROR)
       end
 
       def run(&handler)
@@ -150,8 +150,8 @@ module Raiha::Next::Runtime
 
       def local_address = @server.local_address
 
-      def stop(timeout: Raiha::Next::Runtime::Server::STOP_TIMEOUT)
-        @server.stop(timeout:, error_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+      def stop(timeout: Raiha::Runtime::Server::STOP_TIMEOUT)
+        @server.stop(timeout:, error_code: Raiha::HTTP3::ErrorCode::NO_ERROR)
       end
 
       def reconfigure(...) = @server.reconfigure(...)
@@ -166,9 +166,9 @@ module Raiha::Next::Runtime
 
       def initialize(session, settings)
         @session = session
-        tracer = (quic = session.tracer) && Raiha::Next::HTTP3::Qlog::Tracer.new(quic)
-        @http3 = Raiha::Next::HTTP3::Connection.server(settings:, tracer:)
-        @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+        tracer = (quic = session.tracer) && Raiha::HTTP3::Qlog::Tracer.new(quic)
+        @http3 = Raiha::HTTP3::Connection.server(settings:, tracer:)
+        @binding = Raiha::HTTP3Binding.new(session.connection, @http3)
         @exchanges = {} #: Hash[Integer, Exchange]
         # The requests whose header sections have come, not yet given to a
         # fiber, with their header fields.
@@ -176,7 +176,7 @@ module Raiha::Next::Runtime
         # The fibers of the requests given to the block and not over; nil
         # while one starts.
         @fibers = {} #: Hash[Integer, Fiber?]
-        session.attach(self, close_code: Raiha::Next::HTTP3::ErrorCode::NO_ERROR)
+        session.attach(self, close_code: Raiha::HTTP3::ErrorCode::NO_ERROR)
       end
 
       # Gives each request to the block in a fiber of its own until the
@@ -188,20 +188,20 @@ module Raiha::Next::Runtime
           return go_away(handler) if arrived == :stopping
           start(handler, arrived)
         end
-      rescue Raiha::Next::QUIC::ClosedError
+      rescue Raiha::QUIC::ClosedError
         nil
       end
 
       # The Session's protocol: the server is out of time to stop.
       def expire
-        @arrived.each { |stream_id, _| @http3.cancel(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_REJECTED) }
+        @arrived.each { |stream_id, _| @http3.cancel(stream_id, error_code: Raiha::HTTP3::ErrorCode::REQUEST_REJECTED) }
         @arrived.clear
         scheduler = Fiber.scheduler
         @fibers.each do |stream_id, fiber|
-          @http3.cancel(stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED)
-          @exchanges[stream_id]&.reset = Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED
+          @http3.cancel(stream_id, error_code: Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED)
+          @exchanges[stream_id]&.reset = Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED
           next unless fiber&.alive? && scheduler.respond_to?(:fiber_interrupt)
-          scheduler.fiber_interrupt(fiber, StreamReset.new(stream_id, Raiha::Next::HTTP3::ErrorCode::REQUEST_CANCELLED))
+          scheduler.fiber_interrupt(fiber, StreamReset.new(stream_id, Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED))
         end
         @binding.flush(now: Driver.clock)
       end
@@ -269,7 +269,7 @@ module Raiha::Next::Runtime
       # to no more.
       def turn(now)
         @binding.flush(now:)
-        events = [] #: Array[Raiha::Next::HTTP3::Event::t]
+        events = [] #: Array[Raiha::HTTP3::Event::t]
         @http3.each_event { |event| events << event }
         events.each { |event| take_http3(event) }
         @binding.flush(now:)
@@ -293,7 +293,7 @@ module Raiha::Next::Runtime
       private def go_away(handler)
         begin
           @http3.goaway(LAST_REQUEST)
-        rescue Raiha::Next::HTTP3::Error::Usage
+        rescue Raiha::HTTP3::Error::Usage
           return
         end
         flush
@@ -313,7 +313,7 @@ module Raiha::Next::Runtime
       private def handle(handler, request)
         handler.call(request)
         request.respond(request.protocol ? 501 : 500) unless request.responded?
-      rescue Raiha::Next::QUIC::ClosedError, StreamReset
+      rescue Raiha::QUIC::ClosedError, StreamReset
         nil
       rescue StandardError
         failed(request)
@@ -327,9 +327,9 @@ module Raiha::Next::Runtime
       private def failed(request)
         return request.respond(500) unless request.responded?
         return if @exchanges[request.stream_id]&.answered
-        @http3.cancel(request.stream_id, error_code: Raiha::Next::HTTP3::ErrorCode::INTERNAL_ERROR)
+        @http3.cancel(request.stream_id, error_code: Raiha::HTTP3::ErrorCode::INTERNAL_ERROR)
         flush
-      rescue Raiha::Next::QUIC::ClosedError, StreamReset
+      rescue Raiha::QUIC::ClosedError, StreamReset
         nil
       end
 
@@ -391,12 +391,12 @@ module Raiha::Next::Runtime
 
       private def take_http3(event)
         case event
-        when Raiha::Next::HTTP3::Event::Headers
+        when Raiha::HTTP3::Event::Headers
           return if @exchanges.key?(event.stream_id)
           exchange = @exchanges[event.stream_id] = Exchange.new
           exchange.end! if event.fin
           @arrived << [event.stream_id, event.headers]
-        when Raiha::Next::HTTP3::Event::Data
+        when Raiha::HTTP3::Event::Data
           exchange = @exchanges[event.stream_id] or return
           exchange << event.data unless event.data.empty?
           exchange.end! if event.fin
@@ -404,12 +404,12 @@ module Raiha::Next::Runtime
             exchange.paused = true
             @binding.pause(event.stream_id)
           end
-        when Raiha::Next::HTTP3::Event::Trailers
+        when Raiha::HTTP3::Event::Trailers
           exchange = @exchanges[event.stream_id] or return
           exchange.trailers = event.headers
           exchange.end!
-        when Raiha::Next::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
-        when Raiha::Next::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
+        when Raiha::HTTP3::Event::Reset then @exchanges[event.stream_id]&.reset = event.error_code
+        when Raiha::HTTP3::Event::Stopped then @exchanges[event.stream_id]&.stopped = event.error_code
         end
       end
     end

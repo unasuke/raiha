@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # A server's Endpoint on a Network, run as an application that takes
   # every offer would run it: each offer is admitted and each ClientHello
   # accepted with one TLS Config and Keyring, and what the Endpoint answers
@@ -17,7 +17,7 @@ module Raiha::Next::QUIC::Test
       @retry_unvalidated = retry_unvalidated
       @tracer = tracer
       @anti_replay = anti_replay
-      @transmits = [] #: Array[Raiha::Next::QUIC::Transmit]
+      @transmits = [] #: Array[Raiha::QUIC::Transmit]
     end
 
     def receive(payload, from:, to:, ecn:, now:) = dispatch(@endpoint.receive(payload, from:, to:, ecn:, now:), now)
@@ -35,19 +35,19 @@ module Raiha::Next::QUIC::Test
 
     # The connections the Endpoint has taken.
     def connections
-      all = [] #: Array[Raiha::Next::QUIC::Connection]
+      all = [] #: Array[Raiha::QUIC::Connection]
       @endpoint.each_connection { |connection| all << connection }
       all
     end
 
     private def dispatch(route, now)
       case route
-      when Raiha::Next::QUIC::Route::Incoming
+      when Raiha::QUIC::Route::Incoming
         return @endpoint.retry(route.handle, now:) if @retry_unvalidated && !route.address_validated
         dispatch(@endpoint.admit(route.handle, now:), now)
-      when Raiha::Next::QUIC::Route::ClientHello
+      when Raiha::QUIC::Route::ClientHello
         @endpoint.accept(route.handle, tls_config: @tls_config, keyring: @keyring, now:, tracer: @tracer, anti_replay: @anti_replay)
-      when Raiha::Next::QUIC::Route::Respond then @transmits << route.transmit
+      when Raiha::QUIC::Route::Respond then @transmits << route.transmit
       end
     end
   end

@@ -18,7 +18,7 @@ module ExampleCertificate
             factory.create_extension("subjectAltName", "DNS:localhost")]
         end
         cert.sign(ca_key, "SHA256")
-        Raiha::Next::TLS::Keyring::Identity.new(cert_der: [cert.to_der, ca_cert.to_der], key_der: key.private_to_der)
+        Raiha::TLS::Keyring::Identity.new(cert_der: [cert.to_der, ca_cert.to_der], key_der: key.private_to_der)
       end
     end
 

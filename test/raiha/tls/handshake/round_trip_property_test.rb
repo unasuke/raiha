@@ -11,7 +11,7 @@ require "raiha/tls"
 # smallest valid messages. A failure message carries the seed and the
 # iteration, and RAIHA_FUZZ_SEED replays a seed.
 class RaihaNextTLSHandshakeRoundTripPropertyTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Handshake = TLS::Handshake
   Extension = TLS::Extension
   REGISTRY = Extension::Registry::BUILTIN
@@ -20,8 +20,8 @@ class RaihaNextTLSHandshakeRoundTripPropertyTest < Minitest::Test
   ITERATIONS = 100
 
   class Generator
-    Ext = Raiha::Next::TLS::Extension
-    HS = Raiha::Next::TLS::Handshake
+    Ext = Raiha::TLS::Extension
+    HS = Raiha::TLS::Handshake
 
     SUITES = [0x1301, 0x1302, 0x1303].freeze
     # Group and a plausible key_exchange length.

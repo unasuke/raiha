@@ -6,7 +6,7 @@ require_relative "masked_inspect"
 require_relative "profile"
 require_relative "ticket_keys"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # A session ticket a server seals for itself, holding what a resumption
   # takes from the connection it was issued on:
   #

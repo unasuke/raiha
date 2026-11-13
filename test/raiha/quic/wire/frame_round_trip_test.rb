@@ -5,7 +5,7 @@ require "support/quic_frames"
 # read back as they were written. RAIHA_FUZZ_ITERATIONS (default 10000) and
 # RAIHA_FUZZ_SEED change the number of payloads and the seed.
 class RaihaNextQUICWireFrameRoundTripTest < Minitest::Test
-  Frame = Raiha::Next::QUIC::Wire::Frame
+  Frame = Raiha::QUIC::Wire::Frame
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "10000"))
   SEED = Integer(ENV.fetch("RAIHA_FUZZ_SEED", "9000"))

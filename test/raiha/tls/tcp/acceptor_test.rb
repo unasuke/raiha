@@ -2,7 +2,7 @@ require "test_helper"
 require "support/tcp_pair"
 
 class RaihaNextTLSTCPAcceptorTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TCP = TLS::TCP
   Pair = NextTCPPair
   TLSPair = Pair::TLSPair

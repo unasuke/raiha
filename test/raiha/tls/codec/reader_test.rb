@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSCodecReaderTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
+  Codec = Raiha::TLS::Codec
 
   def test_integers
     r = Codec::Reader.new("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a".b)

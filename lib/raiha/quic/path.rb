@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # One path of a connection, with what loss recovery keeps for it: the RTT,
   # the congestion controller made from the Config, the bytes and
   # ack-eliciting packets in flight on it, and its Pacer, whose bucket

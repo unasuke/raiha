@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionSignatureAlgorithmsTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  Extension = Raiha::Next::TLS::Extension
+  Codec = Raiha::TLS::Codec
+  Extension = Raiha::TLS::Extension
 
   # signature_algorithms from the RFC 8448 section 3 ClientHello.
   RFC8448_CH = [

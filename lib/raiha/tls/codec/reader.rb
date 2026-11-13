@@ -2,7 +2,7 @@
 
 require_relative "error"
 
-module Raiha::Next::TLS::Codec
+module Raiha::TLS::Codec
   # A cursor over a byte string. `#vector` hands its block a view that shares
   # the buffer and only narrows `(pos, limit)`, and checks that the block
   # consumed the whole vector. Integers are read with `getbyte`, which YJIT and

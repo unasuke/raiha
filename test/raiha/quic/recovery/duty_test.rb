@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICRecoveryDutyTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Duty = QUIC::Recovery::Duty
 
   # Loss recovery's design, the table of duties: one kind for each frame

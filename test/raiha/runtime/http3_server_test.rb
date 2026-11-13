@@ -142,7 +142,7 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
         assert_equal "prioritized", client(port) { _1.request("GET", "/", urgency: 5, incremental: true).body }
       end
     end
-    assert_equal [Raiha::Next::HTTP3::Priority.new(urgency: 1, incremental: true)], priorities
+    assert_equal [Raiha::HTTP3::Priority.new(urgency: 1, incremental: true)], priorities
   end
 
   # A block that raises before its response has it answered with 500, and
@@ -214,12 +214,12 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
   # A client's HTTP/3 that sends one Extended CONNECT (RFC 9220) and waits
   # for the status of its response.
   class ConnectRequest
-    HTTP3 = Raiha::Next::HTTP3
+    HTTP3 = Raiha::HTTP3
 
     def initialize(session, protocol:)
       @session = session
       @http3 = HTTP3::Connection.client
-      @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+      @binding = Raiha::HTTP3Binding.new(session.connection, @http3)
       @protocol = protocol
       @status = nil
       session.attach(self)
@@ -236,7 +236,7 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
       stream_id = @session.open_stream_id
       @http3.send_request(stream_id, [[":method", "CONNECT"], [":protocol", @protocol], [":scheme", "https"], [":authority", "localhost"],
         [":path", "/chat"]])
-      @binding.flush(now: Raiha::Next::Runtime::Driver.clock)
+      @binding.flush(now: Raiha::Runtime::Driver.clock)
       @session.changed
       @session.wait_for { @status }
     end
@@ -315,7 +315,7 @@ class RaihaNextRuntimeHTTP3ServerTest < Minitest::Test
             sleep 0.05
             server.stop(timeout: 0.3)
           end
-          error = assert_raises(Runtime::HTTP3::StreamReset, Raiha::Next::QUIC::ClosedError) { client.get("/forever") }
+          error = assert_raises(Runtime::HTTP3::StreamReset, Raiha::QUIC::ClosedError) { client.get("/forever") }
           assert_equal HTTP3::ErrorCode::REQUEST_CANCELLED, error.error_code if error.is_a?(Runtime::HTTP3::StreamReset)
         end
         sleep 0.01 while running.alive?

@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # Reads an extension block, `Extension extensions<min..2^16-1>`, in the
     # given context. The two checks that need no more than the block itself

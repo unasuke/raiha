@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class TransportParameters < Data
     type sender = :client | :server
     type value = Integer | Float | bool | String | PreferredAddress | nil
@@ -70,7 +70,7 @@ module Raiha::Next::QUIC
 
     module Extension
       TYPE: Integer
-      CODECS: Hash[::Raiha::Next::TLS::Handshake::context, ::Raiha::Next::TLS::Extension::Opaque::Parser]
+      CODECS: Hash[::Raiha::TLS::Handshake::context, ::Raiha::TLS::Extension::Opaque::Parser]
     end
   end
 

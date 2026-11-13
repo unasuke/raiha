@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     # The bandwidth estimator of a path, of the form of quicly's ratemeter:
     # the bytes acknowledged while the sender was held back by the

@@ -2,7 +2,7 @@
 
 require "securerandom"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Crypto
     # Where random bytes come from when no other source is given: connection
     # IDs, PATH_CHALLENGE data, the padding of a stateless reset. Anything

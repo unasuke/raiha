@@ -5,7 +5,7 @@ require_relative "../extension"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     class EncryptedExtensions < Data.define(:extensions)
       include Message

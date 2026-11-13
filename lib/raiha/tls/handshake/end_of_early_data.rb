@@ -4,7 +4,7 @@ require_relative "../codec"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # Empty. Sent over TCP only; QUIC forbids it.
     class EndOfEarlyData < Data.define

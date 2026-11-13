@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   module ErrorCode
     NO_ERROR: Integer
     GENERAL_PROTOCOL_ERROR: Integer

@@ -3,7 +3,7 @@
 require_relative "quic"
 require_relative "http3"
 
-module Raiha::Next
+module Raiha
   # Joins one QUIC connection and the HTTP/3 connection over it, neither of
   # which knows the other: what QUIC tells of its streams goes to HTTP/3,
   # and what HTTP/3 writes and asks of the transport goes to QUIC, the

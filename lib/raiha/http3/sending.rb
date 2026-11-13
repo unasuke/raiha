@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The sending side of one request stream, as far as the application has
   # written: :headers until the header section of its message, which
   # interim responses may come before, :body after it.

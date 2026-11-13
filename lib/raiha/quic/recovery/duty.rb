@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Recovery
     # What a packet carried that its owner must hear about when the packet
     # is acknowledged or lost: one kind for each frame whose information is

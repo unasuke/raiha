@@ -8,7 +8,7 @@ require_relative "extension"
 require_relative "ticket_keys"
 require_relative "ticket"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # The settings a handshake runs with, shared by every connection and every
   # Ractor: a Config is deeply frozen and Ractor-shareable from the moment it
   # is built. Key material, the random source and anything else that cannot

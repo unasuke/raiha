@@ -7,7 +7,7 @@ require_relative "key_exchange"
 require_relative "masked_inspect"
 require_relative "verifier"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # What a handshake needs besides its Config and cannot share between
   # Ractors: certificates and private keys, the trust store, the random
   # source and the key exchange provider. Build one per Ractor or process,

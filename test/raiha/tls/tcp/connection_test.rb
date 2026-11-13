@@ -3,7 +3,7 @@ require "support/tcp_pair"
 require "stringio"
 
 class RaihaNextTLSTCPConnectionTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TCP = TLS::TCP
   Pair = NextTCPPair
   NOW = Pair::NOW

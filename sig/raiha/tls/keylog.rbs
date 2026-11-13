@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Keylog
     # What a Machine writes its keylog lines to. A File works as is.
     interface _Writer

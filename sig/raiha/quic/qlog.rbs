@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Qlog
     type json = String | Integer | Float | bool | nil | Array[json] | Hash[Symbol, json]
 
@@ -19,7 +19,7 @@ module Raiha::Next::QUIC
     end
 
     class Tracer
-      include Raiha::Next::QUIC::Tracer
+      include Raiha::QUIC::Tracer
 
       RECORD_SEPARATOR: String
       PACKET_TYPES: Hash[Wire::LongHeader::packet_type | :one_rtt, String]
@@ -38,8 +38,8 @@ module Raiha::Next::QUIC
       def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer, ?budget: Budget?, ?event_schemas: Array[String]) -> void
       def record: (String name, Hash[Symbol, json] data) -> void
       def trace_frames?: () -> bool
-      def packet_sent: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
-      def packet_received: (header: Raiha::Next::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_sent: (header: Raiha::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_received: (header: Raiha::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
       def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> void
       def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> void
       def metrics_updated: (now: Float, **metric metrics) -> void
@@ -55,9 +55,9 @@ module Raiha::Next::QUIC
       def migration_state_updated: (state: migration_state, local: address?, remote: address?, now: Float) -> void
       def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
       def key_updated: (level: PacketProtection::level, now: Float) -> void
-      def tls_trace: (::Raiha::Next::TLS::Trace::t value) -> void
+      def tls_trace: (::Raiha::TLS::Trace::t value) -> void
 
-      private def packet: (String name, Raiha::Next::QUIC::Tracer::PacketHeader header, Array[Wire::Frame::t]? frames, Integer raw_length, Float now) -> void
+      private def packet: (String name, Raiha::QUIC::Tracer::PacketHeader header, Array[Wire::Frame::t]? frames, Integer raw_length, Float now) -> void
       private def frame: (Wire::Frame::t frame) -> Hash[Symbol, json]
       private def values: (Hash[Symbol, untyped] fields) -> Hash[Symbol, json]
       private def event: (Float now, String name, Hash[Symbol, json] data) -> void

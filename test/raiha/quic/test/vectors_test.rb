@@ -5,14 +5,14 @@ require "raiha/quic/test"
 # each other and against the TLS layer's key schedule, before any QUIC code
 # uses them.
 class RaihaNextQUICTestVectorsTest < Minitest::Test
-  V = Raiha::Next::QUIC::Test::Vectors
-  KeySchedule = Raiha::Next::TLS::KeySchedule
+  V = Raiha::QUIC::Test::Vectors
+  KeySchedule = Raiha::TLS::KeySchedule
 
   def expand(secret, label, length) = KeySchedule.expand_label(secret:, label:, length:, hash: :sha256)
 
   def test_keys_follow_from_the_salt
     k = V::Keys
-    initial = KeySchedule.extract(salt: Raiha::Next::QUIC::Version::V1.initial_salt, ikm: k::DCID, hash: :sha256)
+    initial = KeySchedule.extract(salt: Raiha::QUIC::Version::V1.initial_salt, ikm: k::DCID, hash: :sha256)
     assert_equal_bin k::INITIAL_SECRET, initial
     assert_equal_bin k::CLIENT_INITIAL_SECRET, expand(initial, "client in", 32)
     assert_equal_bin k::SERVER_INITIAL_SECRET, expand(initial, "server in", 32)

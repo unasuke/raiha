@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class Profile < Data
     QUIC_TRANSPORT_PARAMETERS: Integer
     TCP: Profile

@@ -3,7 +3,7 @@ require "support/test_pki"
 require "raiha/tls/test"
 
 class RaihaNextTLSKeyringTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Keyring = TLS::Keyring
   PKI = NextTestPKI
 
@@ -103,7 +103,7 @@ end
 
 # Choosing an identity to answer with (RFC 9846 "Certificate Selection").
 class RaihaNextTLSKeyringSelectionTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Keyring = TLS::Keyring
   PKI = NextTestPKI
 

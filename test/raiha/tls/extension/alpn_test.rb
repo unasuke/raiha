@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionAlpnTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  Alpn = Raiha::Next::TLS::Extension::Alpn
+  Codec = Raiha::TLS::Codec
+  Alpn = Raiha::TLS::Extension::Alpn
 
   def test_parse_and_encode
     data = "\x00\x0c\x02h3\x08http/1.1".b

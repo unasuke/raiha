@@ -2,7 +2,7 @@
 
 require_relative "signature_algorithms"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # signature_algorithms_cert: the same SignatureSchemeList as
     # signature_algorithms, for signatures in certificates.

@@ -12,7 +12,7 @@ require "support/tls_pair"
 # RAIHA_FUZZ_ITERATIONS (default 300 per target) and RAIHA_FUZZ_SEED change
 # the number of inputs and the seed.
 class RaihaNextTLSReceiveFuzzTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
 

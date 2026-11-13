@@ -2,7 +2,7 @@
 
 require_relative "error"
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The dynamic table as the decoder keeps it (RFC 9204 "Dynamic Table"):
   # entries by absolute index, the oldest evicted first. The entries sit in
   # a ring, so inserting and evicting move none of the others; the ring

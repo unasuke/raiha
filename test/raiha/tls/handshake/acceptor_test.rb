@@ -2,7 +2,7 @@ require "test_helper"
 require "support/tls_pair"
 
 class RaihaNextTLSAcceptorTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Acceptor = TLS::Handshake::Acceptor
   Extension = TLS::Extension
   RFC8448 = begin
@@ -165,7 +165,7 @@ end
 # A server choosing its Config and Keyring by SNI, in the ten lines the API
 # design promises.
 class RaihaNextTLSAcceptByServerNameTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
   Site = Data.define(:config, :keyring)

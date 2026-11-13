@@ -85,15 +85,15 @@ class RaihaNextResourceLimitsTest < Minitest::Test
 
   def test_the_constants
     CONSTANTS.each do |name, value|
-      assert_equal value, Raiha::Next.const_get(name), name
+      assert_equal value, Raiha.const_get(name), name
     end
   end
 
   def test_the_defaults
     defaults = {
-      "QUIC::Config" => Raiha::Next::QUIC::Config.new,
-      "TLS::Config" => Raiha::Next::TLS::Config.client,
-      "HTTP3::Settings" => Raiha::Next::HTTP3::Settings.new
+      "QUIC::Config" => Raiha::QUIC::Config.new,
+      "TLS::Config" => Raiha::TLS::Config.client,
+      "HTTP3::Settings" => Raiha::HTTP3::Settings.new
     }
     SETTINGS.each do |name, value|
       owner, setting = name.split("#")
@@ -103,8 +103,8 @@ class RaihaNextResourceLimitsTest < Minitest::Test
 
   # A server's default max_unvalidated is half its max_connections.
   def test_max_unvalidated
-    server = Raiha::Next::Runtime::Server.new(config: Raiha::Next::QUIC::Config.new, tls_config: Raiha::Next::TLS::Config.server,
+    server = Raiha::Runtime::Server.new(config: Raiha::QUIC::Config.new, tls_config: Raiha::TLS::Config.server,
       keyring: nil)
-    assert_equal Raiha::Next::Runtime::Server::MAX_CONNECTIONS / 2, server.instance_variable_get(:@max_unvalidated)
+    assert_equal Raiha::Runtime::Server::MAX_CONNECTIONS / 2, server.instance_variable_get(:@max_unvalidated)
   end
 end

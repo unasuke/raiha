@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/http3"
 
 class RaihaNextHTTP3SettingsTest < Minitest::Test
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   Settings = HTTP3::Settings
 
   def frame(*pairs) = HTTP3::Frame::Settings.new(settings: pairs)

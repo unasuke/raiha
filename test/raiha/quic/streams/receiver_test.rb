@@ -5,7 +5,7 @@ require "objspace"
 # The receiving part of a stream: data put back in order however it comes,
 # read as IO#read reads, and the final size and the stream's limit kept to.
 class RaihaNextQUICStreamsReceiverTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   STREAM = 0x0a
 
   def receiver(size: 1000) = QUIC::Streams::Receiver.new(window: QUIC::Streams::ReceiveWindow.new(size:, max: size, now: 0.0))

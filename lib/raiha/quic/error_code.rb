@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The transport error codes of RFC 9000 "Transport Error Codes".
   module ErrorCode
     NO_ERROR = 0x00

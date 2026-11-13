@@ -5,7 +5,7 @@ require "raiha/quic"
 # not gone, FIN with the last data or alone, and the bytes let go as they
 # are acknowledged.
 class RaihaNextQUICStreamsSenderTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   def sender(limit: 1000) = QUIC::Streams::Sender.new(stream_id: 4, limit:)
 

@@ -2,7 +2,7 @@
 
 require_relative "frame_reader"
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The receiving side of one request stream: its frames, how far the
   # message has come, and what waits while a field section of it is
   # blocked on the QPACK encoder stream.

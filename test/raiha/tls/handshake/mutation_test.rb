@@ -10,7 +10,7 @@ require "support/tls_oracle"
 # handshake that still completes must satisfy the oracle. Closing some
 # other way would mean an unchecked path was taken.
 class RaihaNextTLSMutationTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
 

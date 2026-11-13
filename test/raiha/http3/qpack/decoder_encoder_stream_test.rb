@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # Instructions"). What each instruction inserts is checked by decoding
 # references to it; here, which instructions are taken and which fail.
 class RaihaNextQPACKDecoderEncoderStreamTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   ENCODER_STREAM_ERROR = QPACK::ErrorCode::ENCODER_STREAM_ERROR
 
   def setup

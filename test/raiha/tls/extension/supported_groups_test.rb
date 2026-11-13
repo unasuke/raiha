@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionSupportedGroupsTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  SupportedGroups = Raiha::Next::TLS::Extension::SupportedGroups
+  Codec = Raiha::TLS::Codec
+  SupportedGroups = Raiha::TLS::Extension::SupportedGroups
 
   # supported_groups from the RFC 8448 section 3 ClientHello.
   RFC8448_CH = ["001200 1d00 1700 1800 1901 0001 0101 0201 0301 04".delete(" ")].pack("H*")

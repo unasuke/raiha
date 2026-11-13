@@ -4,7 +4,7 @@ require "raiha/tls/test"
 # The RFC 8448 section 3 key schedule, secret by secret. Each value must match
 # byte for byte before anything else is built on top of it.
 class RaihaNextTLSKeyScheduleTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   KeySchedule = TLS::KeySchedule
   LABELS = KeySchedule::LABELS
   RFC8448 = TLS::Test::RFC8448::Simple1RTT

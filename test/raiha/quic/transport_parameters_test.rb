@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICTransportParametersTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   TP = QUIC::TransportParameters
 
   def tp(id, value) = QUIC::Wire::Varint.encode(id) + QUIC::Wire::Varint.encode(value.bytesize) + value.b

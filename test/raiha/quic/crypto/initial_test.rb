@@ -3,9 +3,9 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICCryptoInitialTest < Minitest::Test
-  Initial = Raiha::Next::QUIC::Crypto::Initial
-  V1 = Raiha::Next::QUIC::Version::V1
-  V = Raiha::Next::QUIC::Test::Vectors
+  Initial = Raiha::QUIC::Crypto::Initial
+  V1 = Raiha::QUIC::Version::V1
+  V = Raiha::QUIC::Test::Vectors
 
   def ciphertext_of(vector) = vector::PACKET.byteslice(vector::HEADER.bytesize..)
 

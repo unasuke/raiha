@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     # The hash functions of TLS 1.3 cipher suites, named by Symbol.
     HASHES = { sha256: "SHA256", sha384: "SHA384" }.freeze #: Hash[Symbol, String]

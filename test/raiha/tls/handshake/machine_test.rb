@@ -5,7 +5,7 @@ require "timeout"
 # A client and a server Machine against each other: the full handshake,
 # HelloRetryRequest, client authentication, and what comes out.
 class RaihaNextTLSMachineTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
   TRANSPORT_PARAMETERS = TLS::Extension::Opaque
@@ -280,7 +280,7 @@ end
 # The self round trip of the API design, as written there: no records, no
 # sockets, the server taking its ClientHello through `receive`.
 class RaihaNextTLSSixLineRoundTripTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
 
   def test_six_lines
     c, s, now = NextTLSPair.client_config, NextTLSPair.server_config, NextTLSPair::NOW

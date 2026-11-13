@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSIANATest < Minitest::Test
-  IANA = Raiha::Next::TLS::IANA
+  IANA = Raiha::TLS::IANA
 
   def test_cipher_suite_name
     assert_equal :TLS_AES_128_GCM_SHA256, IANA.cipher_suite_name(0x1301)

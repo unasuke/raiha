@@ -20,7 +20,7 @@ require "tmpdir"
 # server without ECH can resume. `-S` has it offer psk_dhe_ke, the only
 # mode we take.
 class NextTLSPicotlsResumptionInteropTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
   # tmp/ is not in git, so a fresh checkout has none.

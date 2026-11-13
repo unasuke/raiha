@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # An extension kept as its raw extension_data: one this implementation does
     # not know, or knows but does not interpret. Its contents are never

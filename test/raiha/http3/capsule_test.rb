@@ -4,7 +4,7 @@ require "raiha/http3"
 # The Capsules of RFC 9297 "The Capsule Protocol", their reading, and the
 # Capsule-Protocol header field.
 class RaihaNextHTTP3CapsuleTest < Minitest::Test
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   Capsule = HTTP3::Capsule
 
   def read(*chunks, max_value: 100)

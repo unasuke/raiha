@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # The HTTP/3 error codes QPACK defines (RFC 9204 "Error Handling").
   module ErrorCode
     # A field section could not be decoded.

@@ -6,7 +6,7 @@ require "support/http3_side"
 module NextHTTP3UDP
   include NextQUICUDP
 
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   ALPN = ["h3"].freeze
 
   # A server's application: each request that has come whole is answered

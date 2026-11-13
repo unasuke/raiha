@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # The message an extension block belongs to. A HelloRetryRequest and a
     # CertificateEntry have placement rules of their own.
@@ -285,7 +285,7 @@ module Raiha::Next::TLS
   end
 end
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     module ClientHelloBuilder
       class Built < Data

@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class Keyring
     # A source of random bytes: SecureRandom, or a seeded Random in tests.
     interface _Random

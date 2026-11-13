@@ -157,7 +157,7 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
       sleep 0.01 while reading.alive?
       client_owner_driver = client.instance_variable_get(:@driver)
       Fiber.schedule { client_owner_driver.stop }
-      error = assert_raises(Raiha::Next::QUIC::ClosedError) { stream.read }
+      error = assert_raises(Raiha::QUIC::ClosedError) { stream.read }
       assert_equal "the runtime stopped", error.error.reason
       assert client.closed?
     end
@@ -211,9 +211,9 @@ class RaihaNextRuntimeSessionTest < Minitest::Test
       stream.write("hello")
       server = accepted(server_owner)
       Fiber.schedule { server.close(error_code: 42, reason: "bye") }
-      error = assert_raises(Raiha::Next::QUIC::ClosedError) { stream.read }
+      error = assert_raises(Raiha::QUIC::ClosedError) { stream.read }
       assert_equal [42, true, "bye"], [error.error.code, error.error.application, error.error.reason]
-      assert_raises(Raiha::Next::QUIC::ClosedError) { client.open_stream }
+      assert_raises(Raiha::QUIC::ClosedError) { client.open_stream }
       assert client.closed?
       assert_nil server.accept_stream
     end

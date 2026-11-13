@@ -9,7 +9,7 @@
 #   bundle exec ruby -Ilib examples/high_level_loopback.rb
 #
 # Expected output:
-#   Raiha::Next::Runtime::Server accepted 1 connection, stream echo OK
+#   Raiha::Runtime::Server accepted 1 connection, stream echo OK
 
 require "raiha/runtime"
 # The scheduler of async reads with IO::Buffer, which Ruby 4.0 warns is
@@ -19,9 +19,9 @@ require "async"
 require "securerandom"
 require_relative "_certificate"
 
-Runtime = Raiha::Next::Runtime
-QUIC = Raiha::Next::QUIC
-TLS = Raiha::Next::TLS
+Runtime = Raiha::Runtime
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 ALPN = ["hq-interop"].freeze
 
@@ -56,4 +56,4 @@ end
 
 raise "Echo payload mismatch" unless echoed == payload
 
-puts "Raiha::Next::Runtime::Server accepted #{accepted} connection, stream echo OK"
+puts "Raiha::Runtime::Server accepted #{accepted} connection, stream echo OK"

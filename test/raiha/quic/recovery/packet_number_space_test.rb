@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICRecoveryPacketNumberSpaceTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Space = QUIC::Recovery::PacketNumberSpace
 
   def packet(number, time_sent:, ack_eliciting: true, in_flight: true)

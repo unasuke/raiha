@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionPskKeyExchangeModesTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  PskKeyExchangeModes = Raiha::Next::TLS::Extension::PskKeyExchangeModes
+  Codec = Raiha::TLS::Codec
+  PskKeyExchangeModes = Raiha::TLS::Extension::PskKeyExchangeModes
 
   def test_parse_and_encode
     ext = PskKeyExchangeModes.parse("\x01\x01".b)

@@ -2,7 +2,7 @@
 
 require_relative "masked_inspect"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # What the handshake core hands to its transport, in one ordered queue.
   #
   # A Secret comes out when its key may be used, and every Message and Alert

@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSCodecErrorTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
+  Codec = Raiha::TLS::Codec
 
   def test_syntax_errors_map_to_decode_error
     [Codec::Malformed, Codec::Truncated, Codec::RangeViolation, Codec::TrailingData].each do |klass|

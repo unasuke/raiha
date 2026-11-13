@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICCongestionAlgorithmsTest < Minitest::Test
-  Congestion = Raiha::Next::QUIC::Congestion
+  Congestion = Raiha::QUIC::Congestion
 
   def test_resolve
     assert_same Congestion::NewReno, Congestion.resolve(:new_reno)

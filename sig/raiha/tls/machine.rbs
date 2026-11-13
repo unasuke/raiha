@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     class AuthenticationMessages
       SERVER_CONTEXT: String
@@ -372,7 +372,7 @@ module Raiha::Next::TLS
   end
 end
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     class ClientHelloInfo < Data
       attr_reader server_name: String?

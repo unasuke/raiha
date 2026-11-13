@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # Misuse of the runtime. What the peer or the network does to a
   # connection comes as QUIC::ClosedError instead.
   module Error

@@ -2,7 +2,7 @@
 
 require_relative "error_code"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # Exceptions are for misuse of the API only. What the peer does never
   # raises: a protocol error is a ConnectionError value, sent as
   # CONNECTION_CLOSE and reported in Event::Closed.

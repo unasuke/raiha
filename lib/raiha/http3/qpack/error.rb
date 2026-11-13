@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3::QPACK
+module Raiha::HTTP3::QPACK
   # Exceptions are for misuse of the API only. What the peer sends never
   # raises; it comes back as a Failure.
   module Error

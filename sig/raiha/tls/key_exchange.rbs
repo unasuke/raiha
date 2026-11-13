@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module KeyExchange
     interface _Provider
       def supported_groups: () -> Array[Symbol]

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # A datagram on its way through a network: what models pass along, and
   # mark with CE.
   class Datagram < Data.define(:payload, :source, :destination, :ecn); end
@@ -33,12 +33,12 @@ module Raiha::Next::QUIC::Test
     def initialize(seed:, clock: VirtualClock.new)
       @random = Random.new(seed)
       @clock = clock
-      @nodes = {} #: Hash[Raiha::Next::QUIC::address, _Node]
-      @addresses = {} #: Hash[_Node, Raiha::Next::QUIC::address]
+      @nodes = {} #: Hash[Raiha::QUIC::address, _Node]
+      @addresses = {} #: Hash[_Node, Raiha::QUIC::address]
       @addresses.compare_by_identity
-      @links = {} #: Hash[[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address], _Path]
-      @outside = {} #: Hash[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address]
-      @inside = {} #: Hash[Raiha::Next::QUIC::address, Raiha::Next::QUIC::address]
+      @links = {} #: Hash[[Raiha::QUIC::address, Raiha::QUIC::address], _Path]
+      @outside = {} #: Hash[Raiha::QUIC::address, Raiha::QUIC::address]
+      @inside = {} #: Hash[Raiha::QUIC::address, Raiha::QUIC::address]
       @direct = Direct.new
     end
 
@@ -82,7 +82,7 @@ module Raiha::Next::QUIC::Test
     # and gives the Test::Server. `time` is the wall clock the Endpoint
     # starts at; its random bytes come from the seed.
     def add_server(config:, tls_config:, keyring:, time:, address:, **options)
-      endpoint = Raiha::Next::QUIC::Endpoint.server(config:, random: Random.new(@random.rand(1 << 64)), time:, now:)
+      endpoint = Raiha::QUIC::Endpoint.server(config:, random: Random.new(@random.rand(1 << 64)), time:, now:)
       add(Server.new(endpoint, tls_config:, keyring:, **options), address:)
     end
 

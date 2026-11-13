@@ -3,7 +3,7 @@ require "raiha/http3"
 
 # RFC 9114 "Malformed Requests and Responses" on field sections.
 class RaihaNextHTTP3MessageTest < Minitest::Test
-  Message = Raiha::Next::HTTP3::Message
+  Message = Raiha::HTTP3::Message
 
   GET = [[":method", "GET"], [":scheme", "https"], [":authority", "example.com"], [":path", "/"]].freeze
 

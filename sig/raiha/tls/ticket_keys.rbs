@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   class TicketKeys
     class Entry < Data
       include MaskedInspect

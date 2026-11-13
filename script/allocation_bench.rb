@@ -16,8 +16,8 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "raiha/quic"
 require_relative "../../examples/_certificate"
 
-QUIC = Raiha::Next::QUIC
-TLS = Raiha::Next::TLS
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 ALPN = ["hq-interop"].freeze
 HANDSHAKES = 50

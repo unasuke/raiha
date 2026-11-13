@@ -11,7 +11,7 @@ require "support/quic_frames"
 # RAIHA_FUZZ_ITERATIONS (default 10000) and RAIHA_FUZZ_SEED change the
 # number of inputs and the seed.
 class RaihaNextQUICWireFrameFuzzTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   Frame = QUIC::Wire::Frame
 
   ITERATIONS = Integer(ENV.fetch("RAIHA_FUZZ_ITERATIONS", "10000"))

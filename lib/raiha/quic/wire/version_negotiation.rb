@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # A Version Negotiation packet (RFC 9000 "Version Negotiation Packet"):
     # a server's answer to a packet in a version it does not support, with

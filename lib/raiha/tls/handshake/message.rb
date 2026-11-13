@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # What every handshake message value shares: `#encode` writes the 4-byte
     # header (msg_type and a 3-byte length) around `#write_body`.

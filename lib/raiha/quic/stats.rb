@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What a connection has done, as `Connection#stats` gives it. `rtt` is
   # the smoothed RTT, and it, `rtt_var`, `min_rtt` (nil before the first
   # sample), `congestion_window` and `bytes_in_flight` are the current

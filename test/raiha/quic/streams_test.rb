@@ -5,7 +5,7 @@ require "raiha/quic"
 # frame may name, and the checks every frame passes before its data is
 # kept.
 class RaihaNextQUICStreamsTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   def streams(role: :client, events: [], **config) = QUIC::Streams.new(role:, config: QUIC::Config.new(**config), events:, now: 0.0)
 

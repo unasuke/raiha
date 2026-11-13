@@ -55,8 +55,8 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
     tls = server_config
     workers = workers(args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
       raise "worker 0 failed" if worker.id.zero?
-      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
-      Sync { Raiha::Next::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run { nil } }
+      keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
+      Sync { Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run { nil } }
     end
     error = assert_raises(RuntimeError) { workers.run }
     assert_equal "worker 0 failed", error.message
@@ -67,9 +67,9 @@ class RaihaNextRuntimeWorkersTest < Minitest::Test
   def serving(count: 2)
     tls = server_config
     workers = workers(count:, args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
-      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
+      keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       Sync do
-        Raiha::Next::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
+        Raiha::Runtime::Server.new(config: worker.config, tls_config: tls, keyring:, worker:).run do |session|
           session.each_stream { |stream| (stream << "ECHO#{worker.id}:" << stream.read).close_write }
         end
       end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What to send: `payload` to `destination` ([host, port]) from `source`
   # (nil leaves it to the OS) with the ECN codepoint `ecn` (:not_ect, :ect0
   # or :ect1). With a `segment_size`, the payload is several datagrams of

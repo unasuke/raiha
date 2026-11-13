@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSCryptoHKDFTest < Minitest::Test
-  HKDF = Raiha::Next::TLS::Crypto::HKDF
+  HKDF = Raiha::TLS::Crypto::HKDF
 
   def hex(s) = [s.delete(" ")].pack("H*")
 

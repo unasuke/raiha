@@ -6,7 +6,7 @@ require_relative "../extension"
 require_relative "../profile"
 require_relative "client_hello"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # Builds the ClientHello a client opens with, and the second one after a
     # HelloRetryRequest.

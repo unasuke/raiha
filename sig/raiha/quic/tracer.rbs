@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # A packet number space.
   type space = :initial | :handshake | :application_data
 

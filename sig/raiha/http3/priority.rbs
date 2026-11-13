@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   module StructuredField
     type value = Integer | Float | String | Symbol | bool | Array[value]
 

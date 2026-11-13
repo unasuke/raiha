@@ -4,7 +4,7 @@ require "stringio"
 
 # How a TCP::Connection ends: RFC 9846 "Closure Alerts" and "Error Alerts".
 class RaihaNextTLSTCPClosureTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTCPPair
   NOW = Pair::NOW
   SUITE = TLS::CipherSuite::TLS_AES_128_GCM_SHA256

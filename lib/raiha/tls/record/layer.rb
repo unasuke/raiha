@@ -3,7 +3,7 @@
 require_relative "../error"
 require_relative "protection"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Record
     CONTENT_TYPES = { change_cipher_spec: 20, alert: 21, handshake: 22, application_data: 23 }.freeze #: Hash[Symbol, Integer]
     CONTENT_TYPE_NAMES = CONTENT_TYPES.invert.freeze #: Hash[Integer, Symbol]

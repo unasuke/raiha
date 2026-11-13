@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionSupportedVersionsTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  SupportedVersions = Raiha::Next::TLS::Extension::SupportedVersions
+  Codec = Raiha::TLS::Codec
+  SupportedVersions = Raiha::TLS::Extension::SupportedVersions
 
   def test_client_hello
     ext = SupportedVersions::CH.parse("\x02\x03\x04".b)

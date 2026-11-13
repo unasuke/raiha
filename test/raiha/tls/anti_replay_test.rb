@@ -5,7 +5,7 @@ require "raiha/tls"
 # to 22 seconds by the clock it is given, and nothing accepted for the
 # first 11 seconds unless told the keys are new.
 class RaihaNextTLSAntiReplayTest < Minitest::Test
-  Memory = Raiha::Next::TLS::AntiReplay::Memory
+  Memory = Raiha::TLS::AntiReplay::Memory
   NOW = Time.at(1_800_000_000)
   A = ("\x01".b * 32).freeze
   B = ("\x02".b * 32).freeze

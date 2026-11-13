@@ -3,7 +3,7 @@ require "raiha/http3/qpack"
 
 # The Huffman code of RFC 7541 Appendix B, encoding side.
 class RaihaNextQPACKHuffmanEncodingTest < Minitest::Test
-  Huffman = Raiha::Next::HTTP3::QPACK::Huffman
+  Huffman = Raiha::HTTP3::QPACK::Huffman
 
   # RFC 7541 Appendix C.4 and C.6.
   EXAMPLES = {

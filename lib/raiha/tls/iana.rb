@@ -3,7 +3,7 @@
 # Names for the integers on the wire. Values stay Integers everywhere else,
 # so an out-of-date table cannot break parsing. These tables are used only at
 # the public API boundary and for logs, qlog and `inspect`.
-module Raiha::Next::TLS::IANA
+module Raiha::TLS::IANA
   CIPHER_SUITES = {
     0x1301 => :TLS_AES_128_GCM_SHA256,
     0x1302 => :TLS_AES_256_GCM_SHA384,

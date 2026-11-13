@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module TCP
     # What TCP::Connection tells the application on top of the Machine's
     # events. Alerts never reach the Machine, so these are the binding's.

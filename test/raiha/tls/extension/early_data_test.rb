@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/tls"
 
 class RaihaNextTLSExtensionEarlyDataTest < Minitest::Test
-  Codec = Raiha::Next::TLS::Codec
-  EarlyData = Raiha::Next::TLS::Extension::EarlyData
+  Codec = Raiha::TLS::Codec
+  EarlyData = Raiha::TLS::Extension::EarlyData
 
   def test_client_hello_and_encrypted_extensions_are_empty
     [EarlyData::CH, EarlyData::EE].each do |klass|

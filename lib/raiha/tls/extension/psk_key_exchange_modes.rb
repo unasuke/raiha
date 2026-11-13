@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # psk_key_exchange_modes: `PskKeyExchangeMode ke_modes<1..255>`.
     class PskKeyExchangeModes < Data.define(:ke_modes)

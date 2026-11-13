@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # What every congestion control algorithm keeps to, the application's own
   # included, as tests to include in a Minitest class that names the
   # algorithm:
   #
   #   class MyAlgorithmTest < Minitest::Test
-  #     include Raiha::Next::QUIC::Test::CongestionContract
+  #     include Raiha::QUIC::Test::CongestionContract
   #     def congestion_control = MyAlgorithm
   #   end
   module CongestionContract
@@ -95,8 +95,8 @@ module Raiha::Next::QUIC::Test
     end
 
     private def new_controller
-      congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: Raiha::Next::QUIC::Config::DEFAULT_INITIAL_WINDOW,
-        config: Raiha::Next::QUIC::Config.new(congestion_control:))
+      congestion_control.new(max_datagram_size: MAX_DATAGRAM_SIZE, initial_window: Raiha::QUIC::Config::DEFAULT_INITIAL_WINDOW,
+        config: Raiha::QUIC::Config.new(congestion_control:))
     end
 
     private def acknowledge(cc, bytes, sent_at:, now:, app_limited: false)

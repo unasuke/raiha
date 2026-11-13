@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # RFC 9000 "Stateless Reset": what an endpoint that has lost a
   # connection sends to end it, which looks like a short header packet but
   # ends in the token the endpoint gave out with the connection ID.

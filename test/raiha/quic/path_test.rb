@@ -3,7 +3,7 @@ require "raiha/quic"
 require "support/quic_recovery"
 
 class RaihaNextQUICPathTest < Minitest::Test
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
 
   def path(**config) = QUIC::Path.new(config: QUIC::Config.new(**config))
 

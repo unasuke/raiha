@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module TCP
     module Event
       class PeerAlert < Data
@@ -10,7 +10,7 @@ module Raiha::Next::TLS
       end
     end
 
-    type event = ::Raiha::Next::TLS::Event::t | Event::PeerAlert
+    type event = ::Raiha::TLS::Event::t | Event::PeerAlert
 
     class Acceptor
       MAX_HELD_BYTES: Integer

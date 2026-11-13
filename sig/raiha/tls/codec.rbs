@@ -1,4 +1,4 @@
-module Raiha::Next::TLS::Codec
+module Raiha::TLS::Codec
   class Malformed < StandardError
     def alert: () -> Symbol
   end

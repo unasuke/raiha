@@ -2,7 +2,7 @@
 
 require "securerandom"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # The workers of a server, each in a Ractor of its own: `run` binds a
   # socket for each worker to `host` and `port` with SO_REUSEPORT, and one
   # for each preferred address of `config` the first does not take, moves
@@ -30,7 +30,7 @@ module Raiha::Next::Runtime
   # SO_REUSEPORT spreads datagrams over sockets on Linux alone, where more
   # than one worker can be run.
   class Workers
-    MAX = Raiha::Next::QUIC::WorkerConnectionIDs::MAX_WORKERS
+    MAX = Raiha::QUIC::WorkerConnectionIDs::MAX_WORKERS
     # How long `stats` waits for a worker to answer.
     STATS_TIMEOUT = 1.0
 
@@ -40,12 +40,12 @@ module Raiha::Next::Runtime
       raise ArgumentError, "a block to run in each worker is needed" unless block
       raise ArgumentError, "count #{count} is not 1 to #{MAX}" unless count.is_a?(Integer) && (1..MAX).cover?(count)
       raise Error::Usage, "SO_REUSEPORT spreads datagrams over workers on Linux alone" if count > 1 && !RUBY_PLATFORM.include?("linux")
-      if config.connection_id_length < Raiha::Next::QUIC::WorkerConnectionIDs::MIN_LENGTH
-        raise ArgumentError, "a worker's connection IDs are #{Raiha::Next::QUIC::WorkerConnectionIDs::MIN_LENGTH} bytes at least"
+      if config.connection_id_length < Raiha::QUIC::WorkerConnectionIDs::MIN_LENGTH
+        raise ArgumentError, "a worker's connection IDs are #{Raiha::QUIC::WorkerConnectionIDs::MIN_LENGTH} bytes at least"
       end
       @count = count
-      @config = config.with(retry_token_key: config.retry_token_key || SecureRandom.bytes(Raiha::Next::QUIC::Config::MIN_KEY_LENGTH),
-        stateless_reset_key: config.stateless_reset_key || SecureRandom.bytes(Raiha::Next::QUIC::Config::MIN_KEY_LENGTH))
+      @config = config.with(retry_token_key: config.retry_token_key || SecureRandom.bytes(Raiha::QUIC::Config::MIN_KEY_LENGTH),
+        stateless_reset_key: config.stateless_reset_key || SecureRandom.bytes(Raiha::QUIC::Config::MIN_KEY_LENGTH))
       @host = host
       @port = port
       @args = args
@@ -66,7 +66,7 @@ module Raiha::Next::Runtime
     def run
       reader, @wake = IO.pipe
       sockets = bind
-      shared, record = Raiha::Next::TLS::AntiReplay::Shared.start(now: Time.now)
+      shared, record = Raiha::TLS::AntiReplay::Shared.start(now: Time.now)
       out = Ractor::Port.new
       ractors = Array.new(@count) { |id| start(id, out, shared) }
       started = Array.new(@count) { out.receive }.sort_by(&:first)
@@ -188,7 +188,7 @@ module Raiha::Next::Runtime
         control = Ractor::Port.new
         out.send([id, inbox, control])
         sockets, peers = Ractor.receive
-        worker = Raiha::Next::Runtime::Worker.new(id:, count:, config:, sockets:, inbox:, control:, peers:, anti_replay: shared)
+        worker = Raiha::Runtime::Worker.new(id:, count:, config:, sockets:, inbox:, control:, peers:, anti_replay: shared)
         begin
           body.call(worker, *args)
         ensure

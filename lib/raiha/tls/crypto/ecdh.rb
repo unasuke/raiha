@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     # Elliptic-curve Diffie-Hellman over the groups TLS 1.3 uses, with public
     # keys as they appear in key_share: the 32-byte u-coordinate for X25519

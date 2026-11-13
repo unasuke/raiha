@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSCryptoSignatureTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Signature = TLS::Crypto::Signature
   RFC8448 = TLS::Test::RFC8448::Simple1RTT
 

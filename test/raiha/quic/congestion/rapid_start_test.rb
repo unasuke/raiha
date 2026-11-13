@@ -5,9 +5,9 @@ require "raiha/quic/test"
 # Rapid Start (draft-kazuho-ccwg-rapid-start-02) wrapping NewReno or CUBIC:
 # its growth, its pacing, the first recovery period and the hand-over.
 class RaihaNextQUICCongestionRapidStartTest < Minitest::Test
-  include Raiha::Next::QUIC::Test::CongestionContract
+  include Raiha::QUIC::Test::CongestionContract
 
-  QUIC = Raiha::Next::QUIC
+  QUIC = Raiha::QUIC
   RapidStart = QUIC::Congestion::Startup::RapidStart
   NewReno = QUIC::Congestion::NewReno
   Cubic = QUIC::Congestion::Cubic
@@ -18,7 +18,7 @@ class RaihaNextQUICCongestionRapidStartTest < Minitest::Test
   FULL_BDP = 120_000
 
   class Recorder
-    include Raiha::Next::QUIC::Tracer
+    include Raiha::QUIC::Tracer
 
     attr_reader :states
 

@@ -6,7 +6,7 @@ require "raiha/http3/qpack"
 # octets, where stream 0 is the encoder stream and the others carry one
 # field section each.
 module NextQPACKOfflineInterop
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
   QIFS_DIR = ENV.fetch("QIFS_DIR") { File.expand_path("../../tmp/qifs", __dir__) }
 
   # The header lists of a QIF file, in order: "name\tvalue" lines, a blank

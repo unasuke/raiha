@@ -3,7 +3,7 @@
 require_relative "tls"
 
 # QUIC. May refer to the TLS layer.
-module Raiha::Next::QUIC
+module Raiha::QUIC
 end
 
 require_relative "quic/error"

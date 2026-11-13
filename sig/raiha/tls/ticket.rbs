@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Ticket
     type reason = :malformed | :unknown_version | :unknown_key | :aead_failure
 

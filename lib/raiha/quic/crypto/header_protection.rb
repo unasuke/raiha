@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Crypto
     # The header protection of one key (RFC 9001 "Header Protection"): a
     # 5-byte mask from a 16-byte sample of the ciphertext. The AES-GCM suites

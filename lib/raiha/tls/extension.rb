@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Extension values. Each class keeps the RFC's field names and follows the
   # contract an `Extension::Registry` relies on: `.parse(String)`,
   # `#extension_type` and `#encode`, where the String is the extension_data.

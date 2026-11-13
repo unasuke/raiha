@@ -1,4 +1,4 @@
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   class Settings < Data
     QPACK_MAX_TABLE_CAPACITY: Integer
     MAX_FIELD_SECTION_SIZE: Integer

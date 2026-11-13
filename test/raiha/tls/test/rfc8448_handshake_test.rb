@@ -10,7 +10,7 @@ require "raiha/tls/test"
 # for 1-RTT, HelloRetryRequest and client authentication, checked against
 # the traces.
 class RaihaNextTLSRFC8448HandshakeTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448
   S = RFC8448::Simple1RTT
   H = RFC8448::HelloRetryRequest

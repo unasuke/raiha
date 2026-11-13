@@ -4,7 +4,7 @@ require "raiha/tls/test"
 # A KeySchedule instance walking RFC 8448 through its stages, and the order
 # it enforces.
 class RaihaNextTLSKeyScheduleStagesTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   KeySchedule = TLS::KeySchedule
   S = TLS::Test::RFC8448::Simple1RTT
   R = TLS::Test::RFC8448::Resumed0RTT
@@ -123,6 +123,6 @@ class RaihaNextTLSKeyScheduleStagesTest < Minitest::Test
 
   def test_inspect_shows_no_secret
     ks = handshake_stage
-    assert_match(/\A#<Raiha::Next::TLS::KeySchedule:0x\h+ @hash_algorithm=:sha256, @stage=:handshake>\z/, ks.inspect)
+    assert_match(/\A#<Raiha::TLS::KeySchedule:0x\h+ @hash_algorithm=:sha256, @stage=:handshake>\z/, ks.inspect)
   end
 end

@@ -5,7 +5,7 @@ require "support/tls_pair"
 # aside: the row's violation gives its alert and reason, and with an
 # earlier row violated too, the earlier row wins.
 class RaihaNextTLSServerChecksTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Extension = TLS::Extension
   Handshake = TLS::Handshake
   Pair = NextTLSPair

@@ -8,7 +8,7 @@ require "raiha/http3/session"
 class RaihaNextHTTP3SessionTest < Minitest::Test
   include NextQUICPair
 
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
 
   def quic_session
     client = client_connection

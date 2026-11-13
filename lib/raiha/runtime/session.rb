@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # The peer reset the stream a read waits on, or stopped the one a write
   # goes to, with `error_code`.
   class StreamReset < StandardError
@@ -81,11 +81,11 @@ module Raiha::Next::Runtime
       @aborted = nil #: StandardError?
       @stopping = false
       @stop_deadline = nil #: Float?
-      @connected = nil #: Raiha::Next::QUIC::Event::Connected?
+      @connected = nil #: Raiha::QUIC::Event::Connected?
       @protocol = nil #: _Protocol?
       # The application's error code a close with none given closes with.
       @close_code = 0
-      @tickets = [] #: Array[Raiha::Next::QUIC::Session]
+      @tickets = [] #: Array[Raiha::QUIC::Session]
       @tokens = [] #: Array[String]
       # One more each time the server rejects 0-RTT; the Streams of this
       # client opened before are of an earlier one.
@@ -183,7 +183,7 @@ module Raiha::Next::Runtime
     def accept_stream
       stream_id = wait(drain: true) { @incoming.shift || (:stopping if @stopping) }
       Stream.new(self, stream_id, @generation) unless stream_id == :stopping
-    rescue Raiha::Next::QUIC::ClosedError
+    rescue Raiha::QUIC::ClosedError
       nil
     end
 
@@ -233,8 +233,8 @@ module Raiha::Next::Runtime
     # nothing more comes or goes, and what waits wakes to raise it, or
     # QUIC::ClosedError.
     def abort(failure = nil)
-      @aborted ||= failure || Raiha::Next::QUIC::ClosedError.new(Raiha::Next::QUIC::ConnectionError.new(
-        code: Raiha::Next::QUIC::ErrorCode::NO_ERROR, frame_type: nil, reason: "the runtime stopped", application: false))
+      @aborted ||= failure || Raiha::QUIC::ClosedError.new(Raiha::QUIC::ConnectionError.new(
+        code: Raiha::QUIC::ErrorCode::NO_ERROR, frame_type: nil, reason: "the runtime stopped", application: false))
       notify
     end
 
@@ -270,7 +270,7 @@ module Raiha::Next::Runtime
     def write(stream_id, data, fin:, generation:)
       current!(stream_id, generation)
       track = @tracks[stream_id]
-      raise Raiha::Next::QUIC::Error::StreamError, "stream #{stream_id} has ended" unless track&.writing
+      raise Raiha::QUIC::Error::StreamError, "stream #{stream_id} has ended" unless track&.writing
       written = 0
       wait do
         current!(stream_id, generation)
@@ -294,7 +294,7 @@ module Raiha::Next::Runtime
       now = Driver.clock
       @connection.each_event do |event|
         # Before the protocol, which opens its streams again, sees it.
-        zero_rtt_rejected if event.is_a?(Raiha::Next::QUIC::Event::ZeroRttRejected)
+        zero_rtt_rejected if event.is_a?(Raiha::QUIC::Event::ZeroRttRejected)
         take(event) unless protocol&.take(event, now)
       end
       protocol&.turn(now)
@@ -312,20 +312,20 @@ module Raiha::Next::Runtime
     # gone, and its ID may now be another's.
     private def current!(stream_id, generation)
       return if generation == @generation || !local?(stream_id)
-      raise Raiha::Next::QUIC::Error::ZeroRttRejected, "stream #{stream_id} went in 0-RTT, which the server rejected"
+      raise Raiha::QUIC::Error::ZeroRttRejected, "stream #{stream_id} went in 0-RTT, which the server rejected"
     end
 
     private def take(event)
       case event
-      when Raiha::Next::QUIC::Event::Connected then @connected = event
-      when Raiha::Next::QUIC::Event::StreamReadable then arrived(event.stream_id)
-      when Raiha::Next::QUIC::Event::StreamReset
+      when Raiha::QUIC::Event::Connected then @connected = event
+      when Raiha::QUIC::Event::StreamReadable then arrived(event.stream_id)
+      when Raiha::QUIC::Event::StreamReset
         arrived(event.stream_id)
         @tracks[event.stream_id]&.reset = event.error_code
         forget_reset(event.stream_id)
-      when Raiha::Next::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
-      when Raiha::Next::QUIC::Event::SessionTicket then ticket(event.session)
-      when Raiha::Next::QUIC::Event::NewToken
+      when Raiha::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
+      when Raiha::QUIC::Event::SessionTicket then ticket(event.session)
+      when Raiha::QUIC::Event::NewToken
         @tokens.shift if @tokens.size >= MAX_HELD
         @tokens << event.token
       end
@@ -334,7 +334,7 @@ module Raiha::Next::Runtime
     private def ticket(session)
       if @tickets.size >= MAX_HELD
         @tickets.shift
-        @tracer&.tls_trace(Raiha::Next::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets))
+        @tracer&.tls_trace(Raiha::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets))
       end
       @tickets << session
     end
@@ -389,7 +389,7 @@ module Raiha::Next::Runtime
           # T is within T | nil; steep loses it across the two signatures.
           return result unless result.nil? || result == "" # steep:ignore
           aborted = @aborted and raise aborted
-          reason = @connection.close_reason and raise Raiha::Next::QUIC::ClosedError.new(reason)
+          reason = @connection.close_reason and raise Raiha::QUIC::ClosedError.new(reason)
           result = yield unless drain
           return result unless result.nil? || result == "" # steep:ignore
           left = deadline && deadline - Driver.clock

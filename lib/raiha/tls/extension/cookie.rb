@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # cookie: `opaque cookie<1..2^16-1>`.
     class Cookie < Data.define(:cookie)

@@ -2,8 +2,8 @@ require "test_helper"
 require "raiha/quic"
 
 class RaihaNextQUICWireCodecTest < Minitest::Test
-  Wire = Raiha::Next::QUIC::Wire
-  ErrorCode = Raiha::Next::QUIC::ErrorCode
+  Wire = Raiha::QUIC::Wire
+  ErrorCode = Raiha::QUIC::ErrorCode
 
   def hex(s) = [s.delete(" ")].pack("H*")
 

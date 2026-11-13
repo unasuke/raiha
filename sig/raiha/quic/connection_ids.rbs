@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What makes the connection IDs an Endpoint issues.
   interface _ConnectionIDs
     def generate: (Integer length) -> String

@@ -4,7 +4,7 @@ require "pp"
 
 class RaihaNextTLSMaskedInspectTest < Minitest::Test
   class Secret < Data.define(:name, :key, :parts)
-    include Raiha::Next::TLS::MaskedInspect
+    include Raiha::TLS::MaskedInspect
 
     def masked_members = %i[key parts]
   end
@@ -28,6 +28,6 @@ class RaihaNextTLSMaskedInspectTest < Minitest::Test
   end
 
   def test_mask_of_other_values
-    assert_equal "[masked]", Raiha::Next::TLS::MaskedInspect.mask(42)
+    assert_equal "[masked]", Raiha::TLS::MaskedInspect.mask(42)
   end
 end

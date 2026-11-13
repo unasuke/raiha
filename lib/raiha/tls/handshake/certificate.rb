@@ -5,7 +5,7 @@ require_relative "../extension"
 require_relative "message"
 require_relative "violation"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Handshake
     # One certificate in a Certificate message. Only X.509 is supported, so
     # cert_data is a DER certificate. Its extensions have a context of their

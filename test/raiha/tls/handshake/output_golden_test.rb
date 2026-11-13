@@ -6,7 +6,7 @@ require "support/tls_pair"
 # and QUIC come out the same. RFC 8448 confirms the TCP sequences byte for
 # byte (test/rfc8448_handshake_test.rb), for the client of section 4 too.
 class RaihaNextTLSOutputGoldenTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
 
   CLIENT_HELLO = [:message, :initial, 1].freeze

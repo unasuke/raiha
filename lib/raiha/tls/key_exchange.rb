@@ -3,7 +3,7 @@
 require_relative "crypto"
 require_relative "masked_inspect"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Key exchange in the shape of a KEM, since that is what RFC 9846 now
   # describes and what the post-quantum hybrids are: the client sends a
   # public key, the server encapsulates to it and returns a ciphertext. For

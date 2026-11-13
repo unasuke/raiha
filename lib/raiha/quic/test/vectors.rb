@@ -3,7 +3,7 @@
 # The samples of packet protection in RFC 9001 appendix A, "Sample Packet
 # Protection". Every value is a frozen BINARY String, taken from
 # rfcs/rfc9001.md.
-module Raiha::Next::QUIC::Test::Vectors
+module Raiha::QUIC::Test::Vectors
   # A.1 "Keys": the client chose this Destination Connection ID.
   module Keys
     DCID = ["8394c8f03e515708"].pack("H*").freeze

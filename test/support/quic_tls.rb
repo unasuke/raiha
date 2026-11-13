@@ -4,8 +4,8 @@ require "support/tls_pair"
 # TLS settings for QUIC connections in tests: the QUIC profile, an ALPN
 # both ends share, and a registry that keeps the transport parameters.
 module NextQUICTLS
-  TLS = Raiha::Next::TLS
-  QUIC = Raiha::Next::QUIC
+  TLS = Raiha::TLS
+  QUIC = Raiha::QUIC
   REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
   ALPN = ["hq-interop"].freeze
   # The wall clock the test certificates are valid at.

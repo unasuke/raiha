@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class MTUSearch
     CLOSE_ENOUGH: Integer
     MAX_LOSSES: Integer

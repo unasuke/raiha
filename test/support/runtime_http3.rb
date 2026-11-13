@@ -10,18 +10,18 @@ require "support/runtime_owner"
 module NextRuntimeHTTP3
   include NextRuntimeOwner
 
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   H3 = ["h3"].freeze
 
   class Answerer
-    HTTP3 = Raiha::Next::HTTP3
+    HTTP3 = Raiha::HTTP3
     TRAILERS = [["x-checksum", "abc"]].freeze
 
     def initialize(session, bodies)
       @session = session
       @bodies = bodies
       @http3 = HTTP3::Connection.server
-      @binding = Raiha::Next::HTTP3Binding.new(session.connection, @http3)
+      @binding = Raiha::HTTP3Binding.new(session.connection, @http3)
       @requests = {}
       @left = {}
       session.attach(self)
@@ -76,9 +76,9 @@ module NextRuntimeHTTP3
       return unless path == "/last"
       # The answer goes out first: a connection that closes sends only its
       # CONNECTION_CLOSE after.
-      @binding.flush(now: Raiha::Next::Runtime::Driver.clock)
+      @binding.flush(now: Raiha::Runtime::Driver.clock)
       @session.instance_variable_get(:@driver).flush
-      @session.connection.close(error_code: HTTP3::ErrorCode::NO_ERROR, now: Raiha::Next::Runtime::Driver.clock)
+      @session.connection.close(error_code: HTTP3::ErrorCode::NO_ERROR, now: Raiha::Runtime::Driver.clock)
     end
 
     private def write(stream_id)
@@ -100,7 +100,7 @@ module NextRuntimeHTTP3
   def answering(bodies)
     sessions = []
     tls = h3_server_config
-    server = Raiha::Next::Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls),
+    server = Raiha::Runtime::Server.new(config: QUIC::Config.new, tls_config: tls, keyring: server_keyring(config: tls),
       host: "127.0.0.1", port: 0)
     running = Fiber.schedule do
       server.run do |session|
@@ -119,7 +119,7 @@ module NextRuntimeHTTP3
   # A Session of a client connected to `port` with "h3", for the block.
   def h3_connect(port, **options, &)
     tls = h3_client_config
-    Raiha::Next::Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
+    Raiha::Runtime::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
       server_name: "localhost", **options, &)
   end
 end

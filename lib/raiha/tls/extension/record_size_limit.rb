@@ -2,7 +2,7 @@
 
 require_relative "../codec"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Extension
     # record_size_limit (RFC 8449 §4): `uint16 RecordSizeLimit`. A value
     # under MINIMUM is illegal_parameter.

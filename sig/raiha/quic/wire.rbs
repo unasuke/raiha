@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     class Malformed < Violation
       def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void

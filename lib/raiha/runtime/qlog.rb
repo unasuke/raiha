@@ -2,7 +2,7 @@
 
 require "fileutils"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # The qlog of the connections of a client or a server of the runtime, a
   # file of its own for each in one directory. A trace writes to memory, as
   # a call into the core never waits, and what it wrote goes to its file
@@ -92,7 +92,7 @@ module Raiha::Next::Runtime
 
     # The budget of the traces of the current Ractor.
     def self.budget
-      Ractor.current[:raiha_next_runtime_qlog_budget] ||= Raiha::Next::QUIC::Qlog::Budget.new(max_bytes: BUDGET) #: Raiha::Next::QUIC::Qlog::Budget
+      Ractor.current[:raiha_next_runtime_qlog_budget] ||= Raiha::QUIC::Qlog::Budget.new(max_bytes: BUDGET) #: Raiha::QUIC::Qlog::Budget
     end
 
     attr_reader :budget
@@ -117,8 +117,8 @@ module Raiha::Next::Runtime
       rotate
       pending = Pending.new(File.join(@dir, "#{name}_#{vantage_point}.sqlog"))
       @pending << pending
-      event_schemas = tls_config.alpn.include?("h3") ? [Raiha::Next::HTTP3::Qlog::EVENT_SCHEMA] : [] #: Array[String]
-      [Raiha::Next::QUIC::Qlog::Tracer.new(pending, vantage_point:, budget: @budget, event_schemas:), pending]
+      event_schemas = tls_config.alpn.include?("h3") ? [Raiha::HTTP3::Qlog::EVENT_SCHEMA] : [] #: Array[String]
+      [Raiha::QUIC::Qlog::Tracer.new(pending, vantage_point:, budget: @budget, event_schemas:), pending]
     end
 
     # Puts what the traces have written in their files, and lets go those

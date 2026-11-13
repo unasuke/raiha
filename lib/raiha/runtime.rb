@@ -5,7 +5,7 @@ require_relative "quic"
 require_relative "http3"
 
 # The I/O runtime (Fiber, Ractor, Socket). May refer to TLS, QUIC and HTTP/3.
-module Raiha::Next::Runtime
+module Raiha::Runtime
 end
 
 require_relative "runtime/error"

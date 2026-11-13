@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The one place of the QUIC layer that drives the TLS layer's handshake
   # Machine. It carries TLS's messages in the CRYPTO
   # frames of each encryption level and hands those it receives to the
@@ -33,7 +33,7 @@ module Raiha::Next::QUIC
     def self.client(connection:, config:, keyring:, server_name:, transport_parameters:, time:, tracer: nil, keylog: nil, session: nil,
       early_data: false)
       check(config)
-      machine = Raiha::Next::TLS::Handshake::Machine.client(
+      machine = Raiha::TLS::Handshake::Machine.client(
         config:, keyring:, server_name:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:,
         session:, early_data:
       )
@@ -58,7 +58,7 @@ module Raiha::Next::QUIC
       quic = transport_parameters.remembered.encode
       early_data_context = Wire::Writer.new.varint(quic.bytesize).bytes(quic).varint(app_early_data_context.bytesize)
         .bytes(app_early_data_context).to_s
-      machine = Raiha::Next::TLS::Handshake::Machine.server(
+      machine = Raiha::TLS::Handshake::Machine.server(
         config:, keyring:, client_hello:, now: time, extensions: [extension(transport_parameters)], tracer: tls_tracer(tracer), keylog:,
         resumption_binding: [version.number].pack("N"), early_data_context:, anti_replay:
       )
@@ -70,11 +70,11 @@ module Raiha::Next::QUIC
     # PROTOCOL_VIOLATION, by `profile`.
     def self.error_code(profile, alert, reason)
       return ErrorCode::PROTOCOL_VIOLATION if profile.protocol_violation_reasons.include?(reason)
-      alert ? ErrorCode.crypto_error(Raiha::Next::TLS::IANA.alert_code(alert)) : ErrorCode::INTERNAL_ERROR
+      alert ? ErrorCode.crypto_error(Raiha::TLS::IANA.alert_code(alert)) : ErrorCode::INTERNAL_ERROR
     end
 
     private_class_method def self.check(config)
-      return if config.profile == Raiha::Next::TLS::Profile::QUIC
+      return if config.profile == Raiha::TLS::Profile::QUIC
       raise ArgumentError, "the TLS Config of a QUIC connection has the QUIC profile"
     end
 
@@ -83,7 +83,7 @@ module Raiha::Next::QUIC
     end
 
     private_class_method def self.extension(transport_parameters)
-      Raiha::Next::TLS::Extension::Opaque.new(type: TRANSPORT_PARAMETERS, data: transport_parameters.encode)
+      Raiha::TLS::Extension::Opaque.new(type: TRANSPORT_PARAMETERS, data: transport_parameters.encode)
     end
 
     # `consumed` Initial CRYPTO bytes have been read already.
@@ -117,19 +117,19 @@ module Raiha::Next::QUIC
     def pump
       @machine.each_output do |output|
         case output
-        in Raiha::Next::TLS::Output::Message(epoch:, bytes:) then @streams[LEVEL.fetch(epoch)]&.write(bytes)
-        in Raiha::Next::TLS::Output::Secret(epoch:, direction:, secret:, cipher_suite:)
+        in Raiha::TLS::Output::Message(epoch:, bytes:) then @streams[LEVEL.fetch(epoch)]&.write(bytes)
+        in Raiha::TLS::Output::Secret(epoch:, direction:, secret:, cipher_suite:)
           @connection.install_keys(LEVEL.fetch(epoch), direction, secret:, suite: cipher_suite)
-        in Raiha::Next::TLS::Output::Alert then nil
+        in Raiha::TLS::Output::Alert then nil
         end
       end
       @machine.each_event do |event|
         case event
-        in Raiha::Next::TLS::Event::PeerExtension(type: TRANSPORT_PARAMETERS, data:) then @connection.peer_transport_parameters(data)
-        in Raiha::Next::TLS::Event::HandshakeComplete then @connection.handshake_completed(event)
-        in Raiha::Next::TLS::Event::NewSessionTicket(session:) then @connection.session_ticket(session)
-        in Raiha::Next::TLS::Event::EarlyDataRejected(reason:) then @connection.zero_rtt_rejected(reason)
-        in Raiha::Next::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(TLSBinding.error_code(@profile, alert, reason), reason)
+        in Raiha::TLS::Event::PeerExtension(type: TRANSPORT_PARAMETERS, data:) then @connection.peer_transport_parameters(data)
+        in Raiha::TLS::Event::HandshakeComplete then @connection.handshake_completed(event)
+        in Raiha::TLS::Event::NewSessionTicket(session:) then @connection.session_ticket(session)
+        in Raiha::TLS::Event::EarlyDataRejected(reason:) then @connection.zero_rtt_rejected(reason)
+        in Raiha::TLS::Event::Failed(alert:, reason:) then @connection.tls_failed(TLSBinding.error_code(@profile, alert, reason), reason)
         else @connection.tls_event(event)
         end
       end

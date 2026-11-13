@@ -6,7 +6,7 @@ require "support/tls_pair"
 # whether the failure is found here, decided outside (`discard`), or raised
 # by an object the caller gave.
 class RaihaNextTLSTerminationTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
 

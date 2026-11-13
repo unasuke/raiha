@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # What a connection tells the application. An event says that something
   # can be done (a stream has data to read) rather than carrying the data,
   # so flow control credit goes back as the application reads.

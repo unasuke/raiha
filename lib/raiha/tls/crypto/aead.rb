@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module Crypto
     # One key of an AEAD algorithm of the TLS 1.3 cipher suites (RFC 5116),
     # named by Symbol. Each direction keeps its own OpenSSL context, keyed

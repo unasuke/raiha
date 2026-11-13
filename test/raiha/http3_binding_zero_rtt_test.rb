@@ -2,14 +2,14 @@ require "test_helper"
 require "support/quic_pair"
 require "support/http3_side"
 
-# HTTP/3 in a client's 0-RTT, joined by Raiha::Next::HTTP3Binding: HTTP/3's
+# HTTP/3 in a client's 0-RTT, joined by Raiha::HTTP3Binding: HTTP/3's
 # streams open at once, so the client's SETTINGS go at the beginning of the
 # connection (RFC 9114 "Control Streams"), and a request goes with them
 # before the handshake completes, to a server that reads it as early data.
 class RaihaNextHTTP3BindingZeroRTTTest < Minitest::Test
   include NextQUICPair
 
-  HTTP3 = Raiha::Next::HTTP3
+  HTTP3 = Raiha::HTTP3
   GET = [[":method", "GET"], [":scheme", "https"], [":authority", "localhost"], [":path", "/"]].freeze
   SEED = "\x21".b * 32
   # The second connection comes a second after the first.

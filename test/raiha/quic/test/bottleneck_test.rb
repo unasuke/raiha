@@ -3,7 +3,7 @@ require "raiha/quic/test"
 
 # One bottleneck link: bandwidth, delay, a tail-drop queue and CE marks.
 class RaihaNextQUICTestBottleneckTest < Minitest::Test
-  Test = Raiha::Next::QUIC::Test
+  Test = Raiha::QUIC::Test
 
   def datagram(size, ecn: :ect0, name: size.to_s)
     Test::Datagram.new(payload: name.ljust(size, "x"), source: ["192.0.2.1", 1], destination: ["192.0.2.2", 2], ecn:)
@@ -66,7 +66,7 @@ class RaihaNextQUICTestBottleneckTest < Minitest::Test
     sender.define_singleton_method(:each_transmit) do |now:, &block|
       next if sent
       sent = true
-      block.call(Raiha::Next::QUIC::Transmit.new(payload: "x" * 1250, destination: ["192.0.2.2", 2], source: nil, ecn: :ect0, segment_size: nil))
+      block.call(Raiha::QUIC::Transmit.new(payload: "x" * 1250, destination: ["192.0.2.2", 2], source: nil, ecn: :ect0, segment_size: nil))
     end
     sender.define_singleton_method(:next_timeout) { nil }
     sender.define_singleton_method(:handle_timeout) { |now:| }

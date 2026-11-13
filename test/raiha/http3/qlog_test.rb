@@ -89,7 +89,7 @@ class RaihaNextHTTP3QlogTest < Minitest::Test
 
   def test_a_priority_update_that_is_not_text
     io = StringIO.new
-    quic = Raiha::Next::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA])
+    quic = Raiha::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA])
     server = server(quic)
     server.stream_data(2, "\x00".b + Frame.encode(HTTP3::Settings.new.to_frame) + Frame.encode(Frame::PriorityUpdate.new(element_id: 0, priority: "u=\xff\xfe".b)))
     frame = io.string.split("\x1e").drop(1).map { JSON.parse(_1) }.last.dig("data", "frame")
@@ -112,7 +112,7 @@ class RaihaNextHTTP3QlogTest < Minitest::Test
   # The events go into the QUIC connection's trace, under its limits.
   def test_into_the_trace_of_quic
     io = StringIO.new
-    quic = Raiha::Next::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA], max_bytes: 2000)
+    quic = Raiha::QUIC::Qlog::Tracer.new(io, vantage_point: :server, event_schemas: [HTTP3::Qlog::EVENT_SCHEMA], max_bytes: 2000)
     server = server(quic)
     20.times { |index| server.stream_data(index * 4, headers(GET, stream_id: index * 4)) }
     records = io.string.split("\x1e").drop(1).map { JSON.parse(_1) }

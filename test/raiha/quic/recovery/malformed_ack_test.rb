@@ -10,7 +10,7 @@ class RaihaNextQUICRecoveryMalformedAckTest < Minitest::Test
   ECNCounts = QUIC::Wire::Frame::Ack::ECNCounts
 
   # NewReno that keeps the CE marks it was told of.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     def ce = @ce ||= []
 
     def on_ecn_ce(**keywords)

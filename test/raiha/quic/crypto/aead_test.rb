@@ -3,9 +3,9 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICCryptoAEADTest < Minitest::Test
-  AEAD = Raiha::Next::QUIC::Crypto::AEAD
-  Suite = Raiha::Next::TLS::CipherSuite
-  V = Raiha::Next::QUIC::Test::Vectors
+  AEAD = Raiha::QUIC::Crypto::AEAD
+  Suite = Raiha::TLS::CipherSuite
+  V = Raiha::QUIC::Test::Vectors
 
   def client_aead = AEAD.new(suite: Suite::TLS_AES_128_GCM_SHA256, key: V::Keys::CLIENT_KEY, iv: V::Keys::CLIENT_IV)
 

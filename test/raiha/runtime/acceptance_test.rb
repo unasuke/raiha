@@ -10,7 +10,7 @@ class RaihaNextRuntimeAcceptanceTest < Minitest::Test
 
   def test_an_http3_get_under_a_fiber_scheduler
     server_tls = h3_server_config
-    server = Raiha::Next::Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: server_tls,
+    server = Raiha::Runtime::HTTP3::Server.new(config: QUIC::Config.new, tls_config: server_tls,
       keyring: server_keyring(config: server_tls), host: "::", port: 0)
     config = QUIC::Config.new
     # A Keyring is for the Config it was built with.
@@ -22,8 +22,8 @@ class RaihaNextRuntimeAcceptanceTest < Minitest::Test
       sleep 0.01 until server.local_address
       port = server.local_address.fetch(1)
 
-      Raiha::Next::Runtime::Client.connect("localhost", port, config:, tls_config:, keyring:) do |session|
-        response = Raiha::Next::Runtime::HTTP3::Client.new(session).get("/")
+      Raiha::Runtime::Client.connect("localhost", port, config:, tls_config:, keyring:) do |session|
+        response = Raiha::Runtime::HTTP3::Client.new(session).get("/")
         body = response.body
       end
     ensure

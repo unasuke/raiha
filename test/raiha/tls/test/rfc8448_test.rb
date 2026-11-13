@@ -2,11 +2,11 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSTestRFC8448Test < Minitest::Test
-  RFC8448 = Raiha::Next::TLS::Test::RFC8448
+  RFC8448 = Raiha::TLS::Test::RFC8448
 
   def test_not_loaded_by_the_tls_entry_point
     out = IO.popen([RbConfig.ruby, "-I", File.expand_path("../../../../lib", __dir__), "-e",
-      'require "raiha/tls"; print Raiha::Next::TLS.const_defined?(:Test, false)'], &:read)
+      'require "raiha/tls"; print Raiha::TLS.const_defined?(:Test, false)'], &:read)
     assert_equal "false", out
   end
 

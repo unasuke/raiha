@@ -4,7 +4,7 @@ require "socket"
 require "timeout"
 
 class RaihaNextTLSTCPSocketTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   TLSPair = NextTLSPair
 
   # Runs `serve` with the socket a server thread accepts, yields the port

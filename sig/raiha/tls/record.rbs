@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Record
     type content_type = :change_cipher_spec | :alert | :handshake | :application_data
 

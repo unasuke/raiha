@@ -3,9 +3,9 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICWireFrameTest < Minitest::Test
-  Wire = Raiha::Next::QUIC::Wire
+  Wire = Raiha::QUIC::Wire
   Frame = Wire::Frame
-  ErrorCode = Raiha::Next::QUIC::ErrorCode
+  ErrorCode = Raiha::QUIC::ErrorCode
 
   def parse(bytes, packet_type: :one_rtt) = Frame.parse(bytes.b, packet_type:, ack_delay_exponent: 3)
 
@@ -83,7 +83,7 @@ class RaihaNextQUICWireFrameTest < Minitest::Test
   # RFC 9001 appendix A.2: the client's first CRYPTO frame, with the
   # ClientHello, then PADDING to the end of the payload.
   def test_crypto_in_the_client_initial
-    c = Raiha::Next::QUIC::Test::Vectors::ClientInitial
+    c = Raiha::QUIC::Test::Vectors::ClientInitial
     crypto = parse(c::FRAMES).first
     assert_equal [0, 241], [crypto.offset, crypto.data.bytesize]
     assert_equal 0x01, crypto.data.getbyte(0)

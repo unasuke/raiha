@@ -5,7 +5,7 @@ require "support/tls_pair"
 # binding maps these reasons to PROTOCOL_VIOLATION, so every value must be
 # one the Machine actually reports, under its exact name.
 class RaihaNextTLSProtocolViolationTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
   TRANSPORT_PARAMETERS = TLS::Extension::Opaque.new(type: 0x39, data: "tp".b)

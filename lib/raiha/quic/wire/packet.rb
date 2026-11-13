@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # A packet with a packet number under packet protection (RFC 9001
     # "Packet Protection"): the payload sealed by the AEAD with the header

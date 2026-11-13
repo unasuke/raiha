@@ -3,15 +3,15 @@ require "raiha/quic"
 require "raiha/quic/test"
 
 class RaihaNextQUICCongestionCubicTest < Minitest::Test
-  include Raiha::Next::QUIC::Test::CongestionContract
+  include Raiha::QUIC::Test::CongestionContract
 
-  Cubic = Raiha::Next::QUIC::Congestion::Cubic
+  Cubic = Raiha::QUIC::Congestion::Cubic
   MDS = 1200
-  INITIAL_WINDOW = Raiha::Next::QUIC::Config::DEFAULT_INITIAL_WINDOW
+  INITIAL_WINDOW = Raiha::QUIC::Config::DEFAULT_INITIAL_WINDOW
 
   def congestion_control = Cubic
 
-  def cubic(**config) = Cubic.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::Next::QUIC::Config.new(**config))
+  def cubic(**config) = Cubic.new(max_datagram_size: MDS, initial_window: INITIAL_WINDOW, config: Raiha::QUIC::Config.new(**config))
 
   def ack(cc, bytes, sent_at:, now:, app_limited: false, smoothed_rtt: 0.1)
     cc.on_ack(acked_bytes: bytes, largest_acked_sent_at: sent_at, latest_rtt: smoothed_rtt, smoothed_rtt:, min_rtt: smoothed_rtt,
@@ -98,7 +98,7 @@ class RaihaNextQUICCongestionCubicTest < Minitest::Test
 
   def test_the_constants
     assert_in_delta 0.529, Cubic::ALPHA, 0.001
-    assert_same Cubic, Raiha::Next::QUIC::Congestion.resolve(:cubic)
+    assert_same Cubic, Raiha::QUIC::Congestion.resolve(:cubic)
   end
 
   # A controller whose window has grown to `segments` in slow start and

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # The frames of RFC 9000 "Frame Types and Formats" and the DATAGRAM frame
     # of RFC 9221, as values. Each knows its frame types, reads its fields

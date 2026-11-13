@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Wire
     # RFC 9000 "Packet Number Encoding and Decoding": a packet carries only
     # the low 1 to 4 bytes of its number, and the receiver picks the full

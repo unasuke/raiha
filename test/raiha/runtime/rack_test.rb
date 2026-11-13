@@ -168,11 +168,11 @@ class RaihaNextRuntimeRackTest < Minitest::Test
     tls = h3_server_config
     workers = Runtime::Workers.new(count: 2, config: QUIC::Config.new, host: "127.0.0.1", port: 0,
       args: [tls, Ractor.make_shareable(NextTLSPair.server_identity)]) do |worker, tls, identity|
-      keyring = Raiha::Next::TLS::Keyring.server(config: tls, identities: [identity])
+      keyring = Raiha::TLS::Keyring.server(config: tls, identities: [identity])
       app = ->(env) { [200, { "content-type" => "text/plain" }, ["worker #{worker.id} at #{env["PATH_INFO"]}"]] }
       Sync do
-        Raiha::Next::Runtime::HTTP3::Server.new(config: worker.config, tls_config: tls, keyring:, worker:)
-          .run(&Raiha::Next::Runtime::Rack.new(app))
+        Raiha::Runtime::HTTP3::Server.new(config: worker.config, tls_config: tls, keyring:, worker:)
+          .run(&Raiha::Runtime::Rack.new(app))
       end
     end
     running = Thread.new { workers.run }

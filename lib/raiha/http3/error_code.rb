@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::HTTP3
+module Raiha::HTTP3
   # The error codes of HTTP/3 (RFC 9114 "HTTP/3 Error Codes"), for closing
   # the connection and resetting streams, and the one HTTP Datagrams add
   # (RFC 9297). QPACK's are QPACK::ErrorCode.

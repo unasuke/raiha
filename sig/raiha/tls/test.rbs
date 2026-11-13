@@ -1,4 +1,4 @@
-module Raiha::Next::TLS
+module Raiha::TLS
   module Test
     class FixedRandom
       @chunks: Array[String]
@@ -20,15 +20,15 @@ module Raiha::Next::TLS
   end
 end
 
-module Raiha::Next::TLS::Test::RFC8448
+module Raiha::TLS::Test::RFC8448
   SERVER_RSA_PRIVATE_KEY: String
 
   type section = :simple_1rtt | :hello_retry_request | :client_authentication | :resumed_0rtt
 
-  def self.machine: (section section, :client | :server role, now: Time, ?keylog: Raiha::Next::TLS::Keylog::_Writer?) -> Raiha::Next::TLS::Handshake::Machine
-  def self.server_identity: () -> Raiha::Next::TLS::Keyring::Identity
-  def self.resumed_client: (now: Time, keylog: Raiha::Next::TLS::Keylog::_Writer?) -> Raiha::Next::TLS::Handshake::Machine
-  def self.section3_session: (now: Time) -> Raiha::Next::TLS::Session
+  def self.machine: (section section, :client | :server role, now: Time, ?keylog: Raiha::TLS::Keylog::_Writer?) -> Raiha::TLS::Handshake::Machine
+  def self.server_identity: () -> Raiha::TLS::Keyring::Identity
+  def self.resumed_client: (now: Time, keylog: Raiha::TLS::Keylog::_Writer?) -> Raiha::TLS::Handshake::Machine
+  def self.section3_session: (now: Time) -> Raiha::TLS::Session
 
   module Simple1RTT
     CLIENT_X25519_PRIVATE_KEY: String

@@ -10,12 +10,12 @@ require "async"
 class RaihaNextRuntimeDriverTest < Minitest::Test
   include NextQUICTLS
 
-  Runtime = Raiha::Next::Runtime
+  Runtime = Raiha::Runtime
 
   # What a client or a server of the runtime would be to the driver: a
   # server takes every client, and the events are let go.
   class Owner
-    QUIC = Raiha::Next::QUIC
+    QUIC = Raiha::QUIC
 
     attr_reader :connections, :stopped_with, :turns
 
@@ -185,7 +185,7 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
   # it is given with whether it was handed on and when it came.
   class Router < Recorder
     def receive(data, from:, to:, ecn:, now:, forwarded: false)
-      return Raiha::Next::QUIC::Route::Foreign.new(worker: 1, datagram: data) if data == "theirs" && !forwarded
+      return Raiha::QUIC::Route::Foreign.new(worker: 1, datagram: data) if data == "theirs" && !forwarded
       @received << [data, forwarded, now]
       nil
     end
@@ -198,8 +198,8 @@ class RaihaNextRuntimeDriverTest < Minitest::Test
     Sync do
       inboxes = Array.new(2) { Ractor::Port.new }
       workers = Array.new(2) { |id| Runtime::Worker.new(id:, count: 2, sockets: [], inbox: inboxes[id], control: Ractor::Port.new, peers: inboxes,
-        config: Raiha::Next::QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32),
-      anti_replay: Raiha::Next::TLS::AntiReplay::Memory.new(now: Time.now)) }
+        config: Raiha::QUIC::Config.new(retry_token_key: "r".b * 32, stateless_reset_key: "k".b * 32),
+      anti_replay: Raiha::TLS::AntiReplay::Memory.new(now: Time.now)) }
       endpoint = Router.new
       udp = Runtime::UDP.bind("127.0.0.1", 0)
       driver = Runtime::Driver.new(endpoint, udp, Owner.new(endpoint), worker: workers[0]).start

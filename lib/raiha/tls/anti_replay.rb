@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Records the ClientHellos whose 0-RTT a server took, so that it takes the
   # 0-RTT of each at most once (RFC 9846 "0-RTT and Anti-Replay", "Client
   # Hello Recording"). A record answers

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC::Test
+module Raiha::QUIC::Test
   # A path model that holds back a datagram with probability `rate` until
   # the next one has gone past it, so that the two arrive the other way
   # round. One with nothing behind it goes after `hold` seconds. The rest go

@@ -7,7 +7,7 @@ class RaihaNextQUICRecoveryPersistentCongestionTest < Minitest::Test
   include NextQUICRecovery
 
   # NewReno that keeps whether each loss was persistent congestion.
-  class Spy < Raiha::Next::QUIC::Congestion::NewReno
+  class Spy < Raiha::QUIC::Congestion::NewReno
     def persistent = @persistent ||= []
 
     def on_loss(persistent:, **)

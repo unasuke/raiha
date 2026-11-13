@@ -9,7 +9,7 @@ class NextHTTP3Side
   def initialize(connection, http3)
     @connection = connection
     @http3 = http3
-    @binding = Raiha::Next::HTTP3Binding.new(connection, http3)
+    @binding = Raiha::HTTP3Binding.new(connection, http3)
     @events = []
     @quic_events = []
   end

@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSHandshakeFinishedTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   RFC8448 = TLS::Test::RFC8448::Simple1RTT
   REGISTRY = TLS::Extension::Registry::BUILTIN
 
@@ -26,6 +26,6 @@ class RaihaNextTLSHandshakeFinishedTest < Minitest::Test
 
   def test_inspect_masks_verify_data
     finished = TLS::Handshake.parse(RFC8448::SERVER_FINISHED, registry: REGISTRY)
-    assert_equal "#<data Raiha::Next::TLS::Handshake::Finished verify_data=[32 bytes]>", finished.inspect
+    assert_equal "#<data Raiha::TLS::Handshake::Finished verify_data=[32 bytes]>", finished.inspect
   end
 end

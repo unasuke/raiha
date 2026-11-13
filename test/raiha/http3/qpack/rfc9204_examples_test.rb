@@ -5,7 +5,7 @@ require "raiha/http3/qpack"
 # decoder's side: the encoder's instructions and sections in, the fields
 # and the decoder's instructions out, with a table of 220 octets.
 class RaihaNextQPACKRFC9204ExamplesTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   def setup
     @decoder = QPACK::Decoder.new(max_table_capacity: 220, max_blocked_streams: 1)

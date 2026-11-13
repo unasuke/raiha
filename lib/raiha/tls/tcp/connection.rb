@@ -9,7 +9,7 @@ require_relative "../trace"
 require_relative "../handshake/machine"
 require_relative "event"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module TCP
     # TLS over TCP without I/O: a handshake Machine and a Record::Layer put
     # together. Bytes read from the socket go into `receive`; the bytes to
@@ -258,7 +258,7 @@ module Raiha::Next::TLS
         if IANA.alert_name(description) == :close_notify # steep:ignore
           return close_read if @machine.complete?
           @machine.discard
-          @events << ::Raiha::Next::TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)
+          @events << ::Raiha::TLS::Event::Failed.new(alert: nil, reason: :peer_closed_during_handshake)
           return stop
         end
         if IANA.alert_name(description) == :user_canceled # steep:ignore
@@ -293,16 +293,16 @@ module Raiha::Next::TLS
           end
         end
         while (event = @machine.next_event)
-          make_room_for_a_ticket if event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket)
+          make_room_for_a_ticket if event.is_a?(::Raiha::TLS::Event::NewSessionTicket)
           @events << event
         end
         stop if @machine.failed?
       end
 
       private def make_room_for_a_ticket
-        held = @events.count { |event| event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket) }
+        held = @events.count { |event| event.is_a?(::Raiha::TLS::Event::NewSessionTicket) }
         return if held < MAX_HELD_TICKETS
-        oldest = @events.index { |event| event.is_a?(::Raiha::Next::TLS::Event::NewSessionTicket) } or return
+        oldest = @events.index { |event| event.is_a?(::Raiha::TLS::Event::NewSessionTicket) } or return
         @events.delete_at(oldest)
         @tracer&.tls_trace(Trace::TicketIgnored.new(reason: :too_many_tickets))
       end
@@ -355,7 +355,7 @@ module Raiha::Next::TLS
       private def fail!(alert, reason)
         send_alert(@machine.write_epoch, :fatal, alert)
         @machine.discard
-        @events << ::Raiha::Next::TLS::Event::Failed.new(alert:, reason:)
+        @events << ::Raiha::TLS::Event::Failed.new(alert:, reason:)
         stop
       end
 

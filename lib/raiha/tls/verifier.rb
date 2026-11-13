@@ -2,7 +2,7 @@
 
 require "openssl"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   # Decides whether the peer's certificate chain is acceptable.
   #
   # A verifier answers `verify(chain:, server_name:, now:, purpose:)` with a

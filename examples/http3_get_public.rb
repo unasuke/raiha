@@ -26,9 +26,9 @@ require "async"
 require "openssl"
 require "uri"
 
-Runtime = Raiha::Next::Runtime
-QUIC = Raiha::Next::QUIC
-TLS = Raiha::Next::TLS
+Runtime = Raiha::Runtime
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
 REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
 
 DEFAULT_TARGETS = [

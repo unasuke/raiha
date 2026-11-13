@@ -2,10 +2,10 @@
 
 require_relative "../runtime"
 
-module Raiha::Next::Runtime
+module Raiha::Runtime
   # Rack 3 over the server of HTTP/3 of the runtime:
   #
-  #   server.run(&Raiha::Next::Runtime::Rack.new(app))
+  #   server.run(&Raiha::Runtime::Rack.new(app))
   #
   # Each request is made an env, its body read as it comes through
   # rack.input, and what the application returns is written as the

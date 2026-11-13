@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # One QUIC connection, sans-IO: it is
   # given datagrams with `receive` and the time with `handle_timeout`, and
   # hands back the datagrams to send with `each_transmit` and what happened
@@ -648,7 +648,7 @@ module Raiha::Next::QUIC
       held = @events.select { |event| event.is_a?(Event::SessionTicket) }
       if held.size >= MAX_HELD_TICKETS
         @events.delete(held.fetch(0))
-        @tracer.tls_trace(Raiha::Next::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets)) if @tracer.respond_to?(:tls_trace) # steep:ignore
+        @tracer.tls_trace(Raiha::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets)) if @tracer.respond_to?(:tls_trace) # steep:ignore
       end
       @events << Event::SessionTicket.new(session: Session.new(tls: tls_session, transport_parameters: parameters.remembered,
         alpn: tls_session.alpn, version: @version.number))

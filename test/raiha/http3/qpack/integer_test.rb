@@ -4,7 +4,7 @@ require "raiha/http3/qpack"
 # RFC 7541 "Integer Representation", with the limits of RFC 9204
 # "Prefixed Integers" and "Implementation Limits".
 class RaihaNextQPACKIntegerTest < Minitest::Test
-  QPACK = Raiha::Next::HTTP3::QPACK
+  QPACK = Raiha::HTTP3::QPACK
 
   # RFC 7541 Appendix C.1.
   def test_rfc7541_examples

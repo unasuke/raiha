@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The token of a Retry packet (RFC 9000 "Address Validation Using Retry
   # Packets"). It comes back on the client's next Initial and shows the
   # server, which keeps nothing in between, that the client receives at the

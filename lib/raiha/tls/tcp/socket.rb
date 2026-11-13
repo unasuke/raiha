@@ -7,7 +7,7 @@ require_relative "../iana"
 require_relative "connection"
 require_relative "event"
 
-module Raiha::Next::TLS
+module Raiha::TLS
   module TCP
     # TLS over a TCP socket: a Connection driven by blocking reads and
     # writes, which a Fiber scheduler turns non-blocking. The one place in
@@ -144,10 +144,10 @@ module Raiha::Next::TLS
       private def check
         while (event = @connection.next_event)
           case event
-          when ::Raiha::Next::TLS::Event::HandshakeComplete
+          when ::Raiha::TLS::Event::HandshakeComplete
             @alpn = event.alpn
             @peer_certificates = event.peer_certificates
-          when ::Raiha::Next::TLS::Event::Failed
+          when ::Raiha::TLS::Event::Failed
             error = CERTIFICATE_ALERTS.include?(event.alert) ? CertificateError : HandshakeError
             raise error.new("TLS failed: #{event.reason} (#{event.alert || "no alert"})", alert: event.alert, reason: event.reason)
           when Event::PeerAlert

@@ -2,7 +2,7 @@
 
 require "ipaddr"
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   # The token of a NEW_TOKEN frame (RFC 9000 "Address Validation for Future
   # Connections"), which a client puts in the Initial of a later connection
   # to show it receives at the address it sends from:
@@ -23,17 +23,17 @@ module Raiha::Next::QUIC
     LIFETIME = 86_400
     NONCE_LENGTH = 12
     # kind, nonce, version, expiry and the tag.
-    LENGTH = 1 + NONCE_LENGTH + 4 + 8 + Raiha::Next::TLS::Crypto::AEAD::TAG_LENGTH
+    LENGTH = 1 + NONCE_LENGTH + 4 + 8 + Raiha::TLS::Crypto::AEAD::TAG_LENGTH
 
     # The key a server seals its NEW_TOKEN tokens with.
     def self.key(retry_token_key)
-      Raiha::Next::TLS::KeySchedule.expand_label(secret: retry_token_key, label: "new token", length: 32, hash: :sha256, prefix: "raiha ")
+      Raiha::TLS::KeySchedule.expand_label(secret: retry_token_key, label: "new token", length: 32, hash: :sha256, prefix: "raiha ")
     end
 
     def self.mint(key:, address:, version:, time:, random:)
       nonce = random.bytes(NONCE_LENGTH).b
       header = [KIND].pack("C")
-      sealed = Raiha::Next::TLS::Crypto::AEAD.new(:aes_256_gcm, key).seal(nonce:, aad: header + bound(address),
+      sealed = Raiha::TLS::Crypto::AEAD.new(:aes_256_gcm, key).seal(nonce:, aad: header + bound(address),
         plaintext: [version, time.to_i + LIFETIME].pack("NQ>"))
       header + nonce + sealed
     end
@@ -44,7 +44,7 @@ module Raiha::Next::QUIC
       return false unless token.bytesize == LENGTH && token.getbyte(0) == KIND
       header = token.byteslice(0, 1).to_s
       nonce = token.byteslice(1, NONCE_LENGTH).to_s
-      opened = Raiha::Next::TLS::Crypto::AEAD.new(:aes_256_gcm, key).open(nonce:, aad: header + bound(address),
+      opened = Raiha::TLS::Crypto::AEAD.new(:aes_256_gcm, key).open(nonce:, aad: header + bound(address),
         ciphertext: token.byteslice(1 + NONCE_LENGTH..).to_s) or return false
       sealed_version, expiry = opened.unpack("NQ>")
       sealed_version == version && time.to_i <= expiry.to_i

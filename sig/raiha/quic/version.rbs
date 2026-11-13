@@ -1,4 +1,4 @@
-module Raiha::Next::QUIC
+module Raiha::QUIC
   class Version < Data
     type packet_type = :initial | :zero_rtt | :handshake | :retry
 

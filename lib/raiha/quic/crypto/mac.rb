@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Raiha::Next::QUIC
+module Raiha::QUIC
   module Crypto
     # HMAC-SHA256, for the tokens an Endpoint makes and checks itself, and a
     # comparison of them that takes as long wherever they differ.

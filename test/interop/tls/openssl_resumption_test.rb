@@ -13,7 +13,7 @@ require "tmpdir"
 # `openssl s_server` with 0-RTT, and a server resuming `openssl s_client`
 # and taking its 0-RTT.
 class NextTLSOpenSSLResumptionInteropTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
   # tmp/ is not in git, so a fresh checkout has none.

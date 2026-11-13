@@ -2,7 +2,7 @@ require "test_helper"
 require "raiha/tls/test"
 
 class RaihaNextTLSClientHelloBuilderTest < Minitest::Test
-  TLS = Raiha::Next::TLS
+  TLS = Raiha::TLS
   Builder = TLS::Handshake::ClientHelloBuilder
   Extension = TLS::Extension
   RFC8448 = TLS::Test::RFC8448
