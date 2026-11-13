@@ -30,7 +30,10 @@ module Raiha::Runtime
     # The largest datagram UDP carries.
     MAX_DATAGRAM = 65_535
     # The Linux default for the buffers (about 212 KB) is too small for a
-    # burst: the kernel drops what overflows before it is read.
+    # burst: the kernel drops what overflows before it is read. Linux cuts
+    # a larger size down to its limit; OpenBSD refuses one over its limit
+    # (2 MiB) with ENOBUFS, and the socket asks for half as much, and half
+    # again, while it is more than the buffer has.
     BUFFER = 8 * 1024 * 1024
     # The low two bits of the traffic class, the ECN field (RFC 3168).
     ECN = { 0b00 => :not_ect, 0b01 => :ect1, 0b10 => :ect0, 0b11 => :ce }.freeze
@@ -101,8 +104,8 @@ module Raiha::Runtime
       local = socket.local_address
       @family = local.afamily
       @port = local.ip_port
-      @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, BUFFER)
-      @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF, BUFFER)
+      enlarge(Socket::SO_RCVBUF)
+      enlarge(Socket::SO_SNDBUF)
       # An IPv6 socket that takes IPv4 tells the codepoint of an IPv4
       # datagram the IPv4 way.
       @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_RECVTOS, 1)
@@ -205,6 +208,20 @@ module Raiha::Runtime
     # The socket, so that IO.select waits on this with others, as a loop of
     # an application's own that reads several does.
     def to_io = @socket
+
+    # Sets the buffer `option` to BUFFER, or to the most of its halves the
+    # OS takes; never less than the buffer has.
+    private def enlarge(option)
+      size = BUFFER
+      default = @socket.getsockopt(Socket::SOL_SOCKET, option).int
+      while size > default && size.positive?
+        begin
+          return @socket.setsockopt(Socket::SOL_SOCKET, option, size)
+        rescue Errno::ENOBUFS, Errno::EINVAL
+          size /= 2
+        end
+      end
+    end
 
     # Whether IPv4 comes to this socket: one bound to an address of IPv4,
     # or of IPv6 bound to "::" (or an IPv4-mapped address) and not IPv6

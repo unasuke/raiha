@@ -238,6 +238,7 @@ module Raiha::Runtime
 
     def to_io: () -> UDPSocket
 
+    private def enlarge: (Integer option) -> void
     private def takes_ipv4?: () -> bool
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?

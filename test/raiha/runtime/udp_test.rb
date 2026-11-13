@@ -146,6 +146,8 @@ class RaihaRuntimeUDPTest < Minitest::Test
 
     def setsockopt(*) = nil
 
+    def getsockopt(*) = Socket::Option.int(:INET, :SOCKET, :RCVBUF, 0)
+
     def sendmsg(data, _flags, _destination, *controls)
       if controls.any? { _1.level == Socket::IPPROTO_UDP }
         @segmented += 1
@@ -194,6 +196,8 @@ class RaihaRuntimeUDPTest < Minitest::Test
     def local_address = Addrinfo.udp("127.0.0.1", 4433)
 
     def setsockopt(*) = nil
+
+    def getsockopt(*) = Socket::Option.int(:INET, :SOCKET, :RCVBUF, 0)
 
     def sendmsg(data, _flags, _destination, *controls)
       @segmented += 1 if controls.any? { _1.level == Socket::IPPROTO_UDP }
