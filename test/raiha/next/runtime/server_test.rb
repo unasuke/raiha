@@ -109,22 +109,25 @@ class RaihaNextRuntimeServerTest < Minitest::Test
 
   # Once max_unvalidated connections have addresses not validated, a
   # client shows its address with a Retry before it is taken; a connection
-  # whose handshake is done counts for nothing.
+  # whose handshake is done, open still, counts for nothing.
   def test_a_retry_once_max_unvalidated_are_not_validated
     Sync do
       serving(method(:echoes), max_unvalidated: 1) do |port|
         connect(port) do |first|
-          assert_nil first.connection.instance_variable_get(:@retry_source_connection_id)
           assert_equal "ECHO:first", echo(first, "first")
+          connect(port) do |second|
+            assert_nil second.connection.instance_variable_get(:@retry_source_connection_id)
+            assert_equal "ECHO:second", echo(second, "second")
+          end
+          silent = silent_client(port)
+          sleep 0.05
+          connect(port) do |third|
+            refute_nil third.connection.instance_variable_get(:@retry_source_connection_id)
+            assert_equal "ECHO:third", echo(third, "third")
+          end
+        ensure
+          silent&.close
         end
-        silent = silent_client(port)
-        sleep 0.05
-        connect(port) do |second|
-          refute_nil second.connection.instance_variable_get(:@retry_source_connection_id)
-          assert_equal "ECHO:second", echo(second, "second")
-        end
-      ensure
-        silent&.close
       end
     end
   end

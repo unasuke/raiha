@@ -327,9 +327,11 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
         stateless_reset_token: format("%016d", sequence_number).b)
     end
     server.receive(packet(keylog, ping, *issued, number: 999), from: CLIENT, to: SERVER, now:)
-    addresses = (1..4).map { ["198.51.100.#{_1}", 61_000] }
+    addresses = (1..6).map { ["198.51.100.#{_1}", 61_000] }
     addresses.each_with_index { |address, index| server.receive(packet(keylog, ping, number: 1000 + index), from: address, to: SERVER, now:) }
-    assert_equal addresses, peers.addresses
+    kept = addresses.last(QUIC::Connection::MAX_VALIDATING_PATHS + 1)
+    assert_equal kept, peers.addresses
+    assert_equal kept, [*server.instance_variable_get(:@validating), server.path].map(&:remote)
   end
 
   # A path that fails and is left for good takes its address out; the
