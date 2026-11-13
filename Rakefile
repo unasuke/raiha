@@ -138,6 +138,10 @@ namespace :interop do
 
     desc "Clone and build h2o/picotls into tmp/picotls"
     task :picotls do
+      # CI restores tmp/picotls/cli alone from its cache, with no sources
+      # beside it to build from.
+      next if File.executable?("tmp/picotls/cli")
+
       unless Dir.exist?("tmp/picotls")
         mkdir_p "tmp"
         sh "git clone --depth 1 --recurse-submodules https://github.com/h2o/picotls.git tmp/picotls"
