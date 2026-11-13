@@ -91,10 +91,10 @@ module Raiha::Next::Runtime
     def take
       taken = [] #: Array[forwarded]
       while (forwarded = @queue.pop(timeout: 0))
+        bytes = forwarded.fetch(0).bytesize
+        @lock.synchronize { @queued_bytes -= bytes }
         taken << forwarded
       end
-      bytes = taken.sum { |datagram, *| datagram.bytesize }
-      @lock.synchronize { @queued_bytes -= bytes }
       taken
     end
 
