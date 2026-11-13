@@ -14,7 +14,7 @@
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "raiha/quic"
-require_relative "../../examples/_certificate"
+require_relative "../examples/_certificate"
 
 QUIC = Raiha::QUIC
 TLS = Raiha::TLS

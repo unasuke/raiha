@@ -31,7 +31,7 @@ require "raiha/runtime"
 # experimental, and the workers are Ractors.
 Warning[:experimental] = false
 require "async"
-require_relative "../../examples/_certificate"
+require_relative "../examples/_certificate"
 
 Runtime = Raiha::Runtime
 QUIC = Raiha::QUIC
