@@ -13,7 +13,6 @@ class RaihaNextTLSMutationTest < Minitest::Test
   TLS = Raiha::Next::TLS
   Pair = NextTLSPair
   NOW = Pair::NOW
-  FINISHED = TLS::Handshake::Finished::MSG_TYPE
 
   Mutation = Data.define(:name, :inputs, :expected)
 
@@ -24,7 +23,7 @@ class RaihaNextTLSMutationTest < Minitest::Test
     after = ->(i) { epochs[i + 1] || final_epoch }
     type = ->(i) { flight[i].last.getbyte(0) }
     wrong_or_unexpected = ->(arriving, reading) { arriving == reading ? %i[unexpected_message unexpected_message] : %i[unexpected_message wrong_epoch] }
-    malformed = ->(i) { type.(i) == FINISHED ? %i[decrypt_error bad_finished] : %i[decode_error malformed_message] }
+    malformed = %i[decode_error malformed_message]
     header = ->(t, length) { [t].pack("C") + [length].pack("N").byteslice(1, 3) }
     list = []
     flight.each_index do |i|
@@ -42,8 +41,8 @@ class RaihaNextTLSMutationTest < Minitest::Test
         end
       end
       list << Mutation.new("duplicate #{i}", flight[0..i] + [flight[i]], wrong_or_unexpected.(epochs[i], after.(i)))
-      list << Mutation.new("empty #{i}", flight[0...i] + [[epochs[i], header.(type.(i), 0)]], malformed.(i))
-      list << Mutation.new("one byte #{i}", flight[0...i] + [[epochs[i], header.(type.(i), 1) + "\x00".b]], malformed.(i))
+      list << Mutation.new("empty #{i}", flight[0...i] + [[epochs[i], header.(type.(i), 0)]], malformed)
+      list << Mutation.new("one byte #{i}", flight[0...i] + [[epochs[i], header.(type.(i), 1) + "\x00".b]], malformed)
       list << Mutation.new("too long #{i}", flight[0...i] + [[epochs[i], header.(type.(i), limits.(type.(i)) + 1)]],
         %i[decode_error message_too_large])
       other = epochs[i] == :application ? :handshake : :application

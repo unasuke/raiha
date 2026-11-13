@@ -244,7 +244,8 @@ class RaihaNextTLSClientChecksTest < Minitest::Test
     assert_equal [:decrypt_error, :bad_finished], with_server_flight { |f|
       replace(f, 20) { |fin| fin.with(verify_data: fin.verify_data.reverse) }
     }
-    assert_equal [:decrypt_error, :bad_finished], with_server_flight { |f|
+    # Of another length than the hash's, the Finished does not decode.
+    assert_equal [:decode_error, :malformed_message], with_server_flight { |f|
       replace(f, 20) { |fin| fin.with(verify_data: fin.verify_data.byteslice(0, 31)) }
     }
   end

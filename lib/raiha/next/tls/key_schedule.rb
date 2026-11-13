@@ -73,7 +73,7 @@ module Raiha::Next::TLS
       expand_label(secret: inner_value, label: LABELS.fetch(:exporter_value), context: Crypto.hash(hash, context), length:, hash:)
     end
 
-    attr_reader :hash_algorithm, :stage
+    attr_reader :hash_algorithm, :hash_length, :stage
 
     # The early secret from `psk`, or from zeros without one. The hash is
     # fixed here: a server knows it once the suite and PSK are chosen, a

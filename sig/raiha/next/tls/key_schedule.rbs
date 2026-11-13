@@ -21,6 +21,7 @@ module Raiha::Next::TLS
     @application_traffic_secrets: Hash[side, String]
 
     attr_reader hash_algorithm: Symbol
+    attr_reader hash_length: Integer
     attr_reader stage: stage
 
     def initialize: (hash: Symbol, ?psk: String?, ?on_traffic_secret: (^(Symbol name, String secret) -> void)?) -> void

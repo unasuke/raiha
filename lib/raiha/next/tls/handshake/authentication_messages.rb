@@ -89,8 +89,11 @@ module Raiha::Next::TLS
       end
 
       # True once the peer's verify_data matches, or a Failure. A
-      # verify_data of the wrong length does not match.
+      # verify_data of another length than the hash's is a Finished that
+      # does not decode (RFC 8446 "Finished": verify_data[Hash.length]), and
+      # one of the length that does not match fails to verify.
       def verify_finished(finished, key_schedule, transcript_hash)
+        return Failure.new(alert: :decode_error, reason: :malformed_message) unless finished.verify_data.bytesize == key_schedule.hash_length
         unless key_schedule.verify_finished(@parameters.peer_side, transcript_hash, finished.verify_data)
           return Failure.new(alert: :decrypt_error, reason: :bad_finished)
         end
