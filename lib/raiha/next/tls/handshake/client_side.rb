@@ -153,7 +153,11 @@ module Raiha::Next::TLS
 
       private def fail!(alert, reason) = @conductor.fail!(alert, reason)
 
-      private def offered_types = client_hello.extensions.map(&:extension_type)
+      # The types of the extensions offered that a server may answer: not the
+      # GREASE ones, which RFC 8701 "Client Behavior" has the client fail a
+      # server for answering ("Any ServerHello extension", "Any
+      # HelloRetryRequest, EncryptedExtensions, or Certificate extension").
+      private def offered_types = client_hello.extensions.map(&:extension_type).reject { |type| IANA.grease?(type) }
 
       private def server_hello(message, raw, now)
         hrr = @hello_retry_request

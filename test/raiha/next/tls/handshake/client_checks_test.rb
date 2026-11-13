@@ -160,6 +160,17 @@ class RaihaNextTLSClientChecksTest < Minitest::Test
     flight.map { |epoch, message| [epoch, message.msg_type == type ? yield(message) : message] }
   end
 
+  # RFC 8701 "Client Behavior": an extension of a GREASE type the client
+  # offered, answered by the server, fails the connection as one never
+  # offered; EncryptedExtensions and a HelloRetryRequest are checked
+  # against the same types.
+  def test_grease_answered_by_the_server
+    machine, ch = client
+    grease = ch.extensions.find { |ext| TLS::IANA.grease?(ext.extension_type) } || flunk("no GREASE extension offered")
+    sh = server_hello(ch)
+    assert_equal [:unsupported_extension, :unsolicited_extension], deliver(machine, sh.with(extensions: sh.extensions + [grease]))
+  end
+
   def test_encrypted_extensions_rows
     assert_equal [:unsupported_extension, :unsolicited_extension],
       with_server_flight { |f| replace(f, 8) { |ee| ee.with(extensions: ee.extensions + [UNSOLICITED]) } }
