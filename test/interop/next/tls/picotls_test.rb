@@ -1,4 +1,5 @@
 require "raiha/next/test_helper"
+require "fileutils"
 require "raiha/next/support/tls_pair"
 require "raiha/next/tls"
 require "open3"
@@ -14,7 +15,8 @@ class NextTLSPicotlsInteropTest < Minitest::Test
   TLS = Raiha::Next::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
-  TMP = File.expand_path("../../../../tmp", __dir__)
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   PICOTLS = File.join(TMP, "picotls", "cli")
 
   def setup

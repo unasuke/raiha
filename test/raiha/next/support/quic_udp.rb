@@ -1,4 +1,5 @@
 require "raiha/next/support/quic_tls"
+require "fileutils"
 require "raiha/next/quic/test"
 require "socket"
 require "tmpdir"
@@ -10,7 +11,8 @@ require "tmpdir"
 module NextQUICUDP
   include NextQUICTLS
 
-  TMP = File.expand_path("../../../../tmp", __dir__)
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   TICK = 0.05
 
   # A client's application that, once the handshake is confirmed, or with

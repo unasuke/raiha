@@ -1,4 +1,5 @@
 require "raiha/next/test_helper"
+require "fileutils"
 require "raiha/next/support/tls_pair"
 require "raiha/next/support/tcp_drive"
 require "raiha/next/tls"
@@ -15,7 +16,8 @@ class NextTLSOpenSSLResumptionInteropTest < Minitest::Test
   TLS = Raiha::Next::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
-  TMP = File.expand_path("../../../../tmp", __dir__)
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
   SEED = "\x17".b * 32
   REQUEST = "GET / HTTP/1.0\r\n\r\n"
 

@@ -1,4 +1,5 @@
 require "raiha/next/test_helper"
+require "fileutils"
 require "raiha/next/support/tls_pair"
 require "raiha/next/tls"
 require "socket"
@@ -12,7 +13,8 @@ class NextTLSTttls13InteropTest < Minitest::Test
   TLS = Raiha::Next::TLS
   Pair = NextTLSPair
   PKI = NextTestPKI
-  TMP = File.expand_path("../../../../tmp", __dir__)
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 
   def setup
     @dir = Dir.mktmpdir("next-interop-tttls13-", TMP)

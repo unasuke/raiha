@@ -1,4 +1,5 @@
 require "raiha/next/test_helper"
+require "fileutils"
 require "raiha/next/support/qpack_offline_interop"
 require "json"
 require "open3"
@@ -14,7 +15,8 @@ class NextQPACKQifsEncodingTest < Minitest::Test
 
   PYTHON = %w[uv run --with pylsqpack python3].freeze
   DECODE = File.expand_path("../../../support/pylsqpack_decode.py", __dir__)
-  TMP = File.expand_path("../../../../tmp", __dir__)
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 
   def setup
     skip "the qifs corpus is not in #{QIFS_DIR}; run rake test:next:qifs" unless Dir.exist?(File.join(QIFS_DIR, "qifs"))
