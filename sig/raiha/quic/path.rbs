@@ -100,5 +100,6 @@ module Raiha::QUIC
 
     private def black_hole: (Float now) -> void
     private def change_ecn_state: (:testing | :capable | :failed state, Float now) -> void
+    private def ecn_family?: () -> bool
   end
 end

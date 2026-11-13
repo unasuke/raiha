@@ -155,6 +155,16 @@ class RaihaQUICConfigTest < Minitest::Test
 
   # The families of the addresses this end sends to: both by default,
   # either alone, and nothing else.
+  # No family at all is ECN on no path.
+  def test_ecn_address_families
+    assert_equal %i[ipv4 ipv6], Config.new.ecn_address_families
+    assert_equal %i[ipv6], Config.new(ecn_address_families: %i[ipv6]).ecn_address_families
+    assert_equal [], Config.new(ecn_address_families: []).ecn_address_families
+    [%i[ipv4 ipx], %w[ipv4]].each do |ecn_address_families|
+      assert_raises(ArgumentError, ecn_address_families.inspect) { Config.new(ecn_address_families:) }
+    end
+  end
+
   def test_address_families
     assert_equal %i[ipv4 ipv6], Config.new.address_families
     assert_equal %i[ipv4], Config.new(address_families: %i[ipv4]).address_families

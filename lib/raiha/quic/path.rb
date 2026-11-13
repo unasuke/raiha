@@ -54,7 +54,7 @@ module Raiha::QUIC
       @tracer = tracer
       start_over
       @abandoned = false
-      @ecn_state = :testing
+      @ecn_state = ecn_family? ? :testing : :failed
       @ecn_testing_sent = 0
       @ecn_testing_lost = 0
       # PTOs in a row with nothing of the path's acknowledged.
@@ -68,6 +68,7 @@ module Raiha::QUIC
     def learn(local:, remote:)
       @local ||= local
       @remote ||= remote
+      @ecn_state = :failed unless ecn_family?
     end
 
     # Whether the remote address is validated: a client's is from the
@@ -218,7 +219,7 @@ module Raiha::QUIC
       path.adopt(rtt: @rtt, congestion: @congestion, startup: @startup, pacer: @pacer, rate_meter: @rate_meter, rtt_heard: @rtt_heard,
         max_datagram_size: @max_datagram_size, mtu_search: @mtu_search, ecn: [@ecn_state, @ecn_testing_sent, @ecn_testing_lost])
       @mtu_search = nil
-      @ecn_state = :testing
+      @ecn_state = ecn_family? ? :testing : :failed
       @ecn_testing_sent = @ecn_testing_lost = 0
       start_learning
     end
@@ -289,6 +290,14 @@ module Raiha::QUIC
     # The path fails ECN for good: no marks and no counts heeded.
     def ecn_failed(now:)
       change_ecn_state(:failed, now)
+    end
+
+    # Whether ECN goes on this path: the family of its remote address is
+    # one of Config#ecn_address_families, or the address is not known yet.
+    # An IPv4-mapped address is IPv4's on the wire.
+    private def ecn_family?
+      host = @remote&.first or return true
+      @config.ecn_address_families.include?(host.include?(".") ? :ipv4 : :ipv6)
     end
 
     # Counts a packet that went in flight on this path, and tells the

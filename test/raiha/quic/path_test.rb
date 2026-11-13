@@ -212,6 +212,21 @@ class RaihaQUICPathTest < Minitest::Test
     assert_equal 4.0, path.validation_deadline
   end
 
+  # A path to an address of a family Config#ecn_address_families leaves
+  # out sends Not-ECT from the start and validates nothing; the family is
+  # the address's on the wire, so an IPv4-mapped one is IPv4's.
+  def test_no_ecn_for_a_family_left_out
+    config = QUIC::Config.new(ecn_address_families: %i[ipv6])
+    {["192.0.2.1", 443] => :failed, ["::ffff:192.0.2.1", 443] => :failed, ["2001:db8::1", 443] => :testing}.each do |remote, state|
+      path = QUIC::Path.new(config:, remote:)
+      assert_equal [state, state == :failed ? :not_ect : :ect0], [path.ecn_state, path.ecn], remote.inspect
+    end
+    learned = QUIC::Path.new(config:)
+    assert_equal :ect0, learned.ecn
+    learned.learn(local: ["192.0.2.2", 443], remote: ["192.0.2.1", 50_000])
+    assert_equal [:failed, :not_ect], [learned.ecn_state, learned.ecn]
+  end
+
   # A path the peer's port alone tells apart takes over what the other
   # learned, the search for its MTU too, which sends again the probe out
   # on the other, as what became of it goes there; the other starts

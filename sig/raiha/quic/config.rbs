@@ -41,6 +41,7 @@ module Raiha::QUIC
     attr_reader stateless_reset_key: String?
     attr_reader preferred_address: Hash[address_family, address]?
     attr_reader address_families: Array[address_family]
+    attr_reader ecn_address_families: Array[address_family]
 
     def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                    ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
@@ -53,7 +54,8 @@ module Raiha::QUIC
                    ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                    ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
                    ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
-                   ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family]) -> instance
+                   ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family],
+                   ?ecn_address_families: Array[address_family]) -> instance
     def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
                      ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
                      ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
@@ -65,7 +67,8 @@ module Raiha::QUIC
                      ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
                      ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
                      ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
-                     ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family]) -> void
+                     ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family],
+                   ?ecn_address_families: Array[address_family]) -> void
     def masked_members: () -> Array[Symbol]
 
     private def check_preferred_address: (Hash[address_family, address] preferred_address, Integer connection_id_length) -> void
