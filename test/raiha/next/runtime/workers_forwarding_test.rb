@@ -76,13 +76,26 @@ class RaihaNextRuntimeWorkersForwardingTest < Minitest::Test
     running&.join(10)
   end
 
+  # A client with no issuer gives the server no connection ID to spare:
+  # each move is a NAT rebinding to the server, which goes on with the ID
+  # in use, the first move before any 1-RTT packet came as well.
+  def test_a_rebinding_with_no_id_to_spare
+    workers, running = serving(count: 1)
+    socket, sent = moving(workers, issuer: nil) { |moves| moves < 3 }
+    assert_echoed(socket, sent)
+  ensure
+    @socket&.close
+    workers&.stop(timeout: 1)
+    running&.join(10)
+  end
+
   # Connects to `workers` and writes a piece on a stream from a socket of
   # another port each time, while the block is true of the moves so far:
   # the socket it is on last, and what it wrote.
-  def moving(workers)
+  def moving(workers, issuer: ISSUER)
     tls = client_config
     @connection = QUIC::Connection.client(config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
-      server_name: "localhost", remote: workers.local_address, time: Time.now, now: mono, issuer: ISSUER)
+      server_name: "localhost", remote: workers.local_address, time: Time.now, now: mono, issuer:)
     connection = @connection
     @socket = bound
     assert drive(@socket, connection) { connection.handshake_confirmed? }

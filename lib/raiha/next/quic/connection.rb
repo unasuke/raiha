@@ -169,15 +169,16 @@ module Raiha::Next::QUIC
       # when it moved.
       @newest_path = nil #: Path?
       @moved_after = nil #: Integer?
-      # The Destination Connection ID of the last 1-RTT packet that came on
-      # the path in use: a packet from a new address with the same one is a
-      # NAT rebinding most likely.
-      @received_dcid = nil #: String?
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
       @datagrams = Datagrams.new(config:, events: @events)
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
+      # The Destination Connection ID of the last 1-RTT packet that came on
+      # the path in use, at first the one the handshake's packets came to: a
+      # packet from a new address with the same one is a NAT rebinding most
+      # likely, the first 1-RTT packet as well.
+      @received_dcid = @source_connection_id #: String
       @issued = IssuedConnectionIDs.new(@source_connection_id, issuer:, connection: self)
       @peers = peers
       @stateless_reset_token = stateless_reset_token

@@ -131,6 +131,20 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal({ ELSEWHERE => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
   end
 
+  # A rebinding before any 1-RTT packet came is one all the same: the
+  # client sends to the ID it took in the handshake, and the server goes
+  # on with the client's ID in use, with none to spare.
+  def test_a_rebinding_before_any_one_rtt_packet
+    keylog = Keylog.new
+    client = client_connection(keylog:)
+    server = server_connection(source_connection_id: "s".b * 8)
+    now = handshake(client, server)
+    server.each_event { nil }
+    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal ELSEWHERE, server.path.remote
+    assert_includes challenges(sent(server, keylog, now)).keys, ELSEWHERE
+  end
+
   # With another Destination Connection ID, the new path sends with an ID
   # of the client's no path sent with, and the path left validates again
   # with the ID it had.

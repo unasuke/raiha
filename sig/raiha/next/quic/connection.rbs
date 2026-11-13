@@ -79,7 +79,7 @@ module Raiha::Next::QUIC
     @preferred_path: Path?
     @newest_path: Path?
     @moved_after: Integer?
-    @received_dcid: String?
+    @received_dcid: String
     @state: :open | :closing | :draining | :closed
     @close_error: ConnectionError?
     @close_deadline: Float?
