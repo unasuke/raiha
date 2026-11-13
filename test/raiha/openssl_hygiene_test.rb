@@ -6,7 +6,7 @@ require "prism"
 # a constant of our own named OpenSSL (KeyExchange::OpenSSL) is not a call
 # into the library.
 class RaihaOpenSSLHygieneTest < Minitest::Test
-  NEXT_DIR = File.expand_path("../../lib/raiha", __dir__)
+  LIB_DIR = File.expand_path("../../lib/raiha", __dir__)
   ALLOWED = { tls: %r{\Atls/(?:crypto|verifier)(?:\.rb\z|/)}, quic: %r{\Aquic/crypto(?:\.rb\z|/)} }
   # `OpenSSL::` or `OpenSSL.` that is not the tail of a longer constant path.
   OPENSSL = /(?<![\w:])(?:::)?OpenSSL(?:::|\.)/
@@ -21,20 +21,20 @@ class RaihaOpenSSLHygieneTest < Minitest::Test
   end
 
   def files
-    Dir.glob("**/*.rb", base: NEXT_DIR).sort
+    Dir.glob("**/*.rb", base: LIB_DIR).sort
   end
 
   def allowed?(file) = ALLOWED.each_value.any? { |pattern| file.match?(pattern) }
 
   def test_openssl_is_called_only_from_crypto_and_verifier
-    offenders = files.reject { |file| allowed?(file) }.to_h { |file| [file, openssl_lines(File.join(NEXT_DIR, file))] }
+    offenders = files.reject { |file| allowed?(file) }.to_h { |file| [file, openssl_lines(File.join(LIB_DIR, file))] }
     assert_empty offenders.reject { |_, lines| lines.empty? }
   end
 
   # Guards against a pattern silently matching nothing.
   def test_each_layer_does_call_openssl
     ALLOWED.each do |layer, pattern|
-      refute_empty files.grep(pattern).flat_map { |file| openssl_lines(File.join(NEXT_DIR, file)) }, layer
+      refute_empty files.grep(pattern).flat_map { |file| openssl_lines(File.join(LIB_DIR, file)) }, layer
     end
   end
 end
