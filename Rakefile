@@ -193,9 +193,13 @@ namespace :interop do
 
     desc "Install the quic gem (github: unasuke/quic-ruby) into the interop bundle group"
     task :quic_gem do
+      # Outside the environment of `bundle exec`, whose bundler/setup would
+      # load the group the commands are to install, and fail on it.
+      Bundler.with_original_env do
+        sh "bundle config set --local with interop"
+        sh "bundle install"
+      end
       ENV["BUNDLE_WITH"] = "interop" # also inherited by the Rake::TestTask ruby subprocess
-      sh "bundle config set --local with interop"
-      sh "bundle install"
     end
   end
 
