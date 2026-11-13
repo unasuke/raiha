@@ -172,6 +172,7 @@ module Raiha::Next::TLS
         return Failure.new(alert: :unexpected_message, reason: :unexpected_record) if name.nil? || name == :application_data
         return Failure.new(alert: :record_overflow, reason: :record_too_large) if fragment.bytesize > MAX_PLAINTEXT
         return Failure.new(alert: :unexpected_message, reason: :empty_handshake_record) if name == :handshake && fragment.empty?
+        return Failure.new(alert: :unexpected_message, reason: :empty_alert_record) if name == :alert && fragment.empty?
         return change_cipher_spec(:initial, fragment) if name == :change_cipher_spec
         Plaintext.new(content_type: name, payload: fragment)
       end
@@ -212,7 +213,10 @@ module Raiha::Next::TLS
         name = CONTENT_TYPE_NAMES[inner.getbyte(last).to_i]
         return Failure.new(alert: :unexpected_message, reason: :unexpected_record) if name.nil? || name == :change_cipher_spec
         content = inner.byteslice(0, last).to_s
+        # RFC 8446 "Record Layer": a Handshake or Alert record of no content
+        # is unexpected_message.
         return Failure.new(alert: :unexpected_message, reason: :empty_handshake_record) if name == :handshake && content.empty?
+        return Failure.new(alert: :unexpected_message, reason: :empty_alert_record) if name == :alert && content.empty?
         Plaintext.new(content_type: name, payload: content)
       end
     end

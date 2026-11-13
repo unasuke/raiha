@@ -94,6 +94,7 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
       plaintext_record(23, "x") => failure(:unexpected_message, :unexpected_record),
       plaintext_record(24, "x") => failure(:unexpected_message, :unexpected_record),
       plaintext_record(22, "") => failure(:unexpected_message, :empty_handshake_record),
+      plaintext_record(21, "") => failure(:unexpected_message, :empty_alert_record),
       plaintext_record(22, "x" * (Record::MAX_PLAINTEXT + 1)) => failure(:record_overflow, :record_too_large),
       plaintext_record(20, "\x01") => plaintext(:change_cipher_spec, "\x01".b),
       plaintext_record(21, "\x02\x28") => plaintext(:alert, "\x02\x28".b)
@@ -125,6 +126,7 @@ class RaihaNextTLSRecordLayerTest < Minitest::Test
       sealer.seal("hello\x16\x00\x00\x00".b) => plaintext(:handshake, "hello".b),
       sealer.seal("\x17".b) => plaintext(:application_data, "".b),
       sealer.seal("\x16".b) => failure(:unexpected_message, :empty_handshake_record),
+      sealer.seal("\x15\x00\x00".b) => failure(:unexpected_message, :empty_alert_record),
       sealer.seal("\x01\x14".b) => failure(:unexpected_message, :unexpected_record),
       sealer.seal("\x01\x2a".b) => failure(:unexpected_message, :unexpected_record),
       sealer.seal("\x00\x00".b) => failure(:unexpected_message, :no_content_type),
