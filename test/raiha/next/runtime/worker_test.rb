@@ -2,7 +2,8 @@ require "raiha/next/test_helper"
 require "raiha/next/runtime"
 
 # Two workers of a server, in one Ractor here: what one hands on reaches the
-# other's queue through its own thread, up to QUEUE datagrams; what comes to
+# other's queue through its own thread, up to QUEUE datagrams and
+# QUEUE_BYTES of them; what comes to
 # a worker's control port goes to the block, but a request for stats; and
 # closing a worker ends its thread.
 class RaihaNextRuntimeWorkerTest < Minitest::Test
@@ -54,6 +55,21 @@ class RaihaNextRuntimeWorkerTest < Minitest::Test
     stats = @workers[1].stats
     assert_equal [Worker::QUEUE, 3], [stats.received, stats.dropped]
     assert_equal (0...Worker::QUEUE).map { |n| forwarded(n) }, @workers[1].take
+  end
+
+  # Past QUEUE_BYTES of datagrams not taken, the newest are dropped too;
+  # taking them makes room again.
+  def test_the_queue_drops_the_newest_past_its_bytes
+    listen(@workers[1])
+    large = ->(n) { ["x".b * 65_000, ["192.0.2.1", 4433], ["192.0.2.2", 443], :not_ect, n.to_f] }
+    fits = Worker::QUEUE_BYTES / 65_000
+    (fits + 2).times { |n| @workers[0].forward(1, large.(n)) }
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
+    sleep 0.001 until @workers[1].stats.dropped == 2 || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    assert_equal [fits, 2], @workers[1].stats.then { [_1.received, _1.dropped] }
+    assert_equal fits, @workers[1].take.size
+    @workers[0].forward(1, large.(fits + 2))
+    assert_equal 1, taken(@workers[1], 1).size
   end
 
   # A worker that has ended gets nothing, and the one handing on goes on.

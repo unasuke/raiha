@@ -41,6 +41,7 @@ module Raiha::Next::Runtime
       | [:reconfigure, Raiha::Next::TLS::Config, Array[Raiha::Next::TLS::Keyring::Identity]]
 
     QUEUE: Integer
+    QUEUE_BYTES: Integer
     CLOSE: :close
 
     class Stats < Data
@@ -62,6 +63,8 @@ module Raiha::Next::Runtime
     attr_reader anti_replay: Raiha::Next::TLS::AntiReplay::_AntiReplay
 
     @queue: Thread::Queue[forwarded]
+    @queued_bytes: Integer
+    @lock: Thread::Mutex
     @sent: Integer
     @received: Integer
     @dropped: Integer

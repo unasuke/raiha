@@ -15,12 +15,17 @@ module Raiha::Next::Runtime
   # A Ractor::Port waits for what comes without yielding to the Fiber
   # scheduler, so `listen` starts a thread of its own that waits on the
   # inbox and the control port: what is handed on goes into a queue the
-  # driver takes from (`take`), up to QUEUE datagrams, past which the newest
-  # is dropped; what comes to the control port goes to the block. `forward`
+  # driver takes from (`take`), up to QUEUE datagrams and QUEUE_BYTES of
+  # them, past which the newest is dropped; what comes to the control port
+  # goes to the block. `forward`
   # hands a datagram on to another worker, and never waits.
   class Worker
-    # The most datagrams handed on that a worker keeps before taking them.
+    # The most datagrams handed on that a worker keeps before taking them,
+    # and the most bytes of them: a datagram may be 64 KiB, and a peer that
+    # sends large ones for another worker's connections would otherwise
+    # make a worker that falls behind keep 64 MiB.
     QUEUE = 1024
+    QUEUE_BYTES = 4 * 1024 * 1024
     # What `close` sends the listening thread to end it.
     CLOSE = :close
 
@@ -40,6 +45,10 @@ module Raiha::Next::Runtime
       @control = control
       @peers = peers
       @queue = Thread::Queue.new
+      # The bytes queued, which the listening thread adds to and `take`
+      # takes from.
+      @queued_bytes = 0
+      @lock = Thread::Mutex.new
       @sent = 0
       @received = 0
       @dropped = 0
@@ -84,6 +93,8 @@ module Raiha::Next::Runtime
       while (forwarded = @queue.pop(timeout: 0))
         taken << forwarded
       end
+      bytes = taken.sum { |datagram, *| datagram.bytesize }
+      @lock.synchronize { @queued_bytes -= bytes }
       taken
     end
 
@@ -102,7 +113,12 @@ module Raiha::Next::Runtime
     end
 
     private def queue(forwarded, changed)
-      if @queue.size >= QUEUE
+      bytes = forwarded.fetch(0).bytesize
+      room = @lock.synchronize do
+        next false if @queue.size >= QUEUE || @queued_bytes + bytes > QUEUE_BYTES
+        @queued_bytes += bytes
+      end
+      unless room
         @dropped += 1
         return
       end
