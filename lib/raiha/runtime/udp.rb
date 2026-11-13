@@ -8,7 +8,8 @@ module Raiha::Runtime
   # UDP_SEGMENT), elsewhere each with its own, marked with its ECN
   # codepoint; each datagram that comes in is read with `recvmsg` along with
   # the codepoint it was marked with and the address it came to (IP_PKTINFO,
-  # IPV6_PKTINFO), and one sent from an address of the Transmit's goes
+  # or IP_RECVDSTADDR on the BSDs, and IPV6_PKTINFO), so far as the OS
+  # tells them (UDP#features), and one sent from an address of the Transmit's goes
   # from there by the same control message. Bound to "::", one socket takes IPv4
   # as well; the addresses of IPv4 it tells are IPv4's ("192.0.2.1", not
   # the IPv4-mapped "::ffff:192.0.2.1"), so that a peer is the same
@@ -106,21 +107,30 @@ module Raiha::Runtime
       @port = local.ip_port
       enlarge(Socket::SO_RCVBUF)
       enlarge(Socket::SO_SNDBUF)
-      # An IPv6 socket that takes IPv4 tells the codepoint of an IPv4
-      # datagram the IPv4 way.
-      @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_RECVTOS, 1)
-      @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVTCLASS, 1) if @family == Socket::AF_INET6
-      # The address a datagram came to, at both levels on a socket that
-      # takes both.
-      @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_PKTINFO, 1)
-      @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_RECVPKTINFO, 1) if @family == Socket::AF_INET6
+      # What a datagram comes with, at both levels on a socket that takes
+      # both, the options Socket names here alone: an IPv6 socket that
+      # takes IPv4 tells the codepoint and the address of an IPv4 datagram
+      # the IPv4 way. The IPv4 options go only on a socket that takes IPv4,
+      # as OpenBSD's IPv6 sockets refuse them (EINVAL). Its IPv4 has no
+      # IP_RECVTOS, and IP_RECVDSTADDR in place of IP_PKTINFO.
+      ipv4 = takes_ipv4?
+      ipv6 = @family == Socket::AF_INET6
+      @ipv4_destination = if !ipv4 then nil
+        elsif enable(Socket::IPPROTO_IP, :IP_PKTINFO) then Socket::IP_PKTINFO
+        elsif enable(Socket::IPPROTO_IP, :IP_RECVDSTADDR) then Socket::IP_RECVDSTADDR
+        end
+      ipv6_destination = ipv6 && enable(Socket::IPPROTO_IPV6, :IPV6_RECVPKTINFO)
+      ipv4_ecn = ipv4 && enable(Socket::IPPROTO_IP, :IP_RECVTOS)
+      ipv6_ecn = ipv6 && enable(Socket::IPPROTO_IPV6, :IPV6_RECVTCLASS)
+      @destination = (!ipv4 || !@ipv4_destination.nil?) && (!ipv6 || ipv6_destination)
+      @ecn_in = (!ipv4 || ipv4_ecn) && (!ipv6 || ipv6_ecn)
       # No fragments, at both levels on a socket that sends both.
       if UDP.unfragmented?
         @socket.setsockopt(Socket::IPPROTO_IP, Socket::IP_MTU_DISCOVER, PMTUDISC_PROBE)
         @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER, PMTUDISC_PROBE) if @family == Socket::AF_INET6
       end
       @gso = RUBY_PLATFORM.include?("linux")
-      @ecn_in = @destination = @source = @ecn_out = true
+      @source = @ecn_out = true
     end
 
     # The Features of this socket now.
@@ -223,6 +233,14 @@ module Raiha::Runtime
       end
     end
 
+    # Turns on the option `name` at `level` where Socket names it; whether
+    # it did.
+    private def enable(level, name)
+      return false unless Socket.const_defined?(name)
+      @socket.setsockopt(level, Socket.const_get(name), 1)
+      true
+    end
+
     # Whether IPv4 comes to this socket: one bound to an address of IPv4,
     # or of IPv6 bound to "::" (or an IPv4-mapped address) and not IPv6
     # alone, which an OS may not allow.
@@ -280,9 +298,16 @@ module Raiha::Runtime
     private def destination(controls)
       controls.each do |control|
         return [unmapped(control.ipv6_pktinfo[0].ip_address), @port] if control.cmsg_is?(Socket::IPPROTO_IPV6, Socket::IPV6_PKTINFO)
-        return [control.ip_pktinfo[0].ip_address, @port] if control.cmsg_is?(Socket::IPPROTO_IP, Socket::IP_PKTINFO)
+        return [ipv4_destination(control), @port] if @ipv4_destination && control.cmsg_is?(Socket::IPPROTO_IP, @ipv4_destination) # steep:ignore
       end
       nil
+    end
+
+    # The address of IP_PKTINFO's in_pktinfo, or IP_RECVDSTADDR's in_addr,
+    # which is the address alone.
+    private def ipv4_destination(control)
+      data = control.data
+      data.bytesize == 4 ? data.unpack("C4").join(".") : control.ip_pktinfo[0].ip_address
     end
 
     # An IPv4 address as an IPv6 socket sends to or from it, IPv4-mapped,

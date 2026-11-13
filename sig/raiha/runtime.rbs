@@ -207,6 +207,7 @@ module Raiha::Runtime
     @port: Integer
     @gso: bool
     @ecn_in: bool
+    @ipv4_destination: Integer?
     @destination: bool
     @source: bool
     @ecn_out: bool
@@ -239,6 +240,7 @@ module Raiha::Runtime
     def to_io: () -> UDPSocket
 
     private def enlarge: (Integer option) -> void
+    private def enable: (Integer level, Symbol name) -> bool
     private def takes_ipv4?: () -> bool
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
@@ -249,6 +251,7 @@ module Raiha::Runtime
 
     private def source: (address? source) -> Socket::AncillaryData?
     private def destination: (Array[Socket::AncillaryData] controls) -> address?
+    private def ipv4_destination: (Socket::AncillaryData control) -> String
     private def mapped: (String host) -> String
     private def unmapped: (String host) -> String
     private def ecn: (Array[Socket::AncillaryData] controls) -> ecn
