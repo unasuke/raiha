@@ -7,7 +7,9 @@ require "rbconfig"
 # handshake runs a client and a server over real sockets on the loopback
 # interface, and so do the loopback and the qlog examples of the runtime,
 # under the scheduler of async; the handshake and the stream echo in
-# memory use no socket.
+# memory use no socket. The GET to public servers, which needs the
+# network, and the loopback with the quic gem, which needs the :interop
+# group of the bundle, are run by hand.
 class RaihaNextExamplesTest < Minitest::Test
   ROOT = File.expand_path("../../..", __dir__)
   TIMEOUT = 30
