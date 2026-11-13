@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 require "raiha/http3_binding"
-require_relative "next_client"
+require_relative "client"
 
 module RaihaInterop
   # The client of the http3 testcase on the next release of raiha: as
-  # NextClient, over HTTP/3. Its HTTP/3 is joined to the connection by
+  # Client, over HTTP/3. Its HTTP/3 is joined to the connection by
   # HTTP3Binding, a GET for each path goes on a stream of its own, and
   # each response is saved once whole.
-  class NextHTTP3Client < NextClient
+  class HTTP3Client < Client
     HTTP3 = Raiha::HTTP3
 
     def alpn = ["h3"]

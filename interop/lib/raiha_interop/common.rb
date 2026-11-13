@@ -13,7 +13,7 @@ module RaihaInterop
   # (HTTP/0.9 over QUIC) for ALPN, the runtime's UDP socket, and the keylog
   # and the qlog quic-interop-runner asks for. With
   # RAIHA_STARTUP=rapid_start, the paths start with Rapid Start.
-  module NextQUIC
+  module Common
     QUIC = Raiha::QUIC
     TLS = Raiha::TLS
     REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "uri"
-require_relative "next_quic"
+require_relative "common"
 
 module RaihaInterop
   # The client of hq-interop on the next release of raiha: one connection
@@ -16,8 +16,8 @@ module RaihaInterop
   # asked for is asked again. Its socket is bound to "::", which sends to
   # IPv4 too, so that it reaches a server of either family, as the ipv6
   # testcase's server6, and moves to a preferred address of either.
-  class NextClient
-    include NextQUIC
+  class Client
+    include Common
 
     RESUMING = %w[resumption zerortt].freeze
     # Makes the connection IDs the connection issues, as an Endpoint's
@@ -205,6 +205,6 @@ module RaihaInterop
       [address.ip_address, address.ip_port]
     end
 
-    private def log(message) = @logger.puts("[raiha-interop next client] #{message}")
+    private def log(message) = @logger.puts("[raiha-interop client] #{message}")
   end
 end

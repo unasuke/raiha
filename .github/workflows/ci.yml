@@ -162,18 +162,18 @@ jobs:
           import json, pathlib
           p = pathlib.Path("tmp/quic-interop-runner/implementations_quic.json")
           impls = json.loads(p.read_text())
-          impls["raiha-next"] = {
-              "image": "localhost/raiha-next-interop:latest",
+          impls["raiha"] = {
+              "image": "localhost/raiha-interop:latest",
               "url": "https://github.com/unasuke/raiha",
               "role": "both",
           }
           p.write_text(json.dumps(impls, indent=2))
           PY
-      - run: docker build -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+      - run: docker build -t localhost/raiha-interop:latest -f interop/Dockerfile .
       # versionnegotiation is left out: the runner does not list it among
       # its testcases, and its check fails on every trace (interop/README.md).
       - run: >-
-          interop/run_interop_runner.sh -c raiha-next -s raiha-next
+          interop/run_interop_runner.sh -c raiha -s raiha
           -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3,resumption,zerortt
           --log-dir logs -j result.json -d
       # The runner skips a pair that is not compliant and fails nothing for a

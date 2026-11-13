@@ -16,11 +16,10 @@ interop/
 ├── bin/
 │   └── raiha-interop     # Ruby dispatcher, ROLE / TESTCASE_* aware
 ├── lib/raiha_interop/
-│   ├── runner.rb         # reads the role and the testcase
-│   ├── next_runner.rb    # the testcases taken in each role
-│   ├── next_quic.rb
-│   ├── next_server.rb / next_client.rb              # hq-interop
-│   └── next_http3_server.rb / next_http3_client.rb  # http3
+│   ├── runner.rb         # the testcases taken in each role
+│   ├── common.rb         # what the client and the server share
+│   ├── server.rb / client.rb              # hq-interop
+│   └── http3_server.rb / http3_client.rb  # http3
 ├── quic-interop-runner.no-sim.yml
 ├── run_interop_runner.sh
 └── README.md
@@ -31,7 +30,7 @@ interop/
 From the repo root:
 
 ```sh
-docker build -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+docker build -t localhost/raiha-interop:latest -f interop/Dockerfile .
 ```
 
 The build context must be the repo root because the Dockerfile copies
@@ -64,7 +63,7 @@ docker run -d --name raiha-server --network raiha-net \
   -v $(pwd)/tmp/raiha-certs:/certs:ro \
   -v $(pwd)/tmp/raiha-www:/www:ro \
   -v $(pwd)/tmp/raiha-qlog:/logs \
-  localhost/raiha-next-interop:latest
+  localhost/raiha-interop:latest
 ```
 
 Client:
@@ -75,7 +74,7 @@ docker run --rm --network raiha-net \
   -e REQUESTS=https://raiha-server:4433/index.html \
   -e DOWNLOADS=/downloads \
   -v $(pwd)/tmp/raiha-downloads:/downloads \
-  localhost/raiha-next-interop:latest
+  localhost/raiha-interop:latest
 ```
 
 ## Running with quic-interop-runner
@@ -85,9 +84,9 @@ git clone --depth 1 https://github.com/quic-interop/quic-interop-runner tmp/quic
 cd tmp/quic-interop-runner
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-# Add raiha to implementations_quic.json as "raiha-next":
-#   "raiha-next": {
-#     "image": "localhost/raiha-next-interop:latest",
+# Add raiha to implementations_quic.json:
+#   "raiha": {
+#     "image": "localhost/raiha-interop:latest",
 #     "url": "https://github.com/unasuke/raiha",
 #     "role": "both"
 #   }
@@ -107,7 +106,7 @@ the runner's clone and runs `run.py` on it with the arguments given:
 
 ```sh
 PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
-  interop/run_interop_runner.sh -c raiha-next -s raiha-next \
+  interop/run_interop_runner.sh -c raiha -s raiha \
   -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3,resumption,zerortt -d
 ```
 
@@ -135,7 +134,7 @@ leaves it out of `TESTCASES_QUIC`, so `-t` does not take it, and its
 check reads `p.scid` off each packet `get_vnp` gives, which is a whole
 packet rather than its QUIC layer, so it raises `AttributeError` and
 ends the run. Listed and read as `p.quic.scid`, it succeeds between
-raiha-next and itself (checked 2026-10-22, runner at `1d6f655`). Before
+raiha and itself (checked 2026-10-22, runner at `1d6f655`). Before
 adding it back to the job, check the runner upstream for a fix or an
 issue on this.
 
@@ -143,9 +142,8 @@ issue on this.
 
 The image runs the next release of raiha (`Raiha::QUIC`) with
 hq-interop (HTTP/0.9 over QUIC), and HTTP/3 (`Raiha::HTTP3`) for
-http3: `interop/lib/raiha_interop/next_runner.rb` hands the role to
-`NextServer` or `NextClient`, or to `NextHTTP3Server` or
-`NextHTTP3Client` for http3.
+http3: `interop/lib/raiha_interop/runner.rb` hands the role to
+`Server` or `Client`, or to `HTTP3Server` or `HTTP3Client` for http3.
 
 | testcase | client | server |
 |----------|--------|--------|
@@ -215,11 +213,11 @@ services:
 ```
 
 ```sh
-docker build -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+docker build -t localhost/raiha-interop:latest -f interop/Dockerfile .
 cd tmp/quic-interop-runner
-COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
+COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha -s raiha \
   -t handshakeloss,transferloss,handshakecorruption,transfercorruption,longrtt,blackhole,amplificationlimit,ecn,goodput,crosstraffic
-COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
+COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha -s raiha \
   -t rebind-port,rebind-addr,connectionmigration,ipv6
 ```
 

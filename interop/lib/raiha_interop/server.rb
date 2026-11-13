@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "next_quic"
+require_relative "common"
 
 module RaihaInterop
   # The server of hq-interop on the next release of raiha: an Endpoint on
@@ -15,8 +15,8 @@ module RaihaInterop
   # It gives tickets sealed with a key made at random as it starts, and
   # takes 0-RTT from them. As no ticket opens from before the start, the
   # record of 0-RTT taken needs no time to warm up.
-  class NextServer
-    include NextQUIC
+  class Server
+    include Common
 
     PORT = 443
     PREFERRED_PORT = 4434
@@ -155,6 +155,6 @@ module RaihaInterop
         key_der: OpenSSL::PKey.read(File.read(File.join(certs_dir, "priv.key"))).private_to_der)
     end
 
-    private def log(message) = @logger.puts("[raiha-interop next server] #{message}")
+    private def log(message) = @logger.puts("[raiha-interop server] #{message}")
   end
 end
