@@ -5,8 +5,9 @@ require "rbconfig"
 # Each example under examples/next runs in a process of its own and puts
 # out what the "Expected output:" of its header comment says. The UDP
 # handshake runs a client and a server over real sockets on the loopback
-# interface, and so does the loopback of the runtime, under the scheduler
-# of async; the handshake and the stream echo in memory use no socket.
+# interface, and so do the loopback and the qlog examples of the runtime,
+# under the scheduler of async; the handshake and the stream echo in
+# memory use no socket.
 class RaihaNextExamplesTest < Minitest::Test
   ROOT = File.expand_path("../../..", __dir__)
   TIMEOUT = 30
@@ -46,7 +47,7 @@ class RaihaNextExamplesTest < Minitest::Test
     assert_equal expected_output(path), output
   end
 
-  %w[in_memory_handshake stream_echo].each do |name|
+  %w[in_memory_handshake stream_echo qlog_output qlog_roundtrips].each do |name|
     define_method(:"test_#{name}") do
       path = File.join(ROOT, "examples/next/#{name}.rb")
       output, status = run_example(path)
