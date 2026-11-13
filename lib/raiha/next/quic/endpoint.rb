@@ -8,6 +8,16 @@ module Raiha::Next::QUIC
   # Stateless Reset, a CONNECTION_CLOSE for a Retry token that does not
   # verify, or nothing. A Connection never refers to its Endpoint.
   #
+  # Which offers to take is the application's: the Endpoint bounds what
+  # each keeps and how long, but not how many connections there are, nor
+  # how many have addresses not validated. An application should count the
+  # offers it admitted and has not taken, and its connections not
+  # `address_validated?`, and `retry` the offers of addresses not validated
+  # (Route::Incoming#address_validated) once they come to a bound of its
+  # own: a connection from a spoofed address is never validated, and
+  # Initials from such addresses would otherwise take every connection
+  # there is room for. Runtime::Server does so with `max_unvalidated`.
+  #
   # A client's Endpoint makes its connections with `connect` and takes no
   # offers; a Version Negotiation or a Retry goes to the connection it is
   # for. Either finds a Stateless Reset of its peers among the datagrams of
