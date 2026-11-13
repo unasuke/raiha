@@ -1556,7 +1556,7 @@ module Raiha::Next::QUIC
       unless path
         connection_id = nil #: String?
         if dcid == @received_dcid && !preferred_local?(local)
-          return nil unless @peer_ids&.spare?
+          return give_up_an_id(now) unless @peer_ids&.spare?
         else
           connection_id = (@peer_ids&.claim or return nil)
         end
@@ -1758,6 +1758,21 @@ module Raiha::Next::QUIC
       @peers&.remove(self, remote) if remote && !kept
       connection_id = path.destination_connection_id
       @peer_ids&.release(connection_id) if connection_id
+    end
+
+    # With no ID for the path left on a rebinding, the oldest path left that
+    # is validated again, not the one to go back to, goes, and its ID is
+    # retired: the peer issues another for it, and the move can be made at
+    # a packet after that comes. Paths left by rebindings faster than their
+    # validations end would hold every ID otherwise. Gives nil, as there is
+    # no path to move to now.
+    private def give_up_an_id(now)
+      oldest = @validating.find { |path| !path.equal?(@last_validated) && path.destination_connection_id }
+      if oldest
+        trace_migration(:probing_abandoned, oldest, now)
+        abandon_path(oldest)
+      end
+      nil
     end
 
     # RFC 9002 "Computing PTO" for `path`, with the peer's max_ack_delay of

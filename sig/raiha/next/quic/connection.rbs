@@ -168,6 +168,7 @@ module Raiha::Next::QUIC
     private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
     private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float, path: Path?, ?received_at: Float) -> bool?
+    private def give_up_an_id: (Float now) -> nil
     private def take_early_ack: (EarlyAck ack) -> void
     private def keep: (Wire::Packet::Parsed packet, PacketProtection::level level, Integer length, from: address, to: address?, ecn: ecn | :ce, now: Float) -> nil
     private def open_kept: (Float now) -> void

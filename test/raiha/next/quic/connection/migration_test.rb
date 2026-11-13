@@ -327,9 +327,11 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal CLIENT, server.path.remote
   end
 
-  # Rebindings one after another move while there is an ID for each path
-  # left, and no further once none is left.
-  def test_rebindings_while_ids_last
+  # Rebindings one after another, faster than the validations of the paths
+  # left end: with no ID left, the oldest path left being validated again
+  # goes and its ID is retired, and once the client issues another, the
+  # next packet moves the server.
+  def test_rebindings_faster_than_validations
     peers = Peers.new
     keylog = Keylog.new
     client = client_connection(keylog:)
@@ -340,10 +342,20 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
         stateless_reset_token: format("%016d", sequence_number).b)
     end
     server.receive(packet(keylog, ping, *issued, number: 999), from: CLIENT, to: SERVER, now:)
-    addresses = (1..4).map { ["198.51.100.#{_1}", 61_000] }
+    addresses = (1..3).map { ["198.51.100.#{_1}", 61_000] }
     addresses.each_with_index { |address, index| server.receive(packet(keylog, ping, number: 1000 + index), from: address, to: SERVER, now:) }
-    assert_equal addresses.first(2), peers.addresses
     assert_equal addresses[1], server.path.remote
+    assert_equal [addresses[1]], peers.addresses
+    # The new path is validated by the client, and what waited goes there.
+    _, data = challenges(sent(server, keylog, now)).fetch(addresses[1])
+    server.receive(packet(keylog, QUIC::Wire::Frame::PathResponse.new(data:), number: 1003), from: addresses[1], to: SERVER, now:)
+    retired = sent(server, keylog, now).flat_map(&:last).grep(QUIC::Wire::Frame::RetireConnectionID).map(&:sequence_number)
+    assert_equal [2], retired
+    another = QUIC::Wire::Frame::NewConnectionID.new(sequence_number: 3, retire_prior_to: 0, connection_id: "c0000003".b,
+      stateless_reset_token: format("%016d", 3).b)
+    server.receive(packet(keylog, ping, another, number: 1004), from: addresses[2], to: SERVER, now:)
+    server.receive(packet(keylog, ping, number: 1005), from: addresses[2], to: SERVER, now:)
+    assert_equal addresses[2], server.path.remote
   end
 
   # A path that fails and is left for good takes its address out; the
