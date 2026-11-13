@@ -387,7 +387,7 @@ module Raiha::Next::QUIC
     # offers no one decided on. A connection that has closed is let go.
     def handle_timeout(now:)
       connections.each { |connection| connection.handle_timeout(now:) }
-      @handles.each_value.select { |handle| handle.expired?(now) }.each { |handle| forget(handle) }
+      @handles.each_value.uniq.select { |handle| handle.expired?(now) }.each { |handle| expire(handle) }
       @connections.delete_if { |_, connection| connection.closed? }
       @peers.prune
     end
@@ -678,6 +678,14 @@ module Raiha::Next::QUIC
     private def pending!(handle)
       return if @handles[handle.destination_connection_id].equal?(handle)
       raise Error::StateError, "the offer has been decided on or has expired"
+    end
+
+    # An offer no one decided on is forgotten; one that acknowledged the
+    # client's Initials is refused, so that the client, which knows the
+    # server's connection ID, does not wait on it.
+    private def expire(handle)
+      return forget(handle) unless handle.server_connection_id
+      close(handle, ConnectionError.new(code: ErrorCode::CONNECTION_REFUSED, frame_type: 0, reason: "", application: false))
     end
 
     private def forget(handle)

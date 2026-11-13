@@ -166,6 +166,7 @@ module Raiha::Next::QUIC
     private def new_connection_id: () -> String
     private def issue_connection_id: (Connection connection) -> [String, String]
     private def pending!: (Handle handle) -> void
+    private def expire: (Handle handle) -> void
     private def forget: (Handle handle) -> void
     private def negotiate: (Wire::UnsupportedVersion packet, String datagram, address from, address? to) -> Route::t
     private def reset: (String dcid, String datagram, address from, address? to, Float now) -> Route::t

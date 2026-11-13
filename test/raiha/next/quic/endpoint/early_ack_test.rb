@@ -89,6 +89,24 @@ class RaihaNextQUICEndpointEarlyAckTest < Minitest::Test
     refute_kind_of QUIC::Route::ClientHello, endpoint.receive(late, from: CLIENT, now: 0.01)
   end
 
+  # An offer that acknowledged the client's Initials and that no one
+  # decided on is refused when it expires, from the server's connection
+  # ID, and is forgotten by both its IDs, with what it kept.
+  def test_an_acknowledged_offer_that_expires
+    (one, _), first = halves
+    endpoint = endpoint()
+    handle = endpoint.receive(initial(first:, dcid: first, packet_number: 0, frames: [crypto(0, one)]), from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    (ack, = sent(endpoint, first))
+    endpoint.handle_timeout(now: QUIC::Endpoint::HANDLE_LIFETIME)
+    (header, number, frames, _), = sent(endpoint, first)
+    assert_equal [ack.first.scid, 1], [header.scid, number]
+    assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, frames.grep(QUIC::Wire::Frame::ConnectionClose).first.code
+    assert_raises(QUIC::Error::StateError) { endpoint.refuse(handle) }
+    assert_nil endpoint.next_timeout
+    assert_equal 0, endpoint.instance_variable_get(:@buffered)
+  end
+
   # Initial packets of a few bytes, each eliciting an ACK, and with gaps
   # between their numbers, which make each ACK longer, are answered no
   # further than three times what came: some go unanswered.
