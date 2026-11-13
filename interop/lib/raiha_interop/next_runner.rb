@@ -6,8 +6,8 @@ require_relative "next_http3_server"
 require_relative "next_server"
 
 module RaihaInterop
-  # The entry point of the next release of raiha, which the image built
-  # with RAIHA_IMPL=next runs: the testcases it takes in each role, by the
+  # The entry point of the next release of raiha, which the image runs:
+  # the testcases it takes in each role, by the
   # names the runner gives them there, and the client or the server of
   # hq-interop for them, or of HTTP/3 for http3. Key updates come without
   # asking, after the first hundred packets.

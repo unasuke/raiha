@@ -1,8 +1,7 @@
 # String#unpack1 / #unpack format-string specific overloads, added to the
-# core declarations with `| ...`. sig/patches/string.rbs, which the old
-# implementation reads, writes them as definitions of their own, which RBS
-# rejects as duplicates; String then has no definition at all and every
-# method on a String goes unchecked.
+# core declarations with `| ...`, not written as definitions of their own,
+# which RBS rejects as duplicates of the core ones; String then has no
+# definition at all and every method on a String goes unchecked.
 # The bundled
 # rbs core declaration returns `(Integer | Float | String)?` regardless
 # of the format string, but raiha's binary parsers always rely on

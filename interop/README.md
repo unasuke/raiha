@@ -5,7 +5,7 @@ Bundles raiha into the container shape that
 expects: a Docker image with `run_endpoint.sh` at the root and a
 small dispatcher (`interop/bin/raiha-interop`) that reads the
 runner-provided environment variables and either binds a UDP server
-on `0.0.0.0:443` or runs a single client request.
+on port 443 or runs the client's requests.
 
 ## Layout
 
@@ -16,10 +16,13 @@ interop/
 ├── bin/
 │   └── raiha-interop     # Ruby dispatcher, ROLE / TESTCASE_* aware
 ├── lib/raiha_interop/
-│   ├── runner.rb
-│   ├── client_runner.rb
-│   ├── server_runner.rb
-│   └── testcases.rb
+│   ├── runner.rb         # reads the role and the testcase
+│   ├── next_runner.rb    # the testcases taken in each role
+│   ├── next_quic.rb
+│   ├── next_server.rb / next_client.rb              # hq-interop
+│   └── next_http3_server.rb / next_http3_client.rb  # http3
+├── quic-interop-runner.no-sim.yml
+├── run_interop_runner.sh
 └── README.md
 ```
 
@@ -28,7 +31,7 @@ interop/
 From the repo root:
 
 ```sh
-docker build -t raiha-interop -f interop/Dockerfile .
+docker build -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
 ```
 
 The build context must be the repo root because the Dockerfile copies
@@ -61,7 +64,7 @@ docker run -d --name raiha-server --network raiha-net \
   -v $(pwd)/tmp/raiha-certs:/certs:ro \
   -v $(pwd)/tmp/raiha-www:/www:ro \
   -v $(pwd)/tmp/raiha-qlog:/logs \
-  raiha-interop
+  localhost/raiha-next-interop:latest
 ```
 
 Client:
@@ -69,14 +72,11 @@ Client:
 ```sh
 docker run --rm --network raiha-net \
   -e ROLE=client -e TESTCASE_CLIENT=handshake \
-  -e WAITFORSERVER=raiha-server:4433 \
+  -e REQUESTS=https://raiha-server:4433/index.html \
   -e DOWNLOADS=/downloads \
   -v $(pwd)/tmp/raiha-downloads:/downloads \
-  raiha-interop
+  localhost/raiha-next-interop:latest
 ```
-
-For the http3 / transfer testcases also pass `REQUESTS=https://raiha-server/index.html`
-to the client.
 
 ## Running with quic-interop-runner
 
@@ -85,133 +85,51 @@ git clone --depth 1 https://github.com/quic-interop/quic-interop-runner tmp/quic
 cd tmp/quic-interop-runner
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-# Add raiha to implementations_quic.json:
-#   "raiha": {
-#     "image": "localhost/raiha-interop:latest",
-#     "url": "https://github.com/unasuke/raiha",
-#     "role": "both"
-#   }
-python run.py -c raiha -s raiha -t handshake -d
-python run.py -c raiha -s quic-go -t handshake
-```
-
-`-c` selects the client implementation, `-s` the server. `-t`
-restricts the testcases to run.
-
-### Known environment caveats (podman docker-shim)
-
-Running on a docker shim provided by podman 5.x surfaced three issues
-that an actual Docker Engine 28.1+ install with Wireshark would
-avoid:
-
-- `interface_name:` in the upstream `docker-compose.yml` requires
-  Docker Engine 28.1; under the podman shim it errors out at compose
-  up. Either strip those four lines or use the sim-less variant
-  (next bullet).
-- The `martenseemann/quic-network-simulator` ns-3 container needs raw
-  socket / iptables forwarding inside its network namespace. Under
-  podman the sim container starts and `dumpcap` runs, but no packets
-  appear to traverse the ns-3 datapath, so handshake testcases time
-  out. The repo ships a sim-less compose override at
-  `interop/quic-interop-runner.no-sim.yml`, so client and server share
-  a plain bridge network and h3 traffic flows directly.
-  `interop/run_interop_runner.sh` copies it into the runner's clone and
-  runs `run.py` on it with the arguments given:
-
-  ```sh
-  PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
-    interop/run_interop_runner.sh -c raiha -s raiha -t handshake -d
-  ```
-
-  The runner never takes the compose down, so a network it made
-  outlives it, and one on the same addresses (193.167.x.x, which
-  `trace.py` fixes) stops the next run from making its own, whichever
-  checkout or compose left it. The script makes the network afresh:
-  before the run it removes the networks on 193.167.x.x with the
-  stopped containers on them and those named `sim`, `client` and
-  `server`, and after the run it removes its own the same way. A
-  container still running is left alone, and the run does not start.
-  `RUNNER_DIR` points it at another clone of the runner.
-
-  Under this layout the handshake actually completes (`client exited
-  with code 0`, file downloaded), but…
-- The runner's testcase verification is pcap-driven via pyshark and
-  needs `tshark` / `editcap` to inspect QUIC packets. With
-  Wireshark 4.4+ installed and the no-sim compose pinning the
-  containers to `193.167.{0,100}.100` (the IPs that
-  `quic-interop-runner/trace.py` hardcodes), pyshark sees real
-  packets and `_get_versions` returns `0x1`.
-
-### Last verified status (raiha vs raiha, sim-less compose)
-
-| testcase | result | notes |
-|----------|--------|-------|
-| `handshake` | ✓ | basic 1 KB transfer + handshake check |
-| `transfer` | ✓ | 2 MB + 3 MB + 5 MB, all three streams verified |
-| `http3` | ✓ | HTTP/3 GET, ~512 KB body |
-| `retry` | ✓ | Demuxer issues + validates Retry token end-to-end |
-
-### Cross-implementation matrix
-
-Tried against `martenseemann/quic-go-interop:latest` under the same
-sim-less compose. Results so far:
-
-- `python run.py -c raiha -s quic-go ...`: raiha client gets to
-  "starting" but stops before "handshake complete". quic-go server
-  receives the Initial and replies, but raiha's processing of that
-  reply (in this particular compose environment) doesn't progress
-  the handshake — works in a plain `docker network` smoke between
-  the same two images, so the mismatch is environment-specific
-  rather than a protocol-level gap.
-- `python run.py -c quic-go -s raiha ...`: the compliance pre-check
-  fails because quic-go's interop entrypoint doesn't exit 127 for
-  an unknown testcase in our podman-shim setup, so the runner skips
-  every testcase. The same compliance check passes for raiha, so
-  the gap is in quic-go's run script under this runtime.
-
-Both directions need more environment plumbing (matching the
-expectations of the official Docker Engine + ns-3 sim setup) before
-the matrix produces meaningful verdicts. The self-pair smoke above
-remains the only path that runs end to end here.
-
-## Supported testcases
-
-| testcase | status |
-|----------|--------|
-| `handshake` | claimed — raiha vs raiha smoke OK |
-| `transfer` | claimed — raiha vs raiha smoke OK (downloaded body matches `/www`) |
-| `http3` | claimed — raiha vs raiha smoke OK |
-| `versionnegotiation` | claimed — raiha vs raiha smoke は v1-v1 で degenerate (VN は trigger せず); Demuxer 単体の VN 応答は unit test で検証済 |
-| `retry` | claimed — raiha vs raiha smoke で `require_retry: true` のもと client exit 0 (Retry → 二度目 Initial 経路を経たと推定) |
-
-Anything else returns exit status 127 and the runner reports it as
-"not implemented", which keeps the matrix honest while we expand
-coverage.
-
-## The next release of raiha
-
-Built with `--build-arg RAIHA_IMPL=next`, the image runs the next
-release of raiha (`Raiha::Next::QUIC`) with hq-interop (HTTP/0.9 over
-QUIC) instead, and HTTP/3 (`Raiha::Next::HTTP3`) for http3:
-`interop/lib/raiha_interop/next_runner.rb` hands the role to
-`NextServer` or `NextClient`, or to `NextHTTP3Server` or
-`NextHTTP3Client` for http3.
-
-```sh
-docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
-# Add it to implementations_quic.json as "raiha-next":
+# Add raiha to implementations_quic.json as "raiha-next":
 #   "raiha-next": {
 #     "image": "localhost/raiha-next-interop:latest",
 #     "url": "https://github.com/unasuke/raiha",
 #     "role": "both"
 #   }
+```
+
+`-c` selects the client implementation, `-s` the server. `-t`
+restricts the testcases to run.
+
+### The sim-less compose
+
+The runner's own `docker-compose.yml` puts the ns-3 simulator between
+the client and the server. Where that cannot run (see "With the ns-3
+simulator" below), the repo ships a sim-less compose at
+`interop/quic-interop-runner.no-sim.yml`, so client and server share a
+plain bridge network. `interop/run_interop_runner.sh` copies it into
+the runner's clone and runs `run.py` on it with the arguments given:
+
+```sh
 PYTHON=$PWD/tmp/quic-interop-runner/.venv/bin/python \
   interop/run_interop_runner.sh -c raiha-next -s raiha-next \
   -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3,resumption,zerortt -d
 ```
 
-The CI job `next-interop-runner` runs these nine. versionnegotiation is
-implemented on both sides but left out, as the runner cannot run it
+The runner never takes the compose down, so a network it made
+outlives it, and one on the same addresses (193.167.x.x, which
+`trace.py` fixes) stops the next run from making its own, whichever
+checkout or compose left it. The script makes the network afresh:
+before the run it removes the networks on 193.167.x.x with the
+stopped containers on them and those named `sim`, `client` and
+`server`, and after the run it removes its own the same way. A
+container still running is left alone, and the run does not start.
+`RUNNER_DIR` points it at another clone of the runner.
+
+The runner's testcase verification is pcap-driven via pyshark and
+needs `tshark` / `editcap` to inspect QUIC packets, Wireshark 4.4 or
+later. The sim-less compose pins the containers to
+`193.167.{0,100}.100` (the IPs that `quic-interop-runner/trace.py`
+hardcodes) and sets `NETWORK_SIMULATOR=none`, under which each
+endpoint captures its own trace with tcpdump (`run_endpoint.sh`).
+
+The CI job `next-interop-runner` runs the nine above. versionnegotiation
+is implemented on both sides but left out, as the runner cannot run it
 yet: `testcases_quic.py` defines `TestCaseVersionNegotiation` but
 leaves it out of `TESTCASES_QUIC`, so `-t` does not take it, and its
 check reads `p.scid` off each packet `get_vnp` gives, which is a whole
@@ -220,6 +138,14 @@ ends the run. Listed and read as `p.quic.scid`, it succeeds between
 raiha-next and itself (checked 2026-10-22, runner at `1d6f655`). Before
 adding it back to the job, check the runner upstream for a fix or an
 issue on this.
+
+## Supported testcases
+
+The image runs the next release of raiha (`Raiha::Next::QUIC`) with
+hq-interop (HTTP/0.9 over QUIC), and HTTP/3 (`Raiha::Next::HTTP3`) for
+http3: `interop/lib/raiha_interop/next_runner.rb` hands the role to
+`NextServer` or `NextClient`, or to `NextHTTP3Server` or
+`NextHTTP3Client` for http3.
 
 | testcase | client | server |
 |----------|--------|--------|
@@ -235,7 +161,8 @@ issue on this.
 | `ecn` | as for `handshake`; its packets are marked ECT(0), as all are | as for `handshake` |
 | `connectionmigration` | the runner gives it `transfer`: it moves to the server's preferred address, IPv6 first, once the handshake is confirmed and one of its connection IDs acknowledged | offers its own first IPv4 and IPv6 addresses on port 4434 as its preferred address, listens there too, and moves there once it has validated the client's path to it |
 
-Everything else returns exit status 127. The runner gives several
+Everything else returns exit status 127, which the runner reports as
+"not implemented". The runner gives several
 testcases another's name: `blackhole`, `amplificationlimit`,
 `transferloss`, `transfercorruption`, `rebind-port`, `rebind-addr`,
 `ipv6` and the `goodput` and `crosstraffic` measurements are `transfer`
@@ -255,9 +182,11 @@ sending there.
 The testcases of loss, corruption, delay and bandwidth need the
 runner's own `docker-compose.yml`, with the ns-3 simulator between the
 client and the server. That takes Docker Engine 28.1 or later, for its
-`interface_name:`, and Wireshark 4.4 or later for the runner's `tshark`;
-under podman the simulator passes nothing on (see above), and CI stays
-on the sim-less compose.
+`interface_name:`, and Wireshark 4.4 or later for the runner's `tshark`.
+Under the docker shim of podman 5.x, the compose errors out at
+`interface_name:`, and with those lines stripped the simulator's
+container starts but passes no packets on, so CI stays on the sim-less
+compose.
 
 `run_endpoint.sh` does what the simulator's endpoint image does in its
 `setup.sh`: the routes to `193.167.0.0/16` and `fd00:cafe:cafe::/48` go
@@ -265,10 +194,9 @@ through the simulator, `.2` of the endpoint's network, the direct ones
 go, and the checksum offload is turned off, as the simulator passes on
 only datagrams whose checksums are valid; the client waits for the
 simulator to listen on port 57832. The sim-less compose sets
-`NETWORK_SIMULATOR=none`, which leaves all of that out and has the
-endpoints capture the trace themselves instead. With the offload off the
-kernel refuses GSO (EIO), and the runtime's socket sends the datagrams
-of a Transmit one by one.
+`NETWORK_SIMULATOR=none`, which leaves all of that out. With the
+offload off the kernel refuses GSO (EIO), and the runtime's socket sends
+the datagrams of a Transmit one by one.
 
 The upstream compose raises the endpoints' locked memory to 64 MiB. Where
 the hard limit is lower, as in an LXD container (8 MiB), the containers
@@ -287,7 +215,7 @@ services:
 ```
 
 ```sh
-docker build --build-arg RAIHA_IMPL=next -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
+docker build -t localhost/raiha-next-interop:latest -f interop/Dockerfile .
 cd tmp/quic-interop-runner
 COMPOSE_FILE=docker-compose.yml:memlock.yml python run.py -c raiha-next -s raiha-next \
   -t handshakeloss,transferloss,handshakecorruption,transfercorruption,longrtt,blackhole,amplificationlimit,ecn,goodput,crosstraffic
@@ -303,7 +231,7 @@ The runner leaves the log directory and the networks of a run behind;
 give each run a `--log-dir` of its own, and take the networks on
 `193.167.x.x` down before the next.
 
-Built with `--build-arg RAIHA_STARTUP=rapid_start` as well, the image
+Built with `--build-arg RAIHA_STARTUP=rapid_start`, the image
 starts its paths with Rapid Start (`Congestion::Startup::RapidStart`);
 under a tag and a name of its own in `implementations_quic.json`, the
 goodput of the two can be set side by side.
@@ -313,11 +241,12 @@ goodput of the two can be set side by side.
 | variable | purpose |
 |----------|---------|
 | `ROLE` | `server` or `client` |
-| `TESTCASE_SERVER` / `TESTCASE_CLIENT` | per-role testcase selector |
-| `WAITFORSERVER` | client only — `host:port` to dial |
+| `TESTCASE_SERVER` / `TESTCASE_CLIENT` | per-role testcase selector (`TESTCASE` inside the runner's containers) |
+| `REQUESTS` | client only — the URLs to fetch, separated by spaces |
 | `WWW` | server only — document root for static responses |
 | `DOWNLOADS` | client only — directory to write fetched files into |
 | `CERTS` | server only — directory containing `cert.pem` / `priv.key` |
 | `QLOGDIR` | optional — emit qlog files to this directory |
 | `SSLKEYLOGFILE` | optional — path for the standard TLS key log |
-| `BIND_HOST` / `BIND_PORT` | server only — override the default `0.0.0.0:443` |
+| `BIND_PORT` | server only — override the default port 443 |
+| `RAIHA_STARTUP` | optional — `rapid_start` to start paths with Rapid Start |

@@ -6,10 +6,9 @@
 # as environment variables; raiha-interop reads them and either
 # binds a UDP server or runs a one-shot client.
 #
-# Built with --build-arg RAIHA_IMPL=next, the image runs the next
-# release of raiha with hq-interop instead, and with
-# --build-arg RAIHA_STARTUP=rapid_start as well, its paths start with
-# Rapid Start.
+# The image runs the next release of raiha with hq-interop, or HTTP/3
+# for http3. Built with --build-arg RAIHA_STARTUP=rapid_start, its paths
+# start with Rapid Start.
 #
 # iproute2 and ethtool set up the routes through the ns-3 simulator and
 # turn the checksum offload off (run_endpoint.sh).
@@ -28,9 +27,8 @@ RUN bundle config set --local without 'development test' \
  && bundle install
 
 FROM ruby:4.0-slim
-ARG RAIHA_IMPL=current
 ARG RAIHA_STARTUP=
-ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle RAIHA_IMPL=$RAIHA_IMPL RAIHA_STARTUP=$RAIHA_STARTUP
+ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle RAIHA_STARTUP=$RAIHA_STARTUP
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libssl3 ca-certificates iproute2 ethtool tcpdump \

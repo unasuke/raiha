@@ -1,17 +1,10 @@
-# Test helper for the next release of raiha (`Raiha::Next`). Unlike
-# test/test_helper.rb it never requires the old implementation, so a test
-# that reaches for `Raiha::TLS` or `Raiha::Connection` fails instead of
-# passing by accident. Merged into test/test_helper.rb when the old
-# implementation is replaced.
+# Test helper for the next release of raiha (`Raiha::Next`).
 
 if ENV["COVERAGE"]
   require "simplecov"
-  # rake test:unit loads this helper and test/test_helper.rb into one process.
-  unless SimpleCov.running
-    SimpleCov.start do
-      add_filter "/test/"
-      enable_coverage :branch
-    end
+  SimpleCov.start do
+    add_filter "/test/"
+    enable_coverage :branch
   end
 end
 

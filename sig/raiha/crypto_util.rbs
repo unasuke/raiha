@@ -1,4 +1,0 @@
-module Raiha::CryptoUtil
-  def self?.hkdf_expand_label: (String secret, String label, String context, Integer length, ?hash: String) -> String
-  def self?.hkdf_expand: (String prk, String info, Integer length, ?hash: String) -> String
-end

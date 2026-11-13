@@ -17,20 +17,6 @@ namespace :test do
     t.test_files = FileList["test/**/*_test.rb"].exclude("test/interop/**/*_test.rb")
   end
 
-  Rake::TestTask.new(:quic) do |t|
-    t.description = "Run QUIC tests"
-    t.libs << "test"
-    t.libs << "lib"
-    t.test_files = FileList["test/raiha/quic/**/*_test.rb"]
-  end
-
-  Rake::TestTask.new(:tls) do |t|
-    t.description = "Run TLS tests"
-    t.libs << "test"
-    t.libs << "lib"
-    t.test_files = FileList["test/raiha/tls/**/*_test.rb"]
-  end
-
   Rake::TestTask.new(:next) do |t|
     t.description = "Run tests for the next release of raiha (lib/raiha/next)"
     t.libs << "test"
@@ -43,30 +29,6 @@ namespace :test do
     t.libs << "test"
     t.libs << "lib"
     t.test_files = FileList["test/interop/**/*_test.rb"]
-  end
-
-  namespace :interop do
-    INTEROP_SPEC = {
-      aioquic: { file: "test/interop/quic/aioquic_test.rb", build: :aioquic },
-      quicgo: { file: "test/interop/quic/quicgo_test.rb", build: :quicgo },
-      quiche: { file: "test/interop/quic/quiche_test.rb", build: :quiche },
-      quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
-      quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
-      h3i: { file: "test/interop/http3/h3i_test.rb", build: :h3i },
-      openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
-      picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
-      quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem }
-    }.freeze
-
-    INTEROP_SPEC.each do |name, spec|
-      Rake::TestTask.new(name) do |t|
-        t.description = "Run #{name} interop tests (auto-builds the peer implementation)"
-        t.libs << "test"
-        t.libs << "lib"
-        t.test_files = [spec[:file]]
-      end
-      task name => "interop:build:#{spec[:build]}"
-    end
   end
 end
 
