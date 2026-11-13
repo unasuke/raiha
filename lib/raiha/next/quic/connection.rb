@@ -68,6 +68,8 @@ module Raiha::Next::QUIC
     MAX_EVENTS = 4096
     # Event::SessionTicket held until taken (session_ticket).
     MAX_HELD_TICKETS = 8
+    # The levels of the packets kept until their keys come (KeptPackets).
+    KEPT_LEVELS = %i[handshake one_rtt].freeze
     # The limits 0-RTT may have used, which a server that took it must not
     # lower (RFC 9000 "Values of Transport Parameters for 0-RTT"), nor
     # max_datagram_frame_size (RFC 9221). They come with EncryptedExtensions,
@@ -172,6 +174,7 @@ module Raiha::Next::QUIC
       @events = [] #: Array[Event::t]
       @streams = Streams.new(role:, config:, events: @events, now:, tracer:)
       @datagrams = Datagrams.new(config:, events: @events)
+      @kept = KeptPackets.new
       @protection = PacketProtection.new(role:, version: @version) { |phase| keys_updated(phase) }
       @source_connection_id = source_connection_id || random.bytes(config.connection_id_length).b
       # The Destination Connection ID of the last 1-RTT packet that came on
@@ -428,6 +431,7 @@ module Raiha::Next::QUIC
       while offset < datagram.bytesize
         packet = parse_packet(datagram, offset, now) or break
         processed = true if receive_packet(packet, from:, to:, ecn:, now:, path:)
+        open_kept(now) unless @kept.empty?
         offset = packet.end_offset
         break unless @state == :open
       end
@@ -791,9 +795,43 @@ module Raiha::Next::QUIC
       nil
     end
 
+    # Keeps a Handshake or 1-RTT packet whose keys have not come yet, as
+    # RFC 9001 "Receiving Out-of-Order Protected Packets" asks: a client's
+    # that came before the server's Initial, or a server's 1-RTT that came
+    # before the client's Finished, whose keys come only once the handshake
+    # is complete (RFC 9001 "Receiving 1-RTT Packets Before the Handshake
+    # Completes"). Past what KeptPackets keeps, and of a level whose keys
+    # are gone or none, it is dropped.
+    private def keep(packet, level, length, from:, to:, ecn:, now:)
+      kept = KEPT_LEVELS.include?(level) && !@protection.discarded?(level) &&
+        @kept.keep(packet.datagram.byteslice(packet.offset, length) || "".b, level:, from:, to:, ecn:, received_at: now)
+      dropped(:key_unavailable, length, now) unless kept
+      nil
+    end
+
+    # Opens the packets kept whose keys have come, in the order they came,
+    # each on the path it came on, as at once (receive); those of a level
+    # whose keys are gone are dropped. One opened may bring the keys of
+    # another.
+    private def open_kept(now)
+      while @state == :open
+        ready = @kept.take { |level| @protection.can_read?(level) || @protection.discarded?(level) }
+        break if ready.empty?
+        ready.each do |kept|
+          break unless @state == :open
+          next dropped(:key_unavailable, kept.bytes.bytesize, now) if @protection.discarded?(kept.level)
+          packet = parse_packet(kept.bytes, 0, now) or next
+          path = path_of(kept.to, kept.from)
+          next dropped(:rejected, kept.bytes.bytesize, now) unless path || (@role == :server && @handshake_confirmed)
+          receive_packet(packet, from: kept.from, to: kept.to, ecn: kept.ecn, now:, path:, received_at: kept.received_at)
+        end
+      end
+    end
+
     # `path` is the one `from` and `to` name, nil when the connection does
-    # not know it.
-    private def receive_packet(packet, from:, to:, ecn:, now:, path:)
+    # not know it. A packet whose keys have not come is kept until they do
+    # (keep); `received_at` is when one kept came.
+    private def receive_packet(packet, from:, to:, ecn:, now:, path:, received_at: now)
       header = packet.header
       level = header.type
       length = packet.end_offset - packet.offset
@@ -804,7 +842,7 @@ module Raiha::Next::QUIC
       # datagram under 1200 bytes.
       return dropped(:invalid, length, now) if @role == :server && level == :initial && packet.datagram.bytesize < MIN_INITIAL_DATAGRAM
       first = @role == :server && @binding.nil?
-      keys = (first ? first_initial_keys(header) : @protection.read_keys(level)) or return dropped(:key_unavailable, length, now)
+      keys = (first ? first_initial_keys(header) : @protection.read_keys(level)) or return keep(packet, level, length, from:, to:, ecn:, now:)
       unmasked = packet.unmask(keys.header_protection, largest: @recovery.largest_received(level))
       payload = (first ? unmasked.open(keys.aead) : @protection.open(level, unmasked, now:, pto: @path.rtt.pto_period))
       return dropped(:decryption_failure, length, now) unless payload
@@ -817,7 +855,7 @@ module Raiha::Next::QUIC
       frames = Wire::Frame.parse(payload, packet_type: level, ack_delay_exponent: peer_ack_delay_exponent(level))
       largest = @recovery.largest_received(level)
       processed = @recovery.on_packet_received(packet_type: level, packet_number: unmasked.packet_number, ecn:,
-        ack_eliciting: frames.any?(&:ack_eliciting?), now:)
+        ack_eliciting: frames.any?(&:ack_eliciting?), now:, received_at:)
       return dropped(:duplicate, length, now) unless processed
       if @tracer
         @tracer.packet_received(header: Tracer::PacketHeader.of(unmasked.header, unmasked.packet_number), # steep:ignore

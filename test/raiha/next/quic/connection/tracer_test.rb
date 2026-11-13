@@ -93,7 +93,8 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
     assert_equal [[:decryption_failure, 1200], [:duplicate, 1200]], dropped(tracer)
   end
 
-  # A 1-RTT packet before the keys to read it.
+  # A 1-RTT packet before the keys to read it, past what is kept until
+  # they come.
   def test_no_keys_yet
     tracer = RecordingTracer.new
     client = client_connection(tracer:)
@@ -101,7 +102,7 @@ class RaihaNextQUICConnectionTracerTest < Minitest::Test
     keys = QUIC::Crypto::Keys.derive(suite: TLS::CipherSuite::TLS_AES_128_GCM_SHA256, secret: "s".b * 32, version: QUIC::Version::V1)
     packet = QUIC::Wire::Packet.seal(QUIC::Wire::ShortHeader.new(dcid: scid), packet_number: 0, packet_number_length: 2,
       payload: "\x01".b * 30, keys:)
-    client.receive(packet, from: SERVER, now: 0.0)
+    (QUIC::KeptPackets::PACKETS + 1).times { client.receive(packet, from: SERVER, now: 0.0) }
     assert_equal [[:key_unavailable, packet.bytesize]], dropped(tracer)
   end
 

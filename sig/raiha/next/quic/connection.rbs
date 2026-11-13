@@ -23,6 +23,7 @@ module Raiha::Next::QUIC
     CLOSE_LEVELS: Array[PacketProtection::level]
     MAX_EVENTS: Integer
     MAX_HELD_TICKETS: Integer
+    KEPT_LEVELS: Array[PacketProtection::level]
     ZERO_RTT_LIMITS: Array[Symbol]
 
     class Pending < Data
@@ -47,6 +48,7 @@ module Raiha::Next::QUIC
     @events: Array[Event::t]
     @streams: Streams
     @datagrams: Datagrams
+    @kept: KeptPackets
     @packets_sent: Integer
     @bytes_sent: Integer
     @packets_received: Integer
@@ -154,7 +156,9 @@ module Raiha::Next::QUIC
     private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
     private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
     private def dropped: (Symbol reason, Integer length, Float now) -> nil
-    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float, path: Path?) -> bool?
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float, path: Path?, ?received_at: Float) -> bool?
+    private def keep: (Wire::Packet::Parsed packet, PacketProtection::level level, Integer length, from: address, to: address?, ecn: ecn | :ce, now: Float) -> nil
+    private def open_kept: (Float now) -> void
     private def authenticate_connection_ids: (TransportParameters parameters) -> void
     private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
     private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
