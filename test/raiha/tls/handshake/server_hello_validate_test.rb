@@ -32,12 +32,19 @@ class RaihaTLSHandshakeServerHelloValidateTest < Minitest::Test
     assert_nil HRR.validate
   end
 
-  # With supported_versions, legacy_version is ignored (RFC 8446
-  # "Supported Versions").
+  # Without supported_versions, a legacy_version other than 0x0303 claims
+  # an older TLS. With it, the version is the extension's, and such a
+  # legacy_version is illegal_parameter (RFC 9846 "Server Hello").
   def test_row1_legacy_version
     assert_equal violation(:protocol_version, :legacy_version), row1(without_versions(SH)).validate
-    assert_nil row1(SH).validate
-    assert_nil row1(HRR).validate
+    assert_equal violation(:illegal_parameter, :legacy_version), row1(SH).validate
+    assert_equal violation(:illegal_parameter, :legacy_version), row1(HRR).validate
+  end
+
+  # The selected version is told by supported_versions alone, before
+  # legacy_version is checked.
+  def test_row5_before_row1_of_tls13
+    assert_equal violation(:illegal_parameter, :selected_version), row1(row5(SH)).validate
   end
 
   def test_row2_compression
