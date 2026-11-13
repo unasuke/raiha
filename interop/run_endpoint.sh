@@ -68,8 +68,11 @@ if command -v tcpdump >/dev/null 2>&1; then
   # podman setup and the resulting pcap stays at 24 bytes (header
   # only). With -U each captured packet is flushed to disk
   # immediately so the pcap survives even when tcpdump is reaped
-  # abruptly during container teardown.
-  tcpdump -Z root -i eth0 -U -w "$PCAP" -s 0 udp >/dev/null 2>&1 &
+  # abruptly during container teardown. --immediate-mode hands each
+  # packet to tcpdump as it comes; without it the kernel holds them
+  # for up to a second, and a client that is done sooner, as in
+  # handshake or resumption, left a pcap of the header alone.
+  tcpdump -Z root -i eth0 --immediate-mode -U -w "$PCAP" -s 0 udp >/dev/null 2>&1 &
   TCPDUMP_PID=$!
   sleep 0.3
 fi
