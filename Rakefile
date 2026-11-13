@@ -18,10 +18,10 @@ namespace :test do
   end
 
   Rake::TestTask.new(:next) do |t|
-    t.description = "Run tests for the next release of raiha (lib/raiha/next)"
+    t.description = "Run tests for the next release of raiha (lib/raiha)"
     t.libs << "test"
     t.libs << "lib"
-    t.test_files = FileList["test/raiha/next/**/*_test.rb"]
+    t.test_files = FileList["test/raiha/**/*_test.rb"]
   end
 
   Rake::TestTask.new(:interop) do |t|
@@ -36,17 +36,17 @@ namespace :test do
   namespace :next do
     namespace :interop do
       NEXT_INTEROP_SPEC = {
-        openssl: { file: "test/interop/next/tls/openssl_test.rb", build: :openssl },
-        picotls: { file: "test/interop/next/tls/picotls_test.rb", build: :picotls },
-        quicgo: { file: "test/interop/next/quic/quicgo_test.rb", build: :quicgo },
-        aioquic: { file: "test/interop/next/quic/aioquic_test.rb", build: :aioquic },
-        quic_gem: { file: "test/interop/next/quic/quic_gem_test.rb", build: :quic_gem },
-        h3i: { file: "test/interop/next/http3/h3i_test.rb", build: :h3i },
-        quiche_http3_client: { file: "test/interop/next/http3/quiche_client_test.rb", build: :quiche },
-        quiche_http3_server: { file: "test/interop/next/http3/quiche_server_test.rb", build: :quiche },
-        h3spec: { file: "test/interop/next/http3/h3spec_test.rb", build: :h3spec },
+        openssl: { file: "test/interop/tls/openssl_test.rb", build: :openssl },
+        picotls: { file: "test/interop/tls/picotls_test.rb", build: :picotls },
+        quicgo: { file: "test/interop/quic/quicgo_test.rb", build: :quicgo },
+        aioquic: { file: "test/interop/quic/aioquic_test.rb", build: :aioquic },
+        quic_gem: { file: "test/interop/quic/quic_gem_test.rb", build: :quic_gem },
+        h3i: { file: "test/interop/http3/h3i_test.rb", build: :h3i },
+        quiche_http3_client: { file: "test/interop/http3/quiche_client_test.rb", build: :quiche },
+        quiche_http3_server: { file: "test/interop/http3/quiche_server_test.rb", build: :quiche },
+        h3spec: { file: "test/interop/http3/h3spec_test.rb", build: :h3spec },
         # A gem in the bundle: nothing to build.
-        tttls13: { file: "test/interop/next/tls/tttls13_test.rb", build: nil }
+        tttls13: { file: "test/interop/tls/tttls13_test.rb", build: nil }
       }.freeze
 
       NEXT_INTEROP_SPEC.each do |name, spec|
@@ -64,7 +64,7 @@ namespace :test do
       t.description = "Run QPACK of the next release of raiha against the qifs corpus (fetches it into tmp/qifs)"
       t.libs << "test"
       t.libs << "lib"
-      t.test_files = FileList["test/interop/next/http3/qifs*_test.rb"]
+      t.test_files = FileList["test/interop/http3/qifs*_test.rb"]
     end
     task qifs: "interop:build:qifs"
   end

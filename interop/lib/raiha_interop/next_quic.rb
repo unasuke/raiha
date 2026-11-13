@@ -4,8 +4,8 @@ require "fileutils"
 require "openssl"
 require "securerandom"
 require "socket"
-require "raiha/next/quic"
-require "raiha/next/runtime"
+require "raiha/quic"
+require "raiha/runtime"
 
 module RaihaInterop
   # What the client and the server of the next release of raiha share:

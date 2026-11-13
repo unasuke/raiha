@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "raiha/next/http3_binding"
+require "raiha/http3_binding"
 require_relative "next_client"
 
 module RaihaInterop

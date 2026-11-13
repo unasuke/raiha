@@ -15,7 +15,7 @@
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "socket"
-require "raiha/next/tls"
+require "raiha/tls"
 
 TLS = Raiha::Next::TLS
 

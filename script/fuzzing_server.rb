@@ -19,7 +19,7 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "socket"
 require "openssl"
 require "securerandom"
-require "raiha/next/tls"
+require "raiha/tls"
 
 TLS = Raiha::Next::TLS
 # Connections handled at once, each in a thread of its own.

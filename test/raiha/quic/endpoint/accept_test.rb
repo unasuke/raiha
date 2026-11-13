@@ -1,0 +1,336 @@
+require "test_helper"
+require "support/quic_pair"
+require "support/quic_recovery"
+
+# The second stage of a new connection: an admitted offer reads the
+# ClientHello out of its Initial packets.
+class RaihaNextQUICEndpointAcceptTest < Minitest::Test
+  include NextQUICPair
+
+  SCID = "s".b * 8
+
+  KEYS = { stateless_reset_key: "k".b * 32 }.freeze
+
+  def endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0)
+
+  # Takes the offer of `handle` with the test server's TLS settings.
+  def accept(endpoint, handle, now: 0.0)
+    tls_config = server_config
+    endpoint.accept(handle, tls_config:, keyring: server_keyring(config: tls_config), now:)
+  end
+
+  # Takes `client`'s offer and runs the handshake, the client's datagrams
+  # through the Endpoint; gives the connection and the routes of the
+  # client's datagrams after the first.
+  def connect(endpoint, client, now: 0.0)
+    route = endpoint.receive(client.transmits(now:).first.payload, from: CLIENT, to: SERVER, now:)
+    hello = endpoint.admit(route.handle, now:)
+    connection = accept(endpoint, hello.handle, now:)
+    routes = []
+    20.times do
+      break if client.handshake_complete? && connection.handshake_complete?
+      endpoint.each_transmit(now:) { client.receive(_1.payload, from: SERVER, now:) }
+      client.transmits(now:).each { routes << endpoint.receive(_1.payload, from: CLIENT, to: SERVER, now:) }
+      now += 0.001
+    end
+    [connection, routes]
+  end
+
+  # The ClientHello a client's first Initial carries.
+  def client_hello(datagram)
+    packet = QUIC::Wire::Packet.parse(datagram, dcid_length: 8)
+    keys = QUIC::Crypto::Initial.derive(dcid: packet.header.dcid, version: QUIC::Version::V1).client
+    payload = packet.unmask(keys.header_protection, largest: nil).open(keys.aead)
+    QUIC::Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: 3).grep(QUIC::Wire::Frame::Crypto).sum("".b, &:data)
+  end
+
+  # A client's Initial of 1200 bytes to `dcid` with `frames`.
+  def initial(dcid:, packet_number:, frames:)
+    header = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid:, scid: SCID)
+    keys = QUIC::Crypto::Initial.derive(dcid:, version: QUIC::Version::V1).client
+    payload = QUIC::Wire::Frame.encode(frames, ack_delay_exponent: 3)
+    seal = ->(length) { QUIC::Wire::Packet.seal(header, packet_number:, packet_number_length: 2, payload: payload.ljust(length, "\0".b), keys:) }
+    first = seal.(payload.bytesize)
+    seal.(payload.bytesize + 1200 - first.bytesize)
+  end
+
+  # The ClientHello of a client, split over two Initials to its first
+  # connection ID.
+  def split_client_hello
+    first = client_connection.transmits(now: 0.0).first.payload
+    dcid = QUIC::Wire::Packet.parse(first, dcid_length: 8).header.dcid
+    hello = client_hello(first)
+    half = hello.bytesize / 2
+    [0, 1].map do |part|
+      offset = part * half
+      data = part.zero? ? hello.byteslice(0, half) : hello.byteslice(half..)
+      initial(dcid:, packet_number: part, frames: [QUIC::Wire::Frame::Crypto.new(offset:, data:)])
+    end
+  end
+
+  def test_admit_reads_the_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    route = endpoint.admit(handle, now: 0.0)
+    assert_instance_of QUIC::Route::ClientHello, route
+    assert_same handle, route.handle
+    assert_equal "localhost", route.accepted.info.server_name
+    assert_equal ["hq-interop"], route.accepted.info.alpn_protocols
+    assert_empty [].tap { |sent| endpoint.each_transmit(now: 0.0) { sent << _1 } }
+  end
+
+  # A ClientHello over two datagrams is whole when the second comes, after
+  # the offer is admitted or before.
+  def test_a_client_hello_over_two_datagrams
+    first, second = split_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    assert_nil endpoint.admit(handle, now: 0.0)
+    route = endpoint.receive(second, from: CLIENT, now: 0.0)
+    assert_equal "localhost", route.accepted.info.server_name
+    assert_nil endpoint.receive(second, from: CLIENT, now: 0.0)
+
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    assert_nil endpoint.receive(second, from: CLIENT, now: 0.0)
+    assert_instance_of QUIC::Route::ClientHello, endpoint.admit(handle, now: 0.0)
+  end
+
+  # Once the ClientHello is whole, what more comes is kept for the
+  # connection and not read: a forged Initial with more CRYPTO data, which
+  # anyone who saw the first can make, does not end the offer.
+  def test_nothing_more_is_read_once_the_client_hello_is_whole
+    first = client_connection.transmits(now: 0.0).first.payload
+    dcid = QUIC::Wire::Packet.parse(first, dcid_length: 8).header.dcid
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    more = QUIC::Wire::Frame::Crypto.new(offset: client_hello(first).bytesize, data: "\x01".b)
+    assert_nil endpoint.receive(initial(dcid:, packet_number: 7, frames: [more]), from: CLIENT, now: 0.0)
+    assert_equal 2, handle.datagrams.size
+    assert_equal QUIC::Endpoint::HANDLE_LIFETIME, endpoint.next_timeout
+  end
+
+  def test_an_accepted_offer_connects
+    endpoint = endpoint()
+    client = client_connection
+    connection, routes = connect(endpoint, client)
+    assert client.handshake_complete?
+    assert connection.handshake_complete?
+    assert_equal 1, endpoint.connection_count
+    assert_equal [connection], [].tap { |all| endpoint.each_connection { all << _1 } }
+    refute_empty routes
+    assert_equal [QUIC::Route::Deliver.new(connection:)], routes.uniq
+  end
+
+  # The server's transport parameters carry the stateless reset token of
+  # its connection ID, from the Endpoint's key.
+  def test_the_reset_token_of_the_server
+    tracer = NextQUICRecovery::RecordingTracer.new
+    connect(endpoint, client_connection(tracer:))
+    remote = tracer.of(:parameters_set).find { _1[:owner] == :remote }[:parameters]
+    token = QUIC::StatelessReset.token(key: KEYS[:stateless_reset_key], connection_id: remote.initial_source_connection_id)
+    assert_equal token, remote.stateless_reset_token
+  end
+
+  # A generator of connection IDs that gives `ids` in turn.
+  class Generator
+    def initialize(*ids) = @ids = ids
+
+    def generate(_length) = @ids.shift
+  end
+
+  # The connection IDs an Endpoint issues come from its generator, drawn
+  # again while one leads to a connection already; one of another length
+  # than the Config's is misuse. The connections here go no further than
+  # the server's first flight, whose Initial packets carry the ID.
+  def test_connection_ids_from_the_generator
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
+      connection_ids: Generator.new("g".b * 8, "g".b * 8, "h".b * 8))
+    issued = [Random.new(1), Random.new(4)].map do |random|
+      route = endpoint.receive(client_connection(random:).transmits(now: 0.0).first.payload, from: CLIENT, to: SERVER, now: 0.0)
+      accept(endpoint, endpoint.admit(route.handle, now: 0.0).handle)
+      ids = []
+      endpoint.each_transmit(now: 0.0) { ids << QUIC::Wire::Packet.parse(_1.payload, dcid_length: 8).header.scid }
+      ids.uniq
+    end
+    assert_equal [["g".b * 8], ["h".b * 8]], issued
+
+    short = QUIC::Endpoint.server(config: QUIC::Config.new(**KEYS), random: Random.new(3), time: NOW, now: 0.0,
+      connection_ids: Generator.new("g".b * 4))
+    route = short.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, to: SERVER, now: 0.0)
+    assert_raises(QUIC::Error::Usage) { accept(short, short.admit(route.handle, now: 0.0).handle) }
+  end
+
+  # A ClientHello that cannot be read is closed even when no connection ID
+  # is free, which the CONNECTION_CLOSE needs none of.
+  def test_a_close_with_no_free_connection_id
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(connection_id_length: 0), random: Random.new(3), time: NOW, now: 0.0)
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    accept(endpoint, handle)
+    datagram = initial(dcid: "d".b * 8, packet_number: 0, frames: [QUIC::Wire::Frame::Crypto.new(offset: 0, data: "\x01\x00\x00\x05hello".b)])
+    other = ["192.0.2.7", 7]
+    handle = endpoint.receive(datagram, from: other, now: 0.0).handle
+    assert_nil endpoint.admit(handle, now: 0.0)
+    assert_equal 1, [].tap { |sent| endpoint.each_transmit(now: 0.0) { sent << _1 if _1.destination == other } }.size
+  end
+
+  # Zero-length connection IDs leave room for one connection only.
+  def test_no_free_connection_id
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(connection_id_length: 0), random: Random.new(3), time: NOW, now: 0.0)
+    2.times do |i|
+      handle = endpoint.receive(client_connection(random: Random.new(10 + i)).transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+      endpoint.admit(handle, now: 0.0)
+      next accept(endpoint, handle) if i.zero?
+      assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+    end
+  end
+
+  def test_an_offer_is_accepted_once
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    accept(endpoint, handle)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+  end
+
+  def test_no_accept_before_the_client_hello_is_whole
+    first, = split_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+  end
+
+  # The application turns the ClientHello down with a TLS alert: a
+  # CONNECTION_CLOSE of CRYPTO_ERROR, which closes the client.
+  def test_reject
+    client = client_connection
+    endpoint = endpoint()
+    first = client.transmits(now: 0.0).first.payload
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    endpoint.reject(handle, :unrecognized_name)
+    assert_raises(QUIC::Error::StateError) { accept(endpoint, handle) }
+    endpoint.each_transmit(now: 0.0) { client.receive(_1.payload, from: SERVER, now: 0.0) }
+    assert client.draining?
+    assert_equal QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:unrecognized_name)), client.close_reason.code
+  end
+
+  # The application refuses an offer, at its first stage or its second:
+  # a CONNECTION_CLOSE of the transport error, CONNECTION_REFUSED unless it
+  # says another.
+  def test_refuse
+    [false, true].each do |admitted|
+      client = client_connection
+      endpoint = endpoint()
+      handle = endpoint.receive(client.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+      endpoint.admit(handle, now: 0.0) if admitted
+      endpoint.refuse(handle)
+      assert_raises(QUIC::Error::StateError) { endpoint.refuse(handle) }
+      endpoint.each_transmit(now: 0.0) { client.receive(_1.payload, from: SERVER, now: 0.0) }
+      assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, client.close_reason.code
+    end
+  end
+
+  # RFC 9000 "Retry Packet": a Retry to the client's connection ID, whose
+  # tag is of its first, and whose token brings the offer back with the
+  # address validated.
+  def test_retry
+    client = client_connection
+    first = client.transmits(now: 0.0).first.payload
+    header = QUIC::Wire::Packet.parse(first, dcid_length: 8).header
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: "r".b * 32), random: Random.new(3), time: NOW, now: 0.0)
+    endpoint.retry(endpoint.receive(first, from: CLIENT, to: SERVER, now: 0.0).handle, now: 0.0)
+    sent = [].tap { |all| endpoint.each_transmit(now: 0.0) { all << _1 } }
+    assert_equal [[CLIENT, SERVER]], sent.map { [_1.destination, _1.source] }
+    packet = QUIC::Wire::Packet.parse(sent.first.payload, dcid_length: 8)
+    assert_instance_of QUIC::Wire::Retry, packet
+    assert packet.authentic?(header.dcid)
+    assert_equal header.scid, packet.dcid
+    assert_equal header.dcid, QUIC::RetryToken.verify(packet.token, key: "r".b * 32, address: CLIENT, time: NOW)
+    again = QUIC::Wire::LongHeader.new(type: :initial, version: QUIC::Version::V1, dcid: packet.scid, scid: SCID, token: packet.token)
+    keys = QUIC::Crypto::Initial.derive(dcid: packet.scid, version: QUIC::Version::V1).client
+    again = QUIC::Wire::Packet.seal(again, packet_number: 1, packet_number_length: 2, payload: "\x01".b.ljust(1200, "\0".b), keys:)
+    route = endpoint.receive(again, from: CLIENT, now: 0.1)
+    assert route.address_validated
+    assert_equal header.dcid, route.handle.original_destination_connection_id
+    assert_raises(QUIC::Error::Usage) { endpoint.retry(route.handle, now: 0.1) }
+  end
+
+  # An admitted offer cannot have a Retry: the client drops one after the
+  # server's Initial, which the second stage may have sent.
+  def test_no_retry_once_admitted
+    endpoint = QUIC::Endpoint.server(config: QUIC::Config.new(retry_token_key: "r".b * 32), random: Random.new(3), time: NOW, now: 0.0)
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::Usage) { endpoint.retry(handle, now: 0.0) }
+  end
+
+  def test_reject_takes_the_alerts_of_the_acceptor
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(ArgumentError) { endpoint.reject(handle, :bad_record_mac) }
+  end
+
+  def test_no_reject_before_the_client_hello_is_whole
+    first, = split_client_hello
+    endpoint = endpoint()
+    handle = endpoint.receive(first, from: CLIENT, now: 0.0).handle
+    assert_raises(QUIC::Error::StateError) { endpoint.reject(handle, :unrecognized_name) }
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::StateError) { endpoint.reject(handle, :unrecognized_name) }
+  end
+
+  def test_an_offer_is_admitted_once
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.admit(handle, now: 0.0)
+    assert_raises(QUIC::Error::StateError) { endpoint.admit(handle, now: 0.0) }
+  end
+
+  def test_an_expired_offer_is_not_admitted
+    endpoint = endpoint()
+    handle = endpoint.receive(client_connection.transmits(now: 0.0).first.payload, from: CLIENT, now: 0.0).handle
+    endpoint.handle_timeout(now: QUIC::Endpoint::HANDLE_LIFETIME)
+    assert_raises(QUIC::Error::StateError) { endpoint.admit(handle, now: QUIC::Endpoint::HANDLE_LIFETIME) }
+  end
+
+  # What the Endpoint sent itself, each as the frames of the server's
+  # Initial packet to the client whose first connection ID was `dcid`.
+  def closes(endpoint, dcid)
+    keys = QUIC::Crypto::Initial.derive(dcid:, version: QUIC::Version::V1).server
+    [].tap { |sent| endpoint.each_transmit(now: 0.0) { sent << _1 } }.map do |transmit|
+      assert_equal CLIENT, transmit.destination
+      payload = QUIC::Wire::Packet.parse(transmit.payload, dcid_length: 8).unmask(keys.header_protection, largest: nil).open(keys.aead)
+      QUIC::Wire::Frame.parse(payload, packet_type: :initial, ack_delay_exponent: 3)
+    end
+  end
+
+  # RFC 9001 "TLS Errors": a ClientHello the Acceptor fails on ends the
+  # offer with a CONNECTION_CLOSE of the alert as CRYPTO_ERROR.
+  def test_a_broken_client_hello
+    endpoint = endpoint()
+    datagram = initial(dcid: "d".b * 8, packet_number: 0, frames: [QUIC::Wire::Frame::Crypto.new(offset: 0, data: "\x01\x00\x00\x05hello".b)])
+    handle = endpoint.receive(datagram, from: CLIENT, now: 0.0).handle
+    assert_nil endpoint.admit(handle, now: 0.0)
+    assert_nil endpoint.next_timeout
+    assert_raises(QUIC::Error::StateError) { endpoint.admit(handle, now: 0.0) }
+    close, = closes(endpoint, "d".b * 8).flatten
+    assert_equal [QUIC::ErrorCode.crypto_error(TLS::IANA.alert_code(:decode_error)), 0x06], [close.code, close.frame_type]
+  end
+
+  # RFC 9000 "Cryptographic Message Buffering": CRYPTO data past what an
+  # Acceptor takes ends the offer with CRYPTO_BUFFER_EXCEEDED.
+  def test_crypto_past_the_limit
+    endpoint = endpoint()
+    offset = TLS::Handshake::Acceptor::MAX_CLIENT_HELLO_SIZE
+    datagram = initial(dcid: "d".b * 8, packet_number: 0, frames: [QUIC::Wire::Frame::Crypto.new(offset:, data: "x".b)])
+    handle = endpoint.receive(datagram, from: CLIENT, now: 0.0).handle
+    assert_nil endpoint.admit(handle, now: 0.0)
+    assert_nil endpoint.next_timeout
+    assert_equal [QUIC::ErrorCode::CRYPTO_BUFFER_EXCEEDED], closes(endpoint, "d".b * 8).flatten.map(&:code)
+  end
+end
