@@ -48,8 +48,17 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
     end
   end
 
-  # Downloads SIZE bytes through 10 Mbps and 20 ms each way, keeping what
-  # the server sends. Once the client has read 1 MB, the NAT binds its
+  # A client's issuer of connection IDs, as an Endpoint's would be: a
+  # server moves on a NAT rebinding only with an ID of the client's to
+  # validate the path it left with.
+  def issuer
+    random = Random.new(9)
+    QUIC::Endpoint::Issuer.new(->(_connection) { [random.bytes(8), random.bytes(16)] }, ->(_connection_id) {})
+  end
+
+  # Downloads SIZE bytes through 10 Mbps and 20 ms each way, to a client
+  # that issues connection IDs, keeping what the server sends. Once the
+  # client has read 1 MB, the NAT binds its
   # address to `outside`, and the client writes on a stream of its own so
   # that something leaves from there; it runs until the server has moved to
   # the new path and validated it. Gives the network, the server's
@@ -58,7 +67,7 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
   def move(outside)
     path = QUIC::Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 200_000)
     sent = []
-    net, client, server, reads = download(SIZE, forward: path, reverse: [Tap.new(sent), path], client_config: WIDE)
+    net, client, server, reads = download(SIZE, forward: path, reverse: [Tap.new(sent), path], client_config: WIDE, client_issuer: issuer)
     assert net.run_until { reads.last&.last.to_i >= 1_000_000 }
     connection = server.connections.first
     old = connection.path
@@ -97,8 +106,6 @@ class RaihaNextQUICTestMigrationScenariosTest < Minitest::Test
     path = QUIC::Test::Bottleneck.new(bandwidth: 10_000_000, delay: 0.02, queue: 200_000)
     sent = []
     tracer = NextQUICRecovery::RecordingTracer.new
-    random = Random.new(9)
-    issuer = QUIC::Endpoint::Issuer.new(->(_connection) { [random.bytes(8), random.bytes(16)] }, ->(_connection_id) {})
     net, client, server, reads = download(SIZE, forward: [Tap.new(sent), path], reverse: path, client_config:, client_tracer: tracer,
       client_issuer: issuer, server_config: QUIC::Config.new(preferred_address: { ipv4: PREFERRED }), server_addresses: addresses)
     assert net.run_until { client.handshake_confirmed? }

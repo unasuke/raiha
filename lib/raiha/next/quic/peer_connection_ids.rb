@@ -56,6 +56,10 @@ module Raiha::Next::QUIC
     # used, nor of those retired (RFC 9000 "Detecting a Stateless Reset").
     def reset_tokens(connection_ids) = @active.select { |entry| connection_ids.include?(entry.connection_id) }.filter_map(&:stateless_reset_token)
 
+    # Whether there is an ID no path has sent with, for `claim`; with
+    # zero-length IDs there always is.
+    def spare? = @current.empty? || @active.any? { |entry| !in_use?(entry.connection_id) }
+
     # An ID for a path to send with that no path has sent with, the lowest
     # first; nil when there is none. Zero-length IDs are always there.
     def claim

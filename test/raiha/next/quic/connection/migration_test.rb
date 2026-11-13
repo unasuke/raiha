@@ -60,6 +60,14 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
 
   def ping = QUIC::Wire::Frame::Ping.new
 
+  # NEW_CONNECTION_ID frames of `count` IDs of the client's, "c0000001" on.
+  def new_ids(count)
+    (1..count).map do |sequence_number|
+      QUIC::Wire::Frame::NewConnectionID.new(sequence_number:, retire_prior_to: 0, connection_id: format("c%07d", sequence_number).b,
+        stateless_reset_token: format("%016d", sequence_number).b)
+    end
+  end
+
   # The PATH_CHALLENGE of each path in `datagrams`, by destination.
   def challenges(datagrams)
     datagrams.each_with_object({}) do |(destination, _, dcid, frames), all|
@@ -112,7 +120,7 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
       client = client_connection(keylog:)
       server = server_connection(source_connection_id: "s".b * 8, tokens: Tokens.new)
       now = handshake(client, server)
-      server.receive(packet(keylog, ping, number: 999), from: CLIENT, to: SERVER, now:)
+      server.receive(packet(keylog, ping, *new_ids(2), number: 999), from: CLIENT, to: SERVER, now:)
       server.receive(packet(keylog, ping, number: 1000), from: address, to: SERVER, now:)
       2.times do |i|
         _, data = challenges(sent(server, keylog, now)).fetch(address)
@@ -123,28 +131,34 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     end
   end
 
-  # With no ID left that no path sent with, the path left is validated
-  # again with the ID in use, which its address has seen already, so that
-  # a packet an attacker sent again from elsewhere does not keep the
-  # connection there (RFC 9000 "Off-Path Packet Forwarding").
+  # With no ID left that no path sent with, there is no move on a
+  # rebinding: the path left would have to be validated again (RFC 9000
+  # "Off-Path Packet Forwarding") with the ID in use, which may not go to
+  # two addresses (RFC 9000 "Privacy Implications of Connection
+  # Migration").
   def test_a_rebinding_with_no_id_for_the_path_left
-    server, keylog, id, now = connected(ids: 0)
+    server, keylog, _, now = connected(ids: 0)
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
-    assert_equal({ ELSEWHERE => id, CLIENT => id }, challenges(sent(server, keylog, now)).transform_values(&:first))
+    assert_equal CLIENT, server.path.remote
+    assert_equal [CLIENT], sent(server, keylog, now).map(&:first).uniq
   end
 
-  # A rebinding before any 1-RTT packet came is one all the same: the
-  # client sends to the ID it took in the handshake, and the server goes
-  # on with the client's ID in use, with none to spare.
+  # A rebinding before any 1-RTT packet came on the path is one all the
+  # same: the client sends to the ID it took in the handshake, and the
+  # server goes on with the client's ID in use, once it has an ID for the
+  # path left; the first packet from the new address brought them.
   def test_a_rebinding_before_any_one_rtt_packet
     keylog = Keylog.new
     client = client_connection(keylog:)
     server = server_connection(source_connection_id: "s".b * 8)
     now = handshake(client, server)
     server.each_event { nil }
-    server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    id = server.instance_variable_get(:@destination_connection_id)
+    server.receive(packet(keylog, ping, *new_ids(2), number: 1000), from: ELSEWHERE, to: SERVER, now:)
+    assert_equal CLIENT, server.path.remote
+    server.receive(packet(keylog, ping, number: 1001), from: ELSEWHERE, to: SERVER, now:)
     assert_equal ELSEWHERE, server.path.remote
-    assert_includes challenges(sent(server, keylog, now)).keys, ELSEWHERE
+    assert_equal({ ELSEWHERE => id, CLIENT => "c0000001" }, challenges(sent(server, keylog, now)).transform_values(&:first))
   end
 
   # With another Destination Connection ID, the new path sends with an ID
@@ -313,10 +327,9 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     assert_equal CLIENT, server.path.remote
   end
 
-  # Rebindings one after another leave no more than MAX_VALIDATING_PATHS
-  # paths besides the one in use, those with no ID left validated again
-  # with the ID in use; the paths left for good take their addresses out.
-  def test_paths_left_for_good_take_their_addresses_out
+  # Rebindings one after another move while there is an ID for each path
+  # left, and no further once none is left.
+  def test_rebindings_while_ids_last
     peers = Peers.new
     keylog = Keylog.new
     client = client_connection(keylog:)
@@ -327,11 +340,10 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
         stateless_reset_token: format("%016d", sequence_number).b)
     end
     server.receive(packet(keylog, ping, *issued, number: 999), from: CLIENT, to: SERVER, now:)
-    addresses = (1..6).map { ["198.51.100.#{_1}", 61_000] }
+    addresses = (1..4).map { ["198.51.100.#{_1}", 61_000] }
     addresses.each_with_index { |address, index| server.receive(packet(keylog, ping, number: 1000 + index), from: address, to: SERVER, now:) }
-    kept = addresses.last(QUIC::Connection::MAX_VALIDATING_PATHS + 1)
-    assert_equal kept, peers.addresses
-    assert_equal kept, [*server.instance_variable_get(:@validating), server.path].map(&:remote)
+    assert_equal addresses.first(2), peers.addresses
+    assert_equal addresses[1], server.path.remote
   end
 
   # A path that fails and is left for good takes its address out; the
@@ -342,7 +354,7 @@ class RaihaNextQUICConnectionMigrationTest < Minitest::Test
     client = client_connection(keylog:)
     server = server_connection(source_connection_id: "s".b * 8, peers:)
     now = handshake(client, server)
-    server.receive(packet(keylog, ping, number: 999), from: CLIENT, to: SERVER, now:)
+    server.receive(packet(keylog, ping, *new_ids(2), number: 999), from: CLIENT, to: SERVER, now:)
     server.receive(packet(keylog, ping, number: 1000), from: ELSEWHERE, to: SERVER, now:)
     assert_equal [ELSEWHERE], peers.addresses
     _, data = challenges(sent(server, keylog, now)).fetch(CLIENT)
