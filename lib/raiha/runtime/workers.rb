@@ -165,7 +165,7 @@ module Raiha::Runtime
         first = UDP.open(@host, @port, reuse_port: true).tap { |socket| bound << socket }
         address = first.local_address
         @local_address = [UDP.unmapped(address.ip_address), address.ip_port]
-        preferred = (@config.preferred_address&.values || []).reject { |preferred| UDP.covers?(address, preferred) }
+        preferred = (@config.preferred_address&.values || []).reject { |preferred| UDP.covers?(first, preferred) }
         Array.new(@count) do |id|
           main = id.zero? ? first : UDP.open(@host, address.ip_port, reuse_port: true).tap { |socket| bound << socket }
           [main, *preferred.map { |host, port| UDP.open(host, port, reuse_port: true).tap { |socket| bound << socket } }]

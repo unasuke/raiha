@@ -9,11 +9,12 @@ module Raiha::Runtime
   # codepoint; each datagram that comes in is read with `recvmsg` along with
   # the codepoint it was marked with and the address it came to (IP_PKTINFO,
   # or IP_RECVDSTADDR on the BSDs, and IPV6_PKTINFO), so far as the OS
-  # tells them (UDP#features), and one sent from an address of the Transmit's goes
-  # from there by the same control message. Bound to "::", one socket takes IPv4
-  # as well; the addresses of IPv4 it tells are IPv4's ("192.0.2.1", not
-  # the IPv4-mapped "::ffff:192.0.2.1"), so that a peer is the same
-  # address whichever socket it came on, and it maps them back to send.
+  # tells them (UDP#features), and one sent from an address of the
+  # Transmit's goes from there by a control message too. Bound to "::",
+  # one socket takes IPv4 as well where the OS lets it (not OpenBSD); the
+  # addresses of IPv4 it tells are IPv4's ("192.0.2.1", not the IPv4-mapped
+  # "::ffff:192.0.2.1"), so that a peer is the same address whichever
+  # socket it came on, and it maps them back to send.
   #
   # On Linux, IP fragments nothing it sends and the kernel's idea of the
   # path MTU is left aside (PMTUDISC_PROBE), so that a probe for a larger
@@ -103,7 +104,14 @@ module Raiha::Runtime
     def self.open(host, port, reuse_port: false)
       family = Addrinfo.udp(host, port).afamily
       socket = UDPSocket.new(family)
-      socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY, 0) if family == Socket::AF_INET6
+      if family == Socket::AF_INET6
+        begin
+          socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY, 0)
+        rescue Errno::EINVAL, Errno::ENOPROTOOPT
+          # OpenBSD's IPv6 sockets are IPv6's alone (ip6(4)), and the socket
+          # takes no IPv4 (UDP.takes_ipv4?).
+        end
+      end
       socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEPORT, 1) if reuse_port
       socket.bind(host, port)
       socket
@@ -167,18 +175,23 @@ module Raiha::Runtime
 
     # Whether a datagram from `address` ([address, port]) goes from this
     # socket: the port is the socket's, and so is the address, or the
-    # socket is bound to any of its family, IPv4 too for "::".
-    def sends_from?(address) = UDP.covers?(@socket.local_address, address)
+    # socket is bound to any of its family, IPv4 too for "::" where IPv4
+    # comes to it.
+    def sends_from?(address) = UDP.covers?(@socket, address)
 
-    # Whether a socket bound to `bound` (an Addrinfo) sends from `address`,
-    # as `sends_from?` tells of one, for a socket not wrapped yet.
-    def self.covers?(bound, address)
+    # Whether `socket`, a socket wrapped or not yet, sends from `address`,
+    # as `sends_from?` tells of one.
+    def self.covers?(socket, address)
       host, port = address
+      bound = socket.local_address
       return false unless port == bound.ip_port
-      return true if bound.ipv6? && bound.ipv6_unspecified?
+      return host.include?(":") || takes_ipv4?(socket) if bound.ipv6? && bound.ipv6_unspecified?
       return !host.include?(":") if bound.ip_address == "0.0.0.0"
       UDP.unmapped(bound.ip_address) == host
     end
+
+    # Whether IPv4 comes to this socket (UDP.takes_ipv4?).
+    def takes_ipv4? = UDP.takes_ipv4?(@socket)
 
     # Sends each datagram of `transmit`; whether all of them went. The ECN
     # mark of an IPv4 destination, IPv4-mapped included, goes as IP_TOS:
@@ -262,14 +275,14 @@ module Raiha::Runtime
       true
     end
 
-    # Whether IPv4 comes to this socket: one bound to an address of IPv4,
-    # or of IPv6 bound to "::" (or an IPv4-mapped address) and not IPv6
-    # alone, which an OS may not allow.
-    private def takes_ipv4?
-      local = @socket.local_address
+    # Whether IPv4 comes to `socket`: one bound to an address of IPv4, or
+    # of IPv6 bound to "::" (or an IPv4-mapped address) and not IPv6 alone,
+    # which OpenBSD does not allow.
+    def self.takes_ipv4?(socket)
+      local = socket.local_address
       return true if local.ipv4?
       return false unless local.ipv6_unspecified? || local.ipv6_v4mapped?
-      @socket.getsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY).int.zero?
+      socket.getsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_V6ONLY).int.zero?
     end
 
     # All the datagrams in one sendmsg: nil when they went, else what it

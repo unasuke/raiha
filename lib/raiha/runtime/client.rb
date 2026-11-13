@@ -43,8 +43,9 @@ module Raiha::Runtime
   #
   # Each socket is bound to "::", which sends to IPv4 too, so that a
   # connection can move to a server's preferred address of either family;
-  # where IPv6 is off and it cannot be, to "0.0.0.0", and the connection
-  # takes IPv4 addresses alone (Config#address_families). The address a
+  # where IPv6 is off and it cannot be, or IPv4 does not come to it as on
+  # OpenBSD, to "0.0.0.0", and the connection takes IPv4 addresses alone
+  # (Config#address_families). The address a
   # datagram goes from is the OS's to choose.
   #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
@@ -155,7 +156,10 @@ module Raiha::Runtime
 
     # A socket for a connection, and the Config for its addresses.
     private def bind
-      [UDP.bind("::", 0), @config]
+      udp = UDP.bind("::", 0)
+      return [udp, @config] if udp.takes_ipv4?
+      udp.close
+      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     rescue SystemCallError
       [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     end

@@ -214,7 +214,8 @@ module Raiha::Runtime
 
     def self.bind: (String host, Integer port, ?reuse_port: bool) -> UDP
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
-    def self.covers?: (Addrinfo bound, address address) -> bool
+    def self.covers?: (BasicSocket socket, address address) -> bool
+    def self.takes_ipv4?: (BasicSocket socket) -> bool
     def self.unmapped: (String host) -> String
     def self.batching: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
     def self.unfragmented?: () -> bool
@@ -227,6 +228,7 @@ module Raiha::Runtime
 
     def local_address: () -> address
     def sends_from?: (address address) -> bool
+    def takes_ipv4?: () -> bool
 
     def send: (Raiha::QUIC::Transmit transmit) -> bool
 
@@ -242,7 +244,6 @@ module Raiha::Runtime
 
     private def enlarge: (Integer option) -> void
     private def enable: (Integer level, Symbol name) -> bool
-    private def takes_ipv4?: () -> bool
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls) -> bool
