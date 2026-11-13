@@ -32,7 +32,7 @@ module Raiha::Runtime
   # A `config` without max_transmit_size takes UDP::MAX_TRANSMIT, as the
   # socket sends the datagrams of a Transmit with GSO (UDP.batching), and
   # enable_pmtud false where the socket cannot keep IP from fragmenting
-  # (UDP.pmtud).
+  # (UDP.pmtud), and no ECN on IPv4 where the OS cannot mark it (UDP.ecn).
   #
   # A `config` with a preferred_address has a socket bound to each of its
   # addresses as well, unless the first socket takes what comes there
@@ -78,7 +78,7 @@ module Raiha::Runtime
       @stop_error_code = stop_error_code
       config = config.with(retry_token_key: config.retry_token_key || worker.config.retry_token_key,
         stateless_reset_key: config.stateless_reset_key || worker.config.stateless_reset_key) if worker
-      @config = UDP.pmtud(UDP.batching(config))
+      @config = UDP.ecn(UDP.pmtud(UDP.batching(config)))
       @tls_config = tls_config
       @keyring = keyring
       @anti_replay = anti_replay || worker&.anti_replay || Raiha::TLS::AntiReplay::Memory.new(now: Time.now)

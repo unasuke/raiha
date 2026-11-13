@@ -188,6 +188,7 @@ module Raiha::Runtime
     PMTUDISC_PROBE: Integer
     GSO_REFUSED: Array[singleton(SystemCallError)]
     GSO_UNAVAILABLE: Array[singleton(SystemCallError)]
+    CONTROLS_REFUSED: Array[singleton(SystemCallError)]
     MAX_TRANSMIT: Integer
 
     class Features < Data
@@ -209,8 +210,7 @@ module Raiha::Runtime
     @ecn_in: bool
     @ipv4_destination: Integer?
     @destination: bool
-    @source: bool
-    @ecn_out: bool
+    @sends: Hash[Symbol, bool]
 
     def self.bind: (String host, Integer port, ?reuse_port: bool) -> UDP
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
@@ -219,6 +219,7 @@ module Raiha::Runtime
     def self.batching: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
     def self.unfragmented?: () -> bool
     def self.pmtud: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
+    def self.ecn: (Raiha::QUIC::Config config) -> Raiha::QUIC::Config
 
     def initialize: (UDPSocket socket) -> void
 
@@ -244,12 +245,13 @@ module Raiha::Runtime
     private def takes_ipv4?: () -> bool
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
-    private def send_datagram: (String datagram, String destination, Array[Socket::AncillaryData] controls) -> bool
+    private def send_datagram: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls) -> bool
+    private def without_controls: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls) -> bool
     private def datagrams: (Raiha::QUIC::Transmit transmit) -> Array[String]
 
-    private def mark: (Symbol ecn, String host) -> Socket::AncillaryData?
+    private def mark: (Symbol ecn, String host) -> [Symbol, Socket::AncillaryData]?
 
-    private def source: (address? source) -> Socket::AncillaryData?
+    private def source: (address? source) -> [Symbol, Socket::AncillaryData]?
     private def destination: (Array[Socket::AncillaryData] controls) -> address?
     private def ipv4_destination: (Socket::AncillaryData control) -> String
     private def mapped: (String host) -> String

@@ -55,6 +55,9 @@ module Raiha::Runtime
     # What GSO refuses with; the first two say it never works here.
     GSO_REFUSED = [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].freeze
     GSO_UNAVAILABLE = [Errno::EIO, Errno::ENOPROTOOPT].freeze
+    # What sendmsg refuses a control message it does not take with; the
+    # datagram goes again without it (UDP#without_controls).
+    CONTROLS_REFUSED = [Errno::EINVAL, Errno::ENOPROTOOPT, Errno::EOPNOTSUPP].freeze
     # The most a Transmit carries for GSO: the largest UDP payload over
     # IPv4, a Config's max_transmit_size when the application leaves it.
     MAX_TRANSMIT = 65_507
@@ -78,6 +81,15 @@ module Raiha::Runtime
     # `config` with enable_pmtud false where a socket cannot keep IP from
     # fragmenting, so that no probe passes in pieces.
     def self.pmtud(config) = unfragmented? || !config.enable_pmtud ? config : config.with(enable_pmtud: false)
+
+    # `config` without ECN on IPv4 where the OS has no IP_RECVTOS, so that
+    # QUIC sends Not-ECT there: such an OS, OpenBSD, also skips an IP_TOS
+    # control message without a word, and QUIC would take what it sent for
+    # ECT(0).
+    def self.ecn(config)
+      return config if Socket.const_defined?(:IP_RECVTOS)
+      config.with(ecn_address_families: config.ecn_address_families - %i[ipv4])
+    end
 
     # A socket bound to `host` and `port` (0 for one the OS chooses); with
     # `reuse_port`, one of several that share the address (UDP.open).
@@ -130,14 +142,21 @@ module Raiha::Runtime
         @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER, PMTUDISC_PROBE) if @family == Socket::AF_INET6
       end
       @gso = RUBY_PLATFORM.include?("linux")
-      @source = @ecn_out = true
+      # The control messages a datagram goes with: the ECN mark of IPv4
+      # only where the codepoint is read too (UDP.ecn), and the source of
+      # IPv4 by IP_PKTINFO or else IP_SENDSRCADDR. A kind sendmsg refuses
+      # is left out for good (without_controls).
+      @sends = { tos: ipv4 && Socket.const_defined?(:IP_RECVTOS), tclass: ipv6,
+                 ip_source: ipv4 && (Socket.const_defined?(:IP_PKTINFO) || Socket.const_defined?(:IP_SENDSRCADDR)),
+                 ipv6_source: ipv6 }
     end
 
     # The Features of this socket now.
     def features
       Features.new(receive_buffer: @socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF).int,
         send_buffer: @socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF).int, ipv4: takes_ipv4?,
-        ecn_in: @ecn_in, destination: @destination, source: @source, ecn_out: @ecn_out)
+        ecn_in: @ecn_in, destination: @destination, source: @sends[@family == Socket::AF_INET6 ? :ipv6_source : :ip_source],
+        ecn_out: (!takes_ipv4? || @sends[:tos]) && (@family != Socket::AF_INET6 || @sends[:tclass]))
     end
 
     # [address, port] the socket is bound to.
@@ -176,11 +195,13 @@ module Raiha::Runtime
       controls = [mark(transmit.ecn, host), source(transmit.source)].compact
       size = transmit.segment_size
       if @gso && size && size < transmit.payload.bytesize
-        failed = send_segments(transmit.payload, size, destination, controls)
+        failed = send_segments(transmit.payload, size, destination, controls.map(&:last))
         return true unless failed
       end
+      sends = @sends.dup
       sent = datagrams(transmit).map { |datagram| send_datagram(datagram, destination, controls) }
-      if failed && GSO_REFUSED.any? { failed.is_a?(_1) }
+      # A control message the datagrams went without was at fault, not GSO.
+      if failed && GSO_REFUSED.any? { failed.is_a?(_1) } && @sends == sends
         @gso = false if sent.any? || GSO_UNAVAILABLE.any? { failed.is_a?(_1) }
       end
       sent.all?
@@ -261,10 +282,37 @@ module Raiha::Runtime
       error
     end
 
+    # `controls` are [kind, control message], those of a kind left out
+    # since dropped.
     private def send_datagram(datagram, destination, controls)
-      @socket.sendmsg(datagram, 0, destination, *controls)
+      controls = controls.select { |kind, _| @sends[kind] }
+      @socket.sendmsg(datagram, 0, destination, *controls.map(&:last))
       true
+    rescue *CONTROLS_REFUSED
+      without_controls(datagram, destination, controls)
     rescue *DROPPED
+      false
+    end
+
+    # Sends `datagram`, which sendmsg refused with `controls`, without the
+    # ECN mark, then without the source, then without both; what it goes
+    # without is left out for good. When it never goes, the destination is
+    # at fault, and nothing is left out.
+    private def without_controls(datagram, destination, controls)
+      marks, sources = controls.partition { |kind, _| kind == :tos || kind == :tclass }
+      trials = [] #: Array[[Array[[Symbol, Socket::AncillaryData]], Array[[Symbol, Socket::AncillaryData]]]]
+      trials << [sources, marks] unless marks.empty?
+      trials << [marks, sources] unless sources.empty?
+      trials << [[], controls] unless marks.empty? || sources.empty?
+      trials.each do |kept, left|
+        @socket.sendmsg(datagram, 0, destination, *kept.map(&:last))
+        left.each { |kind, _| @sends[kind] = false }
+        return true
+      rescue *CONTROLS_REFUSED
+        next
+      rescue *DROPPED
+        return false
+      end
       false
     end
 
@@ -275,22 +323,30 @@ module Raiha::Runtime
       (0...payload.bytesize).step(size).map { |offset| payload.byteslice(offset, size) || "".b }
     end
 
+    # [kind, control message] that marks a datagram to `host` with `ecn`,
+    # none when it goes without.
     private def mark(ecn, host)
       value = MARKS[ecn] or return nil
       if @family == Socket::AF_INET6 && !(host.start_with?("::ffff:") && host.include?("."))
-        Socket::AncillaryData.int(:INET6, :IPV6, :TCLASS, value)
-      else
-        Socket::AncillaryData.int(:INET, :IP, :TOS, value)
+        [:tclass, Socket::AncillaryData.int(:INET6, :IPV6, :TCLASS, value)] if @sends[:tclass]
+      elsif @sends[:tos]
+        [:tos, Socket::AncillaryData.int(:INET, :IP, :TOS, value)]
       end
     end
 
-    # The control message that sends from the address of `source`, none to
-    # leave it to the OS.
+    # [kind, control message] that sends from the address of `source`,
+    # none to leave it to the OS. IP_SENDSRCADDR carries the in_addr alone.
     private def source(source)
       return nil unless source
       address = Addrinfo.ip(mapped(source[0]))
-      return Socket::AncillaryData.ipv6_pktinfo(address, 0) if @family == Socket::AF_INET6
-      Socket::AncillaryData.ip_pktinfo(address, 0, address)
+      if @family == Socket::AF_INET6
+        [:ipv6_source, Socket::AncillaryData.ipv6_pktinfo(address, 0)] if @sends[:ipv6_source]
+      elsif !@sends[:ip_source] then nil
+      elsif Socket.const_defined?(:IP_PKTINFO)
+        [:ip_source, Socket::AncillaryData.ip_pktinfo(address, 0, address)]
+      else
+        [:ip_source, Socket::AncillaryData.new(:INET, :IP, Socket::IP_SENDSRCADDR, address.ip_address.split(".").map(&:to_i).pack("C4"))]
+      end
     end
 
     # The address a datagram came to, from its control messages, with the
