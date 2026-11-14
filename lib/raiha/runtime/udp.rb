@@ -57,7 +57,8 @@ module Raiha::Runtime
     GSO_REFUSED = [Errno::EIO, Errno::ENOPROTOOPT, Errno::EINVAL, Errno::EMSGSIZE].freeze
     GSO_UNAVAILABLE = [Errno::EIO, Errno::ENOPROTOOPT].freeze
     # What sendmsg refuses a control message it does not take with; the
-    # datagram goes again without it (UDP#without_controls).
+    # datagram goes again without it (UDP#without_controls), which is left
+    # out for good unless it was EINVAL.
     CONTROLS_REFUSED = [Errno::EINVAL, Errno::ENOPROTOOPT, Errno::EOPNOTSUPP].freeze
     # The most a Transmit carries for GSO: the largest UDP payload over
     # IPv4, a Config's max_transmit_size when the application leaves it.
@@ -150,6 +151,7 @@ module Raiha::Runtime
         @socket.setsockopt(Socket::IPPROTO_IPV6, Socket::IPV6_MTU_DISCOVER, PMTUDISC_PROBE) if @family == Socket::AF_INET6
       end
       @gso = RUBY_PLATFORM.include?("linux")
+      @stripped = false
       # The control messages a datagram goes with: the ECN mark of IPv4
       # only where the codepoint is read too (UDP.ecn), and the source of
       # IPv4 by IP_PKTINFO or else IP_SENDSRCADDR. A kind sendmsg refuses
@@ -211,10 +213,10 @@ module Raiha::Runtime
         failed = send_segments(transmit.payload, size, destination, controls.map(&:last))
         return true unless failed
       end
-      sends = @sends.dup
+      @stripped = false
       sent = datagrams(transmit).map { |datagram| send_datagram(datagram, destination, controls) }
       # A control message the datagrams went without was at fault, not GSO.
-      if failed && GSO_REFUSED.any? { failed.is_a?(_1) } && @sends == sends
+      if failed && GSO_REFUSED.any? { failed.is_a?(_1) } && !@stripped
         @gso = false if sent.any? || GSO_UNAVAILABLE.any? { failed.is_a?(_1) }
       end
       sent.all?
@@ -301,25 +303,30 @@ module Raiha::Runtime
       controls = controls.select { |kind, _| @sends[kind] }
       @socket.sendmsg(datagram, 0, destination, *controls.map(&:last))
       true
-    rescue *CONTROLS_REFUSED
-      without_controls(datagram, destination, controls)
+    rescue *CONTROLS_REFUSED => error
+      without_controls(datagram, destination, controls, error)
     rescue *DROPPED
       false
     end
 
-    # Sends `datagram`, which sendmsg refused with `controls`, without the
-    # ECN mark, then without the source, then without both; what it goes
-    # without is left out for good. When it never goes, the destination is
-    # at fault, and nothing is left out.
-    private def without_controls(datagram, destination, controls)
+    # Sends `datagram`, which sendmsg refused with `controls` and `error`.
+    # A control message the OS does not know (ENOPROTOOPT, EOPNOTSUPP): the
+    # datagram goes without the ECN mark, then without the source, then
+    # without both, and what it went without is left out for good. EINVAL
+    # may be the source's alone, an address the host no longer has (Linux,
+    # of IPv6): the datagram goes without the mark only, and nothing is
+    # left out. When it never goes, the destination is at fault.
+    private def without_controls(datagram, destination, controls, error)
       marks, sources = controls.partition { |kind, _| kind == :tos || kind == :tclass }
+      forget = !error.is_a?(Errno::EINVAL)
       trials = [] #: Array[[Array[[Symbol, Socket::AncillaryData]], Array[[Symbol, Socket::AncillaryData]]]]
       trials << [sources, marks] unless marks.empty?
-      trials << [marks, sources] unless sources.empty?
-      trials << [[], controls] unless marks.empty? || sources.empty?
+      trials << [marks, sources] if forget && !sources.empty?
+      trials << [[], controls] if forget && !(marks.empty? || sources.empty?)
       trials.each do |kept, left|
         @socket.sendmsg(datagram, 0, destination, *kept.map(&:last))
-        left.each { |kind, _| @sends[kind] = false }
+        left.each { |kind, _| @sends[kind] = false } if forget
+        @stripped = true
         return true
       rescue *CONTROLS_REFUSED
         next

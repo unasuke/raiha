@@ -211,6 +211,7 @@ module Raiha::Runtime
     @ipv4_destination: Integer?
     @destination: bool
     @sends: Hash[Symbol, bool]
+    @stripped: bool
 
     def self.bind: (String host, Integer port, ?reuse_port: bool) -> UDP
     def self.open: (String host, Integer port, ?reuse_port: bool) -> UDPSocket
@@ -247,7 +248,7 @@ module Raiha::Runtime
 
     private def send_segments: (String payload, Integer size, String destination, Array[Socket::AncillaryData] controls) -> SystemCallError?
     private def send_datagram: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls) -> bool
-    private def without_controls: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls) -> bool
+    private def without_controls: (String datagram, String destination, Array[[Symbol, Socket::AncillaryData]] controls, SystemCallError error) -> bool
     private def datagrams: (Raiha::QUIC::Transmit transmit) -> Array[String]
 
     private def mark: (Symbol ecn, String host) -> [Symbol, Socket::AncillaryData]?
