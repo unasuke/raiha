@@ -4,8 +4,9 @@ require "securerandom"
 
 module Raiha::Runtime
   # The workers of a server, each in a Ractor of its own: `run` binds a
-  # socket for each worker to `host` and `port` with SO_REUSEPORT, and one
-  # for each preferred address of `config` the first does not take, moves
+  # socket for each worker to `host` and `port` with SO_REUSEPORT, one to
+  # "0.0.0.0" on that port where "::" takes no IPv4 (OpenBSD), and one
+  # for each preferred address of `config` those do not take, moves
   # them to the workers' Ractors, and runs the block in each with its
   # Worker and `args`, which have to be shareable or copied. The block
   # makes a server with `worker:` and `config: worker.config` and runs it,
@@ -27,8 +28,11 @@ module Raiha::Runtime
   # Keyring of `identities`, and `stats` gives what each worker counted of
   # the datagrams handed on, nil for one that does not answer in time.
   #
-  # SO_REUSEPORT spreads datagrams over sockets on Linux alone, where more
-  # than one worker can be run.
+  # SO_REUSEPORT spreads datagrams over sockets on Linux. Elsewhere, as on
+  # OpenBSD, the kernel may give them all to one socket: the worker that
+  # has it takes every new connection, and hands on what comes for the
+  # others' connections as it does after a migration, so that more than
+  # one worker runs but the load is not spread.
   class Workers
     MAX = Raiha::QUIC::WorkerConnectionIDs::MAX_WORKERS
     # How long `stats` waits for a worker to answer.
@@ -39,7 +43,6 @@ module Raiha::Runtime
     def initialize(count:, config:, host: "::", port: 443, args: [], &block)
       raise ArgumentError, "a block to run in each worker is needed" unless block
       raise ArgumentError, "count #{count} is not 1 to #{MAX}" unless count.is_a?(Integer) && (1..MAX).cover?(count)
-      raise Error::Usage, "SO_REUSEPORT spreads datagrams over workers on Linux alone" if count > 1 && !RUBY_PLATFORM.include?("linux")
       if config.connection_id_length < Raiha::QUIC::WorkerConnectionIDs::MIN_LENGTH
         raise ArgumentError, "a worker's connection IDs are #{Raiha::QUIC::WorkerConnectionIDs::MIN_LENGTH} bytes at least"
       end
@@ -165,10 +168,19 @@ module Raiha::Runtime
         first = UDP.open(@host, @port, reuse_port: true).tap { |socket| bound << socket }
         address = first.local_address
         @local_address = [UDP.unmapped(address.ip_address), address.ip_port]
-        preferred = (@config.preferred_address&.values || []).reject { |preferred| UDP.covers?(first, preferred) }
+        # Before the preferred addresses, which a specific address of IPv4
+        # on the same port would keep "0.0.0.0" from.
+        ipv4 = if address.ipv6? && address.ipv6_unspecified? && !UDP.takes_ipv4?(first)
+          UDP.open("0.0.0.0", address.ip_port, reuse_port: true).tap { |socket| bound << socket }
+        end
+        preferred = (@config.preferred_address&.values || []).reject do |preferred|
+          [first, ipv4].compact.any? { |socket| UDP.covers?(socket, preferred) }
+        end
         Array.new(@count) do |id|
           main = id.zero? ? first : UDP.open(@host, address.ip_port, reuse_port: true).tap { |socket| bound << socket }
-          [main, *preferred.map { |host, port| UDP.open(host, port, reuse_port: true).tap { |socket| bound << socket } }]
+          main_ipv4 = id.zero? ? ipv4 : (UDP.open("0.0.0.0", address.ip_port, reuse_port: true).tap { |socket| bound << socket } if ipv4)
+          # A socket is an Enumerable of its lines; splatted, it would be read.
+          [main, *[main_ipv4].compact, *preferred.map { |host, port| UDP.open(host, port, reuse_port: true).tap { |socket| bound << socket } }]
         end
       rescue StandardError
         bound.each(&:close)

@@ -55,7 +55,8 @@ module Raiha::Runtime
   # issued with other settings is rejected (Endpoint#accept).
   #
   # Given a `worker`, the server is one of the workers of Workers: it binds
-  # nothing and reads the sockets bound for it, its first and those of the
+  # nothing and reads the sockets bound for it, its first, one of
+  # "0.0.0.0" where the first is "::" taking no IPv4, and those of the
   # preferred addresses; it issues connection IDs that tell its worker
   # (QUIC::WorkerConnectionIDs), fills the keys a `config` leaves out with
   # those every worker shares, records 0-RTT in the worker's shared
@@ -254,11 +255,19 @@ module Raiha::Runtime
       end
     end
 
-    # A socket bound to each preferred address that none bound so far
-    # sends from; none is left open when one cannot be bound, nor `udp`.
+    # A socket bound to "0.0.0.0" on the port of `udp` where `udp` is bound
+    # to "::" and takes no IPv4 (OpenBSD), and one bound to each preferred
+    # address that none bound so far sends from; none is left open when one
+    # cannot be bound, nor `udp`. "0.0.0.0" comes first, as a specific
+    # address of IPv4 bound on the same port would keep it from binding.
     private def preferred_sockets(udp)
       others = [] #: Array[UDP]
-      (@config.preferred_address&.values || []).each do |host, port|
+      bound = udp.to_io.local_address
+      addresses = @config.preferred_address&.values || [] #: Array[UDP::address]
+      if bound.ipv6? && bound.ipv6_unspecified? && !udp.takes_ipv4?
+        addresses = [["0.0.0.0", bound.ip_port], *addresses] #: Array[UDP::address]
+      end
+      addresses.each do |host, port|
         others << UDP.bind(host, port) unless [udp, *others].any? { |socket| socket.sends_from?([host, port]) }
       rescue SystemCallError
         [udp, *others].each(&:close)
