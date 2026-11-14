@@ -254,6 +254,23 @@ class RaihaRuntimeClientTest < Minitest::Test
     end
   end
 
+  # Where "::" cannot be bound, an address of IPv6 fails at once and the
+  # next is tried.
+  def test_an_ipv6_address_without_ipv6
+    bind = Runtime::UDP.method(:bind)
+    Runtime::UDP.define_singleton_method(:bind) do |host, port, **options|
+      raise Errno::EAFNOSUPPORT, "socket(2)" if host == "::"
+      bind.call(host, port, **options)
+    end
+    Sync do
+      client = Addressed.new([["::1", free_port], ["127.0.0.1", free_port]], connect_timeout: 0.1, **options)
+      error = assert_raises(Runtime::ConnectError) { client.connect("example.test", 443, server_name: "localhost") { flunk } }
+      assert_equal [Errno::EAFNOSUPPORT, QUIC::ClosedError], error.errors.map { |_, failure| failure.class }
+    end
+  ensure
+    Runtime::UDP.define_singleton_method(:bind, bind) if bind
+  end
+
   def test_a_name_that_does_not_resolve
     Sync do
       error = assert_raises(Runtime::ConnectError) { Addressed.new([], **options).connect("nowhere.test", 443) { flunk } }

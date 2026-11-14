@@ -47,7 +47,8 @@ module Raiha::Runtime
   # of IPv6, and the connection takes IPv6 addresses alone; for one of IPv4,
   # and where IPv6 is off and "::" cannot be bound, the socket is bound to
   # "0.0.0.0" and the connection takes IPv4 addresses alone
-  # (Config#address_families). The address a datagram goes from is the
+  # (Config#address_families). Without "::", an address of IPv6 fails at
+  # once and the next is tried. The address a datagram goes from is the
   # OS's to choose.
   #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
@@ -96,7 +97,12 @@ module Raiha::Runtime
         raise ConnectError.new(host, port, [[host, error]])
       end
       addresses.each do |address|
-        driver, opened = attempt(address, server_name, session:, token:, early_data:)
+        begin
+          driver, opened = attempt(address, server_name, session:, token:, early_data:)
+        rescue SystemCallError => error
+          errors << [address, error]
+          next
+        end
         session = token = nil
         connected = false
         begin
@@ -165,6 +171,8 @@ module Raiha::Runtime
       udp.close
       [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     rescue SystemCallError
+      # Without "::" there is no IPv6 to send to `address` by.
+      raise if address[0].include?(":")
       [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     end
 
