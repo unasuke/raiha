@@ -1,0 +1,199 @@
+module Raiha::QUIC
+  module Wire
+    class Malformed < Violation
+      def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void
+    end
+
+    class Truncated < Malformed
+    end
+
+    module Varint
+      MAX: Integer
+
+      def self.size: (Integer value) -> Integer
+      def self.encode: (Integer value) -> String
+    end
+
+    class Reader
+      NON_ZERO: Regexp
+
+      @bytes: String
+      @limit: Integer
+
+      attr_reader offset: Integer
+
+      def initialize: (String bytes, ?Integer offset, ?Integer limit) -> void
+      def remaining: () -> Integer
+      def eof?: () -> bool
+      def u8: () -> Integer
+      def u16: () -> Integer
+      def u32: () -> Integer
+      def varint_with_size: () -> [Integer, Integer]
+      def varint: () -> Integer
+      def bytes: (Integer length) -> String
+      def zero_run: () -> Integer
+      def rest: () -> String
+      def sub: (Integer length) -> Reader
+
+      private def take: (Integer length) -> String
+    end
+
+    class Writer
+      @buffer: String
+
+      def initialize: () -> void
+      def u8: (Integer value) -> self
+      def u16: (Integer value) -> self
+      def u32: (Integer value) -> self
+      def varint: (Integer value) -> self
+      def bytes: (String value) -> self
+      def bytesize: () -> Integer
+      def to_s: () -> String
+    end
+
+    module PacketNumber
+      MAX: Integer
+
+      def self.length: (Integer packet_number, largest_acked: Integer?) -> Integer
+      def self.encode: (Integer packet_number, Integer length) -> String
+      def self.decode: (Integer truncated, length: Integer, largest: Integer?) -> Integer
+    end
+
+    CONNECTION_ID_MAX_LENGTH: Integer
+    EMPTY: String
+
+    type header = LongHeader | ShortHeader
+
+    class LongHeader < Data
+      type packet_type = :initial | :zero_rtt | :handshake
+
+      TYPES: Array[packet_type]
+      PROTECTED_BITS: Integer
+      RESERVED_BITS: Integer
+
+      attr_reader type: packet_type
+      attr_reader version: Version
+      attr_reader dcid: String
+      attr_reader scid: String
+      attr_reader token: String
+
+      def self.new: (type: packet_type, version: Version, dcid: String, scid: String, ?token: String) -> instance
+                  | (packet_type type, Version version, String dcid, String scid, ?String token) -> instance
+      def initialize: (type: packet_type, version: Version, dcid: String, scid: String, ?token: String) -> void
+
+      def protected_bits: () -> Integer
+      def reserved_bits: () -> Integer
+      def first_byte: (Integer packet_number_length) -> Integer
+      def write_fields: (Writer writer, length: Integer) -> Writer
+      def unmasked: (Integer _first_byte) -> LongHeader
+    end
+
+    class ShortHeader < Data
+      PROTECTED_BITS: Integer
+      RESERVED_BITS: Integer
+
+      attr_reader dcid: String
+      attr_reader spin: bool
+      attr_reader key_phase: Integer?
+
+      def self.new: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> instance
+                  | (String dcid, ?bool spin, ?Integer? key_phase) -> instance
+      def initialize: (dcid: String, ?spin: bool, ?key_phase: Integer?) -> void
+
+      def type: () -> :one_rtt
+      def protected_bits: () -> Integer
+      def reserved_bits: () -> Integer
+      def first_byte: (Integer packet_number_length) -> Integer
+      def write_fields: (Writer writer, length: Integer) -> Writer
+      def unmasked: (Integer first_byte) -> ShortHeader
+    end
+
+    module Packet
+      SAMPLE_OFFSET: Integer
+
+      def self.seal: (header header, packet_number: Integer, packet_number_length: Integer, payload: String, keys: Crypto::Keys) -> String
+      def self.parse: (String datagram, ?offset: Integer, dcid_length: Integer) -> (Parsed | VersionNegotiation | Retry | UnsupportedVersion)
+
+      private def self.connection_id: (Reader reader) -> String
+
+      class Parsed < Data
+        attr_reader header: header
+        attr_reader datagram: String
+        attr_reader offset: Integer
+        attr_reader number_offset: Integer
+        attr_reader end_offset: Integer
+
+        def self.new: (header: header, datagram: String, offset: Integer, number_offset: Integer, end_offset: Integer) -> instance
+                    | (header header, String datagram, Integer offset, Integer number_offset, Integer end_offset) -> instance
+
+        def unmask: (Crypto::HeaderProtection header_protection, largest: Integer?) -> Unmasked
+      end
+
+      class Unmasked < Data
+        attr_reader header: header
+        attr_reader packet_number: Integer
+        attr_reader reserved: Integer
+        attr_reader associated_data: String
+        attr_reader ciphertext: String
+
+        def self.new: (header: header, packet_number: Integer, reserved: Integer, associated_data: String, ciphertext: String) -> instance
+                    | (header header, Integer packet_number, Integer reserved, String associated_data, String ciphertext) -> instance
+
+        def open: (Crypto::AEAD aead) -> String?
+      end
+    end
+
+    class VersionNegotiation < Data
+      FIRST_BYTE: Integer
+      INVARIANT_CONNECTION_ID_MAX_LENGTH: Integer
+
+      attr_reader dcid: String
+      attr_reader scid: String
+      attr_reader versions: Array[Integer]
+
+      def self.new: (dcid: String, scid: String, versions: Array[Integer]) -> instance
+                  | (String dcid, String scid, Array[Integer] versions) -> instance
+      def initialize: (dcid: String, scid: String, versions: Array[Integer]) -> void
+      def self.read: (Reader reader) -> VersionNegotiation
+
+      def encode: () -> String
+    end
+  
+    class UnsupportedVersion < Data
+      attr_reader version: Integer
+      attr_reader dcid: String
+      attr_reader scid: String
+
+      def self.new: (version: Integer, dcid: String, scid: String) -> instance
+                  | (Integer version, String dcid, String scid) -> instance
+      def self.read: (Integer version, Reader reader) -> UnsupportedVersion
+
+      def negotiation: (Array[Integer] versions) -> VersionNegotiation
+    end
+  
+    class Retry < Data
+      TAG_LENGTH: Integer
+      UNUSED: Integer
+
+      attr_reader version: Version
+      attr_reader dcid: String
+      attr_reader scid: String
+      attr_reader token: String
+      attr_reader unused: Integer
+      attr_reader tag: String?
+
+      def self.new: (version: Version, dcid: String, scid: String, token: String, ?unused: Integer, ?tag: String?) -> instance
+                  | (Version version, String dcid, String scid, String token, ?Integer unused, ?String? tag) -> instance
+      def initialize: (version: Version, dcid: String, scid: String, token: String, ?unused: Integer, ?tag: String?) -> void
+
+      def self.read: (Reader reader, version: Version, dcid: String, scid: String, unused: Integer) -> Retry
+
+      def seal: (String original_dcid) -> String
+      def authentic?: (String original_dcid) -> bool
+
+      private def body: () -> String
+      private def pseudo_packet: (String original_dcid) -> String
+      private def integrity: () -> Crypto::AEAD
+    end
+  end
+end

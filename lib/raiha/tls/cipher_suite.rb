@@ -1,77 +1,62 @@
-require_relative "error"
+# frozen_string_literal: true
 
-module Raiha
-  module TLS
-    class CipherSuite
-      CIPHER_SUITES = [
-        { name: :TLS_AES_128_GCM_SHA256, value: "\x13\x01", supported: true },
-        { name: :TLS_AES_256_GCM_SHA384, value: "\x13\x02", supported: true },
-        { name: :TLS_CHACHA20_POLY1305_SHA256, value: "\x13\x03", supported: true },
-        { name: :TLS_AES_128_CCM_SHA256, value: "\x13\x04", supported: false },
-        { name: :TLS_AES_128_CCM_8_SHA256, value: "\x13\x05", supported: false },
-      ]
+require_relative "crypto"
 
-      attr_reader :name
-      attr_reader :value
+module Raiha::TLS
+  # A TLS 1.3 cipher suite: the AEAD and hash it names, and how much one key
+  # may be used before it has to be updated.
+  #
+  # The usage limits differ by transport. Over TCP they come from RFC 9846
+  # ("Limits on Key Usage"), which counts full-size records and sets no
+  # integrity limit because a TLS connection ends at the first forgery. Over
+  # QUIC they come from RFC 9001 ("Limits on AEAD Usage"), which counts
+  # packets and also limits failed decryptions. nil means no limit.
+  #
+  # The hash is `hash_algorithm`, not `hash`, so that `Object#hash` still
+  # works and a suite can be a Hash key.
+  class CipherSuite < Data.define(:id, :name, :hash_algorithm, :aead, :key_length, :iv_length, :tag_length, :limits)
+    Limits = Data.define(:confidentiality, :integrity)
 
-      def initialize(cipher_name)
-        cipher_suite = CIPHER_SUITES.find { |c| c[:name] == cipher_name } or
-          raise Raiha::TLS::Error, "unknown cipher suite: #{cipher_name.inspect}"
+    def hash_length = Crypto.hash_length(hash_algorithm)
 
-        @name = cipher_suite[:name]
-        @value = cipher_suite[:value]
-        @supported = cipher_suite[:supported]
-      end
+    def confidentiality_limit(transport) = limits.fetch(transport).confidentiality
 
-      def serialize
-        @value
-      end
+    def integrity_limit(transport) = limits.fetch(transport).integrity
 
-      def supported?
-        @supported
-      end
+    # 2^24.5 records, rounded down.
+    AES_GCM_TCP_CONFIDENTIALITY_LIMIT = 23_726_566
 
-      def hash_algorithm
-        @hash_algorithm ||= case @name
-        when :TLS_AES_128_GCM_SHA256, :TLS_CHACHA20_POLY1305_SHA256, :TLS_AES_128_CCM_SHA256
-          "SHA256"
-        when :TLS_AES_256_GCM_SHA384
-          "SHA384"
-        else
-          raise Raiha::TLS::Error, "TODO: hash algorithm for #{@name} is not supported" # TODO: really not supported?
-        end
-      end
+    AES_GCM_LIMITS = {
+      tcp: Limits.new(confidentiality: AES_GCM_TCP_CONFIDENTIALITY_LIMIT, integrity: nil),
+      quic: Limits.new(confidentiality: 1 << 23, integrity: 1 << 52)
+    }.freeze
 
-      def aead_algorithm
-        @aead_algorithm ||= case @name
-        when :TLS_AES_128_GCM_SHA256
-          "aes-128-gcm"
-        when :TLS_AES_256_GCM_SHA384
-          "aes-256-gcm"
-        when :TLS_CHACHA20_POLY1305_SHA256
-          "chacha20-poly1305"
-        when :TLS_AES_128_CCM_SHA256
-          "aes-128-ccm"
-        when :TLS_AES_128_CCM_8_SHA256
-          raise Raiha::TLS::Error, "TODO: aead algorithm for #{@name} is not supported" # TODO: really not supported?
-        else
-          raise Raiha::TLS::Error, "TODO: aead algorithm for #{@name} is not supported"
-        end
-      end
+    TLS_AES_128_GCM_SHA256 = new(
+      id: 0x1301, name: :TLS_AES_128_GCM_SHA256, hash_algorithm: :sha256, aead: :aes_128_gcm,
+      key_length: 16, iv_length: 12, tag_length: 16, limits: AES_GCM_LIMITS
+    )
 
-      def self.deserialize(data)
-        entry = CIPHER_SUITES.find { |c| c[:value] == data }
-        if entry
-          self.new(entry[:name])
-        else
-          # Preserve unknown cipher suites for roundtrip fidelity
-          cs = allocate
-          cs.instance_variable_set(:@name, :"unknown_#{data.unpack1("H4")}")
-          cs.instance_variable_set(:@value, data)
-          cs.instance_variable_set(:@supported, false)
-          cs
-        end
-      end
-    end
+    TLS_AES_256_GCM_SHA384 = new(
+      id: 0x1302, name: :TLS_AES_256_GCM_SHA384, hash_algorithm: :sha384, aead: :aes_256_gcm,
+      key_length: 32, iv_length: 12, tag_length: 16, limits: AES_GCM_LIMITS
+    )
+
+    # The record sequence number wraps before any confidentiality limit, and
+    # RFC 9001 puts it beyond the 2^62 packets QUIC can send.
+    CHACHA20_POLY1305_LIMITS = {
+      tcp: Limits.new(confidentiality: nil, integrity: nil),
+      quic: Limits.new(confidentiality: nil, integrity: 1 << 36)
+    }.freeze
+
+    TLS_CHACHA20_POLY1305_SHA256 = new(
+      id: 0x1303, name: :TLS_CHACHA20_POLY1305_SHA256, hash_algorithm: :sha256, aead: :chacha20_poly1305,
+      key_length: 32, iv_length: 12, tag_length: 16, limits: CHACHA20_POLY1305_LIMITS
+    )
+
+    # The suites this implementation can negotiate. The two CCM suites of RFC
+    # 9846 are left out; when offered they are ignored like any unknown suite.
+    SUITES = [TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256].to_h { |suite| [suite.id, suite] }.freeze
+
+    def self.find(id) = SUITES[id]
   end
 end

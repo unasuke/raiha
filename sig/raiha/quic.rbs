@@ -1,6 +1,2 @@
-module Raiha
-  module Quic
-    class Error < Raiha::Error
-    end
-  end
+module Raiha::QUIC
 end

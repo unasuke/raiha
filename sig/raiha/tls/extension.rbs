@@ -1,0 +1,331 @@
+module Raiha::TLS
+  module Extension
+    # The contract every extension value meets, typed or not.
+    interface _Extension
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    # What a PLACEMENT row or a registered module maps a context to.
+    interface _Parser
+      def parse: (String data) -> _Extension
+    end
+
+    PLACEMENT: Hash[Integer, Hash[Handshake::context, _Parser]]
+
+    class Registry < Data
+      CONTEXTS: Array[Handshake::context]
+      BUILTIN: Registry
+
+      attr_reader codecs: Hash[Integer, Hash[Handshake::context, _Parser]]
+
+      def self.new: (codecs: Hash[Integer, Hash[Handshake::context, _Parser]]) -> instance
+                  | (Hash[Integer, Hash[Handshake::context, _Parser]] codecs) -> instance
+      def lookup: (Integer type, Handshake::context context) -> _Parser?
+      def registered?: (Integer type) -> bool
+      def with: (*Module modules) -> Registry
+    end
+
+    def self.read_list: (Codec::Reader r, context: Handshake::context, registry: Registry, ?min: Integer) -> Array[_Extension]
+    def self.parse_one: (Integer type, String data, Handshake::context context, Registry registry) -> _Extension
+    def self.write_list: (Codec::Writer w, Array[_Extension] extensions, ?min: Integer) -> void
+
+    class Opaque < Data
+      class Parser < Data
+        attr_reader type: Integer
+
+        def self.new: (type: Integer) -> instance
+                    | (Integer type) -> instance
+        def parse: (String data) -> Opaque
+      end
+
+      attr_reader type: Integer
+      attr_reader data: String
+
+      def self.new: (type: Integer, data: String) -> instance
+                  | (Integer type, String data) -> instance
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    module ServerName
+      TYPE: Integer
+      HOST_NAME: Integer
+
+      class CH < Data
+        attr_reader host_name: String?
+
+        def self.new: (host_name: String?) -> instance
+                    | (String? host_name) -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class EE < Data
+        def self.new: () -> instance
+        def self.parse: (String data) -> EE
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+
+    class SupportedGroups < Data
+      TYPE: Integer
+
+      attr_reader named_group_list: Array[Integer]
+
+      def self.new: (named_group_list: Array[Integer]) -> instance
+                  | (Array[Integer] named_group_list) -> instance
+      def self.parse: (String data) -> SupportedGroups
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class SignatureAlgorithms < Data
+      TYPE: Integer
+
+      attr_reader supported_signature_algorithms: Array[Integer]
+
+      def self.new: (supported_signature_algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] supported_signature_algorithms) -> instance
+      def self.parse: (String data) -> SignatureAlgorithms
+      def self.parse_schemes: (String data) -> Array[Integer]
+      def self.encode_schemes: (Array[Integer] schemes) -> String
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class SignatureAlgorithmsCert < Data
+      TYPE: Integer
+
+      attr_reader supported_signature_algorithms: Array[Integer]
+
+      def self.new: (supported_signature_algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] supported_signature_algorithms) -> instance
+      def self.parse: (String data) -> SignatureAlgorithmsCert
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class Alpn < Data
+      TYPE: Integer
+
+      attr_reader protocol_name_list: Array[String]
+
+      def self.new: (protocol_name_list: Array[String]) -> instance
+                  | (Array[String] protocol_name_list) -> instance
+      def self.parse: (String data) -> Alpn
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class PskKeyExchangeModes < Data
+      TYPE: Integer
+
+      attr_reader ke_modes: Array[Integer]
+
+      def self.new: (ke_modes: Array[Integer]) -> instance
+                  | (Array[Integer] ke_modes) -> instance
+      def self.parse: (String data) -> PskKeyExchangeModes
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class Cookie < Data
+      TYPE: Integer
+
+      attr_reader cookie: String
+
+      def self.new: (cookie: String) -> instance
+                  | (String cookie) -> instance
+      def self.parse: (String data) -> Cookie
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class RecordSizeLimit < Data
+      TYPE: Integer
+      MINIMUM: Integer
+
+      attr_reader record_size_limit: Integer
+
+      def self.new: (record_size_limit: Integer) -> instance
+                  | (Integer record_size_limit) -> instance
+      def self.parse: (String data) -> RecordSizeLimit
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class CertificateAuthorities < Data
+      TYPE: Integer
+
+      attr_reader authorities: Array[String]
+
+      def self.new: (authorities: Array[String]) -> instance
+                  | (Array[String] authorities) -> instance
+      def self.parse: (String data) -> CertificateAuthorities
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class PostHandshakeAuth < Data
+      TYPE: Integer
+
+      def self.new: () -> instance
+      def self.parse: (String data) -> PostHandshakeAuth
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+
+    class CompressCertificate < Data
+      TYPE: Integer
+
+      attr_reader algorithms: Array[Integer]
+
+      def self.new: (algorithms: Array[Integer]) -> instance
+                  | (Array[Integer] algorithms) -> instance
+      def self.parse: (String data) -> CompressCertificate
+      def extension_type: () -> Integer
+      def encode: () -> String
+    end
+    module SupportedVersions
+      TYPE: Integer
+
+      class CH < Data
+        attr_reader versions: Array[Integer]
+
+        def self.new: (versions: Array[Integer]) -> instance
+                    | (Array[Integer] versions) -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class SH < Data
+        attr_reader selected_version: Integer
+
+        def self.new: (selected_version: Integer) -> instance
+                    | (Integer selected_version) -> instance
+        def self.parse: (String data) -> SH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+
+    module KeyShare
+      TYPE: Integer
+
+      class Entry < Data
+        include MaskedInspect
+
+        attr_reader group: Integer
+        attr_reader key_exchange: String
+
+        def self.new: (group: Integer, key_exchange: String) -> instance
+                    | (Integer group, String key_exchange) -> instance
+        def self.read: (Codec::Reader r) -> Entry
+        def write: (Codec::Writer w) -> void
+
+        def masked_members: () -> Array[Symbol]
+      end
+
+      class CH < Data
+        attr_reader client_shares: Array[Entry]
+
+        def self.new: (client_shares: Array[Entry]) -> instance
+                    | (Array[Entry] client_shares) -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class SH < Data
+        attr_reader server_share: Entry
+
+        def self.new: (server_share: Entry) -> instance
+                    | (Entry server_share) -> instance
+        def self.parse: (String data) -> SH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class HRR < Data
+        attr_reader selected_group: Integer
+
+        def self.new: (selected_group: Integer) -> instance
+                    | (Integer selected_group) -> instance
+        def self.parse: (String data) -> HRR
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+
+    module PreSharedKey
+      TYPE: Integer
+
+      class Identity < Data
+        attr_reader identity: String
+        attr_reader obfuscated_ticket_age: Integer
+
+        def self.new: (identity: String, obfuscated_ticket_age: Integer) -> instance
+                    | (String identity, Integer obfuscated_ticket_age) -> instance
+        def self.read: (Codec::Reader r) -> Identity
+        def write: (Codec::Writer w) -> void
+      end
+
+      class CH < Data
+        include MaskedInspect
+
+        attr_reader identities: Array[Identity]
+        attr_reader binders: Array[String]
+
+        def self.new: (identities: Array[Identity], binders: Array[String]) -> instance
+                    | (Array[Identity] identities, Array[String] binders) -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+
+        def masked_members: () -> Array[Symbol]
+      end
+
+      class SH < Data
+        attr_reader selected_identity: Integer
+
+        def self.new: (selected_identity: Integer) -> instance
+                    | (Integer selected_identity) -> instance
+        def self.parse: (String data) -> SH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+
+    module EarlyData
+      TYPE: Integer
+
+      class CH < Data
+        def self.new: () -> instance
+        def self.parse: (String data) -> CH
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class EE < Data
+        def self.new: () -> instance
+        def self.parse: (String data) -> EE
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+
+      class NST < Data
+        attr_reader max_early_data_size: Integer
+
+        def self.new: (max_early_data_size: Integer) -> instance
+                    | (Integer max_early_data_size) -> instance
+        def self.parse: (String data) -> NST
+        def extension_type: () -> Integer
+        def encode: () -> String
+      end
+    end
+  end
+end

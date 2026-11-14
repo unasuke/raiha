@@ -1,108 +1,62 @@
 # frozen_string_literal: true
 
-require "securerandom"
-require "stringio"
-require_relative "cipher_suite"
-require_relative "error"
-require_relative "../util/io_reader"
+require_relative "codec"
+require_relative "extension"
+require_relative "handshake/message"
+require_relative "handshake/violation"
+require_relative "handshake/client_hello"
+require_relative "handshake/server_hello"
+require_relative "handshake/encrypted_extensions"
+require_relative "handshake/certificate_request"
+require_relative "handshake/certificate"
+require_relative "handshake/certificate_verify"
+require_relative "handshake/finished"
+require_relative "handshake/new_session_ticket"
+require_relative "handshake/end_of_early_data"
+require_relative "handshake/key_update"
+require_relative "handshake/reassembler"
+require_relative "handshake/client_hello_builder"
+require_relative "handshake/machine"
 
-module Raiha
-  module TLS
-    class Handshake
-      HANDSHAKE_TYPE = {
-        client_hello: 1,
-        server_hello: 2,
-        new_session_ticket: 4,
-        end_of_early_data: 5,
-        encrypted_extensions: 8,
-        certificate: 11,
-        certificate_request: 13,
-        certificate_verify: 15,
-        finished: 20,
-        key_update: 24,
-        message_hash: 254
-      }.freeze
+module Raiha::TLS
+  # Handshake messages as values (RFC 9846 "Handshake Protocol"). Fields keep
+  # the RFC's names, `legacy_` prefixes included, and enumerated values stay
+  # Integers so unknown ones survive a round trip.
+  module Handshake
+    TYPES = {
+      ClientHello::MSG_TYPE => ClientHello,
+      ServerHello::MSG_TYPE => ServerHello,
+      NewSessionTicket::MSG_TYPE => NewSessionTicket,
+      EndOfEarlyData::MSG_TYPE => EndOfEarlyData,
+      EncryptedExtensions::MSG_TYPE => EncryptedExtensions,
+      Certificate::MSG_TYPE => Certificate,
+      CertificateRequest::MSG_TYPE => CertificateRequest,
+      CertificateVerify::MSG_TYPE => CertificateVerify,
+      Finished::MSG_TYPE => Finished,
+      KeyUpdate::MSG_TYPE => KeyUpdate,
+      # Only ever synthesized into the transcript after a HelloRetryRequest;
+      # it never appears on the wire.
+      254 => :message_hash
+    }.freeze
 
-      attr_accessor :handshake_type
-      attr_accessor :length
-      attr_accessor :message
+    # Parses one handshake message, header included. Raises a
+    # Codec::Malformed for anything that is not a well-formed message of a
+    # known type; the state machine rejects unknown types before parsing.
+    def self.parse(bytes, registry:)
+      r = Codec::Reader.new(bytes)
+      msg_type = r.u8
+      body = r.opaque(3, max: 0xffffff)
+      r.finish!
+      parse_body(msg_type, body, registry:)
+    end
 
-      def serialize
-        buf = String.new(encoding: "BINARY")
-        buf << [handshake_type].pack("C*")
-        serialized_message = message.serialize
-        buf << [serialized_message.bytesize].pack("N").byteslice(1..) # uint24
-        buf << serialized_message
-        buf
-      end
-
-      def self.deserialize(data)
-        hs = self.new
-        buf = StringIO.new(data)
-        type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
-        raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
-
-        hs.handshake_type = type
-        hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
-        body = buf.read || "" #: String
-        return nil if body.bytesize != hs.length
-
-        hs.message = Message.deserialize(data: body, type: hs.handshake_type)
-        hs
-      end
-
-      def self.deserialize_multiple(data)
-        handshakes = [] #: Array[Handshake]
-        buf = StringIO.new(data)
-        loop do
-          type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
-          raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
-
-          hs = self.new
-          hs.handshake_type = type
-          hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
-          body = Raiha::Util::IOReader.read_exact(buf, hs.length)
-          hs.message = Message.deserialize(data: body, type: hs.handshake_type)
-          handshakes << hs
-
-          break if buf.eof?
-        end
-        handshakes
-      end
-
-      # Parse a single handshake message and also return the raw wire bytes
-      # of that message. Receiving paths feed the returned raw bytes directly
-      # into the TranscriptHash without going through #serialize.
-      def self.deserialize_with_bytes(data)
-        hs = deserialize(data)
-        return nil unless hs
-        raw_bytes = data[0, 4 + hs.length] #: String
-        [hs, raw_bytes]
-      end
-
-      def self.deserialize_multiple_with_bytes(data)
-        # @type var pairs: Array[[Handshake, String]]
-        pairs = []
-        buf = StringIO.new(data)
-        loop do
-          start_pos = buf.pos
-          type = Raiha::Util::IOReader.read_exact(buf, 1).unpack1("C")
-          raise Raiha::TLS::Error, "unknown handshake type: #{type}" unless HANDSHAKE_TYPE.value?(type)
-
-          hs = self.new
-          hs.handshake_type = type
-          hs.length = ("\x00" + Raiha::Util::IOReader.read_exact(buf, 3)).unpack1("N")
-          body = Raiha::Util::IOReader.read_exact(buf, hs.length)
-          hs.message = Message.deserialize(data: body, type: hs.handshake_type)
-          raw_bytes = data[start_pos, 4 + hs.length] #: String
-          pairs << [hs, raw_bytes]
-
-          break if buf.eof?
-        end
-        pairs
+    def self.parse_body(msg_type, body, registry:)
+      case (klass = TYPES[msg_type])
+      when nil, Symbol
+        raise Codec::UnknownMessageType, "handshake message type #{msg_type} is not supported"
+      else
+        klass.parse_body(body, registry:)
       end
     end
   end
 end
-
-require_relative "handshake/message"

@@ -1,0 +1,324 @@
+module Raiha::HTTP3
+  module Action
+    type t = Reset | StopSending | Priority | Close
+
+    class Reset < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class StopSending < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class Priority < Data
+      attr_reader stream_id: Integer
+      attr_reader urgency: Integer
+      attr_reader incremental: bool
+
+      def self.new: (stream_id: Integer, urgency: Integer, incremental: bool) -> instance
+                  | (Integer stream_id, Integer urgency, bool incremental) -> instance
+    end
+
+    class Close < Data
+      attr_reader error_code: Integer
+      attr_reader reason: String
+
+      def self.new: (error_code: Integer, reason: String) -> instance
+                  | (Integer error_code, String reason) -> instance
+    end
+  end
+
+  module Event
+    type t = Settings | Headers | Data | Trailers | Reset | Stopped | Writable | Capsule | Datagram | GoAway | Blocked
+
+    class Settings < ::Data
+      attr_reader settings: Raiha::HTTP3::Settings
+
+      def self.new: (settings: Raiha::HTTP3::Settings) -> instance
+                  | (Raiha::HTTP3::Settings settings) -> instance
+    end
+
+    class Headers < ::Data
+      attr_reader stream_id: Integer
+      attr_reader headers: Array[[String, String]]
+      attr_reader fin: bool
+
+      def self.new: (stream_id: Integer, headers: Array[[String, String]], fin: bool) -> instance
+                  | (Integer stream_id, Array[[String, String]] headers, bool fin) -> instance
+
+      def initialize: (stream_id: Integer, headers: Array[[String, String]], fin: bool) -> void
+    end
+
+    class Data < ::Data
+      attr_reader stream_id: Integer
+      attr_reader data: String
+      attr_reader fin: bool
+
+      def self.new: (stream_id: Integer, data: String, fin: bool) -> instance
+                  | (Integer stream_id, String data, bool fin) -> instance
+    end
+
+    class Trailers < ::Data
+      attr_reader stream_id: Integer
+      attr_reader headers: Array[[String, String]]
+
+      def self.new: (stream_id: Integer, headers: Array[[String, String]]) -> instance
+                  | (Integer stream_id, Array[[String, String]] headers) -> instance
+
+      def initialize: (stream_id: Integer, headers: Array[[String, String]]) -> void
+    end
+
+    class Reset < ::Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class Stopped < ::Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class Writable < ::Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
+    class Capsule < ::Data
+      attr_reader stream_id: Integer
+      attr_reader capsule: Raiha::HTTP3::Capsule
+
+      def self.new: (stream_id: Integer, capsule: Raiha::HTTP3::Capsule) -> instance
+                  | (Integer stream_id, Raiha::HTTP3::Capsule capsule) -> instance
+    end
+
+    class Datagram < ::Data
+      attr_reader stream_id: Integer
+      attr_reader payload: String
+
+      def self.new: (stream_id: Integer, payload: String) -> instance
+                  | (Integer stream_id, String payload) -> instance
+    end
+
+    class GoAway < ::Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
+    class Blocked < ::Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+  end
+
+  class Receiving
+    @reader: FrameReader
+    @phase: :headers | :body | :trailers
+    @blocked: bool
+    @waiting: Array[FrameReader::item]
+    @waiting_bytes: Integer
+    @fin_waiting: bool
+    @surfaced: bool
+    @content_length: Integer?
+    @received: Integer
+    @budget: Integer
+    @no_content: bool
+    @datagrams: bool
+    @capsules_asked: bool
+    @capsule_reader: CapsuleReader?
+
+    attr_reader reader: FrameReader
+    attr_reader waiting: Array[FrameReader::item]
+    attr_accessor phase: :headers | :body | :trailers
+    attr_accessor blocked: bool
+    attr_accessor waiting_bytes: Integer
+    attr_accessor fin_waiting: bool
+    attr_accessor surfaced: bool
+    attr_accessor content_length: Integer?
+    attr_accessor received: Integer
+    attr_accessor budget: Integer
+    attr_accessor no_content: bool
+    attr_accessor datagrams: bool
+    attr_accessor capsules_asked: bool
+    attr_accessor capsule_reader: CapsuleReader?
+
+    def initialize: (max_payload: Integer) -> void
+  end
+
+  class Sending
+    @phase: :headers | :body
+    @wants_writable: bool
+    @datagrams: bool
+    @capsules: bool
+
+    attr_accessor phase: :headers | :body
+    attr_accessor wants_writable: bool
+    attr_accessor datagrams: bool
+    attr_accessor capsules: bool
+
+    def initialize: () -> void
+  end
+
+  class Output
+    @pieces: Array[String]
+    @buffered: Integer
+    @fin: bool
+    @blocked: bool
+
+    attr_reader buffered: Integer
+
+    def initialize: () -> void
+    def <<: (String bytes) -> self
+    def finish: () -> void
+    def ready?: () -> bool
+    def unblock: () -> void
+    def drain: () { (String data, bool fin) -> Integer } -> bool
+  end
+
+  class Connection
+    CONTROL_STREAM: Integer
+    PUSH_STREAM: Integer
+    ENCODER_STREAM: Integer
+    DECODER_STREAM: Integer
+    DEFAULT_MAX_SEND_BUFFER: Integer
+    CRITICAL: Priority
+    TRANSPORT_ORDERINGS: Array[transport_ordering]
+    CRITICAL_STREAMS: Hash[Integer, String]
+    MAX_CONTROL_FRAME: Integer
+    NOT_ON_CONTROL: Array[Integer]
+    FROM_CLIENTS: Array[Integer]
+    NOT_ON_REQUEST: Array[Integer]
+    MAX_WAITING: Integer
+    MAX_PENDING_PRIORITIES: Integer
+    MAX_DATAGRAMS: Integer
+    MAX_QUARTER_STREAM_ID: Integer
+    MAX_CAPSULE: Integer
+    MAX_EVENTS: Integer
+
+    type role = :client | :server
+    type transport_ordering = :per_stream | :global
+
+    @role: role
+    @tracer: _Tracer?
+    @settings: Settings
+    @transport_ordering: transport_ordering
+    @max_send_buffer: Integer
+    @outputs: Hash[Integer, Output]
+    @priorities: Hash[Integer, Priority]
+    @actions: Array[Action::t]
+    @started: bool
+    @own_critical: Array[Integer]
+    @own_qpack_streams: [Integer, Integer]?
+    @incoming: Hash[Integer, Integer | String]
+    @critical: Hash[Integer, Integer]
+    @closed: bool
+    @control_reader: FrameReader
+    @peer_settings: Settings?
+    @remembered: Settings?
+    @events: Array[Event::t]
+    @decoder: QPACK::Decoder
+    @encoder: QPACK::Encoder
+    @receiving: Hash[Integer, Receiving]
+    @sending: Hash[Integer, Sending]
+    @next_request: Integer
+    @skipped: Hash[Integer, true]
+    @goaway: Integer?
+    @peer_goaway: Integer?
+    @max_push_id: Integer?
+    @pending_priorities: Hash[Integer, Priority]
+    @datagram_max_size: ^() -> Integer? | nil
+    @datagrams: Array[[String, Integer]]
+    @field_section_limit: Integer
+    @max_section: Integer
+
+    attr_reader role: role
+    attr_reader settings: Settings
+    attr_reader peer_settings: Settings?
+
+    def self.client: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?,
+                      ?remembered: Settings?) -> Connection
+    def self.server: (?settings: Settings, ?transport_ordering: transport_ordering, ?max_send_buffer: Integer, ?tracer: _Tracer?) -> Connection
+
+    def initialize: (role: role, settings: Settings, transport_ordering: transport_ordering, max_send_buffer: Integer, ?tracer: _Tracer?,
+                     ?remembered: Settings?) -> void
+    def start: (control: Integer, encoder: Integer, decoder: Integer) -> void
+    def each_send: () { (Integer stream_id, String data, bool fin) -> Integer } -> void
+    def closed?: () -> bool
+    attr_writer datagram_max_size: ^() -> Integer? | nil
+
+    def datagram_received: (String data) -> void
+    def datagram_send: (Integer stream_id, String payload) -> bool
+    def each_datagram_send: () { (String data, Integer urgency) -> void } -> void
+    def send_capsule: (Integer stream_id, Raiha::HTTP3::Capsule capsule) -> bool
+    def stream_writable: (Integer stream_id) -> void
+    def send_request: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
+    def send_headers: (Integer stream_id, Array[[String, String]] headers, ?fin: bool) -> void
+    def send_data: (Integer stream_id, String data, ?fin: bool) -> Integer
+    def stream_data: (Integer stream_id, String data, ?fin: bool) -> void
+    def stream_reset: (Integer stream_id, error_code: Integer) -> void
+    def stream_stopped: (Integer stream_id, error_code: Integer) -> void
+    def cancel: (Integer stream_id, ?error_code: Integer) -> void
+    def stop_reading: (Integer stream_id) -> void
+    def goaway: (?Integer? id) -> void
+    def update_priority: (Integer stream_id, ?urgency: Integer?, ?incremental: bool?) -> void
+    def each_action: () { (Action::t action) -> void } -> void
+    def each_event: () { (Event::t event) -> void } -> void
+    private def unidirectional_data: (Integer stream_id, String data, bool fin) -> void
+    private def open_unidirectional: (Integer stream_id, Integer type) -> void
+    private def peer_limits: () -> Settings?
+    private def check_remembered: (Settings settings, Settings remembered) -> void
+    private def control_item: (FrameReader::item item) -> void
+    private def goaway_received: (Integer id) -> void
+    private def priority_update_received: (Frame::PriorityUpdate frame) -> void
+    private def events_bounded: () -> void
+    private def close_with: (Integer code, String reason) -> void
+    private def bidirectional_data: (Integer stream_id, String data, bool fin) -> void
+    private def open_request: (Integer stream_id) -> Receiving?
+    private def request_item: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
+    private def check_request_frame: (Receiving receiving, Integer type) -> void
+    private def request_data: (Integer stream_id, Receiving receiving, String data) -> void
+    private def capsule_received: (Integer stream_id, Raiha::HTTP3::Capsule capsule) -> void
+    private def wait: (Integer stream_id, Receiving receiving, FrameReader::item item) -> void
+    private def headers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers, Integer size) -> void
+    private def trailers_decoded: (Integer stream_id, Receiving receiving, Array[[String, String]] headers) -> void
+    private def section_decoded: (Integer stream_id, Receiving receiving, QPACK::Decoded | QPACK::Blocked | QPACK::Oversized | QPACK::Failure result) -> void
+    private def unblocked: (QPACK::Decoded | QPACK::Oversized | QPACK::Failure result) -> void
+    private def request_ended: (Integer stream_id, Receiving receiving) -> void
+    private def too_large: (Integer stream_id) -> void
+    private def stream_error: (Integer stream_id, Integer code) -> void
+    private def sending_for: (Integer stream_id) -> Sending
+    private def finish_sending: (Integer stream_id) -> void
+    private def writable_again: (Integer stream_id, Output output) -> void
+    private def checked: [T] () { () -> T } -> T
+    private def qpack_failed: (QPACK::Failure | Array[QPACK::Decoded | QPACK::Oversized | QPACK::Failure] | nil result) -> void
+    private def take_qpack_instructions: () -> void
+    private def output: (Integer stream_id) -> Output
+    private def write_headers: (Integer stream_id, Array[[String, String]] headers) -> void
+    private def trace_parsed: (Integer stream_id, FrameReader::item item) -> void
+    private def forget_output: (Integer stream_id) -> void
+    private def priority_in: (Array[[String, String]] headers) -> Priority
+    private def merge_priority: (Integer stream_id, Array[[String, String]] headers) -> void
+    private def prioritize: (Integer stream_id, Priority priority) -> void
+    private def priority_of: (Integer stream_id) -> Priority
+    private def local_unidirectional?: (Integer stream_id) -> bool
+  end
+end

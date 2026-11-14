@@ -1,0 +1,32 @@
+module Raiha::HTTP3
+  class Capsule < Data
+    DATAGRAM: Integer
+
+    attr_reader type: Integer
+    attr_reader value: String
+
+    def self.new: (type: Integer, value: String) -> instance
+                | (Integer type, String value) -> instance
+
+    def initialize: (type: Integer, value: String) -> void
+
+    def self.encode: (Capsule capsule) -> String
+  end
+
+  class CapsuleReader
+    MAX_HEADER: Integer
+
+    @max_value: Integer
+    @header: String
+    @type: Integer?
+    @left: Integer
+    @value: String?
+
+    def initialize: (max_value: Integer) -> void
+    def mid_capsule?: () -> bool
+    def feed: (String bytes) { (Capsule capsule) -> void } -> void
+    private def read_header: (String bytes, Integer offset) { (Capsule capsule) -> void } -> Integer
+    private def read_value: (String bytes, Integer offset) { (Capsule capsule) -> void } -> Integer
+    private def finish: () { (Capsule capsule) -> void } -> void
+  end
+end

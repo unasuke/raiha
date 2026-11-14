@@ -1,5 +1,7 @@
-# Demonstrates the minimal TLS 1.3 / QUIC handshake using two
-# Raiha::Connection instances exchanging packets in-process (no socket).
+# A QUIC handshake between a client and a server Connection in one
+# process, with no socket: each side's datagrams are handed to the other
+# by hand, at a time the example makes up. A Connection never reads a clock
+# or touches the network, so this is all a test of the protocol needs.
 #
 # Usage:
 #   bundle exec ruby -Ilib examples/in_memory_handshake.rb
@@ -7,41 +9,30 @@
 # Expected output:
 #   Handshake complete (client: true, server: true)
 
-require "raiha/connection"
+require "raiha/quic"
 require_relative "_certificate"
 
-dest_connection_id = Raiha::Quic::Protocol::ConnectionID.generate
-src_connection_id = Raiha::Quic::Protocol::ConnectionID.generate
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
+REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
+ALPN = ["hq-interop"].freeze
+CLIENT = ["192.0.2.1", 50_000].freeze
+SERVER = ["192.0.2.2", 443].freeze
 
-client = Raiha::Connection.new(
-  perspective: :client,
-  src_connection_id: src_connection_id,
-  dest_connection_id: dest_connection_id,
-  server_name: "localhost"
-)
+client_tls = TLS::Config.client(trust_anchors: [ExampleCertificate.ca_der], profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+server_tls = TLS::Config.server(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+now = 0.0
+client = QUIC::Connection.client(config: QUIC::Config.new, tls_config: client_tls, keyring: TLS::Keyring.client(config: client_tls),
+  server_name: "localhost", remote: SERVER, time: Time.now, now:)
+server = QUIC::Connection.server(config: QUIC::Config.new, tls_config: server_tls,
+  keyring: TLS::Keyring.server(config: server_tls, identities: [ExampleCertificate.identity]), time: Time.now, now:)
 
-server = Raiha::Connection.new(
-  perspective: :server,
-  src_connection_id: dest_connection_id,
-  dest_connection_id: dest_connection_id,
-  tls_config: ExampleCertificate.tls_config
-)
+# A millisecond each way, until both have completed the handshake.
+20.times do
+  break if client.handshake_complete? && server.handshake_complete?
+  client.each_transmit(now:) { |transmit| server.receive(transmit.payload, from: CLIENT, now:) }
+  server.each_transmit(now:) { |transmit| client.receive(transmit.payload, from: SERVER, now:) }
+  now += 0.001
+end
 
-# 1-RTT handshake in three flights:
-#   1. client Initial (ClientHello)
-#   2. server Initial (ServerHello) + Handshake (EE+Cert+CV+Fin)
-#   3. client Handshake (Finished)
-client.start_handshake
-client.get_packets_to_send.each { |packet| server.handle_packet(packet) }
-server.get_packets_to_send.each { |packet| client.handle_packet(packet) }
-client.get_packets_to_send.each { |packet| server.handle_packet(packet) }
-
-client_done = client.handshake_complete?
-server_done = server.handshake_complete?
-raise "Handshake did not complete (client: #{client_done}, server: #{server_done})" unless client_done && server_done
-
-puts "Handshake complete (client: #{client_done}, server: #{server_done})"
-
-# Drain a CONNECTION_CLOSE from the client so the server enters draining.
-client.close
-client.get_packets_to_send.each { |packet| server.handle_packet(packet) }
+puts "Handshake complete (client: #{client.handshake_complete?}, server: #{server.handshake_complete?})"

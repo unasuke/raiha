@@ -15,3 +15,5 @@
 # Go build artifacts for interop test helpers
 /test/support/quicgo/client_bin
 /test/support/quicgo/server_bin
+/test/support/quicgo/resume_client_bin
+/test/support/quicgo/resume_server_bin

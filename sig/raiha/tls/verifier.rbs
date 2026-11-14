@@ -1,0 +1,54 @@
+module Raiha::TLS
+  module Verifier
+    type purpose = :server | :client
+
+    # What a Keyring's `verifier:` answers.
+    interface _Verifier
+      def verify: (chain: Array[OpenSSL::X509::Certificate], server_name: String?, now: Time, purpose: purpose) -> Result
+      def resumption_policy: () -> String?
+    end
+
+    class Result < Data
+      attr_reader ok: bool
+      attr_reader reason: Symbol?
+      attr_reader verified_chain: Array[OpenSSL::X509::Certificate]
+
+      def self.new: (ok: bool, reason: Symbol?, verified_chain: Array[OpenSSL::X509::Certificate]) -> instance
+                  | (bool ok, Symbol? reason, Array[OpenSSL::X509::Certificate] verified_chain) -> instance
+    end
+
+    module HostName
+      SUBJECT_ALT_NAME: String
+      DNS_NAME: Integer
+      IP_ADDRESS: Integer
+
+      def self.match?: (OpenSSL::X509::Certificate certificate, String name) -> bool
+      def self.ip_address: (String name) -> IPAddr?
+      def self.dns_name_match?: (String presented, String name) -> bool
+      def self.subject_alt_names: (OpenSSL::X509::Certificate certificate) -> [Array[String], Array[String]]
+    end
+
+    class Default
+      ALERTS: Hash[Integer, Symbol]
+      REVOCATION_FLAGS: Integer
+      PURPOSES: Hash[Symbol, Integer]
+
+      def self.store: (Array[String] trust_anchors) -> OpenSSL::X509::Store
+
+      @store: OpenSSL::X509::Store
+
+      attr_reader verify_flags: Integer
+
+      def initialize: (store: OpenSSL::X509::Store, ?verify_flags: Integer) -> void
+      def verify: (chain: Array[OpenSSL::X509::Certificate], server_name: String?, now: Time, purpose: purpose) -> Result
+      def resumption_policy: () -> String?
+
+      private def failure: (Symbol alert) -> Result
+    end
+
+    class None
+      def verify: (chain: Array[OpenSSL::X509::Certificate], server_name: String?, now: Time, purpose: purpose) -> Result
+      def resumption_policy: () -> String
+    end
+  end
+end

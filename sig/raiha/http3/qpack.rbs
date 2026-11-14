@@ -1,0 +1,246 @@
+module Raiha::HTTP3::QPACK
+  module Error
+    class Usage < StandardError
+    end
+  end
+
+  module ErrorCode
+    DECOMPRESSION_FAILED: Integer
+    ENCODER_STREAM_ERROR: Integer
+    DECODER_STREAM_ERROR: Integer
+  end
+
+  class Malformed < StandardError
+  end
+
+  class Truncated < Malformed
+    attr_reader needed: Integer
+
+    def initialize: (?String? message, ?needed: Integer) -> void
+  end
+
+  class IntegerOverflow < Malformed
+  end
+
+  class TooLong < StandardError
+  end
+
+  class Reader
+    MAX_INTEGER: Integer
+    MAX_CONTINUATIONS: Integer
+
+    attr_reader offset: Integer
+
+    def initialize: (String bytes, ?Integer offset, ?Integer limit) -> void
+
+    def eof?: () -> bool
+
+    def peek: () -> Integer
+
+    def integer: (Integer prefix) -> Integer
+
+    def string: (Integer prefix, ?Integer? max) -> String
+
+    private def take: (Integer length) -> String
+
+    private def u8: () -> Integer
+  end
+
+  class Writer
+    def initialize: () -> void
+
+    def integer: (Integer value, Integer prefix, ?Integer flags) -> self
+
+    def string: (String value, Integer prefix, ?Integer flags) -> self
+
+    def to_s: () -> String
+  end
+
+  module Huffman
+    CODES: Array[[Integer, Integer]]
+    BITS: Array[String]
+    LENGTHS: Array[Integer]
+
+    def self.encode: (String string) -> String
+
+    def self.encoded_length: (String string) -> Integer
+
+    EOS: Integer
+    POISON: Integer
+    NEXT_STATES: Array[Integer]
+    EMITS: Array[String]
+    ACCEPTING: Array[bool]
+
+    def self.tree_of: (Array[[Integer, Integer]] codes) -> Array[Array[Integer]]
+
+    def self.decoder_of: (Array[Array[Integer]] tree) -> [Array[Integer], Array[String], Array[bool]]
+
+    def self.nibble_steps_of: (Array[Array[Integer]] tree) -> [Array[Integer], Array[String]]
+
+    def self.decode: (String bytes) -> String
+  end
+
+  module StaticTable
+    ENTRIES: Array[[String, String]]
+    INDEX: Hash[String, Hash[String, Integer]]
+    NAMES: Hash[String, Integer]
+
+    def self.index_of: (Array[[String, String]] entries) -> Hash[String, Hash[String, Integer]]
+
+    def self.names_of: (Array[[String, String]] entries) -> Hash[String, Integer]
+
+    def self.entry: (Integer index) -> [String, String]?
+
+    def self.find: (String name, String value) -> Integer?
+
+    def self.find_name: (String name) -> Integer?
+  end
+
+  class DynamicTable
+    ENTRY_OVERHEAD: Integer
+    INITIAL_SLOTS: Integer
+
+    attr_reader capacity: Integer
+    attr_reader size: Integer
+    attr_reader insert_count: Integer
+
+    @max_capacity: Integer
+    @evicted: Integer
+    @ring: Array[[String, String]?]
+
+    def initialize: (Integer max_capacity) -> void
+
+    def max_entries: () -> Integer
+
+    def resize: (Integer capacity) -> void
+
+    def insert: (String name, String value) -> void
+
+    def entry: (Integer index) -> [String, String]?
+
+    private def evict_down_to: (Integer limit) -> void
+
+    private def grow: () -> void
+  end
+
+  class Field < Data
+    attr_reader name: String
+    attr_reader value: String
+    attr_reader never_indexed: bool
+
+    def self.new: (name: String, value: String, ?never_indexed: bool) -> instance
+                | (String name, String value, ?bool never_indexed) -> instance
+
+    def initialize: (name: String, value: String, ?never_indexed: bool) -> void
+  end
+
+  class Decoded < Data
+    attr_reader stream_id: Integer
+    attr_reader fields: Array[Field]
+    attr_reader size: Integer
+
+    def self.new: (stream_id: Integer, fields: Array[Field], size: Integer) -> instance
+                | (Integer stream_id, Array[Field] fields, Integer size) -> instance
+  end
+
+  class Blocked < Data
+    attr_reader stream_id: Integer
+
+    def self.new: (stream_id: Integer) -> instance
+                | (Integer stream_id) -> instance
+  end
+
+  class Oversized < Data
+    attr_reader stream_id: Integer
+
+    def self.new: (stream_id: Integer) -> instance
+                | (Integer stream_id) -> instance
+  end
+
+  class Failure < Data
+    attr_reader code: Integer
+    attr_reader reason: String
+    attr_reader stream_id: Integer?
+
+    def self.new: (code: Integer, reason: String, ?stream_id: Integer?) -> instance
+                | (Integer code, String reason, ?Integer? stream_id) -> instance
+
+    def initialize: (code: Integer, reason: String, ?stream_id: Integer?) -> void
+  end
+
+  class Encoder
+    INDEXED_STATIC: Integer
+    NAME_REFERENCE_STATIC: Integer
+    NAME_REFERENCE_NEVER_INDEXED: Integer
+    LITERAL_NAME: Integer
+    LITERAL_NAME_NEVER_INDEXED: Integer
+
+    @pending: String
+    @failure: Failure?
+
+    def initialize: () -> void
+
+    def encode: (Integer stream_id, Array[Field] fields) -> String
+
+    def receive_decoder_stream: (String bytes) -> Failure?
+
+    def take_instructions: () -> String
+
+    private def follow: (Reader reader) -> void
+
+    private def represent: (Writer writer, Field field) -> Writer
+  end
+  class Decoder
+    DEFAULT_MAX_FIELD_SECTION_SIZE: Integer
+    SECTION_ACKNOWLEDGMENT: Integer
+    STREAM_CANCELLATION: Integer
+    INSERT_COUNT_INCREMENT: Integer
+    EXPANSION_BOUND: Integer
+
+    @table: DynamicTable
+    @max_blocked_streams: Integer
+    @max_field_section_size: Integer
+    @pending: String
+    @needed: Integer
+    @blocked: Hash[Integer, [Integer, Integer, Reader, Integer]]
+    @instructions: Writer
+    @known_received_count: Integer
+    @failure: Failure?
+
+    def initialize: (?max_table_capacity: Integer, ?max_blocked_streams: Integer, ?max_field_section_size: Integer) -> void
+
+    def receive_encoder_stream: (String bytes) -> (Array[Decoded | Oversized | Failure] | Failure)
+
+    def decode: (Integer stream_id, String bytes, ?limit: Integer) -> (Decoded | Blocked | Oversized | Failure)
+
+    def cancel: (Integer stream_id) -> nil
+
+    def take_instructions: () -> String
+
+    private def acknowledge: (Integer stream_id, Integer required) -> void
+
+    private def follow_all: (String bytes) -> void
+
+    private def block: (Integer stream_id, Integer required, Integer base, String bytes, Integer offset, Integer limit) -> (Blocked | Oversized)
+
+    private def unblock: () -> Array[Decoded | Oversized | Failure]
+
+    private def fields_of: (Integer stream_id, Reader reader, Integer required, Integer base, Integer limit) -> (Decoded | Oversized)
+
+    private def oversize: (Integer stream_id, Integer required) -> Oversized
+
+    private def required_insert_count: (Integer encoded) -> Integer
+
+    private def represent: (Reader reader, Integer required, Integer base, Integer room) -> Field
+
+    private def field_entry: (Integer absolute, Integer required) -> [String, String]
+
+    private def follow: (Reader reader) -> void
+
+    private def room: () -> Integer
+
+    private def static_entry: (Integer index) -> [String, String]
+
+    private def relative_entry: (Integer index) -> [String, String]
+  end
+end

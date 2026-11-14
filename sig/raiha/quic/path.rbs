@@ -1,0 +1,105 @@
+module Raiha::QUIC
+  class Path
+    AMPLIFICATION_FACTOR: Integer
+    MIN_DATAGRAM_SIZE: Integer
+    BLACK_HOLE_PTOS: Integer
+
+    attr_reader rtt: Recovery::RttEstimator
+    attr_reader bytes_in_flight: Integer
+    attr_reader ack_eliciting_in_flight: Integer
+    attr_reader packets_in_flight: Integer
+    attr_reader max_datagram_size: Integer
+    attr_reader local: address?
+    attr_reader remote: address?
+
+    @config: Config
+    @validated: bool
+    @received_unvalidated: Integer
+    @sent_unvalidated: Integer
+    @challenge: String?
+    @destination_connection_id: String?
+    @challenge_due_at: Float?
+    @challenge_interval: Float?
+    @validation_deadline: Float?
+    @challenges_sent: Hash[String, bool]
+    @full_size_due: bool
+    @validation_owed: bool
+    @congestion: Congestion::_Controller
+    @startup: Congestion::_StartupController?
+    @app_limited: bool
+    @rtt_heard: bool
+    @abandoned: bool
+    @tracer: _Tracer?
+    @ecn_testing_sent: Integer
+    @ecn_testing_lost: Integer
+    @pacer: Pacer
+    @mtu_search: MTUSearch?
+    @timed_out: Integer
+    @pacing_release_at: Float?
+    @rate_meter: Recovery::RateMeter
+
+    attr_reader ecn_state: :testing | :capable | :failed
+
+    def initialize: (config: Config, ?local: address?, ?remote: address?, ?validated: bool, ?destination_connection_id: String?, ?max_datagram_size: Integer, ?tracer: _Tracer?) -> void
+    def learn: (local: address?, remote: address?) -> void
+    def validated?: () -> bool
+    def validate: () -> void
+    def datagram_received: (Integer bytes) -> void
+    def datagram_sent: (Integer bytes) -> void
+    def amplification_budget: () -> Integer?
+    def challenged: (String data) -> void
+    attr_reader challenge: String?
+    def answered: () -> void
+    attr_reader destination_connection_id: String?
+    def send_with: (String? connection_id) -> void
+    def start_validation: (now: Float, interval: Float, deadline: Float) -> void
+    def validating?: () -> bool
+    def stop_validation: () -> void
+    def validation_owed?: () -> bool
+    def challenge_due?: (Float now) -> bool
+    def challenge_sent: (String data, full_size: bool, now: Float) -> void
+    def responded: (String data, now: Float) -> bool
+    def full_size_due?: () -> bool
+    def validation_timeout: () -> Float?
+    attr_reader validation_deadline: Float?
+    def validation_failed?: (Float now) -> bool
+    def start_over: () -> void
+    def take_over: (Path path) -> void
+    def hand_over_to: (Path path) -> void
+    def adopt: (rtt: Recovery::RttEstimator, congestion: Congestion::_Controller, startup: Congestion::_StartupController?, pacer: Pacer,
+                rate_meter: Recovery::RateMeter, rtt_heard: bool, max_datagram_size: Integer, mtu_search: MTUSearch?,
+                ecn: [:testing | :capable | :failed, Integer, Integer]) -> void
+    private def start_learning: () -> void
+    def congestion: () -> Congestion::_Controller
+    def add_in_flight: (sent_bytes: Integer, ack_eliciting: bool, now: Float) -> void
+    def paced?: (Integer size, Float now) -> bool
+    attr_reader pacing_release_at: Float?
+    def delivered: (Integer bytes, largest: Integer, now: Float) -> void
+    def delivery_rate: () -> Float?
+    def acked: (acked_bytes: Integer, largest_acked_sent_at: Float, sampled: bool, now: Float) -> void
+    def remove_in_flight: (sent_bytes: Integer, ack_eliciting: bool) -> void
+    def app_limited?: () -> bool
+    def transmission_stopped: (Symbol reason, waiting: bool, next_packet_number: Integer) -> bool
+    def update_max_datagram_size: (Integer max_datagram_size, now: Float) -> void
+    def search_mtu: (up_to: Integer) -> MTUSearch
+    def mtu_probe_size: () -> Integer?
+    def mtu_probe_sent: (Integer size) -> Integer?
+    def mtu_probe_acked: (Integer size, now: Float) -> void
+    def mtu_probe_lost: (Integer size, now: Float) -> void
+    def persistent_congestion: (now: Float) -> void
+    def probe_timed_out: (now: Float) -> void
+    def window: () -> Integer
+    def window_packets: () -> Integer
+    def abandon: () -> void
+    def abandoned?: () -> bool
+    def ecn: () -> (:ect0 | :not_ect)
+    def ecn_sent: () -> void
+    def ecn_lost: (Integer count, now: Float) -> void
+    def ecn_validated: (now: Float) -> void
+    def ecn_failed: (now: Float) -> void
+
+    private def black_hole: (Float now) -> void
+    private def change_ecn_state: (:testing | :capable | :failed state, Float now) -> void
+    private def ecn_family?: () -> bool
+  end
+end

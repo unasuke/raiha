@@ -1,0 +1,16 @@
+module Raiha::QUIC
+  class Pacer
+    @capacity: Integer
+    @granularity: Float
+    @tokens: Float
+    @filled_at: Float?
+
+    def initialize: (capacity: Integer, granularity: Float) -> void
+    attr_writer capacity: Integer
+    def ready?: (Integer size, Float? rate, Float now) -> bool
+    def sent: (Integer bytes) -> Float
+    def release_at: (Integer size, Float? rate, Float now) -> Float?
+
+    private def fill: (Float? rate, Float now) -> void
+  end
+end

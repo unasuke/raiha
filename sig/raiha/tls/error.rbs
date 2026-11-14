@@ -1,0 +1,21 @@
+module Raiha::TLS
+  class UsageError < StandardError
+  end
+
+  class HandshakeError < StandardError
+    attr_reader alert: Symbol?
+    attr_reader reason: Symbol?
+
+    def initialize: (?String? message, ?alert: Symbol?, ?reason: Symbol?) -> void
+  end
+
+  class CertificateError < HandshakeError
+  end
+
+  class AlertError < StandardError
+    attr_reader level: Integer
+    attr_reader description: Integer
+
+    def initialize: (level: Integer, description: Integer) -> void
+  end
+end

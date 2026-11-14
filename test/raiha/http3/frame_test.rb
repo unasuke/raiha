@@ -1,120 +1,71 @@
 require "test_helper"
-require "raiha/http3/frame"
+require "raiha/http3"
 
 class RaihaHTTP3FrameTest < Minitest::Test
-  def test_data_frame_roundtrip
-    frame = Raiha::HTTP3::DataFrame.new("hello".b)
-    bytes = frame.serialize
+  Frame = Raiha::HTTP3::Frame
 
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::DataFrame, parsed
-    assert_equal "hello", parsed.data
+  # Each frame and its bytes: the type, the length, then the payload.
+  FRAMES = {
+    Frame::Data.new(data: "hello") => "\x00\x05hello",
+    Frame::Headers.new(field_section: "\x00\x00\xd1".b) => "\x01\x03\x00\x00\xd1",
+    Frame::CancelPush.new(push_id: 3) => "\x03\x01\x03",
+    Frame::Settings.new(settings: [[0x01, 0], [0x06, 65_536]]) => "\x04\x07\x01\x00\x06\x80\x01\x00\x00",
+    Frame::Settings.new(settings: []) => "\x04\x00",
+    Frame::PushPromise.new(push_id: 64, field_section: "\x00\x00".b) => "\x05\x04\x40\x40\x00\x00",
+    Frame::GoAway.new(id: 4) => "\x07\x01\x04",
+    Frame::MaxPushId.new(push_id: 0) => "\x0d\x01\x00",
+    Frame::PriorityUpdate.new(element_id: 0, priority: "u=1") => "\x80\x0f\x07\x00\x04\x00u=1",
+    Frame::PriorityUpdate.new(element_id: 2, priority: "", push: true) => "\x80\x0f\x07\x01\x01\x02"
+  }.transform_values(&:b).freeze
+
+  def test_encoding_and_decoding
+    FRAMES.each do |frame, bytes|
+      assert_equal bytes, Frame.encode(frame), frame.inspect
+      type, offset = Raiha::HTTP3::Varint.decode(bytes)
+      length, offset = Raiha::HTTP3::Varint.decode(bytes, offset)
+      assert_equal bytes.bytesize - offset, length
+      assert_equal frame, Frame.decode(type, bytes.byteslice(offset..))
+    end
   end
 
-  def test_data_frame_empty_payload
-    frame = Raiha::HTTP3::DataFrame.new("".b)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_equal "".b, parsed.data
+  def test_the_header_of_a_payload
+    assert_equal "\x00\x40\x40".b, Frame.header(Frame::DATA, 64)
   end
 
-  def test_headers_frame_roundtrip
-    encoded = "\x00\x00\xc0\x81".b # placeholder encoded field section
-    frame = Raiha::HTTP3::HeadersFrame.new(encoded)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::HeadersFrame, parsed
-    assert_equal encoded, parsed.encoded_field_section
+  # Data in any encoding goes as its bytes.
+  def test_strings_are_binary
+    data = "é" * 40
+    frame = Frame::Data.new(data:)
+    assert_equal Encoding::BINARY, frame.data.encoding
+    assert_equal "\x00\x40\x50".b + data.b, Frame.encode(frame)
   end
 
-  def test_settings_frame_roundtrip
-    frame = Raiha::HTTP3::SettingsFrame.new
-    frame.settings[Raiha::HTTP3::SettingsFrame::SETTINGS[:qpack_max_table_capacity]] = 100
-    frame.settings[Raiha::HTTP3::SettingsFrame::SETTINGS[:max_field_section_size]] = 16384
-
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::SettingsFrame, parsed
-    assert_equal 100, parsed.qpack_max_table_capacity
-    assert_equal 16384, parsed.max_field_section_size
-  end
-
-  def test_settings_frame_default_values
-    frame = Raiha::HTTP3::SettingsFrame.new
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_equal 0, parsed.qpack_max_table_capacity
-    assert_equal 0, parsed.qpack_blocked_streams
-    assert_nil parsed.max_field_section_size
-  end
-
-  def test_goaway_frame_roundtrip
-    frame = Raiha::HTTP3::GoawayFrame.new(42)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::GoawayFrame, parsed
-    assert_equal 42, parsed.stream_id
-  end
-
-  def test_cancel_push_frame_roundtrip
-    frame = Raiha::HTTP3::CancelPushFrame.new(7)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::CancelPushFrame, parsed
-    assert_equal 7, parsed.push_id
-  end
-
-  def test_push_promise_frame_roundtrip
-    frame = Raiha::HTTP3::PushPromiseFrame.new(3, "encoded".b)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::PushPromiseFrame, parsed
-    assert_equal 3, parsed.push_id
-    assert_equal "encoded", parsed.encoded_field_section
-  end
-
-  def test_max_push_id_frame_roundtrip
-    frame = Raiha::HTTP3::MaxPushIdFrame.new(1000)
-    bytes = frame.serialize
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(bytes))
-    assert_instance_of Raiha::HTTP3::MaxPushIdFrame, parsed
-    assert_equal 1000, parsed.push_id
-  end
-
-  def test_unknown_frame_preserved
-    # Build an unknown frame type manually: varint type 0x42, varint length 2, 2 bytes payload
-    buf = Raiha::Quic::Wire::Buffer.new
-    buf.write_varint(0x42)
-    buf.write_varint(2)
-    buf.write("ab".b)
-
-    parsed = Raiha::HTTP3::Frame.parse(Raiha::Quic::Wire::Buffer.new(buf.to_s))
-    assert_instance_of Raiha::HTTP3::UnknownFrame, parsed
-    assert_equal 0x42, parsed.frame_type
-    assert_equal "ab".b, parsed.payload
-  end
-
-  def test_multiple_frames_in_sequence
+  def test_frames_are_shareable
     frames = [
-      Raiha::HTTP3::HeadersFrame.new("\xc0\x81".b),
-      Raiha::HTTP3::DataFrame.new("body".b),
+      Frame::Data.new(data: +"x"), Frame::Headers.new(field_section: +"y"), Frame::Settings.new(settings: [[1, 2]]),
+      Frame::PushPromise.new(push_id: 1, field_section: +"z"), Frame::PriorityUpdate.new(element_id: 0, priority: +"i")
     ]
-    bytes = frames.map(&:serialize).join
+    frames.each { |frame| assert Ractor.shareable?(frame), frame.inspect }
+  end
 
-    buffer = Raiha::Quic::Wire::Buffer.new(bytes)
-    parsed1 = Raiha::HTTP3::Frame.parse(buffer)
-    parsed2 = Raiha::HTTP3::Frame.parse(buffer)
+  # RFC 9114 "Frame Layout": a payload with bytes past its fields, or that
+  # ends before them, is H3_FRAME_ERROR.
+  def test_malformed_payloads
+    {
+      Frame::CANCEL_PUSH => ["", "\x01\x02", "\x40"],
+      Frame::SETTINGS => ["\x01", "\x01\x00\x06", "\x01\x40"],
+      Frame::PUSH_PROMISE => [""],
+      Frame::GOAWAY => ["", "\x04\x00"],
+      Frame::MAX_PUSH_ID => ["", "\x80\x00"],
+      Frame::PRIORITY_UPDATE => ["", "\x40"]
+    }.each do |type, payloads|
+      payloads.each do |payload|
+        assert_raises(Frame::Malformed, "0x#{type.to_s(16)} #{payload.inspect}") { Frame.decode(type, payload.b) }
+      end
+    end
+  end
 
-    assert_instance_of Raiha::HTTP3::HeadersFrame, parsed1
-    assert_instance_of Raiha::HTTP3::DataFrame, parsed2
-    assert_equal "body", parsed2.data
+  def test_no_decoding_of_other_types
+    (Frame::HTTP2_TYPES + [0x21, 0x0e]).each { |type| assert_raises(ArgumentError) { Frame.decode(type, "".b) } }
   end
 end

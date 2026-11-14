@@ -1,38 +1,46 @@
 require "test_helper"
-require "raiha/http3/qpack/static_table"
+require "raiha/http3/qpack"
 
-class RaihaHTTP3QPACKStaticTableTest < Minitest::Test
-  def test_size_matches_rfc_9204_appendix_a
-    # RFC 9204 Appendix A defines 99 entries (indices 0-98)
-    assert_equal 99, Raiha::HTTP3::QPACK::StaticTable.size
+# RFC 9204 Appendix A.
+class RaihaQPACKStaticTableTest < Minitest::Test
+  StaticTable = Raiha::HTTP3::QPACK::StaticTable
+
+  def test_entries
+    assert_equal 99, StaticTable::ENTRIES.size
+    assert_equal [":authority", ""], StaticTable.entry(0)
+    assert_equal [":method", "GET"], StaticTable.entry(17)
+    assert_equal [":status", "200"], StaticTable.entry(25)
+    assert_equal ["accept", "*/*"], StaticTable.entry(29)
+    assert_equal ["content-security-policy", "script-src 'none'; object-src 'none'; base-uri 'none'"], StaticTable.entry(85)
+    assert_equal ["x-frame-options", "sameorigin"], StaticTable.entry(98)
+    assert_nil StaticTable.entry(99)
+    assert_nil StaticTable.entry(-1)
   end
 
-  def test_entry_by_index
-    assert_equal [":authority", ""], Raiha::HTTP3::QPACK::StaticTable[0]
-    assert_equal [":method", "GET"], Raiha::HTTP3::QPACK::StaticTable[17]
-    assert_equal [":status", "200"], Raiha::HTTP3::QPACK::StaticTable[25]
-    assert_equal ["x-frame-options", "sameorigin"], Raiha::HTTP3::QPACK::StaticTable[98]
+  def test_find_by_name_and_value
+    StaticTable::ENTRIES.each_with_index do |(name, value), index|
+      assert_equal index, StaticTable.find(name, value)
+    end
+    assert_nil StaticTable.find(":method".b, "PATCH".b)
+    assert_nil StaticTable.find("x-unknown".b, "".b)
   end
 
-  def test_find_exact_match
-    assert_equal 17, Raiha::HTTP3::QPACK::StaticTable.find(":method", "GET")
-    assert_equal 23, Raiha::HTTP3::QPACK::StaticTable.find(":scheme", "https")
-    assert_equal 25, Raiha::HTTP3::QPACK::StaticTable.find(":status", "200")
+  def test_find_by_name
+    assert_equal 1, StaticTable.find_name(":path".b)
+    assert_equal 44, StaticTable.find_name("content-type".b)
+    assert_nil StaticTable.find_name("x-unknown".b)
+    StaticTable::ENTRIES.each do |name, _|
+      assert_equal name, StaticTable.entry(StaticTable.find_name(name)).first
+    end
   end
 
-  def test_find_returns_nil_for_no_match
-    assert_nil Raiha::HTTP3::QPACK::StaticTable.find(":method", "TRACE")
-    assert_nil Raiha::HTTP3::QPACK::StaticTable.find("x-custom-header", "value")
-  end
-
-  def test_find_name_returns_first_matching
-    # :method has multiple entries, find_name returns the first
-    assert_equal 15, Raiha::HTTP3::QPACK::StaticTable.find_name(":method")
-    # :path has a single entry
-    assert_equal 1, Raiha::HTTP3::QPACK::StaticTable.find_name(":path")
-  end
-
-  def test_find_name_returns_nil_for_unknown_name
-    assert_nil Raiha::HTTP3::QPACK::StaticTable.find_name("x-unknown")
+  def test_strings_are_frozen_binary_and_shareable
+    StaticTable::ENTRIES.flatten.each do |string|
+      assert_equal Encoding::BINARY, string.encoding
+      assert string.frozen?
+    end
+    assert Ractor.shareable?(StaticTable::ENTRIES)
+    assert Ractor.shareable?(StaticTable::INDEX)
+    assert Ractor.shareable?(StaticTable::NAMES)
   end
 end

@@ -1,21 +1,41 @@
-module Raiha
-  module TLS
-    class CipherSuite
-      CIPHER_SUITES: Array[{name: Symbol, value: String, supported: bool}]
+module Raiha::TLS
+  class CipherSuite < Data
+    type transport = :tcp | :quic
 
-      @name: Symbol
-      @value: String
-      @supported: bool
+    class Limits < Data
+      attr_reader confidentiality: Integer?
+      attr_reader integrity: Integer?
 
-      attr_reader name: Symbol
-      attr_reader value: String
-
-      def self.deserialize: (String) -> CipherSuite
-      def initialize: (Symbol) -> void
-      def serialize: -> String
-      def supported?: -> bool
-      def hash_algorithm: -> String
-      def aead_algorithm: -> String
+      def self.new: (confidentiality: Integer?, integrity: Integer?) -> instance
+                  | (Integer? confidentiality, Integer? integrity) -> instance
     end
+
+    attr_reader id: Integer
+    attr_reader name: Symbol
+    attr_reader hash_algorithm: Symbol
+    attr_reader aead: Symbol
+    attr_reader key_length: Integer
+    attr_reader iv_length: Integer
+    attr_reader tag_length: Integer
+    attr_reader limits: Hash[transport, Limits]
+
+    def self.new: (id: Integer, name: Symbol, hash_algorithm: Symbol, aead: Symbol, key_length: Integer, iv_length: Integer,
+                   tag_length: Integer, limits: Hash[transport, Limits]) -> instance
+                | (Integer id, Symbol name, Symbol hash_algorithm, Symbol aead, Integer key_length, Integer iv_length,
+                   Integer tag_length, Hash[transport, Limits] limits) -> instance
+
+    def hash_length: () -> Integer
+    def confidentiality_limit: (transport transport) -> Integer?
+    def integrity_limit: (transport transport) -> Integer?
+
+    AES_GCM_TCP_CONFIDENTIALITY_LIMIT: Integer
+    AES_GCM_LIMITS: Hash[transport, Limits]
+    CHACHA20_POLY1305_LIMITS: Hash[transport, Limits]
+    TLS_AES_128_GCM_SHA256: CipherSuite
+    TLS_AES_256_GCM_SHA384: CipherSuite
+    TLS_CHACHA20_POLY1305_SHA256: CipherSuite
+    SUITES: Hash[Integer, CipherSuite]
+
+    def self.find: (Integer id) -> CipherSuite?
   end
 end

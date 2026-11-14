@@ -1,0 +1,213 @@
+module Raiha::QUIC
+  module Congestion
+    # Turns a maximum datagram size into an initial window, in bytes.
+    interface _InitialWindow
+      def call: (Integer max_datagram_size) -> Integer
+    end
+
+    # What loss recovery asks of a congestion controller.
+    interface _Controller
+      def window: () -> Integer
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> void
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> Float?
+      def state: () -> Symbol
+      def metrics: () -> Hash[Symbol, Integer | Float | Symbol | nil]
+    end
+
+    # What a startup asks of the controller it wraps.
+    interface _Handover
+      def beta: (ecn: bool) -> Float
+      def on_startup_exit: (window: Integer, full_bdp: Float, recovery_start: Float?, smoothed_rtt: Float?, now: Float) -> void
+    end
+
+    # A congestion control algorithm: the class itself.
+    interface _Algorithm
+      def requires_rate_sample?: () -> bool
+      def new: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> (_Controller & _Handover)
+    end
+
+    # A controller wrapped while the connection starts, which hands the
+    # one it wraps back once done.
+    interface _StartupController
+      include _Controller
+
+      def done?: () -> bool
+      def handover: () -> (_Controller & _Handover)
+    end
+
+    # A class that wraps a controller while the connection starts, as Rapid
+    # Start does.
+    interface _Startup
+      def new: (_Controller & _Handover cc, max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> _StartupController
+    end
+
+    module Startup
+      class RapidStart
+        DRAFT: String
+        K: Float
+        QUEUE_BUILDUP_MARGIN: Float
+        QUEUE_BUILDUP_FACTOR: Float
+        THREE_TIMES: Float
+
+        @cc: _Controller & _Handover
+        @max_datagram_size: Integer
+        @initial_window: _InitialWindow
+        @tracer: _Tracer?
+        @cwnd: Float
+        @initial: bool
+        @app_limited: bool
+        @phase: :probing | :recovery | :done
+        @recovery_start: Float?
+        @beta: Float
+        @floor: Float
+        @smoothed_rtt: Float?
+        @min_rtt: Float?
+        @floor_times: Array[Float]
+        @floor_rtts: Array[Float]
+        @first_flight: bool
+        @first_flight_sent: Integer
+        @state: Symbol
+
+        def self.queue_buildup_threshold: (Float min_rtt) -> Float
+
+        def initialize: (_Controller & _Handover cc, max_datagram_size: Integer, initial_window: _InitialWindow, ?tracer: _Tracer?) -> void
+        def done?: () -> bool
+        def handover: () -> (_Controller & _Handover)
+        def window: () -> Integer
+        def minimum_window: () -> Integer
+        def on_packet_sent: (bytes: Integer, now: Float) -> void
+        def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                     app_limited: bool, now: Float, ?rate_sample: nil) -> void
+        def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+        def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+        def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+        def pacing_rate: () -> Float?
+        def state: () -> Symbol
+        def metrics: () -> Hash[Symbol, Integer | Float | Symbol | nil]
+
+        private def take_rtt: (Float? latest_rtt, Float smoothed_rtt, Float? min_rtt, Float now) -> void
+        private def three_times?: () -> bool
+        private def enter_recovery: (Float beta, Float now) -> void
+        private def silence_factor: () -> Float
+        private def ack_factor: () -> Float
+        private def loss_factor: () -> Float
+        private def reduce: (Float bytes) -> void
+        private def hand_over: (Float now) -> void
+        private def update_state: (Float now) -> void
+      end
+    end
+
+    ALGORITHMS: Hash[Symbol, _Algorithm]
+
+    module Pacing
+      SLOW_START: Float
+      OTHERWISE: Float
+
+      def self.rate: (Integer | Float window, Float smoothed_rtt, slow_start: bool) -> Float?
+    end
+
+    def self.resolve: (Symbol | _Algorithm name) -> _Algorithm
+
+    class NewReno
+      LOSS_REDUCTION_DIVISOR: Integer
+
+      @max_datagram_size: Integer
+      @initial_window: _InitialWindow
+      @beta_ecn: Float?
+      @window: Integer
+      @ssthresh: Integer?
+      @recovery_start: Float?
+      @in_recovery: bool
+      @app_limited: bool
+      @initial: bool
+      @state: Symbol
+      @tracer: _Tracer?
+      @smoothed_rtt: Float?
+
+      def self.requires_rate_sample?: () -> bool
+
+      attr_reader window: Integer
+      attr_reader state: Symbol
+
+      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> void
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> nil
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> Float?
+      def beta: (ecn: bool) -> Float
+      def on_startup_exit: (window: Integer, full_bdp: Float, recovery_start: Float?, smoothed_rtt: Float?, now: Float) -> void
+      def metrics: () -> Hash[Symbol, Integer]
+
+      private def slow_start?: () -> bool
+      private def congestion_event: (Float sent_at, Float now, ?beta: Float?) -> void
+      private def current_state: (Float now) -> Symbol
+      private def update_state: (Float now) -> void
+    end
+
+    class Cubic
+      BETA: Float
+      C: Float
+      ALPHA: Float
+      MAX_TARGET_FACTOR: Float
+
+      @max_datagram_size: Integer
+      @initial_window: _InitialWindow
+      @fast_convergence: bool
+      @beta_ecn: Float?
+      @cwnd: Float
+      @ssthresh: Float?
+      @recovery_start: Float?
+      @in_recovery: bool
+      @app_limited: bool
+      @initial: bool
+      @epoch_start: Float?
+      @w_max: Float
+      @k: Float
+      @w_est: Float
+      @alpha: Float
+      @cwnd_prior: Float?
+      @app_limited_since: Float?
+      @after_timeout: bool
+      @state: Symbol
+      @tracer: _Tracer?
+      @smoothed_rtt: Float?
+
+      def self.requires_rate_sample?: () -> bool
+
+      attr_reader state: Symbol
+
+      def initialize: (max_datagram_size: Integer, initial_window: _InitialWindow, config: Config, ?tracer: _Tracer?) -> void
+      def window: () -> Integer
+      def minimum_window: () -> Integer
+      def on_packet_sent: (bytes: Integer, now: Float) -> nil
+      def on_ack: (acked_bytes: Integer, largest_acked_sent_at: Float, latest_rtt: Float?, smoothed_rtt: Float, min_rtt: Float?,
+                   app_limited: bool, now: Float, ?rate_sample: nil) -> void
+      def on_loss: (lost_bytes: Integer, largest_lost_sent_at: Float, persistent: bool, now: Float) -> void
+      def on_ecn_ce: (largest_acked_sent_at: Float, now: Float) -> void
+      def on_mtu_updated: (max_datagram_size: Integer, now: Float) -> void
+      def pacing_rate: () -> Float?
+      def beta: (ecn: bool) -> Float
+      def on_startup_exit: (window: Integer, full_bdp: Float, recovery_start: Float?, smoothed_rtt: Float?, now: Float) -> void
+      def metrics: () -> Hash[Symbol, Integer]
+
+      private def slow_start?: () -> bool
+      private def pause_epoch: (bool app_limited, Float now) -> void
+      private def avoid_congestion: (Integer acked_bytes, Float smoothed_rtt, Float now) -> void
+      private def start_epoch: (Float now) -> void
+      private def w_cubic: (Float t) -> Float
+      private def congestion_event: (Float sent_at, Float now, Float beta) -> void
+      private def current_state: (Float now) -> Symbol
+      private def update_state: (Float now) -> void
+    end
+  end
+end

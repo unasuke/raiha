@@ -1,0 +1,21 @@
+module Raiha::QUIC
+  class MTUSearch
+    CLOSE_ENOUGH: Integer
+    MAX_LOSSES: Integer
+
+    @through: Integer
+    @failed: Integer?
+    @max: Integer
+    @probing: Integer?
+    @losing: Integer?
+    @losses: Integer
+
+    def initialize: (from: Integer, up_to: Integer) -> void
+    def next_size: () -> Integer?
+    def done?: () -> bool
+    def sent: (Integer size) -> Integer
+    def abandon_probe: () -> nil
+    def acked: (Integer size) -> Integer?
+    def lost: (Integer size) -> void
+  end
+end

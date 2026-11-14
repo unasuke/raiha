@@ -1,69 +1,67 @@
 # frozen_string_literal: true
 
-require "openssl"
-require "raiha/quic/crypto"
-
-module Raiha::Quic
+module Raiha::QUIC
   module Crypto
-    # Provide AEAD function (wraps OpenSSL) for QUIC
-    # @see https://www.rfc-editor.org/rfc/rfc5116.html
-    # @see https://www.rfc-editor.org/rfc/rfc9001.html#name-aead-usage
+    # The packet protection of one key (RFC 9001 "AEAD Usage"): the nonce is
+    # the IV with the packet number XORed into its low bytes, and the header
+    # up to the end of the packet number is the associated data. Each
+    # direction keeps its own OpenSSL context, keyed once and reused for
+    # every packet.
     class AEAD
-      # AEAD nonce length (AEAD_AES_128_GCM)
-      # @see https://www.rfc-editor.org/rfc/rfc5116.html#section-5.1
-      NONCE_LENGTH = 12
+      CIPHERS = { aes_128_gcm: "aes-128-gcm", aes_256_gcm: "aes-256-gcm", chacha20_poly1305: "chacha20-poly1305" }.freeze #: Hash[Symbol, String]
 
-      # AEAD tag length (AEAD_AES_128_GCM)
-      # @see https://www.rfc-editor.org/rfc/rfc5116.html#section-5.1
-      TAG_LENGTH = 16
+      # How many bytes `seal` adds to the plaintext.
+      attr_reader :tag_length
 
-      # @param cipher_name [String] cipher name. Valid values are
-      #   acceptable for +OpenSSL::Cipher.new+
-      # @param key [String] The key for encryption or decryption. Same as key (secret key) in RFC 5116
-      # @param iv [String] The initialization vector for encrypton or decryption. It uses for a part as a nonce.
-      def initialize(ciper_name, key, iv)
-        @cipher_name = ciper_name
-        @key = key
-        @iv = iv
+      def initialize(suite:, key:, iv:)
+        raise ArgumentError, "#{suite.name} takes a #{suite.key_length}-byte key" unless key.bytesize == suite.key_length
+        raise ArgumentError, "#{suite.name} takes a #{suite.iv_length}-byte IV" unless iv.bytesize == suite.iv_length
+        @name = CIPHERS.fetch(suite.aead)
+        @tag_length = suite.tag_length
+        @key = key.b
+        # A packet number has 62 bits at most, so it reaches only the low 8
+        # of the 12 bytes.
+        @iv_high = iv.unpack1("N")
+        @iv_low = iv.unpack1("Q>", offset: 4)
+        @sealer = nil #: OpenSSL::Cipher?
+        @opener = nil #: OpenSSL::Cipher?
       end
 
-      # Encrypt given data by given cipher.
-      # @param data [String] The target data of encrypt. Same as P (plaintext) in RFC 5116
-      # @param associated_data [String] Associated data. Same as A (associated data) in RFC 5116
-      # @param packet_number [Integer] The packet number.
-      # @return [String] The encrypted string. Same as C (ciphertext) in RFC 5116
-      def encrypt(data, associated_data, packet_number)
-        cipher = OpenSSL::Cipher.new(@cipher_name)
-        nonce = @iv.dup
-        8.times do |i|
-          nonce[NONCE_LENGTH - 1 - i] = IO::Buffer.for(nonce[NONCE_LENGTH-i-1]).dup.xor!(IO::Buffer.for([packet_number >> (8*i)].pack("C*"))).get_string
-        end
-        cipher.encrypt
-        cipher.key = @key
-        cipher.iv = nonce
-        cipher.auth_data = associated_data
-        encrypted = cipher.update(data) + cipher.final
-        return encrypted + cipher.auth_tag
+      # The ciphertext followed by the tag.
+      def seal(packet_number:, header:, plaintext:)
+        cipher = @sealer ||= context(:encrypt)
+        cipher.iv = nonce(packet_number)
+        cipher.auth_data = header
+        sealed = plaintext.empty? ? "".b : cipher.update(plaintext)
+        sealed << cipher.final << cipher.auth_tag(@tag_length)
       end
 
-      # Decrypt given data by given cipher.
-      # @param data [String] The encrypted data. Same as C (plaintext) in RFC 5116
-      # @param associated_data [String] Associated data. Same as A (associated data) in RFC 5116
-      # @param packet_number [Integer] The packet number.
-      # @return [String] The decrypted string. Same as P (plaintext) in RFC 5116
-      def decrypt(data, associated_data, packet_number)
-        cipher = OpenSSL::Cipher.new(@cipher_name)
-        nonce = @iv.dup
-        8.times do |i|
-          nonce[NONCE_LENGTH - 1 - i] = IO::Buffer.for(nonce[NONCE_LENGTH-i-1]).dup.xor!(IO::Buffer.for([packet_number >> (8*i)].pack("C*"))).get_string
-        end
-        cipher.decrypt
+      # The plaintext, or nil when `ciphertext` (with its tag) does not
+      # authenticate. A forged packet, or one under another key, is an
+      # everyday event and not an exception; any other failure of OpenSSL is
+      # a bug of ours and raises.
+      def open(packet_number:, header:, ciphertext:)
+        body_length = ciphertext.bytesize - @tag_length
+        return nil if body_length.negative?
+        cipher = @opener ||= context(:decrypt)
+        cipher.iv = nonce(packet_number)
+        cipher.auth_tag = ciphertext.byteslice(body_length, @tag_length) # steep:ignore
+        cipher.auth_data = header
+        opened = body_length.zero? ? "".b : cipher.update(ciphertext.byteslice(0, body_length)) # steep:ignore
+        opened << cipher.final
+      rescue OpenSSL::Cipher::AuthTagError
+        nil
+      end
+
+      private def instance_variables_to_inspect = %i[@name]
+
+      private def nonce(packet_number) = [@iv_high, @iv_low ^ packet_number].pack("NQ>")
+
+      private def context(direction)
+        cipher = OpenSSL::Cipher.new(@name)
+        direction == :encrypt ? cipher.encrypt : cipher.decrypt
         cipher.key = @key
-        cipher.iv = nonce
-        cipher.auth_tag = data.slice(data.length - TAG_LENGTH, TAG_LENGTH)
-        cipher.auth_data = associated_data
-        decrypted = cipher.update(data.slice(0...(data.length-TAG_LENGTH))) + cipher.final
-        return decrypted
+        cipher
       end
     end
   end

@@ -1,0 +1,12 @@
+# strscan takes a String as a pattern as well as a Regexp, matched as it
+# is (strscan 3.1, as Ruby 4.0 bundles it), but the bundled rbs
+# declaration takes only a Regexp. The String overloads are added with
+# `| ...`, as in string.rbs.
+class StringScanner
+  def skip: (String pattern) -> Integer?
+          | ...
+  def scan: (String pattern) -> String?
+          | ...
+  def match?: (String pattern) -> Integer?
+            | ...
+end

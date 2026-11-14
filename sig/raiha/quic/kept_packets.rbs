@@ -1,0 +1,25 @@
+module Raiha::QUIC
+  class KeptPackets
+    PACKETS: Integer
+    BYTES: Integer
+
+    class Kept < Data
+      attr_reader bytes: String
+      attr_reader level: PacketProtection::level
+      attr_reader from: address
+      attr_reader to: address?
+      attr_reader ecn: ecn | :ce
+      attr_reader received_at: Float
+
+      def self.new: (bytes: String, level: PacketProtection::level, from: address, to: address?, ecn: ecn | :ce, received_at: Float) -> instance
+    end
+
+    @kept: Array[Kept]
+    @bytes: Integer
+
+    def initialize: () -> void
+    def empty?: () -> bool
+    def keep: (String bytes, level: PacketProtection::level, from: address, to: address?, ecn: ecn | :ce, received_at: Float) -> bool
+    def take: () { (PacketProtection::level) -> boolish } -> Array[Kept]
+  end
+end

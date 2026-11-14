@@ -1,0 +1,23 @@
+require "raiha/quic"
+require "support/tls_pair"
+
+# TLS settings for QUIC connections in tests: the QUIC profile, an ALPN
+# both ends share, and a registry that keeps the transport parameters.
+module QUICTLS
+  TLS = Raiha::TLS
+  QUIC = Raiha::QUIC
+  REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
+  ALPN = ["hq-interop"].freeze
+  # The wall clock the test certificates are valid at.
+  NOW = TLSPair::NOW
+
+  module_function
+
+  def client_config(**options) = TLSPair.client_config(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY, **options)
+
+  def server_config(**options) = TLSPair.server_config(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY, **options)
+
+  def client_keyring(config: client_config) = TLS::Keyring.client(config:)
+
+  def server_keyring(config: server_config) = TLSPair.server_keyring(config:)
+end

@@ -1,0 +1,292 @@
+module Raiha::QUIC::Test
+  module Vectors
+    module Keys
+      DCID: String
+      INITIAL_SECRET: String
+      CLIENT_INITIAL_SECRET: String
+      CLIENT_KEY: String
+      CLIENT_IV: String
+      CLIENT_HP: String
+      SERVER_INITIAL_SECRET: String
+      SERVER_KEY: String
+      SERVER_IV: String
+      SERVER_HP: String
+    end
+
+    module ClientInitial
+      PACKET_NUMBER: Integer
+      FRAMES: String
+      PAYLOAD_LENGTH: Integer
+      HEADER: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+
+    module ServerInitial
+      PACKET_NUMBER: Integer
+      PAYLOAD: String
+      HEADER: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+
+    module Retry
+      SOURCE_CONNECTION_ID: String
+      TOKEN: String
+      PACKET: String
+    end
+
+    module ChaCha20ShortHeader
+      SECRET: String
+      KEY: String
+      IV: String
+      HP: String
+      KU: String
+      PACKET_NUMBER: Integer
+      NONCE: String
+      HEADER: String
+      PAYLOAD: String
+      CIPHERTEXT: String
+      SAMPLE: String
+      MASK: String
+      PROTECTED_HEADER: String
+      PACKET: String
+    end
+  end
+end
+
+module Raiha::QUIC::Test
+  module CongestionContract : _ContractTest
+    # What a test class that includes the contract provides: Minitest's
+    # assertions and the algorithm under test.
+    interface _ContractTest
+      def congestion_control: () -> ::Raiha::QUIC::Congestion::_Algorithm
+      def assert_operator: (top left, Symbol operator, top right, ?String? message) -> true
+      def assert_equal: (top expected, top actual, ?String? message) -> true
+      def assert_includes: (top collection, top object, ?String? message) -> true
+      def assert_kind_of: (Module klass, top object, ?String? message) -> true
+    end
+
+    MAX_DATAGRAM_SIZE: Integer
+    KNOWN_STATES: Array[Symbol]
+    SEED: Integer
+
+    def known_congestion_states: () -> Array[Symbol]
+    def test_congestion_contract_window_stays_above_the_minimum: () -> void
+    def test_congestion_contract_loss_shrinks_the_window: () -> void
+    def test_congestion_contract_persistent_congestion_takes_the_minimum: () -> void
+    def test_congestion_contract_minimum_follows_the_datagram_size: () -> void
+    def test_congestion_contract_no_growth_while_application_limited: () -> void
+    def test_congestion_contract_states_are_known: () -> void
+    def test_congestion_contract_metrics_carry_the_window: () -> void
+
+    private def new_controller: () -> ::Raiha::QUIC::Congestion::_Controller
+    private def acknowledge: (::Raiha::QUIC::Congestion::_Controller cc, Integer bytes, sent_at: Float, now: Float, ?app_limited: bool) -> void
+  end
+end
+
+module Raiha::QUIC::Test
+  class VirtualClock
+    attr_reader now: Float
+
+    def initialize: (?now: Float) -> void
+    def advance_to: (Float time) -> Float
+    def advance: (Float seconds) -> Float
+  end
+
+  class Datagram < Data
+    attr_reader payload: String
+    attr_reader source: ::Raiha::QUIC::address
+    attr_reader destination: ::Raiha::QUIC::address
+    attr_reader ecn: ::Raiha::QUIC::ecn | :ce
+
+    def self.new: (payload: String, source: ::Raiha::QUIC::address, destination: ::Raiha::QUIC::address,
+                   ecn: ::Raiha::QUIC::ecn | :ce) -> instance
+                | (String payload, ::Raiha::QUIC::address source, ::Raiha::QUIC::address destination,
+                   ::Raiha::QUIC::ecn | :ce ecn) -> instance
+  end
+
+  # What a network carries datagrams between.
+  interface _Node
+    def receive: (String payload, from: ::Raiha::QUIC::address, to: ::Raiha::QUIC::address?,
+                  ecn: ::Raiha::QUIC::ecn | :ce, now: Float) -> top
+    def each_transmit: (now: Float) { (::Raiha::QUIC::Transmit) -> void } -> top
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> top
+  end
+
+  # One direction of a link.
+  interface _Path
+    def submit: (Datagram datagram, now: Float) -> top
+    def each_delivery: (now: Float) { (Datagram) -> void } -> top
+    def next_timeout: () -> Float?
+  end
+
+  # A path model: a value that starts the state of one direction.
+  interface _Model
+    def start: (random: Random) -> _Path
+  end
+
+  type model = _Model | Array[_Model]
+
+  class Network
+    MAX_ROUNDS: Integer
+
+    class Stuck < StandardError
+    end
+
+    @random: Random
+    @clock: VirtualClock
+    @nodes: Hash[::Raiha::QUIC::address, _Node]
+    @addresses: Hash[_Node, ::Raiha::QUIC::address]
+    @links: Hash[[::Raiha::QUIC::address, ::Raiha::QUIC::address], _Path]
+    @outside: Hash[::Raiha::QUIC::address, ::Raiha::QUIC::address]
+    @inside: Hash[::Raiha::QUIC::address, ::Raiha::QUIC::address]
+    @direct: Direct
+
+    attr_reader clock: VirtualClock
+
+    def initialize: (seed: Integer, ?clock: VirtualClock) -> void
+    def now: () -> Float
+    def add: [N < _Node] (N node, address: ::Raiha::QUIC::address) -> N
+    def address_of: (_Node node) -> ::Raiha::QUIC::address
+    def add_address: (_Node node, address: ::Raiha::QUIC::address) -> self
+    def rebind: (::Raiha::QUIC::address inside, to: ::Raiha::QUIC::address) -> self
+    def add_server: (config: ::Raiha::QUIC::Config, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
+                     time: Time, address: ::Raiha::QUIC::address, ?retry_unvalidated: bool, ?tracer: ::Raiha::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?) -> Server
+    def link: (_Node a, _Node b, ?model: model?, ?forward: model?, ?reverse: model?) -> self
+    def run_until: (?within: Float) { () -> boolish } -> bool
+    def advance: (Float seconds) -> void
+
+    private def settle: () -> void
+    private def transmit_from: (_Node node, ::Raiha::QUIC::Transmit transmit) -> void
+    private def deliver: (Datagram datagram) -> void
+    private def inside: (::Raiha::QUIC::address address) -> ::Raiha::QUIC::address?
+    private def take: (::Raiha::QUIC::address address, _Node node) -> _Node
+    private def each_path: () { (_Path) -> void } -> void
+    private def next_event: () -> Float?
+    private def start: (model model) -> _Path
+
+    class Direct
+      @queue: Array[Datagram]
+
+      def initialize: () -> void
+      def submit: (Datagram datagram, now: Float) -> Array[Datagram]
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> nil
+    end
+
+    class Chain
+      @stages: Array[_Path]
+
+      def initialize: (Array[_Path] stages) -> void
+      def submit: (Datagram datagram, now: Float) -> top
+      def each_delivery: (now: Float) { (Datagram) -> void } -> top
+      def next_timeout: () -> Float?
+    end
+  end
+end
+
+module Raiha::QUIC::Test
+  class RandomLoss < Data
+    attr_reader rate: Float
+
+    def self.new: (rate: Float) -> instance
+                | (Float rate) -> instance
+    def initialize: (rate: Float) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @rate: Float
+      @random: Random
+      @queue: Array[Datagram]
+
+      def initialize: (Float rate, Random random) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> nil
+    end
+  end
+end
+
+module Raiha::QUIC::Test
+  class Reorder < Data
+    attr_reader rate: Float
+    attr_reader hold: Float
+
+    def self.new: (rate: Float, ?hold: Float) -> instance
+                | (Float rate, ?Float hold) -> instance
+    def initialize: (rate: Float, ?hold: Float) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @rate: Float
+      @hold: Float
+      @random: Random
+      @queue: Array[Datagram]
+      @held: [Datagram, Float]?
+
+      def initialize: (Float rate, Float hold, Random random) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> Float?
+    end
+  end
+end
+
+module Raiha::QUIC::Test
+  class Bottleneck < Data
+    attr_reader bandwidth: Integer
+    attr_reader delay: Float
+    attr_reader queue: Integer
+    attr_reader ce_threshold: Integer?
+
+    def self.new: (bandwidth: Integer, delay: Float, queue: Integer, ?ce_threshold: Integer?) -> instance
+                | (Integer bandwidth, Float delay, Integer queue, ?Integer? ce_threshold) -> instance
+    def initialize: (bandwidth: Integer, delay: Float, queue: Integer, ?ce_threshold: Integer?) -> void
+    def start: (random: Random) -> State
+
+    class State
+      @model: Bottleneck
+      @waiting: Array[[Float, Integer]]
+      @busy_until: Float
+      @arrivals: Array[[Float, Datagram]]
+
+      def initialize: (Bottleneck model) -> void
+      def submit: (Datagram datagram, now: Float) -> void
+      def each_delivery: (now: Float) { (Datagram) -> void } -> void
+      def next_timeout: () -> Float?
+    end
+  end
+end
+
+module Raiha::QUIC::Test
+  class Server
+    @endpoint: ::Raiha::QUIC::Endpoint
+    @tls_config: ::Raiha::TLS::Config
+    @keyring: ::Raiha::TLS::Keyring
+    @retry_unvalidated: bool
+    @tracer: ::Raiha::QUIC::_Tracer?
+    @anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?
+    @transmits: Array[::Raiha::QUIC::Transmit]
+
+    attr_reader endpoint: ::Raiha::QUIC::Endpoint
+
+    def initialize: (::Raiha::QUIC::Endpoint endpoint, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring,
+                     ?retry_unvalidated: bool, ?tracer: ::Raiha::QUIC::_Tracer?,
+                     ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?) -> void
+    def receive: (String payload, from: ::Raiha::QUIC::address, to: ::Raiha::QUIC::address?,
+                  ecn: ::Raiha::QUIC::ecn | :ce, now: Float) -> void
+    def each_transmit: (now: Float) { (::Raiha::QUIC::Transmit) -> void } -> void
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+    def connections: () -> Array[::Raiha::QUIC::Connection]
+
+    private def dispatch: (::Raiha::QUIC::Route::t? route, Float now) -> void
+  end
+end

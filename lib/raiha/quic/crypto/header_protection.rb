@@ -1,86 +1,42 @@
 # frozen_string_literal: true
 
-require "openssl"
-
-module Raiha::Quic
+module Raiha::QUIC
   module Crypto
-    # Remove or apply QUIC header protection
-    # @see https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4
-    # @todo Support to ChaCha20-Based Header Protection
-    #   {https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4.4}
+    # The header protection of one key (RFC 9001 "Header Protection"): a
+    # 5-byte mask from a 16-byte sample of the ciphertext. The AES-GCM suites
+    # encrypt the sample with AES in ECB mode; ChaCha20-Poly1305 takes the
+    # sample as the block counter and nonce of ChaCha20 and encrypts five
+    # zero bytes. One OpenSSL context, keyed once.
     class HeaderProtection
-      MASK = "\x00" * 31
-      ZERO = "\x00" * 5
-      PACKET_NUMBER_LENGTH_MAX = 4
       SAMPLE_LENGTH = 16
+      MASK_LENGTH = 5
+      CIPHERS = { aes_128_gcm: "aes-128-ecb", aes_256_gcm: "aes-256-ecb", chacha20_poly1305: "chacha20" }.freeze #: Hash[Symbol, String]
+      ZEROS = ("\0".b * MASK_LENGTH).freeze
 
-      # @param cipher_name [String] cipher name. Valid values are
-      #   acceptable for +OpenSSL::Cipher.new+
-      # @param key [String] key
-      # @raise [RutimeError] If +cihper_name+ is invalid, raise it.
-      def initialize(cipher_name:, key:)
-        @cipher = OpenSSL::Cipher.new(cipher_name)
+      def initialize(suite:, key:)
+        raise ArgumentError, "#{suite.name} takes a #{suite.key_length}-byte header protection key" unless key.bytesize == suite.key_length
+        @name = CIPHERS.fetch(suite.aead)
+        @chacha20 = suite.aead == :chacha20_poly1305
+        @cipher = OpenSSL::Cipher.new(@name)
         @cipher.encrypt
         @cipher.key = key
-        @mask = MASK.dup
+        @cipher.padding = 0 unless @chacha20
       end
 
-      # Apply packet protection
-      # @see https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4
-      # @param plain_header [IO::Buffer]
-      # @param protected_payload [IO::Buffer]
-      # @return [IO::Buffer] protected packet
-      def apply(plain_header, protected_payload)
-        packet_number_length = (plain_header.get_value(:U8, 0) & 0x03) + 1
-        packet_number_offset = plain_header.size - packet_number_length
-        @mask = mask(protected_payload.slice(PACKET_NUMBER_LENGTH_MAX - packet_number_length).slice(0, SAMPLE_LENGTH))
-
-        buffer = IO::Buffer.for(plain_header.get_string + protected_payload.get_string).dup # make mutable
-        if buffer.get_value(:U8, 0) & 0x80 != 0
-          # buffer.set_value(:U8, 0, buffer.slice(0, 1).xor!(IO::Buffer.for((@mask[0].unpack1("C*") & 0x0f).chr)))
-          buffer.copy(buffer.slice(0, 1).xor!(IO::Buffer.for((@mask[0].unpack1("C*") & 0x0f).chr)))
+      # The mask for `sample`, 5 bytes.
+      def mask(sample) # steep:ignore
+        raise ArgumentError, "a sample is #{SAMPLE_LENGTH} bytes, not #{sample.bytesize}" unless sample.bytesize == SAMPLE_LENGTH
+        if @chacha20
+          # OpenSSL's ChaCha20 takes a 16-byte IV, the 4-byte little-endian
+          # block counter and then the 12-byte nonce: the sample as it is.
+          @cipher.iv = sample
+          @cipher.update(ZEROS)
         else
-          buffer.set_value(:U8, 0, buffer.slice(0, 1).xor!(IO::Buffer.for((@mask[0].unpack1("C*") & 0x1f)).chr))
+          @cipher.update(sample).byteslice(0, MASK_LENGTH)
         end
-        buffer.copy(buffer.slice(packet_number_offset, packet_number_length).xor!(IO::Buffer.for(@mask[1..packet_number_length])), packet_number_offset)
-        # packet_number_length.times do |i|
-        #   buffer.set_value(:U8, )
-        # end
-        buffer
       end
 
-      # Remove packet protection
-      # @see https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4
-      # @param packet [IO::Buffer]
-      # @param encrypted_offset [Integer]
-      # @return [Hash] +:plain_header+ and +:packet_number+
-      def remove(packet, encrypted_offset)
-        @mask = mask(packet.dup.slice(encrypted_offset + PACKET_NUMBER_LENGTH_MAX, SAMPLE_LENGTH))
-        buffer = packet.dup.slice(0, encrypted_offset + PACKET_NUMBER_LENGTH_MAX)
-        if buffer.get_value(:U8, 0) & 0x80 != 0
-          # buffer.set_value(:U8, 0, buffer.slice(0, 1).xor!(IO::Buffer.for(@mask[0].unpack1("C*") & 0x0f)))
-          buffer.copy(buffer.slice(0, 1).xor!(IO::Buffer.for((@mask[0].unpack1("C*") & 0x0f).chr)), 0)
-        else
-          # buffer.set_value(:U8, 0, buffer.slice(0, 1).xor!(IO::Buffer.for(@mask[0].unpack1("C*") & 0x1f)))
-          buffer.copy(buffer.slice(0, 1).xor!(IO::Buffer.for((@mask[0].unpack1("C*") & 0x1f).chr)), 0)
-        end
-        packet_number_length = (buffer.get_value(:U8, 0) & 0x03) + 1
-        packet_number_truncated = 0
-        buffer.copy(buffer.slice(encrypted_offset, packet_number_length).xor!(IO::Buffer.for(@mask[1..packet_number_length])), encrypted_offset)
-        packet_number_length.times do |i|
-          packet_number_truncated = buffer.get_value(:U8, encrypted_offset + i) | (packet_number_truncated << 8)
-        end
-
-        { plain_header: buffer.slice(0, encrypted_offset + packet_number_length), packet_number: packet_number_truncated }
-      end
-
-      # @param sample [IO::Buffer]
-      # @return [String]
-      # @todo Support to ChaCha20-Based Header Protection
-      #   {https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4.4}
-      private def mask(sample)
-        @cipher.update(sample.get_string) + @cipher.final
-      end
+      private def instance_variables_to_inspect = %i[@name]
     end
   end
 end

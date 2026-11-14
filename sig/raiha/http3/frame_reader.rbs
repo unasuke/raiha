@@ -1,0 +1,39 @@
+module Raiha::HTTP3
+  class FrameReader
+    type item = Started | TooLong | Frame::t
+
+    class Started < Data
+      attr_reader type: Integer
+      attr_reader length: Integer
+
+      def self.new: (type: Integer, length: Integer) -> instance
+                  | (Integer type, Integer length) -> instance
+    end
+
+    class TooLong < Data
+      attr_reader type: Integer
+      attr_reader length: Integer
+
+      def self.new: (type: Integer, length: Integer) -> instance
+                  | (Integer type, Integer length) -> instance
+    end
+
+    HELD: Array[Integer]
+    MAX_HEADER: Integer
+
+    @max_payload: Integer
+    @header: String
+    @type: Integer?
+    @left: Integer
+    @mode: :hold | :pass | :skip
+    @payload: String
+
+    def initialize: (max_payload: Integer) -> void
+    def mid_frame?: () -> bool
+    def feed: (String bytes) { (item) -> void } -> void
+    private def read_header: (String bytes, Integer offset) { (item) -> void } -> Integer
+    private def begin_frame: (Integer type, Integer length) { (item) -> void } -> void
+    private def read_payload: (String bytes, Integer offset) { (item) -> void } -> Integer
+    private def finish_frame: () { (item) -> void } -> void
+  end
+end

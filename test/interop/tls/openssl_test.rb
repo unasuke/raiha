@@ -1,166 +1,193 @@
 require "test_helper"
-require "support/test_certificate"
-require "raiha/tls/client"
-require "raiha/tls/server"
+require "fileutils"
+require "support/tls_pair"
+require "raiha/tls"
+require "open3"
 require "socket"
 require "timeout"
-require "tempfile"
+require "tmpdir"
 
-class RaihaTLSOpenSSLIntegrationTest < Minitest::Test
-  include TestCertificate
+# raiha over TCP against the openssl command, both
+# ways: a client against `openssl s_server`, a server against
+# `openssl s_client`. OpenSSL is a RFC 8446 implementation, so these also
+# check that what RFC 8446 allowed and RFC 9846 does not is taken.
+class TLSOpenSSLInteropTest < Minitest::Test
+  TLS = Raiha::TLS
+  Pair = TLSPair
+  PKI = TestPKI
+  # tmp/ is not in git, so a fresh checkout has none.
+  TMP = File.expand_path("../../../tmp", __dir__).tap { |dir| FileUtils.mkdir_p(dir) }
 
-  def test_client_against_openssl_s_server
-    cert_file, key_file = write_cert_files
-    port = find_available_port
+  def setup
+    skip "openssl command not found" unless system("openssl", "version", out: File::NULL, err: File::NULL)
+    @dir = Dir.mktmpdir("next-interop-openssl-", TMP)
+    leaf = PKI.leaf(Pair.ca)
+    @ca_file = write("ca.pem", Pair.ca.certificate.to_pem)
+    @cert_file = write("cert.pem", leaf.certificate.to_pem)
+    @key_file = write("key.pem", leaf.key.private_to_pem)
+    client = PKI.leaf(Pair.ca, names: [], common_name: "client", key: PKI.key(:client), purpose: "clientAuth", serial: 3)
+    @client_cert_file = write("client_cert.pem", client.certificate.to_pem)
+    @client_key_file = write("client_key.pem", client.key.private_to_pem)
+  end
 
-    server_pid = Process.spawn(
-      "openssl", "s_server",
-      "-accept", port.to_s,
-      "-cert", cert_file.path,
-      "-key", key_file.path,
-      "-tls1_3",
-      "-www",
-      out: File::NULL, err: File::NULL
-    )
+  def teardown
+    FileUtils.rm_rf(@dir) if @dir
+  end
 
-    Timeout.timeout(10) do
-      wait_for_port(port)
+  def write(name, contents) = File.join(@dir, name).tap { |path| File.write(path, contents) }
 
-      client = Raiha::TLS::Client.new
-      socket = TCPSocket.new("localhost", port)
+  def free_port = TCPServer.open("localhost", 0) { |server| server.addr[1] }
 
-      begin
-        loop do
-          break if client.finished?
-
-          datagrams = client.datagrams_to_send
-          datagrams&.each { |d| socket.write(d) }
-
-          if IO.select([socket], nil, nil, 1)
-            data = socket.recv(16384)
-            break if data.nil? || data.empty?
-            client.receive(data)
-          end
-        end
-
-        assert_equal Raiha::TLS::Client::State::CONNECTED, client.state
-      ensure
-        socket.close
-      end
-    end
+  # openssl s_server on a free port for the block.
+  def s_server(*options)
+    port = free_port
+    pid = Process.spawn("openssl", "s_server", "-accept", port.to_s, "-cert", @cert_file, "-key", @key_file, "-tls1_3", *options,
+      in: File::NULL, out: File::NULL, err: File::NULL)
+    wait_for(port)
+    Timeout.timeout(10) { yield port }
   ensure
-    Process.kill("TERM", server_pid) if server_pid rescue nil
-    Process.wait(server_pid) if server_pid rescue nil
-    cert_file&.close!
-    key_file&.close!
-  end
-
-  def test_server_against_openssl_s_client
-    config = create_server_config_for_openssl
-    tcp_server = TCPServer.new("localhost", 0)
-    port = tcp_server.addr[1]
-    server_state = nil
-    client_pid = nil
-
-    Timeout.timeout(10) do
-      # Launch openssl s_client in background
-      client_pid = Process.spawn(
-        "openssl", "s_client",
-        "-connect", "localhost:#{port}",
-        "-tls1_3",
-        "-no_ticket",
-        "-groups", "prime256v1",
-        in: File::NULL, out: File::NULL, err: File::NULL
-      )
-
-      server = Raiha::TLS::Server.new(config: config)
-      conn = tcp_server.accept
-      conn.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
-
-      begin
-        until server.connected?
-          datagrams = server.datagrams_to_send
-          if datagrams && !datagrams.empty?
-            datagrams.flatten.each { |d| conn.write(d) }
-            conn.flush
-          end
-
-          if IO.select([conn], nil, nil, 1)
-            data = conn.recv(16384)
-            next if data.nil? || data.empty?
-            server.receive(data)
-          end
-        end
-        server_state = server.state
-      ensure
-        conn.close
-      end
+    if pid
+      Process.kill("TERM", pid) rescue nil # rubocop:disable Style/RescueModifier
+      Process.wait(pid)
     end
-
-    assert_equal Raiha::TLS::Server::State::CONNECTED, server_state
-  ensure
-    Process.kill("TERM", client_pid) if client_pid rescue nil
-    Process.wait(client_pid) if client_pid rescue nil
-    tcp_server&.close
   end
 
-  private def create_server_config_for_openssl
-    key = OpenSSL::PKey::RSA.generate(2048)
-    cert = generate_server_cert(key, "localhost")
-
-    config = Raiha::TLS::Config.server_default
-    config.server_certificate = cert
-    config.server_private_key = key
-    config
-  end
-
-  private def write_cert_files
-    key = OpenSSL::PKey::RSA.generate(2048)
-    cert = generate_server_cert(key, "localhost")
-
-    cert_file = Tempfile.new(["server_cert", ".pem"])
-    key_file = Tempfile.new(["server_key", ".pem"])
-    cert_file.write(cert.to_pem)
-    cert_file.flush
-    key_file.write(key.to_pem)
-    key_file.flush
-
-    [cert_file, key_file]
-  end
-
-  private def generate_server_cert(key, hostname)
-    cert = OpenSSL::X509::Certificate.new
-    cert.version = 2
-    cert.serial = 1
-    cert.subject = OpenSSL::X509::Name.new([["CN", hostname]])
-    cert.issuer = cert.subject
-    cert.public_key = key.public_key
-    cert.not_before = Time.now - 3600
-    cert.not_after = Time.now + 86400
-
-    ef = OpenSSL::X509::ExtensionFactory.new
-    ef.subject_certificate = cert
-    ef.issuer_certificate = cert
-    cert.add_extension(ef.create_extension("subjectAltName", "DNS:#{hostname}"))
-    cert.sign(key, "SHA256")
-    cert
-  end
-
-  private def find_available_port
-    server = TCPServer.new("localhost", 0)
-    port = server.addr[1]
-    server.close
-    port
-  end
-
-  private def wait_for_port(port, timeout: 5)
-    deadline = Time.now + timeout
-    loop do
+  def wait_for(port)
+    Timeout.timeout(5) do
       TCPSocket.new("localhost", port).close
-      return
     rescue Errno::ECONNREFUSED
-      raise "Port #{port} not available after #{timeout}s" if Time.now > deadline
-      sleep 0.1
+      sleep 0.05
+      retry
     end
+  end
+
+  def connect(port, config: Pair.client_config, **keyring_options, &)
+    TLS::TCP::Socket.connect("localhost", port, config:, keyring: TLS::Keyring.client(config:, **keyring_options), &)
+  end
+
+  # Reads until `count` bytes have come, or the peer closes.
+  def read_bytes(sock, count)
+    data = +""
+    while data.bytesize < count && (chunk = sock.read(count - data.bytesize))
+      data << chunk
+    end
+    data
+  end
+
+  def test_client_against_s_server
+    s_server("-www") do |port|
+      connect(port) do |sock|
+        sock.write("GET / HTTP/1.0\r\n\r\n")
+        assert_match(%r{\AHTTP/1.0 200 ok}, read_bytes(sock, 16))
+      end
+    end
+  end
+
+  # s_server prefers no group of ours with a key share: a
+  # HelloRetryRequest for P-256.
+  def test_client_after_a_hello_retry_request
+    s_server("-www", "-groups", "P-256") do |port|
+      connect(port) do |sock|
+        sock.write("GET / HTTP/1.0\r\n\r\n")
+        assert_match(%r{\AHTTP/1.0 200 ok}, read_bytes(sock, 16))
+      end
+    end
+  end
+
+  def test_client_certificate
+    s_server("-www", "-Verify", "1", "-verifyCAfile", @ca_file, "-verify_return_error") do |port|
+      connect(port, identities: [Pair.client_identity]) do |sock|
+        sock.write("GET / HTTP/1.0\r\n\r\n")
+        assert_match(%r{\AHTTP/1.0 200 ok}, read_bytes(sock, 16))
+      end
+    end
+  end
+
+  # Our KeyUpdate asks for s_server's; its answer comes before its data,
+  # and both sides go on with the next keys.
+  def test_client_key_update
+    s_server("-rev") do |port|
+      connect(port) do |sock|
+        sock.write("abc\n")
+        assert_equal "cba\n", read_bytes(sock, 4)
+        sock.request_key_update(request_peer_update: true)
+        sock.write("defg\n")
+        assert_equal "gfed\n", read_bytes(sock, 5)
+      end
+    end
+  end
+
+  # s_client against our echo server, with a KeyUpdate that asks for ours
+  # in between ("K" on its own line, a command only without -ign_eof, so
+  # stdin stays open until the echo is back).
+  def test_server_against_s_client
+    config = Pair.server_config
+    keyring = Pair.server_keyring(config:)
+    listener = TCPServer.new("localhost", 0)
+    port = listener.addr[1]
+    received = Thread::Queue.new
+    echoed = Thread::Queue.new
+    server = Thread.new do
+      TLS::TCP::Socket.accept(listener, config:, keyring:) do |sock|
+        data = +""
+        while (chunk = sock.read(100))
+          data << chunk
+          sock.write(chunk)
+          echoed << chunk
+        end
+        received << data
+      end
+    rescue StandardError => e
+      received << e
+    end
+    Open3.popen2e("openssl", "s_client", "-connect", "localhost:#{port}", "-tls1_3", "-CAfile", @ca_file,
+      "-verify_return_error", "-servername", "localhost") do |stdin, out, wait|
+      stdin.sync = true
+      Timeout.timeout(10) do
+        stdin.write("hello\n")
+        assert_equal "hello\n", echoed.pop
+        # s_client takes a command from one read of stdin as a whole, so
+        # the line after it has to come in a read of its own.
+        stdin.write("K\n")
+        sleep 0.5
+        stdin.write("after\n")
+        assert_equal "after\n", echoed.pop
+        stdin.close
+        output = out.read
+        assert wait.value.success?, output
+        assert_includes output, "Verify return code: 0 (ok)"
+        assert_includes output, "KEYUPDATE"
+      end
+    end
+    server.join(5)
+    assert_equal "hello\nafter\n", received.pop(timeout: 0)
+  ensure
+    listener&.close
+    server&.kill
+  end
+
+  # s_client offering a share for P-256 only, to a server that takes
+  # X25519 only: our HelloRetryRequest.
+  def test_server_hello_retry_request
+    config = Pair.server_config(groups: [:x25519])
+    keyring = Pair.server_keyring(config:)
+    listener = TCPServer.new("localhost", 0)
+    port = listener.addr[1]
+    received = Thread::Queue.new
+    server = Thread.new do
+      TLS::TCP::Socket.accept(listener, config:, keyring:) { |sock| received << sock.read(100) }
+    rescue StandardError => e
+      received << e
+    end
+    out, status = Timeout.timeout(10) do
+      Open3.capture2e("openssl", "s_client", "-connect", "localhost:#{port}", "-tls1_3", "-CAfile", @ca_file,
+        "-verify_return_error", "-servername", "localhost", "-groups", "P-256:X25519", stdin_data: "hi\n")
+    end
+    server.join(5)
+    assert_equal "hi\n", received.pop(timeout: 0)
+    assert status.success?, out
+  ensure
+    listener&.close
+    server&.kill
   end
 end

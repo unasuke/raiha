@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+module Raiha::HTTP3::QPACK
+  # Exceptions are for misuse of the API only. What the peer sends never
+  # raises; it comes back as a Failure.
+  module Error
+    # A call the API does not allow, as a field section for a stream that
+    # has one blocked.
+    class Usage < StandardError; end
+  end
+
+  # Bytes from the peer that do not decode. Raised inside QPACK and turned
+  # into a Failure where the bytes came in, whose error code depends on
+  # the stream they came on; the caller never sees it.
+  class Malformed < StandardError; end
+
+  # The bytes ran out before a field did. On the encoder and decoder
+  # streams the rest is yet to come; a field section is always whole.
+  # `needed` is how far the bytes must reach, at least, for the field to
+  # be read, so that a long instruction arriving a byte at a time is not
+  # read over again for each byte.
+  class Truncated < Malformed
+    attr_reader :needed
+
+    def initialize(message = nil, needed: 0)
+      super(message)
+      @needed = needed
+    end
+  end
+
+  # An integer larger than QPACK has to decode (RFC 9204 "Implementation
+  # Limits"): a stream error on a request stream, unlike the rest.
+  class IntegerOverflow < Malformed; end
+
+  # A string longer than the caller allows, found out before its bytes are
+  # taken: past the capacity of the dynamic table on the encoder stream,
+  # past the budget in a field section. Not malformed in itself.
+  class TooLong < StandardError; end
+end

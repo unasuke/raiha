@@ -1,89 +1,76 @@
-# Demonstrates a TLS 1.3 / QUIC handshake between two Raiha::Connection
-# instances over real UDP sockets on the loopback interface.
+# A QUIC handshake over UDP on the loopback interface, with the loop an
+# application writes around a connection: send what there is to send, take
+# the events, then wait for a datagram or the next timeout, whichever comes
+# first. A server's Endpoint runs the same loop in a thread of its own,
+# taking every client.
 #
 # Usage:
 #   bundle exec ruby -Ilib examples/udp_handshake.rb
 #
 # Expected output:
+#   Connected to localhost with hq-interop
 #   Handshake complete over UDP (client: true, server: true)
 
-require "raiha/connection"
+require "raiha/quic"
 require "socket"
-require "timeout"
 require_relative "_certificate"
 
-def find_available_udp_port
-  socket = UDPSocket.new
-  socket.bind("127.0.0.1", 0)
-  port = socket.addr[1]
-  socket.close
-  port
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
+REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
+ALPN = ["hq-interop"].freeze
+
+def mono = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+def handle(ev)
+  puts "Connected to #{ev.handshake.server_name} with #{ev.handshake.alpn}" if ev.is_a?(QUIC::Event::Connected)
 end
 
-def send_packets(connection, socket, host, port)
-  connection.get_packets_to_send.each { |packet| socket.send(packet, 0, host, port) }
-end
-
-def receive_packets(socket, connection)
-  loop do
-    readable = IO.select([socket], nil, nil, 0.1)
-    break unless readable
-
-    data, = socket.recvfrom_nonblock(65535)
-    connection.handle_packet(data)
-  rescue IO::WaitReadable
-    break
-  end
-end
-
-client_port = find_available_udp_port
-server_port = find_available_udp_port
-
-client_socket = UDPSocket.new
-client_socket.bind("127.0.0.1", client_port)
-
+server_tls = TLS::Config.server(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+server_keyring = TLS::Keyring.server(config: server_tls, identities: [ExampleCertificate.identity])
 server_socket = UDPSocket.new
-server_socket.bind("127.0.0.1", server_port)
+server_socket.bind("127.0.0.1", 0)
+endpoint = QUIC::Endpoint.server(config: QUIC::Config.new, random: SecureRandom, time: Time.now, now: mono)
+accepted = Thread::Queue.new
+Thread.new do
+  loop do
+    endpoint.each_transmit(now: mono) { |t| server_socket.send(t.payload, 0, *t.destination) }
 
-dest_connection_id = Raiha::Quic::Protocol::ConnectionID.generate
-
-client = Raiha::Connection.new(
-  perspective: :client,
-  src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-  dest_connection_id: dest_connection_id,
-  server_name: "localhost"
-)
-
-server = Raiha::Connection.new(
-  perspective: :server,
-  src_connection_id: dest_connection_id,
-  dest_connection_id: dest_connection_id,
-  tls_config: ExampleCertificate.tls_config
-)
-
-begin
-  Timeout.timeout(5) do
-    client.start_handshake
-    send_packets(client, client_socket, "127.0.0.1", server_port)
-    receive_packets(server_socket, server)
-
-    send_packets(server, server_socket, "127.0.0.1", client_port)
-    receive_packets(client_socket, client)
-
-    send_packets(client, client_socket, "127.0.0.1", server_port)
-    receive_packets(server_socket, server)
+    deadline = endpoint.next_timeout
+    timeout  = deadline ? [deadline - mono, 0].max : Float::INFINITY
+    if IO.select([server_socket], nil, nil, timeout)
+      data, addr = server_socket.recvfrom(65535)
+      route = endpoint.receive(data, from: [addr[3], addr[1]], now: mono)
+      route = endpoint.admit(route.handle, now: mono) if route.is_a?(QUIC::Route::Incoming)
+      accepted << endpoint.accept(route.handle, tls_config: server_tls, keyring: server_keyring, now: mono) if route.is_a?(QUIC::Route::ClientHello)
+      server_socket.send(route.transmit.payload, 0, *route.transmit.destination) if route.is_a?(QUIC::Route::Respond)
+    else
+      endpoint.handle_timeout(now: mono)
+    end
   end
-
-  client_done = client.handshake_complete?
-  server_done = server.handshake_complete?
-  raise "Handshake did not complete (client: #{client_done}, server: #{server_done})" unless client_done && server_done
-
-  puts "Handshake complete over UDP (client: #{client_done}, server: #{server_done})"
-
-  client.close
-  send_packets(client, client_socket, "127.0.0.1", server_port)
-  receive_packets(server_socket, server)
-ensure
-  client_socket.close
-  server_socket.close
 end
+
+client_tls = TLS::Config.client(trust_anchors: [ExampleCertificate.ca_der], profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+socket = UDPSocket.new
+socket.bind("127.0.0.1", 0)
+conn = QUIC::Connection.client(config: QUIC::Config.new, tls_config: client_tls, keyring: TLS::Keyring.client(config: client_tls),
+  server_name: "localhost", remote: ["127.0.0.1", server_socket.addr[1]], time: Time.now, now: mono)
+
+until conn.handshake_confirmed? || conn.closed?
+  conn.each_transmit(now: mono) { |t| socket.send(t.payload, 0, *t.destination) }
+  conn.each_event { |ev| handle(ev) }
+
+  deadline = conn.next_timeout
+  timeout  = deadline ? [deadline - mono, 0].max : Float::INFINITY
+  if IO.select([socket], nil, nil, timeout)
+    data, addr = socket.recvfrom(65535)
+    conn.receive(data, from: [addr[3], addr[1]], now: mono)
+  else
+    conn.handle_timeout(now: mono)
+  end
+end
+abort "Handshake failed: #{conn.close_reason&.reason}" if conn.closed?
+
+conn.close(now: mono)
+conn.each_transmit(now: mono) { |t| socket.send(t.payload, 0, *t.destination) }
+puts "Handshake complete over UDP (client: #{conn.handshake_complete?}, server: #{accepted.pop.handshake_complete?})"

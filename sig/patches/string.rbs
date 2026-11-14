@@ -1,4 +1,8 @@
-# String#unpack1 / #unpack format-string specific overloads. The bundled
+# String#unpack1 / #unpack format-string specific overloads, added to the
+# core declarations with `| ...`, not written as definitions of their own,
+# which RBS rejects as duplicates of the core ones; String then has no
+# definition at all and every method on a String goes unchecked.
+# The bundled
 # rbs core declaration returns `(Integer | Float | String)?` regardless
 # of the format string, but raiha's binary parsers always rely on
 # unsigned-integer formats (`C`, `n`, `N`, `Q>`) which deterministically
@@ -13,10 +17,10 @@ class String
              | ("L>" template, ?offset: int) -> Integer
              | ("C*" template, ?offset: int) -> Integer
              | ("H*" template, ?offset: int) -> String
-             | (string template, ?offset: int) -> (Integer | Float | String)?
+             | ...
 
   def unpack: ("CCC" template, ?offset: int) -> Array[Integer]
             | ("CCCCCCC" template, ?offset: int) -> Array[Integer]
             | ("C*" template, ?offset: int) -> Array[Integer]
-            | (string template, ?offset: int) -> Array[(Integer | Float | String)?]
+            | ...
 end

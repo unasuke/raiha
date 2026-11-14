@@ -1,0 +1,36 @@
+module Raiha::QUIC
+  class Scheduler
+    URGENCIES: Range[Integer]
+    DEFAULT_URGENCY: Integer
+    SEQUENTIAL: Integer
+
+    class Level
+      @turns: Array[Integer]
+      @sequential: Array[Integer]
+
+      attr_reader turns: Array[Integer]
+      attr_reader sequential: Array[Integer]
+
+      def initialize: () -> void
+      def empty?: () -> bool
+      def add: (Integer stream_id, incremental: bool) -> void
+      def remove: (Integer stream_id, incremental: bool) -> void
+      def current: () -> Integer?
+    end
+
+    @levels: Array[Level]
+    @priorities: Hash[Integer, [Integer, bool]]
+    @ready: Hash[Integer, true]
+
+    def initialize: () -> void
+    def prioritize: (Integer stream_id, urgency: Integer, incremental: bool) -> void
+    def ready: (Integer stream_id) -> void
+    def idle: (Integer stream_id) -> void
+    def forget: (Integer stream_id) -> void
+    def current: () -> Integer?
+    def urgency: () -> Integer?
+    def advance: () -> void
+    private def level: () -> Level?
+    private def priority_of: (Integer stream_id) -> [Integer, bool]
+  end
+end

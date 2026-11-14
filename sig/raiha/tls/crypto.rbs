@@ -1,0 +1,85 @@
+module Raiha::TLS
+  module Crypto
+    HASHES: Hash[Symbol, String]
+    HASH_LENGTHS: Hash[Symbol, Integer]
+
+    def self.hash_length: (Symbol hash) -> Integer
+    def self.digest_name: (Symbol hash) -> String
+    def self.hash: (Symbol hash, String data) -> String
+    def self.hmac: (hash: Symbol, key: String, data: String) -> String
+    def self.fixed_length_secure_compare: (String a, String b) -> bool
+
+    class Digest
+      @digest: OpenSSL::Digest
+
+      attr_reader hash_name: Symbol
+
+      def initialize: (Symbol hash_name) -> void
+      def <<: (String bytes) -> self
+      def digest: () -> String
+      def initialize_copy: (Digest other) -> void
+    end
+
+    module HKDF
+      def self.extract: (hash: Symbol, salt: String, ikm: String) -> String
+      def self.expand: (hash: Symbol, prk: String, info: String, length: Integer) -> String
+    end
+
+    class AEAD
+      CIPHERS: Hash[Symbol, String]
+      TAG_LENGTH: Integer
+
+      @name: String
+      @key: String
+      @sealer: OpenSSL::Cipher?
+      @opener: OpenSSL::Cipher?
+
+      def initialize: (Symbol algorithm, String key) -> void
+      def seal: (nonce: String, aad: String, plaintext: String) -> String
+      def open: (nonce: String, aad: String, ciphertext: String) -> String?
+      def discard!: () -> void
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def context: (:encrypt | :decrypt direction) -> OpenSSL::Cipher
+    end
+  end
+end
+
+module Raiha::TLS
+  module Crypto
+    module ECDH
+      CURVES: Hash[Symbol, String]
+      POINT_LENGTHS: Hash[Symbol, Integer]
+      X25519_LENGTH: Integer
+
+      def self.groups: () -> Array[Symbol]
+      def self.generate: (Symbol group) -> OpenSSL::PKey::PKey
+      def self.private_key: (Symbol group, String bytes) -> OpenSSL::PKey::PKey
+      def self.public_bytes: (Symbol group, OpenSSL::PKey::PKey key) -> String
+      def self.derive: (Symbol group, OpenSSL::PKey::PKey key, String peer_public_bytes) -> String?
+      def self.curve_name: (Symbol group) -> String
+    end
+  end
+end
+
+module Raiha::TLS
+  module Crypto
+    module Signature
+      DIGESTS: Hash[Symbol, String]
+      CURVES: Hash[String, Symbol]
+
+      def self.private_key: (String der) -> OpenSSL::PKey::PKey?
+      def self.key_matches?: (SignatureScheme scheme, OpenSSL::PKey::PKey key) -> bool
+      def self.sign: (SignatureScheme scheme, OpenSSL::PKey::PKey key, String data) -> String
+      def self.verify: (SignatureScheme scheme, OpenSSL::PKey::PKey key, String signature, String data) -> bool
+      def self.digest_name: (SignatureScheme scheme) -> String
+    end
+
+    module Certificate
+      SIGNATURE_SCHEMES: Hash[String, Integer]
+
+      def self.signature_scheme_id: (OpenSSL::X509::Certificate certificate) -> Integer?
+      def self.parse: (String der) -> OpenSSL::X509::Certificate?
+    end
+  end
+end

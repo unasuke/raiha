@@ -1,0 +1,241 @@
+module Raiha::QUIC
+  class Connection
+    include TLSBinding::_Connection
+    include Recovery::Duty::_Owner
+
+    LEVELS: Array[PacketProtection::level]
+    SPACES: Hash[PacketProtection::level, space]
+    PROBED_SPACES: Array[space]
+    SEND_AGAIN_AT_ONCE: Integer
+    RETIRED_PTOS: Integer
+    VALIDATION_PTOS: Integer
+    MAX_VALIDATING_PATHS: Integer
+    CHALLENGE_LENGTH: Integer
+    MIN_PROBE: Integer
+    MAX_MTU_PROBE: Hash[address_family, Integer]
+    MIN_INITIAL_DATAGRAM: Integer
+    INITIAL_DCID_LENGTH: Integer
+    DEFAULT_ACK_DELAY_EXPONENT: Integer
+    LONG_HEADER_OVERHEAD: Integer
+    SHORT_HEADER_OVERHEAD: Integer
+    CLOSE_PTOS: Integer
+    MAX_REASON_LENGTH: Integer
+    CLOSE_LEVELS: Array[PacketProtection::level]
+    MAX_EVENTS: Integer
+    MAX_HELD_TICKETS: Integer
+    KEPT_LEVELS: Array[PacketProtection::level]
+    ZERO_RTT_LIMITS: Array[Symbol]
+
+    class Pending < Data
+      attr_reader level: PacketProtection::level
+      attr_reader header: Wire::header
+      attr_reader packet_number: Integer
+      attr_reader packet_number_length: Integer
+      attr_reader frames: Array[Wire::Frame::t]
+      attr_reader duties: Array[Recovery::Duty::t]
+
+      def self.new: (level: PacketProtection::level, header: Wire::header, packet_number: Integer, packet_number_length: Integer,
+                     frames: Array[Wire::Frame::t], duties: Array[Recovery::Duty::t]) -> instance
+    end
+
+    class EarlyAck < Data
+      attr_reader packet_number: Integer
+      attr_reader bytes: Integer
+      attr_reader time: Float
+
+      def self.new: (packet_number: Integer, bytes: Integer, time: Float) -> instance
+    end
+
+    @config: Config
+    @version: Version
+    @created_at: Float
+    @time: Time
+    @tracer: _Tracer?
+    @recovery: Recovery
+    @protection: PacketProtection
+    @events: Array[Event::t]
+    @streams: Streams
+    @datagrams: Datagrams
+    @kept: KeptPackets
+    @packets_sent: Integer
+    @bytes_sent: Integer
+    @packets_received: Integer
+    @bytes_received: Integer
+    @handshake_completed_at: Float?
+    @source_connection_id: String
+    @stateless_reset_token: String?
+    @destination_connection_id: String
+    @peer_parameters: TransportParameters?
+    @handshake_complete: bool
+    @handshake_confirmed: bool
+    @handshake_done_due: bool
+    @peer_source_connection_id: String?
+    @original_destination_connection_id: String?
+    @retry_source_connection_id: String?
+    @token: String
+    @new_token: String?
+    @new_token_due: bool
+    @session: Session?
+    @zero_rtt_state: :disabled | :pending | :accepted | :rejected
+    @early_data_streams: Set[Integer]
+    @zero_rtt_rejection_unacknowledged: bool
+    @peer_ids: PeerConnectionIDs?
+    @issued: IssuedConnectionIDs
+    @peers: _Peers?
+    @tokens: _Tokens?
+    @random: ::Raiha::TLS::Keyring::_Random
+    @validating: Array[Path]
+    @last_validated: Path?
+    @preferred_path: Path?
+    @newest_path: Path?
+    @moved_after: Integer?
+    @received_dcid: String
+    @state: :open | :closing | :draining | :closed
+    @close_error: ConnectionError?
+    @close_deadline: Float?
+    @close_frame_due: bool
+    @closing_datagrams: Integer
+    @idle_deadline: Float?
+    @eliciting_since_received: bool
+    @now: Float
+    @amplification_limited: bool
+    @non_probing_due: bool
+    @probe_datagrams: Integer
+    @probed_spaces: Array[space]
+    @sent_again_at_once: Integer
+    @start_binding: ^(Connection, TransportParameters) -> TLSBinding
+    @binding: TLSBinding?
+
+    attr_reader role: :client | :server
+    attr_reader path: Path
+
+    def self.client: (config: Config, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring, server_name: String,
+                      remote: address, time: Time, now: Float, ?tracer: _Tracer?, ?keylog: ::Raiha::TLS::Keylog::_Writer?,
+                      ?source_connection_id: String?, ?token: String?, ?session: Session?, ?early_data: bool, ?issuer: _Issuer?, ?peers: _Peers?) -> Connection
+    def self.server: (config: Config, tls_config: ::Raiha::TLS::Config, keyring: ::Raiha::TLS::Keyring, time: Time, now: Float,
+                      ?tracer: _Tracer?, ?keylog: ::Raiha::TLS::Keylog::_Writer?, ?client_hello: ::Raiha::TLS::Handshake::Accepted?,
+                      ?original_destination_connection_id: String?, ?retry_source_connection_id: String?, ?address_validated: bool,
+                      ?source_connection_id: String?, ?stateless_reset_token: String?, ?new_token: String?,
+                      ?anti_replay: ::Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String, ?issuer: _Issuer?, ?peers: _Peers?, ?tokens: _Tokens?,
+                      ?early_acks: Array[EarlyAck]) -> Connection
+
+    def initialize: (role: :client | :server, config: Config, now: Float, time: Time, remote: address?, tracer: _Tracer?,
+                     random: ::Raiha::TLS::Keyring::_Random, ?original_destination_connection_id: String?,
+                     ?retry_source_connection_id: String?, ?address_validated: bool, ?source_connection_id: String?,
+                     ?stateless_reset_token: String?, ?token: String?,
+                     ?new_token: String?, ?session: Session?, ?issuer: _Issuer?, ?peers: _Peers?, ?tokens: _Tokens?,
+                     ?early_acks: Array[EarlyAck]) { (Connection, TransportParameters) -> TLSBinding } -> void
+    def zero_rtt_state: () -> (:disabled | :pending | :accepted | :rejected)
+    def stream_early_data?: (Integer stream_id) -> bool
+    def acknowledge_zero_rtt_rejection: () -> nil
+    def handshake_complete?: () -> bool
+    def handshake_confirmed?: () -> bool
+    def address_validated?: () -> bool
+    def closing?: () -> bool
+    def draining?: () -> bool
+    def closed?: () -> bool
+    def close_reason: () -> ConnectionError?
+    def stats: () -> Stats
+    def stream_read: (Integer stream_id, Integer max_bytes) -> String?
+    def readable_streams: () -> Enumerator[Integer, Array[Integer]]
+    def open_stream: (?direction: :bidi | :uni) -> Integer?
+    def stream_write: (Integer stream_id, String data, ?fin: bool) -> Integer
+    def stream_writable_bytes: (Integer stream_id) -> Integer
+    def datagram_send: (String data, ?expires_at: Float?, ?urgency: Integer) -> bool
+    def datagram_max_size: () -> Integer?
+    def stream_reset: (Integer stream_id, error_code: Integer) -> void
+    def stream_stop_sending: (Integer stream_id, error_code: Integer) -> void
+    def stream_priority: (Integer stream_id, urgency: Integer, incremental: bool) -> void
+    def writable_streams: () -> Enumerator[Integer, Array[Integer]]
+    def close: (?error_code: Integer, ?reason: String, ?application: bool, now: Float) -> void
+    def next_event: () -> Event::t?
+    def each_event: () { (Event::t) -> void } -> void
+    def receive: (String datagram, from: address, ?to: address?, ?ecn: ecn | :ce, now: Float) -> void
+    def each_transmit: (now: Float) { (Transmit) -> void } -> void
+    def transmits: (now: Float) -> Array[Transmit]
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+    def take_stateless_reset: (String datagram, from: address, now: Float) -> bool
+
+    private def keys_updated: (Integer phase) -> void
+    private def zero_rtt_parameters: () -> RememberedTransportParameters?
+    private def start_zero_rtt: () -> void
+    private def zero_rtt_settled!: (?Integer? stream_id) -> void
+    private def check_zero_rtt_limits: (TransportParameters parameters) -> void
+    private def binding: () -> TLSBinding
+    private def parse_packet: (String datagram, Integer offset, Float now) -> Wire::Packet::Parsed?
+    private def take_retry: (Wire::Retry packet, Integer length, Float now) -> nil
+    private def take_version_negotiation: (Wire::VersionNegotiation packet, Integer length, Float now) -> nil
+    private def dropped: (Symbol reason, Integer length, Float now) -> nil
+    private def receive_packet: (Wire::Packet::Parsed packet, from: address, to: address?, ecn: ecn | :ce, now: Float, path: Path?, ?received_at: Float) -> bool?
+    private def give_up_an_id: (Float now) -> nil
+    private def take_early_ack: (EarlyAck ack) -> void
+    private def keep: (Wire::Packet::Parsed packet, PacketProtection::level level, Integer length, from: address, to: address?, ecn: ecn | :ce, now: Float) -> nil
+    private def open_kept: (Float now) -> void
+    private def authenticate_connection_ids: (TransportParameters parameters) -> void
+    private def first_initial_keys: (Wire::header header) -> Crypto::Keys?
+    private def accept_first_initial: (Wire::LongHeader header, address from, address? to) -> void
+    private def adopt_peer_connection_id: (Wire::LongHeader header, Float now) -> void
+    private def use_peer_connection_id: (String connection_id, Float now) -> void
+    private def receive_frame: (PacketProtection::level level, Wire::Frame::t frame, Float now, String dcid, Path? path) -> void
+    private def confirm: (Float now) -> void
+    private def enter_closing: (ConnectionError error, Float now) -> void
+    private def close_for: (Violation violation, Float now) -> void
+    private def enter_draining: (ConnectionError error, Float now) -> void
+    private def time_out_idly: () -> void
+    private def close_silently: (String reason) -> void
+    private def restart_idle: (Float now) -> void
+    private def next_datagram: (Float now) -> [String, Path, bool]?
+    private def stopped: (:drained | :flow_control | :amplification | :congestion | :pacing reason, Float now) -> nil
+    private def amplification_budget: (Float now) -> Integer?
+    private def count_received: (String datagram, Path path, Float now) -> void
+    private def validate_address: (Float now) -> void
+    private def lift_amplification_limit: (Float now) -> void
+    private def send_again_at_once: () -> void
+    private def probe: (Recovery::Probe probe) -> void
+    private def probing?: (space space) -> bool
+    private def fill_probe: (PacketProtection::level level) -> void
+    private def discard_level: (:initial | :handshake level, Float now) -> void
+    private def closing_datagram: (Float now) -> String?
+    private def close_frame: (PacketProtection::level level) -> Wire::Frame::ConnectionClose
+    private def frames_for: (PacketProtection::level level, Integer room, bool eliciting, Float now) -> [Array[Wire::Frame::t], Array[Recovery::Duty::t]]
+    private def next_application_frame: (Integer room, Float now) -> [Wire::Frame::Stream | Wire::Frame::Datagram, Recovery::Duty::Stream?]?
+    private def next_datagram_frame: (Integer room, Float now) -> [Wire::Frame::Datagram, nil]?
+    private def probing_datagram: (Float now) -> [String, Path, bool]?
+    private def mtu_probe_datagram: (Float now) -> [String, Path, bool]?
+    private def transmit: (String payload, Path path, Integer? segment_size) -> Transmit
+    private def path_of: (address? local, address? remote) -> Path?
+    private def probing_frames?: (Array[Wire::Frame::t] frames) -> bool
+    private def probed_path: (address? local, address remote, Integer bytes, Float now) -> Path?
+    private def migrate: (Path? path, address? local, address remote, String dcid, Integer bytes, Float now) -> Path?
+    private def move_to_preferred_address: (Float now) -> void
+    private def move_to_own_preferred_address: (Path path, Float now) -> void
+    private def preferred_local?: (address? local) -> bool
+    private def give_new_token: (Float now) -> void
+    private def port_only?: (address? local, address remote) -> bool
+    private def switch_to: (Path path, Float now, ?revalidate: bool) -> void
+    private def fall_back: (Float now) -> void
+    private def remember_validated: (Path path) -> void
+    private def kept?: (Path path) -> bool
+    private def trace_migration: (migration_state state, Path path, Float now) -> void
+    private def start_validation: (Path path, Float now) -> void
+    private def reassign_connection_ids: (PeerConnectionIDs ids) -> void
+    private def make_room: () -> void
+    private def abandon_path: (Path path) -> void
+    private def path_pto: (Path path) -> Float
+    private def validation_timeouts: () -> Array[Float]
+    private def seal: (Array[Pending] pending, Float now, ?target: Integer?, ?probing: bool, ?mtu_probe: bool, ?path: Path) -> String
+    private def padded_initial?: (Pending packet) -> bool
+    private def padded: (Pending packet, String payload, Integer missing) -> String
+    private def protect: (Pending packet, String payload, Float now, probing: bool, mtu_probe: bool, path: Path) -> String
+    private def header_for: (PacketProtection::level level) -> Wire::header
+    private def overhead: (Wire::header header) -> Integer
+    private def token_field: (Wire::LongHeader header) -> Integer
+    private def sealed_size: (Pending packet, Integer length) -> Integer
+    private def own_ack_delay_exponent: (PacketProtection::level level) -> Integer
+    private def peer_ack_delay_exponent: (PacketProtection::level level) -> Integer
+    private def rtt_sample: () -> Float?
+    private def open!: () -> void
+    private def tls_time: (Float now) -> Time
+  end
+end

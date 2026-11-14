@@ -1,143 +1,59 @@
-# Demonstrates the Raiha::Server demuxer / accept flow. Drives the server
-# side through `Raiha::Server.new(tls_config: ...)` + `handle_packet` +
-# `accept_nonblock` instead of low-level Connection wiring, but binds the
-# UDPSocket externally because Server#listen hides the socket behind a
-# private ivar. The client side stays on Raiha::Connection directly for
-# the same reason.
+# A server and a client of the runtime of raiha on the
+# loopback interface, in fibers of the scheduler of the async gem: the
+# server takes each connection and echoes each stream its client opens,
+# and the client sends a payload on a stream of its own and reads it back.
+# No loop of the application's own: the runtime waits on the sockets and
+# the timers, and each call blocks only the fiber that makes it.
 #
 # Usage:
 #   bundle exec ruby -Ilib examples/high_level_loopback.rb
 #
 # Expected output:
-#   Raiha::Server accepted 1 connection, stream echo OK
+#   Raiha::Runtime::Server accepted 1 connection, stream echo OK
 
-require "raiha/server"
-require "raiha/connection"
+require "raiha/runtime"
+# The scheduler of async reads with IO::Buffer, which Ruby 4.0 warns is
+# experimental.
+Warning[:experimental] = false
+require "async"
 require "securerandom"
-require "socket"
-require "timeout"
 require_relative "_certificate"
 
-def find_available_udp_port
-  socket = UDPSocket.new
-  socket.bind("127.0.0.1", 0)
-  port = socket.addr[1]
-  socket.close
-  port
-end
+Runtime = Raiha::Runtime
+QUIC = Raiha::QUIC
+TLS = Raiha::TLS
+REGISTRY = TLS::Extension::Registry::BUILTIN.with(QUIC::TransportParameters::Extension)
+ALPN = ["hq-interop"].freeze
 
-# Receive any pending datagrams on the server socket, dispatch them
-# through Raiha::Server#handle_packet, and bounce back any
-# demuxer-produced response (Version Negotiation, Stateless Reset, etc.).
-def drain_server(server, server_socket)
-  loop do
-    readable = IO.select([server_socket], nil, nil, 0.1)
-    break unless readable
-
-    data, addr = server_socket.recvfrom_nonblock(65535)
-    response = server.handle_packet(data, addr)
-    server_socket.send(response, 0, addr[2], addr[1]) if response
-  rescue IO::WaitReadable
-    break
-  end
-end
-
-# Pull every queued outgoing packet from every Server-owned Connection and
-# write it back to the address we recorded for that Connection via
-# `handle_packet(peer_address:)`.
-def flush_server(server, server_socket)
-  server.connections.each_value do |conn|
-    next unless conn.peer_address
-
-    conn.get_packets_to_send.each do |packet|
-      server_socket.send(packet, 0, conn.peer_address[2], conn.peer_address[1])
-    end
-  end
-end
-
-def send_client(client, client_socket, host, port)
-  client.get_packets_to_send.each { |packet| client_socket.send(packet, 0, host, port) }
-end
-
-def receive_client(client_socket, client)
-  loop do
-    readable = IO.select([client_socket], nil, nil, 0.1)
-    break unless readable
-
-    data, = client_socket.recvfrom_nonblock(65535)
-    client.handle_packet(data)
-  rescue IO::WaitReadable
-    break
-  end
-end
-
-client_port = find_available_udp_port
-server_port = find_available_udp_port
-
-client_socket = UDPSocket.new
-client_socket.bind("127.0.0.1", client_port)
-
-server_socket = UDPSocket.new
-server_socket.bind("127.0.0.1", server_port)
-
-server = Raiha::Server.new(tls_config: ExampleCertificate.tls_config)
-
-client = Raiha::Connection.new(
-  perspective: :client,
-  src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-  dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-  server_name: "localhost"
-)
-
+server_tls = TLS::Config.server(profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
+server = Runtime::Server.new(config: QUIC::Config.new, tls_config: server_tls,
+  keyring: TLS::Keyring.server(config: server_tls, identities: [ExampleCertificate.identity]), host: "127.0.0.1", port: 0)
+client_tls = TLS::Config.client(trust_anchors: [ExampleCertificate.ca_der], profile: TLS::Profile::QUIC, alpn: ALPN, registry: REGISTRY)
 payload = SecureRandom.random_bytes(256)
-server_conn = nil
+accepted = 0
+echoed = nil
 
-begin
-  Timeout.timeout(5) do
-    client.start_handshake
-    send_client(client, client_socket, "127.0.0.1", server_port)
-
-    drain_server(server, server_socket)
-    server_conn = server.accept_nonblock
-    raise "Raiha::Server did not accept a Connection" unless server_conn
-    flush_server(server, server_socket)
-
-    receive_client(client_socket, client)
-    send_client(client, client_socket, "127.0.0.1", server_port)
-
-    drain_server(server, server_socket)
-    flush_server(server, server_socket)
-    receive_client(client_socket, client)
-
-    unless client.handshake_complete? && server_conn.handshake_complete?
-      raise "Handshake did not complete (client: #{client.handshake_complete?}, server: #{server_conn.handshake_complete?})"
+Async do
+  running = Async do
+    server.run do |session|
+      accepted += 1
+      session.each_stream { |stream| (stream << stream.read).close_write }
     end
+  end
+  sleep 0.01 until server.local_address
 
-    client.send_stream_data(0, payload, fin: true)
-    send_client(client, client_socket, "127.0.0.1", server_port)
-    drain_server(server, server_socket)
-
-    server_stream = server_conn.streams.get_stream(0)
-    raise "Server stream 0 not opened" unless server_stream
-    received = server_stream.read
-
-    server_conn.send_stream_data(1, received, fin: true)
-    flush_server(server, server_socket)
-    receive_client(client_socket, client)
-
-    client_stream = client.streams.get_stream(1)
-    raise "Client stream 1 not opened" unless client_stream
-    echoed = client_stream.read
-
-    raise "Echo payload mismatch" unless echoed == payload
+  Runtime::Client.connect("127.0.0.1", server.local_address[1], server_name: "localhost", config: QUIC::Config.new, tls_config: client_tls,
+    keyring: TLS::Keyring.client(config: client_tls)) do |session|
+    stream = session.open_stream
+    stream << payload
+    stream.close_write
+    echoed = stream.read
   end
 
-  puts "Raiha::Server accepted 1 connection, stream echo OK"
-
-  client.close
-  send_client(client, client_socket, "127.0.0.1", server_port)
-  drain_server(server, server_socket)
-ensure
-  client_socket.close
-  server_socket.close
+  server.stop(timeout: 1)
+  running.wait
 end
+
+raise "Echo payload mismatch" unless echoed == payload
+
+puts "Raiha::Runtime::Server accepted #{accepted} connection, stream echo OK"

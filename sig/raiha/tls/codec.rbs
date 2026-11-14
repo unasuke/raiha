@@ -1,0 +1,66 @@
+module Raiha::TLS::Codec
+  class Malformed < StandardError
+    def alert: () -> Symbol
+  end
+
+  class Truncated < Malformed
+  end
+
+  class RangeViolation < Malformed
+  end
+
+  class TrailingData < Malformed
+  end
+
+  class Duplicate < Malformed
+  end
+
+  class IllegalPlacement < Malformed
+  end
+
+  class IllegalValue < Malformed
+  end
+
+  class UnknownMessageType < Malformed
+  end
+
+  class EncodeError < StandardError
+  end
+
+  class Reader
+    @buf: String
+    @pos: Integer
+    @limit: Integer
+
+    def initialize: (String buf, ?Integer pos, ?Integer limit) -> void
+    def u8: () -> Integer
+    def u16: () -> Integer
+    def u24: () -> Integer
+    def u32: () -> Integer
+    def bytes: (Integer n) -> String
+    def opaque: (Integer len_bytes, max: Integer, ?min: Integer) -> String
+    def vector: [T] (Integer len_bytes, max: Integer, ?min: Integer) { (Reader) -> T } -> T
+    def eof?: () -> bool
+    def remaining: () -> Integer
+    def finish!: () -> void
+
+    private def read_length: (Integer len_bytes, Integer min, Integer max) -> Integer
+  end
+
+  class Writer
+    PAD: Array[String]
+
+    @buf: String
+
+    def initialize: () -> void
+    def u8: (Integer v) -> nil
+    def u16: (Integer v) -> nil
+    def u24: (Integer v) -> nil
+    def u32: (Integer v) -> nil
+    def bytes: (String s) -> nil
+    def vector: (Integer len_bytes, ?min: Integer, ?max: Integer?) { () -> void } -> nil
+    def to_s: () -> String
+
+    private def check_range: (Integer v, Integer max) -> void
+  end
+end

@@ -1,0 +1,67 @@
+module Raiha::TLS
+  class TicketKeys
+    class Entry < Data
+      include MaskedInspect
+
+      attr_reader key_id: String
+      attr_reader aead_key: String
+      attr_reader nonce_key: String
+      attr_reader epoch: Integer?
+
+      def self.new: (key_id: String, aead_key: String, nonce_key: String, epoch: Integer?) -> instance
+                  | (String key_id, String aead_key, String nonce_key, Integer? epoch) -> instance
+
+      def masked_members: () -> Array[Symbol]
+    end
+
+    PREFIX: String
+    SEED_LENGTH: Integer
+    KEY_LENGTH: Integer
+    KEY_ID_LENGTH: Integer
+    HASH: Symbol
+
+    @entries: Array[Entry]
+    @by_id: Hash[String, Entry]
+
+    def self.static: (current: String, ?previous: Array[String]) -> TicketKeys
+    def self.ratchet: (base: String, base_epoch: Integer, origin: Time, now: Time, ?epoch: Integer, ?retain: Integer?, ?horizon: Integer) -> Ratchet
+    def self.derive: (String seed, Integer? epoch) -> Entry
+    def self.expand: (String seed, String label, Integer length) -> String
+
+    def initialize: (Array[Entry] entries) -> void
+    def sealing: (Time now) -> Entry?
+    def opening: (String key_id, Time now) -> Entry?
+    def for_ticket_lifetime: (Integer ticket_lifetime) -> TicketKeys
+    def issuing_until: () -> Time?
+    def next_advance_at: () -> Time?
+    def advance: (now: Time) -> TicketKeys
+    def inspect: () -> String
+
+    class Ratchet < TicketKeys
+      MAX_STEPS: Integer
+
+      attr_reader origin: Time
+      attr_reader epoch: Integer
+      attr_reader retain: Integer?
+      attr_reader horizon: Integer
+      attr_reader base: String
+      attr_reader base_epoch: Integer
+
+      @built_at: Time
+      @built_epoch: Integer
+      @by_epoch: Hash[Integer, Entry]
+
+      def initialize: (base: String, base_epoch: Integer, origin: Time, epoch: Integer, retain: Integer?, horizon: Integer, now: Time) -> void
+      def for_ticket_lifetime: (Integer ticket_lifetime) -> Ratchet
+      def issuing_until: () -> Time
+      def next_advance_at: () -> Time
+      def advance: (now: Time) -> Ratchet
+      private def rebuild: (retain: Integer, now: Time, ?from: Ratchet) -> Ratchet
+      private def chain: (Integer retain) -> Array[Entry]
+      private def step: (String seed) -> String
+      private def epoch_at: (Time time) -> Integer
+      private def retain!: () -> Integer
+      private def resolved!: () -> true
+    end
+  end
+end

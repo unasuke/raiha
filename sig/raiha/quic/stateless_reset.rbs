@@ -1,10 +1,10 @@
-module Raiha::Quic
+module Raiha::QUIC
   module StatelessReset
     TOKEN_LENGTH: Integer
-    MIN_PACKET_LENGTH: Integer
+    MIN_LENGTH: Integer
 
-    def self.build: (String token, ?min_size: Integer) -> String
-    def self.match_token?: (String datagram, Array[String] tokens) -> bool
-    def self.derive_token: (String reset_key, Protocol::ConnectionID | String connection_id) -> String
+    def self.token: (key: String, connection_id: String) -> String
+    def self.packet: (token: String, length: Integer, random: Crypto::_Random) -> String
+    def self.match?: (String datagram, Array[String] tokens) -> bool
   end
 end

@@ -1,0 +1,59 @@
+module Raiha::QUIC
+  class PacketProtection
+    type level = :initial | :zero_rtt | :handshake | :one_rtt
+    type direction = :read | :write
+
+    LEVELS: Array[level]
+    OLD_KEY_PTOS: Integer
+    FIRST_KEY_UPDATE_INTERVAL: Integer
+    KEY_UPDATE_INTERVAL: Integer
+
+    @role: :client | :server
+    @keys: Hash[level, Hash[direction, Crypto::Keys]]
+    @discarded: Array[level]
+    @updated: (^(Integer phase) -> void)?
+    @suite: ::Raiha::TLS::CipherSuite
+    @failures: Integer
+    @next_secrets: Hash[direction, String]
+    @next_read: Crypto::Keys?
+    @previous_read: Crypto::Keys?
+    @previous_until: Float?
+    @confirmed: bool
+    @largest_acked: Integer?
+    @largest_opened: Integer?
+    @largest_older: Integer?
+    @first_sent: Integer?
+    @lowest_opened: Integer?
+    @sent_count: Integer
+    @opened_count: Integer
+    @largest_ack_sent: Integer?
+
+    attr_reader version: Version
+    attr_reader key_phase: Integer
+
+    def initialize: (role: :client | :server, version: Version) ?{ (Integer phase) -> void } -> void
+    def install_initial: (String dcid) -> Hash[direction, Crypto::Keys]
+    def install: (level level, direction direction, secret: String, suite: ::Raiha::TLS::CipherSuite) -> void
+    def read_keys: (level level) -> Crypto::Keys?
+    def write_keys: (level level) -> Crypto::Keys?
+    def can_read?: (level level) -> bool
+    def can_write?: (level level) -> bool
+    def discarded?: (level level) -> bool
+    def key_phase_bit: () -> Integer
+    def open: (level level, Wire::Packet::Unmasked unmasked, now: Float, pto: Float) -> String?
+    def sent: (Integer packet_number, ?acknowledging: Integer?) -> void
+    def acknowledged: (Integer largest) -> void
+    def handshake_confirmed!: () -> bool
+    def update_keys_if_due: () -> void
+    def next_timeout: () -> Float?
+    def handle_timeout: (now: Float) -> void
+    def discard: (level level) -> void
+
+    private def update_keys: () -> void
+    private def update_allowed?: () -> bool
+    private def key_update_error: (String message) -> bot
+    private def open_with: (Crypto::Keys keys, Wire::Packet::Unmasked unmasked) -> String?
+    private def authentication_failed: () -> nil
+    private def discard_previous_keys: (Float now) -> void
+  end
+end

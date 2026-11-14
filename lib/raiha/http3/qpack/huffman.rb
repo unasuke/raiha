@@ -1,340 +1,397 @@
 # frozen_string_literal: true
 
-require_relative "../error"
+require_relative "error"
 
-module Raiha
-  module HTTP3
-    module QPACK
-      # RFC 7541 Appendix B: Huffman code used by HPACK and QPACK.
-      # Decoder only (encoder not needed for interop reception).
-      module Huffman
-        class DecodingError < ::Raiha::HTTP3::Error; end
+module Raiha::HTTP3::QPACK
+  # The static Huffman code of RFC 7541 Appendix B, which QPACK uses
+  # unmodified for string literals (RFC 9204 "String Literals").
+  module Huffman
+    # [code, length in bits] of each symbol, the 256 octets and EOS.
+    CODES = Ractor.make_shareable([
+      [0x1ff8, 13], # 0
+      [0x7fffd8, 23], # 1
+      [0xfffffe2, 28], # 2
+      [0xfffffe3, 28], # 3
+      [0xfffffe4, 28], # 4
+      [0xfffffe5, 28], # 5
+      [0xfffffe6, 28], # 6
+      [0xfffffe7, 28], # 7
+      [0xfffffe8, 28], # 8
+      [0xffffea, 24], # 9
+      [0x3ffffffc, 30], # 10
+      [0xfffffe9, 28], # 11
+      [0xfffffea, 28], # 12
+      [0x3ffffffd, 30], # 13
+      [0xfffffeb, 28], # 14
+      [0xfffffec, 28], # 15
+      [0xfffffed, 28], # 16
+      [0xfffffee, 28], # 17
+      [0xfffffef, 28], # 18
+      [0xffffff0, 28], # 19
+      [0xffffff1, 28], # 20
+      [0xffffff2, 28], # 21
+      [0x3ffffffe, 30], # 22
+      [0xffffff3, 28], # 23
+      [0xffffff4, 28], # 24
+      [0xffffff5, 28], # 25
+      [0xffffff6, 28], # 26
+      [0xffffff7, 28], # 27
+      [0xffffff8, 28], # 28
+      [0xffffff9, 28], # 29
+      [0xffffffa, 28], # 30
+      [0xffffffb, 28], # 31
+      [0x14, 6], # 32
+      [0x3f8, 10], # 33 "!"
+      [0x3f9, 10], # 34 "\""
+      [0xffa, 12], # 35 "#"
+      [0x1ff9, 13], # 36 "$"
+      [0x15, 6], # 37 "%"
+      [0xf8, 8], # 38 "&"
+      [0x7fa, 11], # 39 "'"
+      [0x3fa, 10], # 40 "("
+      [0x3fb, 10], # 41 ")"
+      [0xf9, 8], # 42 "*"
+      [0x7fb, 11], # 43 "+"
+      [0xfa, 8], # 44 ","
+      [0x16, 6], # 45 "-"
+      [0x17, 6], # 46 "."
+      [0x18, 6], # 47 "/"
+      [0x0, 5], # 48 "0"
+      [0x1, 5], # 49 "1"
+      [0x2, 5], # 50 "2"
+      [0x19, 6], # 51 "3"
+      [0x1a, 6], # 52 "4"
+      [0x1b, 6], # 53 "5"
+      [0x1c, 6], # 54 "6"
+      [0x1d, 6], # 55 "7"
+      [0x1e, 6], # 56 "8"
+      [0x1f, 6], # 57 "9"
+      [0x5c, 7], # 58 ":"
+      [0xfb, 8], # 59 ";"
+      [0x7ffc, 15], # 60 "<"
+      [0x20, 6], # 61 "="
+      [0xffb, 12], # 62 ">"
+      [0x3fc, 10], # 63 "?"
+      [0x1ffa, 13], # 64 "@"
+      [0x21, 6], # 65 "A"
+      [0x5d, 7], # 66 "B"
+      [0x5e, 7], # 67 "C"
+      [0x5f, 7], # 68 "D"
+      [0x60, 7], # 69 "E"
+      [0x61, 7], # 70 "F"
+      [0x62, 7], # 71 "G"
+      [0x63, 7], # 72 "H"
+      [0x64, 7], # 73 "I"
+      [0x65, 7], # 74 "J"
+      [0x66, 7], # 75 "K"
+      [0x67, 7], # 76 "L"
+      [0x68, 7], # 77 "M"
+      [0x69, 7], # 78 "N"
+      [0x6a, 7], # 79 "O"
+      [0x6b, 7], # 80 "P"
+      [0x6c, 7], # 81 "Q"
+      [0x6d, 7], # 82 "R"
+      [0x6e, 7], # 83 "S"
+      [0x6f, 7], # 84 "T"
+      [0x70, 7], # 85 "U"
+      [0x71, 7], # 86 "V"
+      [0x72, 7], # 87 "W"
+      [0xfc, 8], # 88 "X"
+      [0x73, 7], # 89 "Y"
+      [0xfd, 8], # 90 "Z"
+      [0x1ffb, 13], # 91 "["
+      [0x7fff0, 19], # 92 "\\"
+      [0x1ffc, 13], # 93 "]"
+      [0x3ffc, 14], # 94 "^"
+      [0x22, 6], # 95 "_"
+      [0x7ffd, 15], # 96 "`"
+      [0x3, 5], # 97 "a"
+      [0x23, 6], # 98 "b"
+      [0x4, 5], # 99 "c"
+      [0x24, 6], # 100 "d"
+      [0x5, 5], # 101 "e"
+      [0x25, 6], # 102 "f"
+      [0x26, 6], # 103 "g"
+      [0x27, 6], # 104 "h"
+      [0x6, 5], # 105 "i"
+      [0x74, 7], # 106 "j"
+      [0x75, 7], # 107 "k"
+      [0x28, 6], # 108 "l"
+      [0x29, 6], # 109 "m"
+      [0x2a, 6], # 110 "n"
+      [0x7, 5], # 111 "o"
+      [0x2b, 6], # 112 "p"
+      [0x76, 7], # 113 "q"
+      [0x2c, 6], # 114 "r"
+      [0x8, 5], # 115 "s"
+      [0x9, 5], # 116 "t"
+      [0x2d, 6], # 117 "u"
+      [0x77, 7], # 118 "v"
+      [0x78, 7], # 119 "w"
+      [0x79, 7], # 120 "x"
+      [0x7a, 7], # 121 "y"
+      [0x7b, 7], # 122 "z"
+      [0x7ffe, 15], # 123 "{"
+      [0x7fc, 11], # 124 "|"
+      [0x3ffd, 14], # 125 "}"
+      [0x1ffd, 13], # 126 "~"
+      [0xffffffc, 28], # 127
+      [0xfffe6, 20], # 128
+      [0x3fffd2, 22], # 129
+      [0xfffe7, 20], # 130
+      [0xfffe8, 20], # 131
+      [0x3fffd3, 22], # 132
+      [0x3fffd4, 22], # 133
+      [0x3fffd5, 22], # 134
+      [0x7fffd9, 23], # 135
+      [0x3fffd6, 22], # 136
+      [0x7fffda, 23], # 137
+      [0x7fffdb, 23], # 138
+      [0x7fffdc, 23], # 139
+      [0x7fffdd, 23], # 140
+      [0x7fffde, 23], # 141
+      [0xffffeb, 24], # 142
+      [0x7fffdf, 23], # 143
+      [0xffffec, 24], # 144
+      [0xffffed, 24], # 145
+      [0x3fffd7, 22], # 146
+      [0x7fffe0, 23], # 147
+      [0xffffee, 24], # 148
+      [0x7fffe1, 23], # 149
+      [0x7fffe2, 23], # 150
+      [0x7fffe3, 23], # 151
+      [0x7fffe4, 23], # 152
+      [0x1fffdc, 21], # 153
+      [0x3fffd8, 22], # 154
+      [0x7fffe5, 23], # 155
+      [0x3fffd9, 22], # 156
+      [0x7fffe6, 23], # 157
+      [0x7fffe7, 23], # 158
+      [0xffffef, 24], # 159
+      [0x3fffda, 22], # 160
+      [0x1fffdd, 21], # 161
+      [0xfffe9, 20], # 162
+      [0x3fffdb, 22], # 163
+      [0x3fffdc, 22], # 164
+      [0x7fffe8, 23], # 165
+      [0x7fffe9, 23], # 166
+      [0x1fffde, 21], # 167
+      [0x7fffea, 23], # 168
+      [0x3fffdd, 22], # 169
+      [0x3fffde, 22], # 170
+      [0xfffff0, 24], # 171
+      [0x1fffdf, 21], # 172
+      [0x3fffdf, 22], # 173
+      [0x7fffeb, 23], # 174
+      [0x7fffec, 23], # 175
+      [0x1fffe0, 21], # 176
+      [0x1fffe1, 21], # 177
+      [0x3fffe0, 22], # 178
+      [0x1fffe2, 21], # 179
+      [0x7fffed, 23], # 180
+      [0x3fffe1, 22], # 181
+      [0x7fffee, 23], # 182
+      [0x7fffef, 23], # 183
+      [0xfffea, 20], # 184
+      [0x3fffe2, 22], # 185
+      [0x3fffe3, 22], # 186
+      [0x3fffe4, 22], # 187
+      [0x7ffff0, 23], # 188
+      [0x3fffe5, 22], # 189
+      [0x3fffe6, 22], # 190
+      [0x7ffff1, 23], # 191
+      [0x3ffffe0, 26], # 192
+      [0x3ffffe1, 26], # 193
+      [0xfffeb, 20], # 194
+      [0x7fff1, 19], # 195
+      [0x3fffe7, 22], # 196
+      [0x7ffff2, 23], # 197
+      [0x3fffe8, 22], # 198
+      [0x1ffffec, 25], # 199
+      [0x3ffffe2, 26], # 200
+      [0x3ffffe3, 26], # 201
+      [0x3ffffe4, 26], # 202
+      [0x7ffffde, 27], # 203
+      [0x7ffffdf, 27], # 204
+      [0x3ffffe5, 26], # 205
+      [0xfffff1, 24], # 206
+      [0x1ffffed, 25], # 207
+      [0x7fff2, 19], # 208
+      [0x1fffe3, 21], # 209
+      [0x3ffffe6, 26], # 210
+      [0x7ffffe0, 27], # 211
+      [0x7ffffe1, 27], # 212
+      [0x3ffffe7, 26], # 213
+      [0x7ffffe2, 27], # 214
+      [0xfffff2, 24], # 215
+      [0x1fffe4, 21], # 216
+      [0x1fffe5, 21], # 217
+      [0x3ffffe8, 26], # 218
+      [0x3ffffe9, 26], # 219
+      [0xffffffd, 28], # 220
+      [0x7ffffe3, 27], # 221
+      [0x7ffffe4, 27], # 222
+      [0x7ffffe5, 27], # 223
+      [0xfffec, 20], # 224
+      [0xfffff3, 24], # 225
+      [0xfffed, 20], # 226
+      [0x1fffe6, 21], # 227
+      [0x3fffe9, 22], # 228
+      [0x1fffe7, 21], # 229
+      [0x1fffe8, 21], # 230
+      [0x7ffff3, 23], # 231
+      [0x3fffea, 22], # 232
+      [0x3fffeb, 22], # 233
+      [0x1ffffee, 25], # 234
+      [0x1ffffef, 25], # 235
+      [0xfffff4, 24], # 236
+      [0xfffff5, 24], # 237
+      [0x3ffffea, 26], # 238
+      [0x7ffff4, 23], # 239
+      [0x3ffffeb, 26], # 240
+      [0x7ffffe6, 27], # 241
+      [0x3ffffec, 26], # 242
+      [0x3ffffed, 26], # 243
+      [0x7ffffe7, 27], # 244
+      [0x7ffffe8, 27], # 245
+      [0x7ffffe9, 27], # 246
+      [0x7ffffea, 27], # 247
+      [0x7ffffeb, 27], # 248
+      [0xffffffe, 28], # 249
+      [0x7ffffec, 27], # 250
+      [0x7ffffed, 27], # 251
+      [0x7ffffee, 27], # 252
+      [0x7ffffef, 27], # 253
+      [0x7fffff0, 27], # 254
+      [0x3ffffee, 26], # 255
+      [0x3fffffff, 30], # EOS
+    ])
 
-        # (code, bit_length) for each symbol 0..256 (256 is EOS).
-        TABLE = [
-          [0x1ff8, 13],
-          [0x7fffd8, 23],
-          [0xfffffe2, 28],
-          [0xfffffe3, 28],
-          [0xfffffe4, 28],
-          [0xfffffe5, 28],
-          [0xfffffe6, 28],
-          [0xfffffe7, 28],
-          [0xfffffe8, 28],
-          [0xffffea, 24],
-          [0x3ffffffc, 30],
-          [0xfffffe9, 28],
-          [0xfffffea, 28],
-          [0x3ffffffd, 30],
-          [0xfffffeb, 28],
-          [0xfffffec, 28],
-          [0xfffffed, 28],
-          [0xfffffee, 28],
-          [0xfffffef, 28],
-          [0xffffff0, 28],
-          [0xffffff1, 28],
-          [0xffffff2, 28],
-          [0x3ffffffe, 30],
-          [0xffffff3, 28],
-          [0xffffff4, 28],
-          [0xffffff5, 28],
-          [0xffffff6, 28],
-          [0xffffff7, 28],
-          [0xffffff8, 28],
-          [0xffffff9, 28],
-          [0xffffffa, 28],
-          [0xffffffb, 28],
-          [0x14, 6],
-          [0x3f8, 10],
-          [0x3f9, 10],
-          [0xffa, 12],
-          [0x1ff9, 13],
-          [0x15, 6],
-          [0xf8, 8],
-          [0x7fa, 11],
-          [0x3fa, 10],
-          [0x3fb, 10],
-          [0xf9, 8],
-          [0x7fb, 11],
-          [0xfa, 8],
-          [0x16, 6],
-          [0x17, 6],
-          [0x18, 6],
-          [0x0, 5],
-          [0x1, 5],
-          [0x2, 5],
-          [0x19, 6],
-          [0x1a, 6],
-          [0x1b, 6],
-          [0x1c, 6],
-          [0x1d, 6],
-          [0x1e, 6],
-          [0x1f, 6],
-          [0x5c, 7],
-          [0xfb, 8],
-          [0x7ffc, 15],
-          [0x20, 6],
-          [0xffb, 12],
-          [0x3fc, 10],
-          [0x1ffa, 13],
-          [0x21, 6],
-          [0x5d, 7],
-          [0x5e, 7],
-          [0x5f, 7],
-          [0x60, 7],
-          [0x61, 7],
-          [0x62, 7],
-          [0x63, 7],
-          [0x64, 7],
-          [0x65, 7],
-          [0x66, 7],
-          [0x67, 7],
-          [0x68, 7],
-          [0x69, 7],
-          [0x6a, 7],
-          [0x6b, 7],
-          [0x6c, 7],
-          [0x6d, 7],
-          [0x6e, 7],
-          [0x6f, 7],
-          [0x70, 7],
-          [0x71, 7],
-          [0x72, 7],
-          [0xfc, 8],
-          [0x73, 7],
-          [0xfd, 8],
-          [0x1ffb, 13],
-          [0x7fff0, 19],
-          [0x1ffc, 13],
-          [0x3ffc, 14],
-          [0x22, 6],
-          [0x7ffd, 15],
-          [0x3, 5],
-          [0x23, 6],
-          [0x4, 5],
-          [0x24, 6],
-          [0x5, 5],
-          [0x25, 6],
-          [0x26, 6],
-          [0x27, 6],
-          [0x6, 5],
-          [0x74, 7],
-          [0x75, 7],
-          [0x28, 6],
-          [0x29, 6],
-          [0x2a, 6],
-          [0x7, 5],
-          [0x2b, 6],
-          [0x76, 7],
-          [0x2c, 6],
-          [0x8, 5],
-          [0x9, 5],
-          [0x2d, 6],
-          [0x77, 7],
-          [0x78, 7],
-          [0x79, 7],
-          [0x7a, 7],
-          [0x7b, 7],
-          [0x7ffe, 15],
-          [0x7fc, 11],
-          [0x3ffd, 14],
-          [0x1ffd, 13],
-          [0xffffffc, 28],
-          [0xfffe6, 20],
-          [0x3fffd2, 22],
-          [0xfffe7, 20],
-          [0xfffe8, 20],
-          [0x3fffd3, 22],
-          [0x3fffd4, 22],
-          [0x3fffd5, 22],
-          [0x7fffd9, 23],
-          [0x3fffd6, 22],
-          [0x7fffda, 23],
-          [0x7fffdb, 23],
-          [0x7fffdc, 23],
-          [0x7fffdd, 23],
-          [0x7fffde, 23],
-          [0xffffeb, 24],
-          [0x7fffdf, 23],
-          [0xffffec, 24],
-          [0xffffed, 24],
-          [0x3fffd7, 22],
-          [0x7fffe0, 23],
-          [0xffffee, 24],
-          [0x7fffe1, 23],
-          [0x7fffe2, 23],
-          [0x7fffe3, 23],
-          [0x7fffe4, 23],
-          [0x1fffdc, 21],
-          [0x3fffd8, 22],
-          [0x7fffe5, 23],
-          [0x3fffd9, 22],
-          [0x7fffe6, 23],
-          [0x7fffe7, 23],
-          [0xffffef, 24],
-          [0x3fffda, 22],
-          [0x1fffdd, 21],
-          [0xfffe9, 20],
-          [0x3fffdb, 22],
-          [0x3fffdc, 22],
-          [0x7fffe8, 23],
-          [0x7fffe9, 23],
-          [0x1fffde, 21],
-          [0x7fffea, 23],
-          [0x3fffdd, 22],
-          [0x3fffde, 22],
-          [0xfffff0, 24],
-          [0x1fffdf, 21],
-          [0x3fffdf, 22],
-          [0x7fffeb, 23],
-          [0x7fffec, 23],
-          [0x1fffe0, 21],
-          [0x1fffe1, 21],
-          [0x3fffe0, 22],
-          [0x1fffe2, 21],
-          [0x7fffed, 23],
-          [0x3fffe1, 22],
-          [0x7fffee, 23],
-          [0x7fffef, 23],
-          [0xfffea, 20],
-          [0x3fffe2, 22],
-          [0x3fffe3, 22],
-          [0x3fffe4, 22],
-          [0x7ffff0, 23],
-          [0x3fffe5, 22],
-          [0x3fffe6, 22],
-          [0x7ffff1, 23],
-          [0x3ffffe0, 26],
-          [0x3ffffe1, 26],
-          [0xfffeb, 20],
-          [0x7fff1, 19],
-          [0x3fffe7, 22],
-          [0x7ffff2, 23],
-          [0x3fffe8, 22],
-          [0x1ffffec, 25],
-          [0x3ffffe2, 26],
-          [0x3ffffe3, 26],
-          [0x3ffffe4, 26],
-          [0x7ffffde, 27],
-          [0x7ffffdf, 27],
-          [0x3ffffe5, 26],
-          [0xfffff1, 24],
-          [0x1ffffed, 25],
-          [0x7fff2, 19],
-          [0x1fffe3, 21],
-          [0x3ffffe6, 26],
-          [0x7ffffe0, 27],
-          [0x7ffffe1, 27],
-          [0x3ffffe7, 26],
-          [0x7ffffe2, 27],
-          [0xfffff2, 24],
-          [0x1fffe4, 21],
-          [0x1fffe5, 21],
-          [0x3ffffe8, 26],
-          [0x3ffffe9, 26],
-          [0xffffffd, 28],
-          [0x7ffffe3, 27],
-          [0x7ffffe4, 27],
-          [0x7ffffe5, 27],
-          [0xfffec, 20],
-          [0xfffff3, 24],
-          [0xfffed, 20],
-          [0x1fffe6, 21],
-          [0x3fffe9, 22],
-          [0x1fffe7, 21],
-          [0x1fffe8, 21],
-          [0x7ffff3, 23],
-          [0x3fffea, 22],
-          [0x3fffeb, 22],
-          [0x1ffffee, 25],
-          [0x1ffffef, 25],
-          [0xfffff4, 24],
-          [0xfffff5, 24],
-          [0x3ffffea, 26],
-          [0x7ffff4, 23],
-          [0x3ffffeb, 26],
-          [0x7ffffe6, 27],
-          [0x3ffffec, 26],
-          [0x3ffffed, 26],
-          [0x7ffffe7, 27],
-          [0x7ffffe8, 27],
-          [0x7ffffe9, 27],
-          [0x7ffffea, 27],
-          [0x7ffffeb, 27],
-          [0xffffffe, 28],
-          [0x7ffffec, 27],
-          [0x7ffffed, 27],
-          [0x7ffffee, 27],
-          [0x7ffffef, 27],
-          [0x7fffff0, 27],
-          [0x3ffffee, 26],
-          [0x3fffffff, 30], # EOS
-        ].freeze
+    # The code of each octet as a String of "0" and "1", for the encoder to
+    # append; the bits are packed once at the end.
+    BITS = CODES.first(256).map { |code, length| code.to_s(2).rjust(length, "0").freeze }.freeze
+    LENGTHS = CODES.first(256).map(&:last).freeze
 
-        EOS_SYMBOL = 256
+    # `string` in the Huffman code, padded to a whole octet with the most
+    # significant bits of EOS (RFC 7541 "String Literal Representation").
+    def self.encode(string)
+      bits = String.new(capacity: string.bytesize * 8)
+      string.each_byte { |byte| bits << BITS.fetch(byte) }
+      bits << ("1" * (-bits.bytesize % 8))
+      [bits].pack("B*")
+    end
 
-        # Decoder table built lazily. Uses a binary tree of nested arrays:
-        # each internal node is [left, right]; leaves are symbol indices (::Integer).
-        def self.tree
-          @tree ||= build_tree
+    # How many octets `string` takes in the Huffman code, to choose it only
+    # when it is shorter.
+    def self.encoded_length(string)
+      bits = 0
+      string.each_byte { |byte| bits += LENGTHS.fetch(byte) }
+      (bits + 7) / 8
+    end
+
+    EOS = 256
+
+    # The tree of the code: the two children of each inner node, the root
+    # first. A child is the index of an inner node, or ~symbol for a leaf.
+    # No node points back to the root, so 0 marks a child not yet made.
+    def self.tree_of(codes)
+      tree = [[0, 0]]
+      codes.each_with_index do |(code, length), symbol|
+        node = 0
+        (length - 1).downto(1) do |shift|
+          bit = (code >> shift) & 1
+          child = tree.fetch(node).fetch(bit)
+          if child.zero?
+            child = tree.size
+            tree << [0, 0]
+            tree.fetch(node)[bit] = child
+          end
+          node = child
         end
+        tree.fetch(node)[code & 1] = ~symbol
+      end
+      tree
+    end
 
-        def self.build_tree
-          root = [nil, nil] #: Array[untyped]
-          TABLE.each_with_index do |(code, len), sym|
-            node = root
-            (len - 1).downto(0) do |bit_index|
-              bit = (code >> bit_index) & 1
-              if bit_index.zero?
-                node[bit] = sym
-              else
-                node[bit] ||= [nil, nil]
-                node = node[bit]
-              end
-            end
-          end
-          root
-        end
+    # The decoder reads a byte at a time: Ruby's cost follows the
+    # instructions it runs, not the bits, so a byte's transition looked up
+    # at once beats walking the tree a bit at a time by an order of
+    # magnitude. The states are the 256 inner nodes and POISON, which EOS
+    # leads to and never leaves; each of the 257 × 256 transitions has the
+    # state it leads to and the octets it emits, so the loop has no branch.
+    POISON = 256
 
-        # Decode a Huffman-encoded string to bytes.
-        # RFC 7541 Section 5.2: trailing bits that form a prefix of the EOS code (all 1s)
-        # with length <= 7 are treated as padding; anything else is a decoding error.
-        def self.decode(data)
-          node = tree
-          result = String.new(encoding: "BINARY")
-          partial_bits = 0
-          partial_count = 0
-
-          data.each_byte do |byte|
-            7.downto(0) do |shift|
-              bit = (byte >> shift) & 1
-              next_node = node[bit]
-              raise DecodingError, "Invalid Huffman code" if next_node.nil?
-
-              # Use ::Integer to avoid clashing with Raiha::HTTP3::QPACK::Integer.
-              if next_node.is_a?(::Integer)
-                raise DecodingError, "EOS symbol must not appear in input" if next_node == EOS_SYMBOL
-                result << next_node.chr(Encoding::BINARY)
-                node = tree
-                partial_bits = 0
-                partial_count = 0
-              else
-                node = next_node
-                partial_bits = (partial_bits << 1) | bit
-                partial_count += 1
-              end
-            end
-          end
-
-          unless node.equal?(tree)
-            raise DecodingError, "Huffman padding longer than 7 bits" if partial_count > 7
-            expected_padding = (1 << partial_count) - 1
-            raise DecodingError, "Invalid Huffman padding" unless partial_bits == expected_padding
-          end
-
-          result
+    # The state after each [state, byte] at `(state << 8) | byte`, the
+    # octets emitted on the way, and the states a string may end in: the
+    # root and the first seven nodes of the all-ones path, which padding
+    # of up to seven bits of EOS leads to (RFC 7541 "String Literal
+    # Representation"). A byte's transition is two of a nibble's, which
+    # take a sixteenth of the walking to make.
+    def self.decoder_of(tree)
+      nibble_states, nibble_emits = nibble_steps_of(tree)
+      next_states = Array.new((POISON + 1) << 8, POISON)
+      emits = Array.new((POISON + 1) << 8, "")
+      POISON.times do |state|
+        256.times do |byte|
+          high = (state << 4) | (byte >> 4)
+          middle = nibble_states.fetch(high)
+          next if middle == POISON
+          low = (middle << 4) | (byte & 0x0f)
+          next_states[(state << 8) | byte] = nibble_states.fetch(low)
+          emits[(state << 8) | byte] = -(nibble_emits.fetch(high) + nibble_emits.fetch(low))
         end
       end
+      accepting = Array.new(POISON + 1, false)
+      node = 0
+      8.times do
+        accepting[node] = true
+        node = tree.fetch(node).fetch(1)
+      end
+      [next_states, emits, accepting]
+    end
+
+    # The state after each [state, nibble] at `(state << 4) | nibble`, and
+    # the octets emitted on the way.
+    def self.nibble_steps_of(tree)
+      states = Array.new(POISON << 4, POISON)
+      emits = Array.new(POISON << 4, "")
+      POISON.times do |state|
+        16.times do |nibble|
+          node = state
+          emitted = String.new(encoding: Encoding::BINARY)
+          3.downto(0) do |shift|
+            child = tree.fetch(node).fetch((nibble >> shift) & 1)
+            if child.positive?
+              node = child
+            elsif child == ~EOS
+              node = POISON
+              break
+            else
+              emitted << ~child
+              node = 0
+            end
+          end
+          states[(state << 4) | nibble] = node
+          emits[(state << 4) | nibble] = emitted
+        end
+      end
+      [states, emits]
+    end
+
+    NEXT_STATES, EMITS, ACCEPTING = Ractor.make_shareable(decoder_of(tree_of(CODES)))
+
+    # The octets `bytes` encode. Bits that end inside a code other than the
+    # padding, or EOS anywhere, raise Malformed.
+    def self.decode(bytes)
+      decoded = String.new(encoding: Encoding::BINARY, capacity: bytes.bytesize * 8 / 5)
+      state = 0
+      bytes.each_byte do |byte|
+        index = (state << 8) | byte
+        decoded << EMITS[index]
+        state = NEXT_STATES[index]
+      end
+      raise Malformed, "the Huffman code ends inside a code or holds EOS" unless ACCEPTING[state]
+      decoded
     end
   end
 end

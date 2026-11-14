@@ -1,102 +1,39 @@
 require "test_helper"
-require "raiha/quic/stateless_reset"
+require "raiha/quic"
 
-class RaihaQuicStatelessResetTest < Minitest::Test
-  def test_build_produces_at_least_min_packet_length
-    token = "\x00".b * 16
-    packet = Raiha::Quic::StatelessReset.build(token)
+# RFC 9000 "Stateless Reset".
+class RaihaQUICStatelessResetTest < Minitest::Test
+  StatelessReset = Raiha::QUIC::StatelessReset
 
-    assert_operator packet.bytesize, :>=, Raiha::Quic::StatelessReset::MIN_PACKET_LENGTH
-    assert_equal token, packet.byteslice(-16, 16)
+  KEY = ("r" * 32).b
+
+  # The same connection ID gives the same token, another one another.
+  def test_token
+    token = StatelessReset.token(key: KEY, connection_id: "c".b * 8)
+    assert_equal 16, token.bytesize
+    assert_equal token, StatelessReset.token(key: KEY, connection_id: "c".b * 8)
+    refute_equal token, StatelessReset.token(key: KEY, connection_id: "d".b * 8)
+    refute_equal token, StatelessReset.token(key: ("s" * 32).b, connection_id: "c".b * 8)
   end
 
-  def test_build_honors_min_size_when_larger_than_minimum
-    token = "\x00".b * 16
-    packet = Raiha::Quic::StatelessReset.build(token, min_size: 200)
-
-    assert_equal 200, packet.bytesize
-    assert_equal token, packet.byteslice(-16, 16)
+  # Looks like a short header packet and ends in the token.
+  def test_packet
+    token = "t".b * 16
+    packet = StatelessReset.packet(token:, length: 40, random: Random.new(1))
+    assert_equal 40, packet.bytesize
+    assert_equal 0b01, packet.getbyte(0) >> 6
+    assert packet.end_with?(token)
+    assert_equal packet, StatelessReset.packet(token:, length: 40, random: Random.new(1))
+    assert_equal 21, StatelessReset.packet(token:, length: 21, random: Random.new(1)).bytesize
+    assert_raises(ArgumentError) { StatelessReset.packet(token:, length: 20, random: Random.new(1)) }
   end
 
-  def test_build_sets_fixed_bit_and_clears_header_form_bit
-    token = "\x00".b * 16
-    packet = Raiha::Quic::StatelessReset.build(token)
-
-    first = packet.getbyte(0)
-    assert_equal 0, first & 0x80, "header form bit should be 0 (short header)"
-    assert_equal 0x40, first & 0x40, "fixed bit should be 1"
-  end
-
-  def test_build_rejects_non_16_byte_tokens
-    assert_raises(ArgumentError) { Raiha::Quic::StatelessReset.build("short".b) }
-    assert_raises(ArgumentError) { Raiha::Quic::StatelessReset.build("\x00".b * 15) }
-    assert_raises(ArgumentError) { Raiha::Quic::StatelessReset.build("\x00".b * 17) }
-  end
-
-  def test_match_token_detects_trailing_token
-    token = "abcdefghijklmnop".b
-    datagram = ("\x00".b * 20) + token
-
-    assert Raiha::Quic::StatelessReset.match_token?(datagram, [token])
-  end
-
-  def test_match_token_returns_false_without_match
-    token = "abcdefghijklmnop".b
-    datagram = ("\x00".b * 20) + "different_token_".b
-
-    refute Raiha::Quic::StatelessReset.match_token?(datagram, [token])
-  end
-
-  def test_match_token_returns_false_for_short_datagram
-    token = "abcdefghijklmnop".b
-    # 20 bytes is below the 21-byte minimum even though the trailing bytes match.
-    datagram = "\x00".b * 4 + token
-
-    refute Raiha::Quic::StatelessReset.match_token?(datagram, [token])
-  end
-
-  def test_match_token_returns_false_with_empty_token_set
-    datagram = "\x00".b * 40
-    refute Raiha::Quic::StatelessReset.match_token?(datagram, [])
-  end
-
-  def test_match_token_handles_multiple_candidate_tokens
-    active = "ACTIVETOKEN_____".b[0, 16]
-    other = "OTHERONE________".b[0, 16]
-    datagram = ("\x00".b * 20) + active
-
-    assert Raiha::Quic::StatelessReset.match_token?(datagram, [other, active])
-  end
-
-  def test_derive_token_is_deterministic_per_key_and_cid
-    key = "static-reset-key".b * 2
-    cid = "ABCDEFGH".b
-
-    token = Raiha::Quic::StatelessReset.derive_token(key, cid)
-    assert_equal Raiha::Quic::StatelessReset::TOKEN_LENGTH, token.bytesize
-    assert_equal token, Raiha::Quic::StatelessReset.derive_token(key, cid)
-  end
-
-  def test_derive_token_differs_across_keys
-    cid = "ABCDEFGH".b
-    a = Raiha::Quic::StatelessReset.derive_token("k1".b * 16, cid)
-    b = Raiha::Quic::StatelessReset.derive_token("k2".b * 16, cid)
-
-    refute_equal a, b
-  end
-
-  def test_derive_token_accepts_connection_id_object
-    key = "k".b * 32
-    cid_bytes = "ABCDEFGH".b
-    cid = Raiha::Quic::Protocol::ConnectionID.from_bytes(cid_bytes)
-
-    assert_equal(
-      Raiha::Quic::StatelessReset.derive_token(key, cid_bytes),
-      Raiha::Quic::StatelessReset.derive_token(key, cid)
-    )
-  end
-
-  def test_derive_token_rejects_empty_key
-    assert_raises(ArgumentError) { Raiha::Quic::StatelessReset.derive_token("", "ABCDEFGH".b) }
+  def test_match
+    token = "t".b * 16
+    packet = StatelessReset.packet(token:, length: 30, random: Random.new(1))
+    assert StatelessReset.match?(packet, ["u".b * 16, token])
+    refute StatelessReset.match?(packet, ["u".b * 16])
+    refute StatelessReset.match?(packet, [])
+    refute StatelessReset.match?(token.byteslice(0, 15) + "\x00".b * 5, [token])
   end
 end

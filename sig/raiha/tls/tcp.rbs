@@ -1,0 +1,134 @@
+module Raiha::TLS
+  module TCP
+    module Event
+      class PeerAlert < Data
+        attr_reader level: Integer
+        attr_reader description: Integer
+
+        def self.new: (level: Integer, description: Integer) -> instance
+                    | (Integer level, Integer description) -> instance
+      end
+    end
+
+    type event = ::Raiha::TLS::Event::t | Event::PeerAlert
+
+    class Acceptor
+      MAX_HELD_BYTES: Integer
+
+      @acceptor: Handshake::Acceptor
+      @record: Record::Layer
+      @outgoing: String
+      @alert: Symbol?
+      @reason: Symbol?
+      @peer_alerted: bool
+      @handed_over: bool
+
+      def initialize: () -> void
+      def receive: (String bytes, now: Time) -> nil
+      def each_output: () { (String bytes) -> void } -> void
+      def accepted: () -> Handshake::Accepted?
+      def reject: (Symbol description) -> nil
+      def failed?: () -> bool
+      def alert: () -> Symbol?
+      def reason: () -> Symbol?
+      def hand_over: () -> [Handshake::Accepted, Record::Layer]
+
+      private def take: (Record::Plaintext record, Time now) -> void
+      private def hold: () -> nil
+      private def send_alerts: () -> nil
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+    end
+
+    class Socket
+      READ_SIZE: Integer
+      CERTIFICATE_ALERTS: Array[Symbol]
+
+      @io: ::TCPSocket
+      @connection: Connection
+
+      def self.connect: (String host, Integer port, config: Config, keyring: Keyring, ?server_name: String, ?keylog: Keylog::_Writer?) -> Socket
+                      | [T] (String host, Integer port, config: Config, keyring: Keyring, ?server_name: String, ?keylog: Keylog::_Writer?) { (Socket) -> T } -> T
+      def self.accept: (::TCPServer listener, config: Config, keyring: Keyring, ?keylog: Keylog::_Writer?) -> Socket
+                     | [T] (::TCPServer listener, config: Config, keyring: Keyring, ?keylog: Keylog::_Writer?) { (Socket) -> T } -> T
+      private def self.start: (::TCPSocket io) { () -> Connection } -> Socket
+      private def self.new: (::TCPSocket io, Connection connection) -> Socket
+
+      attr_reader alpn: String?
+      attr_reader peer_certificates: Array[OpenSSL::X509::Certificate]
+
+      def initialize: (::TCPSocket io, Connection connection) -> void
+      def write: (_ToS data) -> Integer
+      def read: (Integer max_bytes) -> String?
+      def request_key_update: (?request_peer_update: bool) -> nil
+      def close: () -> nil
+
+      private def flush: () -> void
+      private def fill: () -> void
+      private def check: () -> void
+    end
+
+    class Connection
+      WRITE_BUFFER_LIMIT: Integer
+      ALERT_LEVELS: Hash[Symbol, Integer]
+      MAX_CONSECUTIVE_WARNING_ALERTS: Integer
+      MAX_HELD_TICKETS: Integer
+
+      @machine: Handshake::Machine
+      @config: Config
+      @record: Record::Layer
+      @outgoing: String
+      @unsent: String
+      @received: String
+      @early_received: String
+      @early_data_size: Integer
+      @events: Array[event]
+      @failed: bool
+      @read_closed: bool
+      @write_closed: bool
+      @consecutive_warning_alerts: Integer
+      @handshake_received: bool
+      @record_size_limits_set: bool
+      @change_cipher_spec_sent: bool
+      @early_data_room: Integer
+      @tracer: Trace::_Tracer?
+
+      def self.client: (config: Config, keyring: Keyring, server_name: String, now: Time,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?session: Session?, ?early_data: bool) -> Connection
+      def self.server: (config: Config, keyring: Keyring, now: Time, ?acceptor: Acceptor?,
+                        ?extensions: Array[Extension::_Extension], ?tracer: Trace::_Tracer?, ?keylog: Keylog::_Writer?,
+                        ?anti_replay: AntiReplay::_AntiReplay?) -> Connection
+      private def self.new: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
+                             ?early_data_room: Integer, ?tracer: Trace::_Tracer?) -> Connection
+
+      def initialize: (Handshake::Machine machine, Config config, ?record: Record::Layer, ?client_hello_received: bool,
+                       ?early_data_room: Integer, ?tracer: Trace::_Tracer?) -> void
+      def receive: (String bytes, now: Time) -> nil
+      def each_output: () { (String bytes) -> void } -> void
+      def write: (String data) -> Integer
+      def write_early_data: (String data) -> Integer?
+      def read: (Integer max_bytes) -> String?
+      def read_early_data: (Integer max_bytes) -> String?
+      def request_key_update: (?request_peer_update: bool) -> nil
+      def close_notify: () -> nil
+      def handshake_complete?: () -> bool
+      def failed?: () -> bool
+      def next_event: () -> event?
+
+      private def take: (Record::Plaintext record, Time now) -> void
+      private def take_early_data: (String payload) -> nil
+      private def limit_record_sizes: () -> void
+      private def receive_alert: (String payload) -> nil
+      private def close_read: () -> nil
+      private def drain_machine: () -> void
+      private def make_room_for_a_ticket: () -> void
+      private def send_alert: (epoch epoch, Symbol level, Symbol description) -> void
+      private def send_record: (Record::content_type content_type, String payload, epoch epoch) -> void
+      private def change_cipher_spec: () -> void
+      private def send_application_data: () -> void
+      private def update_keys_at_the_limit: () -> void
+      private def fail!: (Symbol alert, Symbol reason) -> nil
+      private def stop: () -> nil
+    end
+  end
+end

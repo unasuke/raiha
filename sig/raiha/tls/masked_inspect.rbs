@@ -1,0 +1,12 @@
+module Raiha::TLS
+  interface _MaskedMembers
+    def masked_members: () -> Array[Symbol]
+  end
+
+  module MaskedInspect : Data, _MaskedMembers
+    def inspect: () -> String
+    def to_s: () -> String
+    def pretty_print: (PP q) -> void
+    def self.mask: (Object value) -> String
+  end
+end

@@ -1,0 +1,33 @@
+module Raiha::TLS
+  module KeyExchange
+    interface _Provider
+      def supported_groups: () -> Array[Symbol]
+      def generate: (Symbol group) -> KeyPair
+      def encapsulate: (Symbol group, String peer_public_bytes) -> [String, String]?
+      def decapsulate: (KeyPair key_pair, String ciphertext) -> String?
+    end
+
+    class KeyPair < Data
+      include MaskedInspect
+
+      attr_reader group: Symbol
+      attr_reader public_bytes: String
+      attr_reader private_key: ::OpenSSL::PKey::PKey
+
+      def self.new: (group: Symbol, public_bytes: String, private_key: ::OpenSSL::PKey::PKey) -> instance
+                  | (Symbol group, String public_bytes, ::OpenSSL::PKey::PKey private_key) -> instance
+      def masked_members: () -> Array[Symbol]
+    end
+
+    class OpenSSL
+      GROUPS: Array[Symbol]
+
+      def supported_groups: () -> Array[Symbol]
+      def generate: (Symbol group) -> KeyPair
+      def encapsulate: (Symbol group, String peer_public_bytes) -> [String, String]?
+      def decapsulate: (KeyPair key_pair, String ciphertext) -> String?
+
+      private def check_group: (Symbol group) -> void
+    end
+  end
+end

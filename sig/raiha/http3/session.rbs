@@ -1,0 +1,11 @@
+module Raiha::HTTP3
+  class Session < Data
+    attr_reader quic: ::Raiha::QUIC::Session
+    attr_reader settings: Settings
+
+    def self.new: (quic: ::Raiha::QUIC::Session, settings: Settings) -> instance
+                | (::Raiha::QUIC::Session quic, Settings settings) -> instance
+    def self.from_h: (Hash[Symbol, Object?] hash) -> Session
+    def to_h: () -> Hash[Symbol, Object?]
+  end
+end

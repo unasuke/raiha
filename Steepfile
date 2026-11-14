@@ -1,10 +1,7 @@
 target :lib do
   signature "sig"
   check "lib"
-  library "openssl"
+  library "ipaddr"
   library "securerandom"
-  library "stringio"
   library "socket"
-  library "logger"
-  library "forwardable"
 end

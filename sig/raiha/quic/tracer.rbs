@@ -1,0 +1,65 @@
+module Raiha::QUIC
+  # A packet number space.
+  type space = :initial | :handshake | :application_data
+
+  type metric = Integer | Float | Symbol | nil
+  type migration_state = :probing_started | :probing_successful | :probing_abandoned | :migration_started | :migration_complete |
+                         :migration_abandoned
+
+  interface _Tracer
+    def packet_sent: (header: Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+    def packet_received: (header: Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+    def trace_frames?: () -> bool
+    def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> void
+    def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
+    def key_updated: (level: PacketProtection::level, now: Float) -> void
+    def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> void
+    def metrics_updated: (now: Float, **metric metrics) -> void
+    def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> void
+    def ecn_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+    def recovery_parameters_set: (now: Float, **metric parameters) -> void
+    def spurious_loss: (packet_number: Integer, space: space, now: Float) -> void
+    def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+    def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+    def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+    def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> void
+    def connection_id_updated: (owner: :local | :remote, old: String, new: String, now: Float) -> void
+    def migration_state_updated: (state: migration_state, local: address?, remote: address?, now: Float) -> void
+  end
+
+  module Tracer
+    class PacketHeader < Data
+      attr_reader packet_type: Wire::LongHeader::packet_type | :one_rtt
+      attr_reader packet_number: Integer
+      attr_reader version: Integer?
+      attr_reader dcid: String
+      attr_reader scid: String?
+      attr_reader key_phase: Integer?
+
+      def self.new: (packet_type: Wire::LongHeader::packet_type | :one_rtt, packet_number: Integer, version: Integer?, dcid: String,
+                     scid: String?, key_phase: Integer?) -> instance
+                  | (Wire::LongHeader::packet_type | :one_rtt packet_type, Integer packet_number, Integer? version, String dcid,
+                     String? scid, Integer? key_phase) -> instance
+      def self.of: (Wire::header header, Integer packet_number) -> PacketHeader
+    end
+
+    def packet_sent: (header: PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> nil
+    def packet_received: (header: PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> nil
+    def trace_frames?: () -> bool
+    def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> nil
+    def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> nil
+    def key_updated: (level: PacketProtection::level, now: Float) -> nil
+    def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> nil
+    def metrics_updated: (now: Float, **metric metrics) -> nil
+    def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> nil
+    def ecn_state_updated: (old: Symbol, new: Symbol, now: Float) -> nil
+    def recovery_parameters_set: (now: Float, **metric parameters) -> nil
+    def spurious_loss: (packet_number: Integer, space: space, now: Float) -> nil
+    def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> nil
+    def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
+    def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> nil
+    def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> nil
+    def connection_id_updated: (owner: :local | :remote, old: String, new: String, now: Float) -> nil
+    def migration_state_updated: (state: migration_state, local: address?, remote: address?, now: Float) -> nil
+  end
+end

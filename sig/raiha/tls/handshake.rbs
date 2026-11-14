@@ -1,17 +1,311 @@
-module Raiha
-  module TLS
-    class Handshake
-      HANDSHAKE_TYPE: Hash[Symbol, Integer]
+module Raiha::TLS
+  module Handshake
+    # The message an extension block belongs to. A HelloRetryRequest and a
+    # CertificateEntry have placement rules of their own.
+    type context = :client_hello | :server_hello | :hello_retry_request
+                 | :encrypted_extensions | :certificate | :certificate_request
+                 | :new_session_ticket | :certificate_entry
 
-      attr_accessor handshake_type: Integer
-      attr_accessor length: Integer
-      attr_accessor message: Message
+    interface _Message
+      def msg_type: () -> Integer
+      def encode: () -> String
+      def validate: () -> Violation?
+    end
 
-      def serialize: -> String
-      def self.deserialize: (String data) -> Handshake?
-      def self.deserialize_multiple: (String data) -> Array[Handshake]
-      def self.deserialize_with_bytes: (String data) -> [Handshake, String]?
-      def self.deserialize_multiple_with_bytes: (String data) -> Array[[Handshake, String]]
+    class Violation < Data
+      attr_reader alert: Symbol
+      attr_reader reason: Symbol
+
+      def self.new: (alert: Symbol, reason: Symbol) -> instance
+                  | (Symbol alert, Symbol reason) -> instance
+    end
+
+    interface _BodyParser
+      def parse_body: (String body, registry: Extension::Registry) -> _Message
+    end
+
+    TYPES: Hash[Integer, _BodyParser | :message_hash]
+
+    def self.parse: (String bytes, registry: Extension::Registry) -> _Message
+    def self.parse_body: (Integer msg_type, String body, registry: Extension::Registry) -> _Message
+
+    interface _Body
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+    end
+
+    module Message : _Body
+      def encode: () -> String
+    end
+
+    interface _Extensions
+      def extensions: () -> Array[Extension::_Extension]
+    end
+
+    module ExtensionLookup : _Extensions
+      def extension: (Integer type) -> Extension::_Extension?
+    end
+
+    class ClientHello < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader legacy_version: Integer
+      attr_reader random: String
+      attr_reader legacy_session_id: String
+      attr_reader cipher_suites: Array[Integer]
+      attr_reader legacy_compression_methods: Array[Integer]
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (legacy_version: Integer, random: String, legacy_session_id: String, cipher_suites: Array[Integer],
+                     legacy_compression_methods: Array[Integer], extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer legacy_version, String random, String legacy_session_id, Array[Integer] cipher_suites,
+                     Array[Integer] legacy_compression_methods, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> ClientHello
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def encode: () -> String
+      def binders_wire_length: () -> Integer
+      def encode_truncated: () -> String
+      def with_binders: (Array[String] binders) -> ClientHello
+      def validate: () -> Violation?
+
+      private def supported_versions_extension: () -> Extension::SupportedVersions::CH?
+      private def supported_groups_extension: () -> Extension::SupportedGroups?
+      private def key_share_extension: () -> Extension::KeyShare::CH?
+      private def pre_shared_key_extension: () -> Extension::PreSharedKey::CH?
+      private def signature_algorithms_extension: () -> Extension::SignatureAlgorithms?
+      private def psk_key_exchange_modes_extension: () -> Extension::PskKeyExchangeModes?
+      def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id: String, ?cipher_suites: Array[Integer],
+                 ?legacy_compression_methods: Array[Integer], ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class ServerHello < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+      HELLO_RETRY_REQUEST_RANDOM: String
+      DOWNGRADE_TLS12: String
+      DOWNGRADE_TLS11: String
+
+      attr_reader legacy_version: Integer
+      attr_reader random: String
+      attr_reader legacy_session_id_echo: String
+      attr_reader cipher_suite: Integer
+      attr_reader legacy_compression_method: Integer
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (legacy_version: Integer, random: String, legacy_session_id_echo: String, cipher_suite: Integer,
+                     legacy_compression_method: Integer, extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer legacy_version, String random, String legacy_session_id_echo, Integer cipher_suite,
+                     Integer legacy_compression_method, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> ServerHello
+      def msg_type: () -> Integer
+      def hello_retry_request?: () -> bool
+      def validate: () -> Violation?
+      def write_body: (Codec::Writer w) -> void
+      def with: (?legacy_version: Integer, ?random: String, ?legacy_session_id_echo: String, ?cipher_suite: Integer,
+                 ?legacy_compression_method: Integer, ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class EncryptedExtensions < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (extensions: Array[Extension::_Extension]) -> instance
+                  | (Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> EncryptedExtensions
+      def validate: () -> nil
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class CertificateRequest < Data
+      include Message
+      include ExtensionLookup
+
+      MSG_TYPE: Integer
+
+      attr_reader certificate_request_context: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (certificate_request_context: String, extensions: Array[Extension::_Extension]) -> instance
+                  | (String certificate_request_context, Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> CertificateRequest
+      def validate: () -> Violation?
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?certificate_request_context: String, ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class CertificateEntry < Data
+      include ExtensionLookup
+
+      attr_reader cert_data: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (cert_data: String, extensions: Array[Extension::_Extension]) -> instance
+                  | (String cert_data, Array[Extension::_Extension] extensions) -> instance
+      def self.read: (Codec::Reader r, registry: Extension::Registry) -> CertificateEntry
+      def write: (Codec::Writer w) -> void
+      def with: (?cert_data: String, ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class Certificate < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      attr_reader certificate_request_context: String
+      attr_reader certificate_list: Array[CertificateEntry]
+
+      def self.new: (certificate_request_context: String, certificate_list: Array[CertificateEntry]) -> instance
+                  | (String certificate_request_context, Array[CertificateEntry] certificate_list) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> Certificate
+      def validate: () -> nil
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?certificate_request_context: String, ?certificate_list: Array[CertificateEntry]) -> instance
+    end
+
+    class CertificateVerify < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      attr_reader algorithm: Integer
+      attr_reader signature: String
+
+      def self.new: (algorithm: Integer, signature: String) -> instance
+                  | (Integer algorithm, String signature) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> CertificateVerify
+      def validate: () -> Violation?
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def with: (?algorithm: Integer, ?signature: String) -> instance
+    end
+
+    class Finished < Data
+      include Message
+      include MaskedInspect
+
+      MSG_TYPE: Integer
+
+      attr_reader verify_data: String
+
+      def self.new: (verify_data: String) -> instance
+                  | (String verify_data) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> Finished
+      def validate: () -> nil
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def masked_members: () -> Array[Symbol]
+    end
+
+    class NewSessionTicket < Data
+      include Message
+      include ExtensionLookup
+      include MaskedInspect
+
+      MSG_TYPE: Integer
+
+      attr_reader ticket_lifetime: Integer
+      attr_reader ticket_age_add: Integer
+      attr_reader ticket_nonce: String
+      attr_reader ticket: String
+      attr_reader extensions: Array[Extension::_Extension]
+
+      def self.new: (ticket_lifetime: Integer, ticket_age_add: Integer, ticket_nonce: String, ticket: String,
+                     extensions: Array[Extension::_Extension]) -> instance
+                  | (Integer ticket_lifetime, Integer ticket_age_add, String ticket_nonce, String ticket,
+                     Array[Extension::_Extension] extensions) -> instance
+      def self.parse_body: (String body, registry: Extension::Registry) -> NewSessionTicket
+      def validate: () -> nil
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+      def masked_members: () -> Array[Symbol]
+      def with: (?ticket_lifetime: Integer, ?ticket_age_add: Integer, ?ticket_nonce: String, ?ticket: String,
+                 ?extensions: Array[Extension::_Extension]) -> instance
+    end
+
+    class EndOfEarlyData < Data
+      include Message
+
+      MSG_TYPE: Integer
+
+      def self.new: () -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> EndOfEarlyData
+      def validate: () -> nil
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> nil
+    end
+
+    class KeyUpdate < Data
+      include Message
+
+      MSG_TYPE: Integer
+      UPDATE_NOT_REQUESTED: Integer
+      UPDATE_REQUESTED: Integer
+
+      attr_reader request_update: Integer
+
+      def self.new: (request_update: Integer) -> instance
+                  | (Integer request_update) -> instance
+      def self.parse_body: (String body, ?registry: Extension::Registry?) -> KeyUpdate
+      def validate: () -> Violation?
+      def msg_type: () -> Integer
+      def write_body: (Codec::Writer w) -> void
+    end
+
+    class Reassembler
+      @limits: ^(Integer) -> Integer
+      @expected: Set[Integer]
+      @buf: String
+      @header_checked: bool
+      @status: :ok | :overflow | :unexpected
+
+      def initialize: (limits: ^(Integer) -> Integer) -> void
+      def expect: (Set[Integer] types) -> nil
+      def <<: (String bytes) -> (:ok | :overflow | :unexpected)
+      def each_message: () { (Integer, String) -> void } -> (:ok | :overflow | :unexpected)
+      def pending?: () -> bool
+      def next_type: () -> Integer?
+
+      private def check_header: () -> (:ok | :overflow | :unexpected)
+      private def message_length: () -> Integer?
+    end
+  end
+end
+
+module Raiha::TLS
+  module Handshake
+    module ClientHelloBuilder
+      class Built < Data
+        attr_reader client_hello: ClientHello
+        attr_reader key_pairs: Array[KeyExchange::KeyPair]
+
+        def self.new: (client_hello: ClientHello, key_pairs: Array[KeyExchange::KeyPair]) -> instance
+                    | (ClientHello client_hello, Array[KeyExchange::KeyPair] key_pairs) -> instance
+      end
+
+      TLS13: Integer
+      LEGACY_VERSION: Integer
+      FIXED_ORDER: Array[Integer]
+      PADDING: Integer
+      PSK_DHE_KE: Integer
+      GREASE_SLOTS: Hash[Symbol, Integer]
+
+      def self.build: (config: Config, keyring: Keyring, server_name: String?, ?extensions: Array[Extension::_Extension]) -> Built
+      def self.retry: (ClientHello ch1, ServerHello hrr) { (Integer group) -> Extension::KeyShare::Entry } -> ClientHello
+      def self.grease_value: (String seed, Integer slot) -> Integer
     end
   end
 end

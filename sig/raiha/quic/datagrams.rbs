@@ -1,0 +1,32 @@
+module Raiha::QUIC
+  class Datagrams
+    MAX_SEND_QUEUE: Integer
+    MAX_RECEIVED: Integer
+    MAX_RECEIVED_BYTES: Integer
+    FRAME_TYPE: Integer
+
+    class Waiting < Data
+      attr_reader data: String
+      attr_reader expires_at: Float?
+      attr_reader urgency: Integer
+
+      def self.new: (data: String, expires_at: Float?, urgency: Integer) -> instance
+                  | (String data, Float? expires_at, Integer urgency) -> instance
+    end
+
+    @max_frame_size: Integer
+    @events: Array[Event::t]
+    @queue: Array[Waiting]
+    @received: Integer
+    @received_bytes: Integer
+
+    def initialize: (config: Config, events: Array[Event::t]) -> void
+    def send: (String data, expires_at: Float?, urgency: Integer, max_size: Integer?) -> bool
+    def urgency: (now: Float) -> Integer?
+    def next_frame: (Integer room, now: Float) -> Wire::Frame::Datagram?
+    def drop_queued: () -> void
+    def receive: (Wire::Frame::Datagram frame) -> void
+    def taken: (Event::t event) -> void
+    private def drop_expired: (Float now) -> void
+  end
+end

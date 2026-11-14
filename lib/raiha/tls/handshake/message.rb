@@ -1,51 +1,25 @@
-require_relative "../error"
+# frozen_string_literal: true
 
-module Raiha
-  module TLS
-    class Handshake
-      class Message
-        def serialize
-          raise NoMethodError
-        end
+require_relative "../codec"
 
-        def self.deserialize(data:, type:)
-          case type
-          when Handshake::HANDSHAKE_TYPE[:client_hello]
-            ClientHello.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:server_hello]
-            ServerHello.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:encrypted_extensions]
-            EncryptedExtensions.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:certificate]
-            Certificate.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:certificate_request]
-            CertificateRequest.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:certificate_verify]
-            CertificateVerify.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:finished]
-            Finished.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:new_session_ticket]
-            NewSessionTicket.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:key_update]
-            KeyUpdate.deserialize(data)
-          when Handshake::HANDSHAKE_TYPE[:end_of_early_data]
-            EndOfEarlyData.deserialize(data)
-          else
-            raise Raiha::TLS::Error, "TODO: unknown handshake message type: #{type.inspect}"
-          end
-        end
+module Raiha::TLS
+  module Handshake
+    # What every handshake message value shares: `#encode` writes the 4-byte
+    # header (msg_type and a 3-byte length) around `#write_body`.
+    module Message
+      def encode
+        w = Codec::Writer.new
+        w.u8(msg_type)
+        w.vector(3) { write_body(w) }
+        w.to_s
       end
+    end
+
+    # `#extension(type)` for a message that carries an extension block. The
+    # block is an Array rather than a Hash so that its order and any
+    # duplicate stay representable.
+    module ExtensionLookup
+      def extension(type) = extensions.find { |ext| ext.extension_type == type }
     end
   end
 end
-
-require_relative "message/client_hello"
-require_relative "message/server_hello"
-require_relative "message/encrypted_extensions"
-require_relative "message/certificate"
-require_relative "message/certificate_request"
-require_relative "message/certificate_verify"
-require_relative "message/new_session_ticket"
-require_relative "message/finished"
-require_relative "message/key_update"
-require_relative "message/end_of_early_data"

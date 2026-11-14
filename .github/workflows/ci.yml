@@ -16,8 +16,7 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake test:unit
 
-  interop-aioquic:
-    name: interop (aioquic, Python)
+  steep:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -25,11 +24,33 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
-      - run: bundle exec rake test:interop:aioquic
+      - run: bundle exec rbs collection install
+      - run: bundle exec steep check
+
+  interop-openssl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - run: bundle exec rake test:interop:openssl
+
+  interop-picotls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libssl-dev
+      - run: bundle exec rake test:interop:picotls
 
   interop-quicgo:
-    name: interop (quic-go, Go)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -43,6 +64,17 @@ jobs:
           cache-dependency-path: test/support/quicgo/go.sum
       - run: bundle exec rake test:interop:quicgo
 
+  interop-aioquic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+      - run: bundle exec rake test:interop:aioquic
+
   interop-quic-gem:
     runs-on: ubuntu-latest
     steps:
@@ -55,23 +87,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool pkg-config build-essential
       - run: bundle exec rake test:interop:quic_gem
-
-  interop-quiche:
-    name: interop (quiche, Rust)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
-        with:
-          ruby-version: '4.0'
-          bundler-cache: true
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Clone quiche (for rust-cache key derivation)
-        run: git clone --depth 1 https://github.com/cloudflare/quiche.git tmp/quiche
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          workspaces: tmp/quiche
-      - run: bundle exec rake test:interop:quiche test:interop:quiche_http3_client test:interop:quiche_http3_server
 
   interop-h3i:
     runs-on: ubuntu-latest
@@ -90,8 +105,7 @@ jobs:
             test/support/h3i_harness -> ../../../tmp/h3i_harness
       - run: bundle exec rake test:interop:h3i
 
-  interop-tls-openssl:
-    name: interop (TLS, openssl)
+  interop-quiche-http3:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -99,10 +113,14 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
-      - run: bundle exec rake test:interop:openssl
+      - uses: dtolnay/rust-toolchain@stable
+      - run: git clone --depth 1 https://github.com/cloudflare/quiche.git tmp/quiche
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: tmp/quiche
+      - run: bundle exec rake test:interop:quiche_http3_client test:interop:quiche_http3_server
 
-  interop-tls-picotls:
-    name: interop (TLS, picotls)
+  interop-h3spec:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -110,27 +128,24 @@ jobs:
         with:
           ruby-version: '4.0'
           bundler-cache: true
-      - name: Install picotls build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libssl-dev
-      - name: Cache picotls binary
-        id: picotls-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - run: bundle exec rake test:interop:h3spec
+
+  qifs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ruby/setup-ruby@7372622e62b60b3cb750dcd2b9e32c247ffec26a # v1.302.0
         with:
-          path: tmp/picotls/cli
-          key: picotls-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
-      - run: bundle exec rake test:interop:picotls
+          ruby-version: '4.0'
+          bundler-cache: true
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+      - run: bundle exec rake test:qifs
 
   interop-runner:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      # quic-interop-runner's trace checks need Wireshark >= 4.5.0
-      # (see its README); Ubuntu 24.04 ships tshark 4.2.2, which finds
-      # no Retry packets and cannot decrypt the resumption handshake.
-      # Install from the same nightly PPA the upstream interop-runner
-      # CI uses.
+      # Wireshark >= 4.5.0 for the trace checks.
       - run: |
           sudo add-apt-repository ppa:wireshark-dev/nightly
           sudo apt-get update
@@ -154,14 +169,24 @@ jobs:
           }
           p.write_text(json.dumps(impls, indent=2))
           PY
-      - run: cp interop/quic-interop-runner.no-sim.yml tmp/quic-interop-runner/docker-compose.no-sim.yml
       - run: docker build -t localhost/raiha-interop:latest -f interop/Dockerfile .
+      # versionnegotiation is left out: the runner does not list it among
+      # its testcases, and its check fails on every trace (interop/README.md).
+      - run: >-
+          interop/run_interop_runner.sh -c raiha -s raiha
+          -t handshake,transfer,multiplexing,retry,chacha20,keyupdate,http3,resumption,zerortt
+          --log-dir logs -j result.json -d
+      # The runner skips a pair that is not compliant and fails nothing for a
+      # testcase left unsupported: each has to have succeeded.
       - working-directory: tmp/quic-interop-runner
-        env:
-          COMPOSE_FILE: docker-compose.no-sim.yml
-        # --log-dir avoids the default `logs_%Y-%m-%dT%H:%M:%S` name;
-        # upload-artifact rejects paths containing colons.
-        run: python run.py -c raiha -s raiha -t handshake,retry,http3,transfer,resumption --log-dir logs -d
+        run: |
+          python - <<'PY'
+          import json, sys
+          results = json.load(open("result.json"))["results"][0]
+          print(results)
+          failed = [result["name"] for result in results if result["result"] != "succeeded"]
+          sys.exit(f"not succeeded: {failed}" if failed else 0)
+          PY
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

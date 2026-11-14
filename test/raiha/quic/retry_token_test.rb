@@ -1,122 +1,51 @@
 require "test_helper"
-require "raiha/quic/retry_token"
-require "raiha/quic/protocol/connection_id"
+require "raiha/quic"
 
-class RaihaQuicRetryTokenTest < Minitest::Test
-  KEY = "retry-cookie-key".b * 2
+# RFC 9000 "Address Validation Using Retry Packets".
+class RaihaQUICRetryTokenTest < Minitest::Test
+  RetryToken = Raiha::QUIC::RetryToken
 
-  def test_mint_and_verify_round_trip
-    odcid = "ABCDEFGH".b
-    peer = "192.0.2.1:1234".b
+  KEY = ("k" * 32).b
+  ADDRESS = ["192.0.2.1", 4433].freeze
+  NOW = Time.at(1_800_000_000)
 
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: peer,
-      original_destination_connection_id: odcid
-    )
-
-    assert_equal odcid, Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: token,
-      peer_address_bytes: peer
-    )
+  def mint(odcid = "o".b * 8, key: KEY, address: ADDRESS, time: NOW)
+    RetryToken.mint(key:, original_destination_connection_id: odcid, address:, time:)
   end
 
-  def test_verify_rejects_modified_token
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: "peer1".b,
-      original_destination_connection_id: "ABCDEFGH".b
-    )
-    tampered = token.dup
-    tampered.setbyte(0, tampered.getbyte(0) ^ 0x01)
+  def verify(token, key: KEY, address: ADDRESS, time: NOW) = RetryToken.verify(token, key:, address:, time:)
 
-    assert_nil Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: tampered,
-      peer_address_bytes: "peer1".b
-    )
+  def test_round_trip
+    ["".b, "o".b * 8, "x".b * 20].each { |odcid| assert_equal odcid, verify(mint(odcid)) }
+    assert_equal 0, mint.getbyte(0)
   end
 
-  def test_verify_rejects_wrong_peer
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: "peer1".b,
-      original_destination_connection_id: "ABCDEFGH".b
-    )
-
-    assert_nil Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: token,
-      peer_address_bytes: "peer2".b
-    )
+  # Only from the same address, with the same key, before it expires.
+  def test_bound_to_the_address_the_key_and_the_time
+    token = mint
+    assert_nil verify(token, address: ["192.0.2.1", 4434])
+    assert_nil verify(token, address: ["192.0.2.2", 4433])
+    assert_nil verify(token, key: ("j" * 32).b)
+    assert_equal "o".b * 8, verify(token, time: NOW + RetryToken::LIFETIME)
+    assert_nil verify(token, time: NOW + RetryToken::LIFETIME + 1)
   end
 
-  def test_verify_rejects_expired_token
-    minted_at = Time.at(1_700_000_000)
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: "peer1".b,
-      original_destination_connection_id: "ABCDEFGH".b,
-      lifetime: 30,
-      now: minted_at
-    )
-
-    assert_nil Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: token,
-      peer_address_bytes: "peer1".b,
-      now: minted_at + 60
-    )
+  def test_anything_else_is_nil
+    token = mint
+    assert_nil verify("".b)
+    assert_nil verify(token.byteslice(0, RetryToken::OVERHEAD - 1))
+    flipped = token.dup.tap { _1.setbyte(5, _1.getbyte(5) ^ 1) }
+    assert_nil verify(flipped)
+    # Another kind, with a MAC that matches it.
+    other = "\x01".b + token.byteslice(1, token.bytesize - 33)
+    other += Raiha::QUIC::Crypto::Mac.digest(KEY, other + "192.0.2.1\0".b + [4433].pack("n"))
+    assert_nil verify(other)
   end
 
-  def test_verify_accepts_token_within_lifetime
-    minted_at = Time.at(1_700_000_000)
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: "peer1".b,
-      original_destination_connection_id: "ABCDEFGH".b,
-      lifetime: 30,
-      now: minted_at
-    )
-
-    assert_equal "ABCDEFGH".b, Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: token,
-      peer_address_bytes: "peer1".b,
-      now: minted_at + 10
-    )
-  end
-
-  def test_mint_accepts_connection_id_object
-    cid = Raiha::Quic::Protocol::ConnectionID.from_bytes("ABCDEFGH".b)
-    token = Raiha::Quic::RetryToken.mint(
-      retry_key: KEY,
-      peer_address_bytes: "peer".b,
-      original_destination_connection_id: cid
-    )
-    assert_equal "ABCDEFGH".b, Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: token,
-      peer_address_bytes: "peer".b
-    )
-  end
-
-  def test_verify_returns_nil_for_short_token
-    assert_nil Raiha::Quic::RetryToken.verify(
-      retry_key: KEY,
-      token: "short".b,
-      peer_address_bytes: "peer".b
-    )
-  end
-
-  def test_mint_rejects_empty_key
-    assert_raises(ArgumentError) do
-      Raiha::Quic::RetryToken.mint(
-        retry_key: "",
-        peer_address_bytes: "peer".b,
-        original_destination_connection_id: "ABCDEFGH".b
-      )
-    end
+  # A length that does not match the bytes there, with a valid MAC.
+  def test_a_wrong_length
+    body = [0, NOW.to_i + 10, 9].pack("CQ>C") + "o".b * 8
+    token = body + Raiha::QUIC::Crypto::Mac.digest(KEY, body + "192.0.2.1\0".b + [4433].pack("n"))
+    assert_nil verify(token)
   end
 end

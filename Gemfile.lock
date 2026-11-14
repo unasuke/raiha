@@ -1,22 +1,30 @@
 GIT
   remote: https://github.com/unasuke/quic-ruby.git
-  revision: ed2701625635a0c0ac784887673eda595ec323a5
+  revision: 7e50b39739aeb04e83aa91aff24ea30c48915953
   specs:
-    quic (0.0.1)
+    quic (0.0.2)
+      mini_portile2
 
 PATH
   remote: .
   specs:
     raiha (0.1.0)
-      stringio
-      tttls1.3
+      openssl (>= 4.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.3)
+    async (2.46.0)
+      console (~> 1.29)
+      fiber-annotation
+      io-event (~> 1.21)
     base64 (0.3.0)
     concurrent-ruby (1.3.6)
+    console (1.38.0)
+      fiber-annotation
+      fiber-local (~> 1.1)
+      json
     csv (3.3.5)
     date (3.5.1)
     debug (1.11.1)
@@ -28,10 +36,15 @@ GEM
       base64
     erb (6.0.4)
     ffi (1.15.5)
+    fiber-annotation (0.2.0)
+    fiber-local (1.1.0)
+      fiber-storage
+    fiber-storage (1.0.1)
     fileutils (1.8.0)
-    hpke (1.0.0)
-      openssl (~> 3.3.0, >= 3.0)
+    hpke (1.0.2)
+      openssl (~> 4.0.0, >= 3.0)
     io-console (0.8.2)
+    io-event (1.22.3)
     irb (1.18.0)
       pp (>= 0.6.0)
       prism (>= 1.3.0)
@@ -45,10 +58,11 @@ GEM
       rb-fsevent (~> 0.10, >= 0.10.3)
       rb-inotify (~> 0.9, >= 0.9.10)
     logger (1.7.0)
+    mini_portile2 (2.8.9)
     minitest (6.0.6)
       drb (~> 2.0)
       prism (~> 1.5)
-    openssl (3.3.3)
+    openssl (4.0.2)
     parallel (2.1.0)
     parser (3.3.11.1)
       ast (~> 2.4.1)
@@ -61,6 +75,7 @@ GEM
       date
       stringio
     racc (1.8.1)
+    rack (3.2.7)
     rainbow (3.1.1)
     rake (13.4.2)
     rb-fsevent (0.11.2)
@@ -134,21 +149,26 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  async
   debug
   minitest
   quic!
+  rack
   raiha!
   rake
   rbs
   rubocop
   simplecov
   steep
+  tttls1.3
 
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
+  async (2.46.0) sha256=34f984733dbf63a997376346451ec995e858cacc3105e86ccfeaf8877b4f490b
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
   bundler (4.0.12) sha256=7f8b757d28dfb636e7b24fba2344ac6dd13b5b24f4b46d62573d483f211825ac
   concurrent-ruby (1.3.6) sha256=6b56837e1e7e5292f9864f34b69c5a2cbc75c0cf5338f1ce9903d10fa762d5ab
+  console (1.38.0) sha256=35b82f59130e95e9be6b832d9e539c8b3988fc192e4a8e9a86ab4922f44ad5de
   csv (3.3.5) sha256=6e5134ac3383ef728b7f02725d9872934f523cb40b961479f69cf3afa6c8e73f
   date (3.5.1) sha256=750d06384d7b9c15d562c76291407d89e368dda4d4fff957eb94962d325a0dc0
   debug (1.11.1) sha256=2e0b0ac6119f2207a6f8ac7d4a73ca8eb4e440f64da0a3136c30343146e952b6
@@ -157,25 +177,31 @@ CHECKSUMS
   ech_config (0.0.4) sha256=0541f2db35b08c28a1332b62e4ff8c6159d0e13646b6fe9e9fae63bf1b0ca086
   erb (6.0.4) sha256=38e3803694be357fe2bfe312487c74beaf9fb4e5beb3e22498952fe1645b95d9
   ffi (1.15.5) sha256=6f2ed2fa68047962d6072b964420cba91d82ce6fa8ee251950c17fca6af3c2a0
+  fiber-annotation (0.2.0) sha256=7abfadf1d119f508867d4103bf231c0354d019cc39a5738945dec2edadaf6c03
+  fiber-local (1.1.0) sha256=c885f94f210fb9b05737de65d511136ea602e00c5105953748aa0f8793489f06
+  fiber-storage (1.0.1) sha256=f48e5b6d8b0be96dac486332b55cee82240057065dc761c1ea692b2e719240e1
   fileutils (1.8.0) sha256=8c6b1df54e2540bdb2f39258f08af78853aa70bad52b4d394bbc6424593c6e02
-  hpke (1.0.0) sha256=d31d84d1be114a77c65101a010ad74c173bc7929d97f06d8d5d954153f072c25
+  hpke (1.0.2) sha256=169b4b596297f526e4ed9ae3d154cb9fc85409f1721c3b8533edd05e69c41fb1
   io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
+  io-event (1.22.3) sha256=1b12f144898bd36b689ee1e0898750fc04adf039188c7e24a05f21fa63cc6adb
   irb (1.18.0) sha256=de9454a0703a54704b9811a5ef31a60c86949fbf4013fcf244fabc7c775248e3
   json (2.19.5) sha256=218a18553e4801d579ca7e0f5bc72bafd776d7397238a1fb4e74db5b0a812c59
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
   listen (3.10.0) sha256=c6e182db62143aeccc2e1960033bebe7445309c7272061979bb098d03760c9d2
   logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
+  mini_portile2 (2.8.9) sha256=0cd7c7f824e010c072e33f68bc02d85a00aeb6fce05bb4819c03dfd3c140c289
   minitest (6.0.6) sha256=153ea36d1d987a62942382b61075745042a2b3123b1cd48f4c3675af9cc7d6f1
-  openssl (3.3.3) sha256=d46902138f2987c13122fab826030a11c2bb9b8a16394215cbfc5062c5e2d335
+  openssl (4.0.2) sha256=1037ad2868ae58df9ad917891c0c0f9815a1172f6846d4bcdd508e4c2ee747c2
   parallel (2.1.0) sha256=b35258865c2e31134c5ecb708beaaf6772adf9d5efae28e93e99260877b09356
   parser (3.3.11.1) sha256=d17ace7aabe3e72c3cc94043714be27cc6f852f104d81aa284c2281aecc65d54
   pp (0.6.3) sha256=2951d514450b93ccfeb1df7d021cae0da16e0a7f95ee1e2273719669d0ab9df6
   prettyprint (0.2.0) sha256=2bc9e15581a94742064a3cc8b0fb9d45aae3d03a1baa6ef80922627a0766f193
   prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
   psych (5.3.1) sha256=eb7a57cef10c9d70173ff74e739d843ac3b2c019a003de48447b2963d81b1974
-  quic (0.0.1)
+  quic (0.0.2)
   racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
+  rack (3.2.7) sha256=93e13e1c24f93556671d85d2d79fa228c3485815c50d7e2f265b5330c6528fb7
   raiha (0.1.0)
   rainbow (3.1.1) sha256=039491aa3a89f42efa1d6dec2fc4e62ede96eb6acd95e52f1ad581182b79bc6a
   rake (13.4.2) sha256=cb825b2bd5f1f8e91ca37bddb4b9aaf345551b4731da62949be002fa89283701

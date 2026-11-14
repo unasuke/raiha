@@ -1,64 +1,79 @@
-module Raiha
-  module TLS
-    class Record
-      CONTENT_TYPE: Hash[Symbol, Integer]
-      LEGACY_RECORD_VERSION: String
+module Raiha::TLS
+  module Record
+    type content_type = :change_cipher_spec | :alert | :handshake | :application_data
 
-      def self.deserialize: (String buf) -> Array[TLSPlaintext|TLSCiphertext]
-      def self.unwrap_fragments: (String serialized_records) -> Array[{content_type: Integer, length: Integer, fragment: String, legacy_record_version: String}]
+    CONTENT_TYPES: Hash[content_type, Integer]
+    CONTENT_TYPE_NAMES: Hash[Integer, content_type]
+    HEADER_LENGTH: Integer
+    MAX_PLAINTEXT: Integer
+    MAX_EXPANSION: Integer
+    DEFAULT_SIZE_LIMIT: Integer
 
-      class TLSPlaintext
-        FRAGMENT_SIZE_LIMIT: Integer
+    class Plaintext < Data
+      attr_reader content_type: content_type
+      attr_reader payload: String
 
-        attr_accessor content_type: Integer
-        attr_accessor length: Integer
-        attr_accessor fragment: ChangeCipherSpec|Handshake
-        attr_accessor legacy_record_version: String
-        attr_accessor handshake_raw_bytes: String?
+      def self.new: (content_type: content_type, payload: String) -> instance
+                  | (content_type content_type, String payload) -> instance
+    end
 
-        def self.serialize: (Handshake | Alert | ChangeCipherSpec content) -> Array[String]
-        def serialize: -> String
-        def invalid?: -> bool
-        def change_cipher_spec?: -> bool
-        def handshake?: -> bool
-        def alert?: -> bool
-        def application_data?: -> bool
-        def plaintext?: -> TrueClass
-        def ciphertext?: -> FalseClass
-      end
+    class Failure < Data
+      attr_reader alert: Symbol
+      attr_reader reason: Symbol
 
-      class TLSCiphertext
-        attr_reader content_type: Integer
-        attr_accessor length: Integer
-        attr_accessor encrypted_record: String
-        attr_accessor tls_inner_plaintext: TLSInnerPlaintext|nil
+      def self.new: (alert: Symbol, reason: Symbol) -> instance
+                  | (Symbol alert, Symbol reason) -> instance
+    end
 
-        def serialize: -> String
-        def auth_tag: -> String
-        def encrypted_record_without_auth_tag: -> String
-        def additional_data: -> String
-        def plaintext?: -> FalseClass
-        def ciphertext?: -> TrueClass
-      end
+    BAD_RECORD_MAC: Failure
 
-      class TLSInnerPlaintext
-        PROTOCOL_VERSION: String
+    class Layer
+      @buffer: String
+      @read: Hash[epoch, Protection]
+      @write: Hash[epoch, Protection]
+      @send_size_limit: Integer
+      @receive_size_limit: Integer
+      @early_data_skipped: Integer
+      @skipping_ended: bool
 
-        # attr_accessor content: Handshake # TODO
-        attr_accessor content: String
-        attr_accessor content_type: Integer
-        attr_accessor zeros: Integer
+      def initialize: (profile: Profile) -> void
+      def install: (direction: Output::direction, epoch: epoch, secret: String, cipher_suite: CipherSuite) -> nil
+      def limit_sizes: (?send: Integer, ?receive: Integer) -> nil
+      def <<: (String bytes) -> self
+      def pending_bytes: () -> Integer
+      def read: (epoch: epoch, ?skip_early_data: Integer?) -> (Plaintext | Failure | nil)
+      def write: (content_type: content_type, payload: String, epoch: epoch) -> String
+      def fragment_size: (epoch epoch) -> Integer
+      def records_written: (epoch epoch) -> Integer
+      def key_update_due?: (epoch epoch) -> bool
+      def discard!: () -> nil
 
-        def self.deserialize: (String data) -> TLSInnerPlaintext
-        def serialize: -> String
-        def additional_data: -> String
-        def invalid?: -> bool
-        def change_cipher_spec?: -> bool
-        def handshake?: -> bool
-        def alert?: -> bool
-        def application_data?: -> bool
-      end
+      private def skipped?: (epoch epoch, Integer type, Plaintext | Failure result) -> bool
+      private def fragments: (String payload, Integer size) -> Array[String]
+      private def unprotected: (Integer type, String fragment) -> (Plaintext | Failure)
+      private def protected: (epoch epoch, Integer type, String header, String fragment) -> (Plaintext | Failure)
+      private def change_cipher_spec: (epoch epoch, String fragment) -> (Plaintext | Failure)
+      private def open: (epoch epoch, String header, String fragment) -> (Plaintext | Failure)
+    end
+
+    class Protection
+      CONTENT_TYPE_APPLICATION_DATA: Integer
+      LEGACY_RECORD_VERSION: Integer
+
+      @iv: String
+      @aead: Crypto::AEAD
+
+      attr_reader cipher_suite: CipherSuite
+      attr_reader sequence_number: Integer
+
+      def initialize: (secret: String, cipher_suite: CipherSuite) -> void
+      def seal: (String inner_plaintext) -> String
+      def open: (String header, String encrypted_record) -> String?
+      def discard!: () -> void
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def next_nonce: () -> String
+      private def nonce: (Integer sequence) -> String
     end
   end
 end
-

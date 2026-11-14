@@ -1,215 +1,121 @@
 require "test_helper"
-require "raiha/connection"
-require "support/test_certificate"
-require "socket"
-require "timeout"
-require "tempfile"
-require "securerandom"
+require "support/quic_udp"
+require "fileutils"
 
-class RaihaQuicAioquicInteropTest < Minitest::Test
-  include TestCertificate
+# raiha over UDP against aioquic, both ways: a client
+# against aioquic's server with a certificate of the test CA, a server
+# against aioquic's client, which closes once its handshake is done unless
+# it has data to send. Both scripts print HANDSHAKE_COMPLETE then. The
+# server answers the stream the client opens with "ECHO:" and what came on
+# it, and aioquic's client prints what came back as STREAM_DATA. The
+# server gives tickets and takes 0-RTT, and with --resume the client
+# connects twice, the second time resuming in 0-RTT; both print, for each
+# connection, whether it resumed and 0-RTT was taken. uv fetches aioquic
+# when it first runs.
+class QUICAioquicInteropTest < Minitest::Test
+  include QUICUDP
 
-  AIOQUIC_SERVER_SCRIPT = File.expand_path("../../support/aioquic_server.py", __dir__)
-  AIOQUIC_CLIENT_SCRIPT = File.expand_path("../../support/aioquic_client.py", __dir__)
+  SERVER = File.expand_path("../../support/aioquic_server.py", __dir__)
+  CLIENT = File.expand_path("../../support/aioquic_client.py", __dir__)
+  PYTHON = %w[uv run --with aioquic python3].freeze
+  ALPN = ["hq-interop"].freeze
+  PAYLOAD = Random.new(1).bytes(20_000)
 
-  def test_raiha_client_to_aioquic_server
-    cert_file, key_file = write_cert_files
-    port = find_available_udp_port
+  def setup
+    skip "uv not found" unless system("uv", "--version", out: File::NULL, err: File::NULL)
+    @dir = Dir.mktmpdir("next-interop-aioquic-", TMP)
+  end
 
-    server_rd, server_wr = IO.pipe
-    server_pid = Process.spawn(
-      "uv", "run", "--with", "aioquic", "python3", AIOQUIC_SERVER_SCRIPT,
-      "--certfile", cert_file.path,
-      "--keyfile", key_file.path,
-      "--port", port.to_s,
-      out: server_wr, err: server_wr
-    )
-    server_wr.close
+  def teardown
+    FileUtils.rm_rf(@dir) if @dir
+  end
 
-    wait_for_ready(server_rd)
-
-    client_socket = UDPSocket.new
-    client_socket.bind("127.0.0.1", 0)
-
-    dest_connection_id = Raiha::Quic::Protocol::ConnectionID.generate
-    client_connection = Raiha::Connection.new(
-      perspective: :client,
-      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      dest_connection_id: dest_connection_id
-    )
-
-    Timeout.timeout(10) do
-      client_connection.start_handshake
-
-      # Handshake loop
-      until client_connection.handshake_complete?
-        send_packets(client_connection, client_socket, "127.0.0.1", port)
-        receive_packets(client_socket, client_connection)
+  def test_client_against_aioquic_server
+    port = free_port
+    chain, key = certificate_files(@dir)
+    peer(*PYTHON, SERVER, "--certfile", chain, "--keyfile", key, "--port", port.to_s, "--alpn", ALPN.first) do |output|
+      assert wait_for(output, "READY"), output
+      client(port, alpn: ALPN) do |socket, connection|
+        done = drive(socket, connection) { (connection.handshake_confirmed? && output.include?("HANDSHAKE_COMPLETE")) || connection.closed? }
+        assert done, output
+        assert connection.handshake_confirmed?, "#{connection.close_reason.inspect}\n#{output}"
       end
-
-      # Send stream data
-      payload = SecureRandom.random_bytes(64)
-      client_connection.send_stream_data(0, payload, fin: true)
-      send_packets(client_connection, client_socket, "127.0.0.1", port)
-
-      # Receive echo response
-      receive_packets(client_socket, client_connection, timeout: 2.0)
-
-      stream = client_connection.streams.get_stream(0)
-      refute_nil stream, "Client should have received response on stream 0"
-      assert stream.data_available?, "Stream should have data"
-      received = stream.read
-      assert_equal "ECHO:".b + payload, received, "Should receive echoed data"
-    end
-
-    server_output = server_rd.read_nonblock(4096) rescue ""
-    assert_includes server_output, "HANDSHAKE_COMPLETE"
-  ensure
-    Process.kill("TERM", server_pid) if server_pid rescue nil
-    Process.wait(server_pid) if server_pid rescue nil
-    client_socket&.close
-    cert_file&.close!
-    key_file&.close!
-  end
-
-  def test_aioquic_client_to_raiha_server
-    cert_file, key_file = write_cert_files
-    port = find_available_udp_port
-
-    server_socket = UDPSocket.new
-    server_socket.bind("127.0.0.1", port)
-
-    dest_connection_id = Raiha::Quic::Protocol::ConnectionID.generate
-    server_connection = Raiha::Connection.new(
-      perspective: :server,
-      src_connection_id: dest_connection_id,
-      dest_connection_id: dest_connection_id,
-      tls_config: create_server_config
-    )
-
-    payload = SecureRandom.random_bytes(64)
-
-    client_rd, client_wr = IO.pipe
-    client_pid = Process.spawn(
-      "uv", "run", "--with", "aioquic", "python3", AIOQUIC_CLIENT_SCRIPT,
-      "--host", "127.0.0.1",
-      "--port", port.to_s,
-      "--data", payload.unpack1("H*"),
-      out: client_wr, err: client_wr
-    )
-    client_wr.close
-
-    Timeout.timeout(10) do
-      client_addr = nil
-
-      until server_connection.handshake_complete?
-        readable = IO.select([server_socket], nil, nil, 0.5)
-        next unless readable
-
-        data, addr = server_socket.recvfrom_nonblock(65535)
-        client_addr = addr
-        server_connection.handle_packet(data)
-
-        packets = server_connection.get_packets_to_send
-        packets.each { |pkt| server_socket.send(pkt, 0, client_addr[3], client_addr[1]) }
-      end
-
-      # Receive stream data from aioquic client
-      5.times do
-        readable = IO.select([server_socket], nil, nil, 1.0)
-        next unless readable
-
-        data, addr = server_socket.recvfrom_nonblock(65535)
-        client_addr = addr
-        server_connection.handle_packet(data)
-
-        packets = server_connection.get_packets_to_send
-        packets.each { |pkt| server_socket.send(pkt, 0, client_addr[3], client_addr[1]) }
-
-        stream = server_connection.streams.get_stream(0)
-        break if stream&.data_available?
-      end
-
-      stream = server_connection.streams.get_stream(0)
-      refute_nil stream, "Server should have received stream 0"
-      assert stream.data_available?, "Stream should have data"
-      received = stream.read
-      assert_equal payload, received, "Server should receive exact data from aioquic client"
-
-      # Echo back
-      server_connection.send_stream_data(0, "ECHO:".b + received, fin: true)
-      packets = server_connection.get_packets_to_send
-      packets.each { |pkt| server_socket.send(pkt, 0, client_addr[3], client_addr[1]) }
-    end
-
-    Process.wait(client_pid)
-    client_output = client_rd.read
-    assert_includes client_output, "HANDSHAKE_COMPLETE"
-  ensure
-    Process.kill("TERM", client_pid) if client_pid rescue nil
-    Process.wait(client_pid) if client_pid rescue nil
-    server_socket&.close
-    cert_file&.close!
-    key_file&.close!
-  end
-
-  private def write_cert_files
-    key = OpenSSL::PKey::RSA.generate(2048)
-    cert = OpenSSL::X509::Certificate.new
-    cert.version = 2
-    cert.serial = 1
-    cert.subject = OpenSSL::X509::Name.new([["CN", "localhost"]])
-    cert.issuer = cert.subject
-    cert.public_key = key.public_key
-    cert.not_before = Time.now - 3600
-    cert.not_after = Time.now + 86400
-    cert.sign(key, "SHA256")
-
-    cert_file = Tempfile.new(["quic_cert", ".pem"])
-    key_file = Tempfile.new(["quic_key", ".pem"])
-    cert_file.write(cert.to_pem)
-    cert_file.flush
-    key_file.write(key.to_pem)
-    key_file.flush
-
-    [cert_file, key_file]
-  end
-
-  private def find_available_udp_port
-    socket = UDPSocket.new
-    socket.bind("127.0.0.1", 0)
-    port = socket.addr[1]
-    socket.close
-    port
-  end
-
-  private def wait_for_ready(io, timeout: 10)
-    deadline = Time.now + timeout
-    loop do
-      raise "aioquic server did not become ready" if Time.now > deadline
-
-      readable = IO.select([io], nil, nil, 0.5)
-      next unless readable
-
-      line = io.gets
-      return if line&.include?("READY")
     end
   end
 
-  private def send_packets(connection, socket, host, port)
-    packets = connection.get_packets_to_send
-    packets.each { |packet| socket.send(packet, 0, host, port) }
+  def test_server_against_aioquic_client
+    server(alpn: ALPN) do |socket, server|
+      peer(*PYTHON, CLIENT, "--port", socket.addr[1].to_s, "--alpn", ALPN.first) do |output|
+        done = drive(socket, server, seconds: 60) { server.connections.any?(&:handshake_complete?) && output.include?("HANDSHAKE_COMPLETE") }
+        assert done, output
+      end
+    end
   end
 
-  private def receive_packets(socket, connection, timeout: 0.5)
-    loop do
-      readable = IO.select([socket], nil, nil, timeout)
-      break unless readable
+  def test_echo_from_aioquic_server
+    port = free_port
+    chain, key = certificate_files(@dir)
+    peer(*PYTHON, SERVER, "--certfile", chain, "--keyfile", key, "--port", port.to_s, "--alpn", ALPN.first) do |output|
+      assert wait_for(output, "READY"), output
+      client(port, alpn: ALPN) do |socket, connection|
+        echo = EchoClient.new(connection, PAYLOAD)
+        assert drive(socket, connection) { echo.step }, output
+        assert_equal "ECHO:".b + PAYLOAD, echo.received, "#{connection.close_reason.inspect}\n#{output}"
+      end
+    end
+  end
 
-      data, = socket.recvfrom_nonblock(65535)
-      connection.handle_packet(data)
-    rescue IO::WaitReadable
-      break
+  def test_echo_to_aioquic_client
+    server(alpn: ALPN) do |socket, server|
+      echo = EchoServer.new(server)
+      peer(*PYTHON, CLIENT, "--port", socket.addr[1].to_s, "--alpn", ALPN.first, "--data", PAYLOAD.unpack1("H*")) do |output|
+        done = drive(socket, server, seconds: 60) do
+          echo.step
+          output.include?("STREAM_DATA:")
+        end
+        assert done, output
+        assert_includes output, "STREAM_DATA:#{("ECHO:".b + PAYLOAD).unpack1("H*")}\n"
+      end
+    end
+  end
+
+  # A ticket of aioquic's server resumes, and the echo goes in 0-RTT, which
+  # the server takes.
+  def test_resumption_and_0rtt_against_aioquic_server
+    port = free_port
+    chain, key = certificate_files(@dir)
+    peer(*PYTHON, SERVER, "--certfile", chain, "--keyfile", key, "--port", port.to_s, "--alpn", ALPN.first) do |output|
+      assert wait_for(output, "READY"), output
+      ticket = client(port, alpn: ALPN) do |socket, connection|
+        echo = EchoClient.new(connection, PAYLOAD)
+        assert drive(socket, connection) { echo.step && echo.tickets.any? }, output
+        echo.tickets.last
+      end
+      client(port, alpn: ALPN, session: ticket, early_data: true) do |socket, connection|
+        assert_equal :pending, connection.zero_rtt_state
+        echo = EchoClient.new(connection, PAYLOAD, early: true)
+        assert drive(socket, connection) { echo.step && echo.handshake }, output
+        assert_equal ["ECHO:".b + PAYLOAD, true, :accepted], [echo.received, echo.handshake.resumed, connection.zero_rtt_state],
+          "#{connection.close_reason.inspect}\n#{output}"
+      end
+      assert wait_for(output, "CONNECTION resumed=true early=true", seconds: 5), output
+    end
+  end
+
+  # aioquic's client resumes a ticket of ours, and its 0-RTT is taken.
+  def test_resumption_and_0rtt_to_aioquic_client
+    server(alpn: ALPN, resumption: true) do |socket, server|
+      echo = EchoServer.new(server)
+      peer(*PYTHON, CLIENT, "--port", socket.addr[1].to_s, "--alpn", ALPN.first, "--data", PAYLOAD.unpack1("H*"), "--resume") do |output|
+        done = drive(socket, server, seconds: 60) do
+          echo.step
+          output.scan("CONNECTION ").size == 2
+        end
+        assert done, output
+        connections = output.lines.grep(/\ACONNECTION /)
+        assert_equal ["resumed=false early=false", "resumed=true early=true"], connections.map { _1[/resumed=\S+ early=\S+/] }, output
+        assert(connections.all? { _1.include?("data=#{("ECHO:".b + PAYLOAD).unpack1("H*")}") }, output)
+      end
     end
   end
 end

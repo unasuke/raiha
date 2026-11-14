@@ -1,0 +1,34 @@
+module Raiha::QUIC
+  class CryptoStream
+    FRAME_TYPE: Integer
+    MAX_RANGES: Integer
+
+    @sent: String
+    @sent_base: Integer
+    @next_offset: Integer
+    @lost: Array[Range[Integer]]
+    @acked: Array[Range[Integer]]
+    @window: String
+    @window_start: Integer
+    @filled: Array[Range[Integer]]
+
+    attr_reader space: space
+    attr_reader received_end: Integer
+    attr_reader read_offset: Integer
+
+    def initialize: (space space) -> void
+    def write: (String bytes) -> String
+    def pending?: () -> bool
+    def next_frame: (Integer room) -> [Wire::Frame::Crypto, Recovery::Duty::Crypto]?
+    def acked: (Integer offset, Integer length) -> void
+    def lost: (Integer offset, Integer length) -> void
+    def receive: (Integer offset, String data, limit: Integer) -> bool
+    def consumed: (Integer length) -> Integer
+    def read: () -> String
+    def buffered: () -> Integer
+
+    private def send_end: () -> Integer
+    private def exceeded: (String message) -> bot
+    private def fill: (Range[Integer] range) -> void
+  end
+end

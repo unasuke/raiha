@@ -1,6 +1,2 @@
-module Raiha
-  module HTTP3
-    class Error < Raiha::Error
-    end
-  end
+module Raiha::HTTP3
 end

@@ -1,0 +1,40 @@
+module Raiha::HTTP3
+  module StructuredField
+    type value = Integer | Float | String | Symbol | bool | Array[value]
+
+    KEY: Regexp
+    TOKEN: Regexp
+    INTEGER: Regexp
+    DECIMAL: Regexp
+    BYTE_SEQUENCE: Regexp
+    STRING_RUN: Regexp
+    OWS: Regexp
+    SP: Regexp
+
+    def self.dictionary: (String text) -> Hash[String, value]?
+    def self.item: (String text) -> value?
+    def self.member_value: (StringScanner scanner) -> value?
+    def self.inner_list: (StringScanner scanner) -> Array[value]?
+    def self.parameters: (StringScanner scanner) -> bool
+    def self.bare_item: (StringScanner scanner) -> value?
+    def self.string: (StringScanner scanner) -> String?
+  end
+
+  class Priority < Data
+    DEFAULT_URGENCY: Integer
+    URGENCIES: Range[Integer]
+
+    attr_reader urgency: Integer
+    attr_reader incremental: bool
+
+    def self.new: (?urgency: Integer, ?incremental: bool) -> instance
+                | (Integer urgency, ?bool incremental) -> instance
+
+    def initialize: (?urgency: Integer, ?incremental: bool) -> void
+
+    def self.parameters: (String text) -> [Integer?, bool?]?
+    def self.parse: (String text) -> Priority
+    def merge: (Integer? urgency, bool? incremental) -> Priority
+    def to_field: () -> String
+  end
+end

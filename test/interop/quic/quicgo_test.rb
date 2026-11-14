@@ -1,263 +1,128 @@
 require "test_helper"
-require "raiha/connection"
-require "support/test_certificate"
-require "socket"
-require "timeout"
-require "securerandom"
+require "support/quic_udp"
+require "fileutils"
 
-class RaihaQuicQuicgoInteropTest < Minitest::Test
-  include TestCertificate
+# raiha over UDP against quic-go, both ways: a client
+# against quic-go's server with a certificate of the test CA, a server
+# against quic-go's client. Both programs print HANDSHAKE_COMPLETE when
+# their handshake is done; the echo of a stream goes on from there. The
+# server answers the stream the client opens with "ECHO:" and what came on
+# it, and quic-go's client prints what came back as STREAM_DATA. For
+# resumption, quic-go's programs connect or take connections twice and
+# print, for each, whether it resumed and 0-RTT was taken.
+class QUICQuicgoInteropTest < Minitest::Test
+  include QUICUDP
 
-  QUICGO_SERVER = File.expand_path("../../support/quicgo/server_bin", __dir__)
-  QUICGO_CLIENT = File.expand_path("../../support/quicgo/client_bin", __dir__)
+  SERVER = File.expand_path("../../support/quicgo/server_bin", __dir__)
+  CLIENT = File.expand_path("../../support/quicgo/client_bin", __dir__)
+  RESUME_SERVER = File.expand_path("../../support/quicgo/resume_server_bin", __dir__)
+  RESUME_CLIENT = File.expand_path("../../support/quicgo/resume_client_bin", __dir__)
+  ALPN = ["quic-echo"].freeze
+  PAYLOAD = Random.new(1).bytes(20_000)
 
   def setup
-    skip "quic-go server not found" unless File.executable?(QUICGO_SERVER)
-    skip "quic-go client not found" unless File.executable?(QUICGO_CLIENT)
+    skip "quic-go server not found" unless File.executable?(SERVER)
+    skip "quic-go client not found" unless File.executable?(CLIENT)
+    @dir = Dir.mktmpdir("next-interop-quicgo-", TMP)
   end
 
-  def test_raiha_client_handshake_with_quicgo_server
-    with_quicgo_server do |port, client_socket|
-      client_connection = build_raiha_client
+  def teardown
+    FileUtils.rm_rf(@dir) if @dir
+  end
 
-      Timeout.timeout(15) do
-        complete_handshake_as_client(client_connection, client_socket, port)
-        assert client_connection.handshake_complete?, "Handshake with quic-go should complete"
+  def test_client_against_quicgo_server
+    port = free_port
+    peer(SERVER, port.to_s, *certificate_files(@dir)) do |output|
+      assert wait_for(output, "READY"), output
+      client(port, alpn: ALPN) do |socket, connection|
+        done = drive(socket, connection) { (connection.handshake_confirmed? && output.include?("HANDSHAKE_COMPLETE")) || connection.closed? }
+        assert done, output
+        assert connection.handshake_confirmed?, "#{connection.close_reason.inspect}\n#{output}"
       end
     end
   end
 
-  def test_raiha_client_stream_exchange_with_quicgo_server
-    with_quicgo_server do |port, client_socket|
-      client_connection = build_raiha_client
-
-      Timeout.timeout(30) do
-        complete_handshake_as_client(client_connection, client_socket, port)
-
-        payload = SecureRandom.random_bytes(64)
-        client_connection.send_stream_data(0, payload, fin: true)
-        send_packets(client_connection, client_socket, "127.0.0.1", port)
-
-        receive_until_stream_data(client_socket, client_connection, "127.0.0.1", port, stream_id: 0)
-
-        stream = client_connection.streams.get_stream(0)
-        refute_nil stream, "Client should have received response on stream 0"
-        assert stream.data_available?, "Stream should have data"
-        assert_equal "ECHO:".b + payload, stream.read, "Should receive echoed data"
+  def test_server_against_quicgo_client
+    server(alpn: ALPN) do |socket, server|
+      peer(CLIENT, "127.0.0.1:#{socket.addr[1]}", "00") do |output|
+        done = drive(socket, server) { server.connections.any?(&:handshake_complete?) && output.include?("HANDSHAKE_COMPLETE") }
+        assert done, output
       end
     end
   end
 
-  def test_quicgo_client_handshake_with_raiha_server
-    server_socket, server_connection = build_raiha_server
-    port = server_socket.addr[1]
-
-    payload = SecureRandom.random_bytes(16)
-    client_pid, _client_rd = spawn_quicgo_client(port, payload)
-
-    Timeout.timeout(15) do
-      complete_handshake_as_server(server_connection, server_socket)
-      assert server_connection.handshake_complete?, "Handshake with quic-go client should complete"
-    end
-  ensure
-    Process.kill("TERM", client_pid) if client_pid rescue nil
-    Process.wait(client_pid) if client_pid rescue nil
-    server_socket&.close
-  end
-
-  def test_quicgo_client_stream_exchange_with_raiha_server
-    server_socket, server_connection = build_raiha_server
-    port = server_socket.addr[1]
-
-    payload = SecureRandom.random_bytes(64)
-    client_pid, client_rd = spawn_quicgo_client(port, payload)
-
-    Timeout.timeout(30) do
-      client_addr = complete_handshake_as_server(server_connection, server_socket)
-
-      received = receive_stream_data_as_server(server_connection, server_socket, stream_id: 0)
-      assert_equal payload, received, "Server should receive exact data from quic-go client"
-
-      # Echo back
-      server_connection.send_stream_data(0, "ECHO:".b + received, fin: true)
-      send_to(server_socket, server_connection.get_packets_to_send, client_addr)
-
-      # Keep connection alive so quic-go client can receive the echo
-      drive_server_until_client_exits(server_socket, server_connection, client_pid, client_addr)
-    end
-
-    client_output = client_rd.read rescue ""
-    assert_includes client_output, "STREAM_DATA:#{("ECHO:".b + payload).unpack1("H*")}",
-                    "quic-go client should have received echoed data"
-  ensure
-    Process.kill("TERM", client_pid) if client_pid rescue nil
-    Process.wait(client_pid) if client_pid rescue nil
-    server_socket&.close
-  end
-
-  private def with_quicgo_server
-    port = find_available_udp_port
-    server_rd, server_wr = IO.pipe
-    server_pid = Process.spawn(QUICGO_SERVER, port.to_s, out: server_wr, err: server_wr)
-    server_wr.close
-    wait_for_ready(server_rd)
-
-    client_socket = UDPSocket.new
-    client_socket.bind("127.0.0.1", 0)
-    yield port, client_socket
-  ensure
-    Process.kill("TERM", server_pid) if server_pid rescue nil
-    Process.wait(server_pid) if server_pid rescue nil
-    client_socket&.close
-  end
-
-  private def build_raiha_client
-    Raiha::Connection.new(
-      perspective: :client,
-      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      alpn_protocols: ["quic-echo"]
-    )
-  end
-
-  private def build_raiha_server
-    server_socket = UDPSocket.new
-    server_socket.bind("127.0.0.1", 0)
-    server_connection = Raiha::Connection.new(
-      perspective: :server,
-      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      tls_config: create_server_config,
-      alpn_protocols: ["quic-echo"]
-    )
-    [server_socket, server_connection]
-  end
-
-  private def spawn_quicgo_client(port, payload)
-    client_rd, client_wr = IO.pipe
-    client_pid = Process.spawn(
-      QUICGO_CLIENT, "127.0.0.1:#{port}", payload.unpack1("H*"),
-      out: client_wr, err: client_wr
-    )
-    client_wr.close
-    [client_pid, client_rd]
-  end
-
-  private def complete_handshake_as_client(connection, socket, port)
-    connection.start_handshake
-    until connection.handshake_complete?
-      send_packets(connection, socket, "127.0.0.1", port)
-      receive_packets(socket, connection)
-      send_packets(connection, socket, "127.0.0.1", port)
-    end
-  end
-
-  private def complete_handshake_as_server(connection, socket)
-    client_addr = nil
-    until connection.handshake_complete?
-      readable = IO.select([socket], nil, nil, 0.5)
-      next unless readable
-
-      data, addr = socket.recvfrom_nonblock(65535)
-      client_addr = addr
-      connection.handle_packet(data)
-      send_to(socket, connection.get_packets_to_send, client_addr)
-    end
-    client_addr
-  end
-
-  private def receive_stream_data_as_server(connection, socket, stream_id:, max_iterations: 40)
-    max_iterations.times do
-      readable = IO.select([socket], nil, nil, 0.5)
-      next unless readable
-
-      data, addr = socket.recvfrom_nonblock(65535)
-      connection.handle_packet(data)
-      send_to(socket, connection.get_packets_to_send, addr)
-
-      stream = connection.streams.get_stream(stream_id)
-      return stream.read if stream&.data_available?
-    end
-    nil
-  end
-
-  private def drive_server_until_client_exits(socket, connection, client_pid, client_addr, max_iterations: 40)
-    max_iterations.times do
-      # Check if client has exited
-      exited = Process.wait(client_pid, Process::WNOHANG) rescue nil
-      return if exited
-
-      readable = IO.select([socket], nil, nil, 0.3)
-      if readable
-        data, addr = socket.recvfrom_nonblock(65535) rescue next
-        connection.handle_packet(data)
-        send_to(socket, connection.get_packets_to_send, addr)
-      else
-        send_to(socket, connection.get_packets_to_send, client_addr)
+  def test_echo_from_quicgo_server
+    port = free_port
+    peer(SERVER, port.to_s, *certificate_files(@dir)) do |output|
+      assert wait_for(output, "READY"), output
+      client(port, alpn: ALPN) do |socket, connection|
+        echo = EchoClient.new(connection, PAYLOAD)
+        assert drive(socket, connection) { echo.step }, output
+        assert_equal "ECHO:".b + PAYLOAD, echo.received, "#{connection.close_reason.inspect}\n#{output}"
       end
     end
   end
 
-  private def send_to(socket, packets, addr)
-    packets.each { |pkt| socket.send(pkt, 0, addr[3], addr[1]) }
-  end
-
-  private def find_available_udp_port
-    socket = UDPSocket.new
-    socket.bind("127.0.0.1", 0)
-    port = socket.addr[1]
-    socket.close
-    port
-  end
-
-  private def wait_for_ready(io, timeout: 10)
-    deadline = Time.now + timeout
-    loop do
-      raise "quic-go server did not become ready" if Time.now > deadline
-
-      readable = IO.select([io], nil, nil, 0.5)
-      next unless readable
-
-      line = io.gets
-      return if line&.include?("READY")
-    end
-  end
-
-  private def send_packets(connection, socket, host, port)
-    packets = connection.get_packets_to_send
-    packets.each { |packet| socket.send(packet, 0, host, port) }
-  end
-
-  private def receive_packets(socket, connection, timeout: 0.5)
-    loop do
-      readable = IO.select([socket], nil, nil, timeout)
-      break unless readable
-
-      data, = socket.recvfrom_nonblock(65535)
-      connection.handle_packet(data)
-      break if connection.handshake_complete?
-    rescue IO::WaitReadable
-      break
-    end
-  end
-
-  # Receive packets and send ACKs back until the specified stream has data or max iterations
-  private def receive_until_stream_data(socket, connection, host, port, stream_id:, max_iterations: 40, timeout: 0.5)
-    max_iterations.times do
-      readable = IO.select([socket], nil, nil, timeout)
-      unless readable
-        send_packets(connection, socket, host, port)
-        next
+  def test_echo_to_quicgo_client
+    server(alpn: ALPN) do |socket, server|
+      echo = EchoServer.new(server)
+      peer(CLIENT, "127.0.0.1:#{socket.addr[1]}", PAYLOAD.unpack1("H*")) do |output|
+        done = drive(socket, server) do
+          echo.step
+          output.include?("STREAM_DATA:")
+        end
+        assert done, output
+        assert_includes output, "STREAM_DATA:#{("ECHO:".b + PAYLOAD).unpack1("H*")}\n"
       end
+    end
+  end
 
-      data, = socket.recvfrom_nonblock(65535)
-      connection.handle_packet(data)
-      send_packets(connection, socket, host, port)
+  # A ticket of quic-go's server resumes, and the echo goes in 0-RTT, which
+  # the server takes.
+  def test_resumption_and_0rtt_against_quicgo_server
+    skip "quic-go resumption server not found" unless File.executable?(RESUME_SERVER)
+    port = free_port
+    peer(RESUME_SERVER, port.to_s, *certificate_files(@dir)) do |output|
+      assert wait_for(output, "READY"), output
+      ticket = client(port, alpn: ALPN) do |socket, connection|
+        echo = EchoClient.new(connection, PAYLOAD)
+        assert drive(socket, connection) { echo.step && echo.tickets.any? }, output
+        echo.tickets.last
+      end
+      client(port, alpn: ALPN, session: ticket, early_data: true) do |socket, connection|
+        assert_equal :pending, connection.zero_rtt_state
+        echo = EchoClient.new(connection, PAYLOAD, early: true)
+        assert drive(socket, connection) { echo.step && echo.handshake }, output
+        assert_equal ["ECHO:".b + PAYLOAD, true, :accepted], [echo.received, echo.handshake.resumed, connection.zero_rtt_state],
+          "#{connection.close_reason.inspect}\n#{output}"
+      end
+      assert wait_for(output, "CONNECTION resumed=true early=true", seconds: 5), output
+    end
+  end
 
-      stream = connection.streams.get_stream(stream_id)
-      return if stream&.data_available?
-    rescue IO::WaitReadable
-      next
+  # quic-go's client resumes a ticket of ours, and its 0-RTT is taken; its
+  # second Initial carries the NEW_TOKEN token of the first connection,
+  # which validates its address.
+  def test_resumption_and_0rtt_to_quicgo_client
+    skip "quic-go resumption client not found" unless File.executable?(RESUME_CLIENT)
+    server(alpn: ALPN, resumption: true) do |socket, server|
+      validated = []
+      server.define_singleton_method(:dispatch) do |route, now|
+        validated << route.address_validated if route.is_a?(QUIC::Route::Incoming)
+        super(route, now)
+      end
+      echo = EchoServer.new(server)
+      peer(RESUME_CLIENT, "127.0.0.1:#{socket.addr[1]}", PAYLOAD.unpack1("H*")) do |output|
+        done = drive(socket, server, seconds: 20) do
+          echo.step
+          output.scan("CONNECTION ").size == 2
+        end
+        assert done, output
+        connections = output.lines.grep(/\ACONNECTION /)
+        assert_equal ["resumed=false early=false", "resumed=true early=true"], connections.map { _1[/resumed=\S+ early=\S+/] }, output
+        assert(connections.all? { _1.include?("data=#{("ECHO:".b + PAYLOAD).unpack1("H*")}") }, output)
+        assert_equal [false, true], validated
+      end
     end
   end
 end

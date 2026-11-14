@@ -1,22 +1,122 @@
-module Raiha
-  module TLS
-    class Config
-      DEFAULT_CIPHER_SUITES: Array[CipherSuite]
-      DEFAULT_SUPPORTED_GROUPS: Array[String]
+module Raiha::TLS
+  class Config
+    type role = :client | :server
+    type client_auth = :none | :optional | :required
 
-      attr_reader cipher_suites: Array[CipherSuite]
-      attr_reader supported_groups: Array[String]
-      attr_accessor server_certificate: OpenSSL::X509::Certificate?
-      attr_accessor server_private_key: (OpenSSL::PKey::RSA | OpenSSL::PKey::EC)?
-      attr_accessor client_certificate: OpenSSL::X509::Certificate?
-      attr_accessor client_private_key: (OpenSSL::PKey::RSA | OpenSSL::PKey::EC)?
-      attr_accessor client_ca_store: TrustStore?
-      attr_accessor request_client_certificate: bool?
-      attr_accessor transcript_hash_verify: bool
+    DEFAULT_CIPHER_SUITES: Array[Symbol]
+    DEFAULT_GROUPS: Array[Symbol]
+    DEFAULT_SIGNATURE_ALGORITHMS: Array[Symbol]
+    DEFAULT_SIGNATURE_ALGORITHMS_CERT: Array[Symbol]
+    RESERVED_EXTENSIONS: Array[Integer]
+    EXPORTER_LABEL_LENGTH: Range[Integer]
+    MAX_TICKET_LIFETIME: Integer
+    DEFAULT_TICKET_LIFETIME: Integer
+    DEFAULT_TICKET_COUNT: Integer
+    DEFAULT_MAX_TICKET_SIZE: Integer
+    MAX_TICKET_SIZE: Integer
+    MAX_EARLY_DATA_SIZE: Integer
+    CIPHER_SUITES_BY_NAME: Hash[Symbol, CipherSuite]
+    GROUPS_BY_NAME: Hash[Symbol, Integer]
+    SCHEMES_BY_NAME: Hash[Symbol, SignatureScheme]
 
-      def self.client_default: -> Config
-      def self.server_default: -> Config
-      def initialize: (cipher_suites: Array[CipherSuite], supported_groups: Array[String], ?transcript_hash_verify: bool) -> void
-    end
+    def self.client: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
+                      ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
+                      ?alpn: Array[String], ?registry: Extension::Registry, ?extensions: Array[Extension::_Extension],
+                      ?max_handshake_message_size: Integer, ?max_certificate_message_size: Integer,
+                      ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
+                      ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
+                      ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
+                      ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                      ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                      ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
+    def self.server: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
+                      ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
+                      ?alpn: Array[String], ?registry: Extension::Registry, ?extensions: Array[Extension::_Extension],
+                      ?max_handshake_message_size: Integer, ?max_certificate_message_size: Integer,
+                      ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
+                      ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
+                      ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
+                      ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                      ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                      ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
+    def self.deterministic: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
+                             ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
+                             ?alpn: Array[String], ?registry: Extension::Registry,
+                             ?extensions: Array[Extension::_Extension], ?max_handshake_message_size: Integer,
+                             ?max_certificate_message_size: Integer, ?max_certificate_chain_length: Integer,
+                             ?exporter_labels: Array[String], ?record_size_limit: Integer?,
+                             ?trust_anchors: Array[String], ?verify_flags: Integer) -> Config
+    def self.check_extensions: (Array[Extension::_Extension] extensions, Extension::Registry registry) -> void
+
+    attr_reader role: role
+    attr_reader profile: Profile
+    attr_reader cipher_suites: Array[Symbol]
+    attr_reader groups: Array[Symbol]
+    attr_reader signature_algorithms: Array[Symbol]
+    attr_reader signature_algorithms_cert: Array[Symbol]
+    attr_reader alpn: Array[String]
+    attr_reader registry: Extension::Registry
+    attr_reader extensions: Array[Extension::_Extension]
+    attr_reader max_handshake_message_size: Integer
+    attr_reader max_certificate_message_size: Integer
+    attr_reader max_certificate_chain_length: Integer
+    attr_reader permute_extensions: bool
+    attr_reader grease: bool
+    attr_reader exporter_labels: Array[String]
+    attr_reader record_size_limit: Integer?
+    attr_reader trust_anchors: Array[String]
+    attr_reader verify_flags: Integer
+    attr_reader client_auth: client_auth
+    attr_reader certificate_authorities: bool
+    attr_reader require_server_name: bool
+    attr_reader resumption: bool
+    attr_reader ticket_keys: TicketKeys?
+    attr_reader ticket_lifetime: Integer
+    attr_reader ticket_count: Integer
+    attr_reader max_ticket_size: Integer
+    attr_reader resumption_scope: String
+    attr_reader max_early_data_size: Integer
+    attr_reader ticket_binding: String
+    attr_reader trust_anchor_digests: Array[String]
+
+    @ticket_count_given: Integer?
+    attr_reader cipher_suite_ids: Array[Integer]
+    attr_reader group_ids: Array[Integer]
+    attr_reader signature_algorithm_ids: Array[Integer]
+    attr_reader signature_algorithm_cert_ids: Array[Integer]
+
+    def initialize: (role: role, ?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
+                     ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol],
+                     ?alpn: Array[String], ?registry: Extension::Registry, ?extensions: Array[Extension::_Extension],
+                     ?max_handshake_message_size: Integer, ?max_certificate_message_size: Integer,
+                     ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
+                     ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
+                     ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
+                     ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+                     ?ticket_key: String?, ?ticket_lifetime: Integer, ?ticket_count: Integer?,
+                     ?max_ticket_size: Integer, ?resumption_scope: String, ?max_early_data_size: Integer) -> void
+
+    def client?: () -> bool
+    def server?: () -> bool
+    def with: (?profile: Profile, ?cipher_suites: Array[Symbol], ?groups: Array[Symbol],
+               ?signature_algorithms: Array[Symbol], ?signature_algorithms_cert: Array[Symbol], ?alpn: Array[String],
+               ?registry: Extension::Registry, ?extensions: Array[Extension::_Extension],
+               ?max_handshake_message_size: Integer, ?max_certificate_message_size: Integer,
+               ?max_certificate_chain_length: Integer, ?permute_extensions: boolish, ?grease: boolish,
+               ?exporter_labels: Array[String], ?record_size_limit: Integer?, ?trust_anchors: Array[String],
+               ?verify_flags: Integer, ?client_auth: client_auth, ?certificate_authorities: boolish,
+               ?require_server_name: boolish, ?resumption: boolish, ?ticket_keys: TicketKeys?,
+               ?ticket_lifetime: Integer, ?ticket_count: Integer?, ?max_ticket_size: Integer,
+               ?resumption_scope: String, ?max_early_data_size: Integer) -> Config
+    def issues_tickets?: () -> bool
+
+    private def names: [T] (Symbol setting, Array[Symbol] given, Hash[Symbol, T] table) -> Array[Symbol]
+    private def check_alpn: (Array[String] alpn) -> Array[String]
+    private def check_extensions: (Array[Extension::_Extension] extensions, Extension::Registry registry) -> Array[Extension::_Extension]
+    private def check_exporter_labels: (Array[String] labels) -> Array[String]
+    private def resumption_settings: (resumption: boolish, ticket_keys: TicketKeys?, ticket_key: String?,
+                                      ticket_lifetime: Integer, ticket_count: Integer?, max_ticket_size: Integer,
+                                      resumption_scope: String, max_early_data_size: Integer) -> void
+    private def positive: (Symbol setting, Integer value) -> Integer
   end
 end

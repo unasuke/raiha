@@ -1,0 +1,199 @@
+module Raiha::QUIC
+  module Error
+    class Base < StandardError
+    end
+
+    class Usage < Base
+    end
+
+    class StateError < Usage
+    end
+
+    class StreamError < Usage
+    end
+
+    class ZeroRttRejected < Usage
+    end
+  end
+
+  class Violation < StandardError
+    attr_reader code: Integer
+    attr_reader frame_type: Integer?
+
+    def initialize: (?String? message, ?code: Integer, ?frame_type: Integer?) -> void
+  end
+
+  class ConnectionError < Data
+    attr_reader code: Integer
+    attr_reader frame_type: Integer?
+    attr_reader reason: String
+    attr_reader application: bool
+
+    def self.new: (code: Integer, frame_type: Integer?, reason: String, application: bool) -> instance
+                | (Integer code, Integer? frame_type, String reason, bool application) -> instance
+  end
+
+  class ClosedError < StandardError
+    attr_reader error: ConnectionError
+
+    def initialize: (ConnectionError error) -> void
+  end
+
+  module ErrorCode
+    NO_ERROR: Integer
+    INTERNAL_ERROR: Integer
+    CONNECTION_REFUSED: Integer
+    FLOW_CONTROL_ERROR: Integer
+    STREAM_LIMIT_ERROR: Integer
+    STREAM_STATE_ERROR: Integer
+    FINAL_SIZE_ERROR: Integer
+    FRAME_ENCODING_ERROR: Integer
+    TRANSPORT_PARAMETER_ERROR: Integer
+    CONNECTION_ID_LIMIT_ERROR: Integer
+    PROTOCOL_VIOLATION: Integer
+    INVALID_TOKEN: Integer
+    APPLICATION_ERROR: Integer
+    CRYPTO_BUFFER_EXCEEDED: Integer
+    KEY_UPDATE_ERROR: Integer
+    AEAD_LIMIT_REACHED: Integer
+    NO_VIABLE_PATH: Integer
+    CRYPTO_ERROR_BASE: Integer
+
+    def self.crypto_error: (Integer alert_code) -> Integer
+  end
+
+  type address = [String, Integer]
+  type ecn = :not_ect | :ect0 | :ect1
+
+  class Stats < Data
+    attr_reader rtt: Float
+    attr_reader rtt_var: Float
+    attr_reader min_rtt: Float?
+    attr_reader congestion_window: Integer
+    attr_reader bytes_in_flight: Integer
+    attr_reader packets_sent: Integer
+    attr_reader packets_received: Integer
+    attr_reader packets_lost: Integer
+    attr_reader packets_spuriously_lost: Integer
+    attr_reader bytes_sent: Integer
+    attr_reader bytes_received: Integer
+    attr_reader path_mtu: Integer
+    attr_reader handshake_duration: Float?
+    attr_reader receive_window: Integer
+    attr_reader send_buffer_bytes: Integer
+    attr_reader blocked_sent: Integer
+    attr_reader blocked_received: Integer
+
+    def self.new: (rtt: Float, rtt_var: Float, min_rtt: Float?, congestion_window: Integer, bytes_in_flight: Integer,
+                   packets_sent: Integer, packets_received: Integer, packets_lost: Integer, packets_spuriously_lost: Integer,
+                   bytes_sent: Integer, bytes_received: Integer, path_mtu: Integer, handshake_duration: Float?,
+                   receive_window: Integer, send_buffer_bytes: Integer, blocked_sent: Integer, blocked_received: Integer) -> instance
+  end
+
+  class Transmit < Data
+    ECN: Array[ecn]
+    MAX_SEGMENTS: Integer
+
+    attr_reader payload: String
+    attr_reader destination: address
+    attr_reader source: address?
+    attr_reader ecn: ecn
+    attr_reader segment_size: Integer?
+
+    def self.new: (payload: String, destination: address, source: address?, ecn: ecn, segment_size: Integer?) -> instance
+                | (String payload, address destination, address? source, ecn ecn, Integer? segment_size) -> instance
+  end
+
+  module Event
+    class Connected < Data
+      attr_reader handshake: ::Raiha::TLS::Event::HandshakeComplete
+
+      def self.new: (handshake: ::Raiha::TLS::Event::HandshakeComplete) -> instance
+                  | (::Raiha::TLS::Event::HandshakeComplete handshake) -> instance
+    end
+
+    class StreamReadable < Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
+    class StreamWritable < Data
+      attr_reader stream_id: Integer
+
+      def self.new: (stream_id: Integer) -> instance
+                  | (Integer stream_id) -> instance
+    end
+
+    class StreamReset < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+      attr_reader final_size: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer, final_size: Integer) -> instance
+                  | (Integer stream_id, Integer error_code, Integer final_size) -> instance
+    end
+
+    class StopSending < Data
+      attr_reader stream_id: Integer
+      attr_reader error_code: Integer
+
+      def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                  | (Integer stream_id, Integer error_code) -> instance
+    end
+
+    class DatagramReceived < Data
+      attr_reader data: String
+
+      def self.new: (data: String) -> instance
+                  | (String data) -> instance
+    end
+
+    class KeyUpdated < Data
+      attr_reader phase: Integer
+
+      def self.new: (phase: Integer) -> instance
+                  | (Integer phase) -> instance
+    end
+
+    class SessionTicket < Data
+      attr_reader session: Session
+
+      def self.new: (session: Session) -> instance
+                  | (Session session) -> instance
+    end
+
+    class ZeroRttRejected < Data
+      attr_reader reason: Symbol
+
+      def self.new: (reason: Symbol) -> instance
+                  | (Symbol reason) -> instance
+    end
+
+    class NewToken < Data
+      attr_reader token: String
+
+      def self.new: (token: String) -> instance
+                  | (String token) -> instance
+    end
+
+    class TLSEvent < Data
+      attr_reader event: ::Raiha::TLS::Event::t
+
+      def self.new: (event: ::Raiha::TLS::Event::t) -> instance
+                  | (::Raiha::TLS::Event::t event) -> instance
+    end
+
+    class Closed < Data
+      attr_reader error: ConnectionError
+      attr_reader by_peer: bool
+
+      def self.new: (error: ConnectionError, by_peer: bool) -> instance
+                  | (ConnectionError error, bool by_peer) -> instance
+    end
+
+    type t = Connected | StreamReadable | StreamWritable | StreamReset | StopSending | DatagramReceived
+           | KeyUpdated | SessionTicket | ZeroRttRejected | NewToken | TLSEvent | Closed
+  end
+end

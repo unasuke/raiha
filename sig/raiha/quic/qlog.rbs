@@ -1,0 +1,72 @@
+module Raiha::QUIC
+  module Qlog
+    type json = String | Integer | Float | bool | nil | Array[json] | Hash[Symbol, json]
+
+    interface _Writer
+      def write: (*String) -> untyped
+    end
+
+    class Budget
+      @max_bytes: Integer
+      @spent: Integer
+
+      attr_reader max_bytes: Integer
+      attr_reader spent: Integer
+
+      def initialize: (max_bytes: Integer) -> void
+      def left: () -> Integer
+      def spend: (Integer bytes) -> void
+    end
+
+    class Tracer
+      include Raiha::QUIC::Tracer
+
+      RECORD_SEPARATOR: String
+      PACKET_TYPES: Hash[Wire::LongHeader::packet_type | :one_rtt, String]
+      SPACE_PACKET_TYPES: Hash[space, String]
+      TIMES: Array[Symbol]
+      DEFAULT_MAX_BYTES: Integer
+      STOP_ROOM: Integer
+
+      @io: _Writer
+      @max_bytes: Integer
+      @budget: Budget?
+      @written: Integer
+      @stopped: bool
+      @now: Float
+
+      def initialize: (_Writer io, vantage_point: :client | :server, ?title: String?, ?max_bytes: Integer, ?budget: Budget?, ?event_schemas: Array[String]) -> void
+      def record: (String name, Hash[Symbol, json] data) -> void
+      def trace_frames?: () -> bool
+      def packet_sent: (header: Raiha::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_received: (header: Raiha::QUIC::Tracer::PacketHeader, frames: Array[Wire::Frame::t]?, raw_length: Integer, now: Float) -> void
+      def packet_dropped: (reason: Symbol, raw_length: Integer, now: Float) -> void
+      def packet_lost: (packet_number: Integer, space: space, trigger: Symbol, mtu_probe: bool, now: Float) -> void
+      def metrics_updated: (now: Float, **metric metrics) -> void
+      def timer_updated: (timer_type: Symbol, event_type: Symbol, space: space?, delta: Float?, now: Float) -> void
+      def ecn_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+      def recovery_parameters_set: (now: Float, **metric parameters) -> void
+      def spurious_loss: (packet_number: Integer, space: space, now: Float) -> void
+      def congestion_state_updated: (old: Symbol, new: Symbol, now: Float) -> void
+      def connection_data_blocked_updated: (old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+      def stream_data_blocked_updated: (stream_id: Integer, old: :blocked | :unblocked, new: :blocked | :unblocked, reason: Symbol, now: Float) -> void
+      def mtu_updated: (old: Integer, new: Integer, done: bool, now: Float) -> void
+      def connection_id_updated: (owner: :local | :remote, old: String, new: String, now: Float) -> void
+      def migration_state_updated: (state: migration_state, local: address?, remote: address?, now: Float) -> void
+      def parameters_set: (owner: :local | :remote, parameters: TransportParameters, now: Float) -> void
+      def key_updated: (level: PacketProtection::level, now: Float) -> void
+      def tls_trace: (::Raiha::TLS::Trace::t value) -> void
+
+      private def packet: (String name, Raiha::QUIC::Tracer::PacketHeader header, Array[Wire::Frame::t]? frames, Integer raw_length, Float now) -> void
+      private def frame: (Wire::Frame::t frame) -> Hash[Symbol, json]
+      private def values: (Hash[Symbol, untyped] fields) -> Hash[Symbol, json]
+      private def event: (Float now, String name, Hash[Symbol, json] data) -> void
+      private def write: (Hash[Symbol, json] record) -> void
+      private def record_size: (String json) -> Integer
+      private def room_for?: (Integer bytes) -> bool
+      private def stop_reason: (Integer bytes) -> Hash[Symbol, json]
+      private def hex: (String bytes) -> String
+      private def endpoint: (address? address) -> Hash[Symbol, json]?
+    end
+  end
+end

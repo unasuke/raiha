@@ -2,14 +2,24 @@
 module OpenSSL
   module PKey
     def self.new_raw_public_key: (String group, String key_exchange) -> PKey
+    def self.new_raw_private_key: (String algorithm, String key) -> PKey
     def self.generate_key: (String group) -> PKey
 
     class PKey
       def raw_public_key: -> String
       def verify_pss: (String digest, String signature, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> bool
       def sign_pss: (String digest, String data, salt_length: Integer | Symbol, mgf1_hash: String) -> String
-      def verify: (String | OpenSSL::Digest digest, String signature, String data) -> bool
-      def sign: (String | OpenSSL::Digest digest, String data) -> String
+      # A nil digest for Ed25519 and Ed448, which hash on their own.
+      def verify: (String | OpenSSL::Digest | nil digest, String signature, String data) -> bool
+      def sign: (String | OpenSSL::Digest | nil digest, String data) -> String
+      def oid: () -> String
+      def private?: () -> bool
+    end
+  end
+
+  class Cipher
+    # openssl 4.0: an AEAD tag that does not authenticate.
+    class AuthTagError < CipherError
     end
   end
 end

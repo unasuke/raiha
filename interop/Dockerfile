@@ -5,6 +5,13 @@
 # WAITFORSERVER / WWW / DOWNLOADS / QLOGDIR / SSLKEYLOGFILE come in
 # as environment variables; raiha-interop reads them and either
 # binds a UDP server or runs a one-shot client.
+#
+# The image runs raiha with hq-interop, or HTTP/3
+# for http3. Built with --build-arg RAIHA_STARTUP=rapid_start, its paths
+# start with Rapid Start.
+#
+# iproute2 and ethtool set up the routes through the ns-3 simulator and
+# turn the checksum offload off (run_endpoint.sh).
 
 FROM ruby:4.0-slim AS builder
 ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
@@ -20,10 +27,11 @@ RUN bundle config set --local without 'development test' \
  && bundle install
 
 FROM ruby:4.0-slim
-ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle
+ARG RAIHA_STARTUP=
+ENV LANG=C.UTF-8 BUNDLE_PATH=/usr/local/bundle RAIHA_STARTUP=$RAIHA_STARTUP
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libssl3 ca-certificates iproute2 tcpdump \
+      libssl3 ca-certificates iproute2 ethtool tcpdump \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

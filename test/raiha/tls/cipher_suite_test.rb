@@ -1,76 +1,59 @@
 require "test_helper"
-require "raiha/tls/cipher_suite"
+require "raiha/tls"
 
 class RaihaTLSCipherSuiteTest < Minitest::Test
-  def test_initialize
-    known_cipher_suites = %i(
-      TLS_AES_128_GCM_SHA256
-      TLS_AES_256_GCM_SHA384
-      TLS_CHACHA20_POLY1305_SHA256
-      TLS_AES_128_CCM_SHA256
-      TLS_AES_128_CCM_8_SHA256
-    )
-    known_cipher_suites.each do |cipher_suite|
-      assert_equal ::Raiha::TLS::CipherSuite, ::Raiha::TLS::CipherSuite.new(cipher_suite).class
-    end
+  TLS = Raiha::TLS
+  CipherSuite = TLS::CipherSuite
 
-    unknown_cipher_suite = :TLS_UNKNOWN_CIPHER_SUITE
-    assert_raises do
-      ::Raiha::TLS::CipherSuite.new(unknown_cipher_suite)
-    end
+  def test_descriptors
+    aes128 = CipherSuite.find(0x1301)
+    assert_same CipherSuite::TLS_AES_128_GCM_SHA256, aes128
+    assert_equal [:sha256, 32, :aes_128_gcm, 16, 12, 16],
+      [aes128.hash_algorithm, aes128.hash_length, aes128.aead, aes128.key_length, aes128.iv_length, aes128.tag_length]
+    aes256 = CipherSuite.find(0x1302)
+    assert_equal [:sha384, 48, :aes_256_gcm, 32], [aes256.hash_algorithm, aes256.hash_length, aes256.aead, aes256.key_length]
+    chacha = CipherSuite.find(0x1303)
+    assert_equal [:sha256, :chacha20_poly1305, 32], [chacha.hash_algorithm, chacha.aead, chacha.key_length]
   end
 
-  def test_value
-    assert_equal "\x13\x01", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).value
-    assert_equal "\x13\x02", ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).value
-    assert_equal "\x13\x03", ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).value
-    assert_equal "\x13\x04", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).value
-    assert_equal "\x13\x05", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).value
+  def test_names_match_iana
+    CipherSuite::SUITES.each_value { |suite| assert_equal TLS::IANA.cipher_suite_name(suite.id), suite.name }
   end
 
-  def test_serialize
-    assert_equal_bin "\x13\x01", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).serialize
-    assert_equal_bin "\x13\x02", ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).serialize
-    assert_equal_bin "\x13\x03", ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).serialize
-    assert_equal_bin "\x13\x04", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).serialize
-    assert_equal_bin "\x13\x05", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).serialize
+  def test_ccm_suites_are_not_supported
+    assert_nil CipherSuite.find(0x1304)
+    assert_nil CipherSuite.find(0x1305)
   end
 
-  def test_supported
-    assert ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).supported?
-    assert ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).supported?
-    assert ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).supported?
-
-    refute ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).supported?
-    refute ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).supported?
-  end
-
-  def test_hash_algorithm
-    assert_equal "SHA256", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).hash_algorithm
-    assert_equal "SHA256", ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).hash_algorithm
-    assert_equal "SHA384", ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).hash_algorithm
-
-    assert_raises do
-      ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).hash_algorithm
+  # RFC 9846: AES-GCM up to 2^24.5 full-size records; no integrity limit.
+  # RFC 9001: AES-GCM 2^23 packets and 2^52 forgeries.
+  def test_aes_gcm_limits
+    [CipherSuite::TLS_AES_128_GCM_SHA256, CipherSuite::TLS_AES_256_GCM_SHA384].each do |suite|
+      assert_equal (2**24.5).floor, suite.confidentiality_limit(:tcp)
+      assert_nil suite.integrity_limit(:tcp)
+      assert_equal 2**23, suite.confidentiality_limit(:quic)
+      assert_equal 2**52, suite.integrity_limit(:quic)
     end
   end
 
-  def test_aead_algorithm
-    assert_equal "aes-128-gcm", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_GCM_SHA256).aead_algorithm
-    assert_equal "aes-256-gcm", ::Raiha::TLS::CipherSuite.new(:TLS_AES_256_GCM_SHA384).aead_algorithm
-    assert_equal "chacha20-poly1305", ::Raiha::TLS::CipherSuite.new(:TLS_CHACHA20_POLY1305_SHA256).aead_algorithm
-    assert_equal "aes-128-ccm", ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_SHA256).aead_algorithm
-
-    assert_raises do
-      ::Raiha::TLS::CipherSuite.new(:TLS_AES_128_CCM_8_SHA256).aead_algorithm
-    end
+  # ChaCha20-Poly1305 has no confidentiality limit either way, and RFC 9001
+  # limits it to 2^36 forgeries.
+  def test_chacha20_limits
+    suite = CipherSuite::TLS_CHACHA20_POLY1305_SHA256
+    assert_nil suite.confidentiality_limit(:tcp)
+    assert_nil suite.integrity_limit(:tcp)
+    assert_nil suite.confidentiality_limit(:quic)
+    assert_equal 2**36, suite.integrity_limit(:quic)
   end
 
-  def test_deserialize
-    assert_equal :TLS_AES_128_GCM_SHA256, ::Raiha::TLS::CipherSuite.deserialize("\x13\x01").name
-    assert_equal :TLS_AES_256_GCM_SHA384, ::Raiha::TLS::CipherSuite.deserialize("\x13\x02").name
-    assert_equal :TLS_CHACHA20_POLY1305_SHA256, ::Raiha::TLS::CipherSuite.deserialize("\x13\x03").name
-    assert_equal :TLS_AES_128_CCM_SHA256, ::Raiha::TLS::CipherSuite.deserialize("\x13\x04").name
-    assert_equal :TLS_AES_128_CCM_8_SHA256, ::Raiha::TLS::CipherSuite.deserialize("\x13\x05").name
+  def test_unknown_transport
+    assert_raises(KeyError) { CipherSuite::TLS_AES_128_GCM_SHA256.confidentiality_limit(:udp) }
+  end
+
+  def test_shareable_and_usable_as_hash_keys
+    CipherSuite::SUITES.each_value { |suite| assert Ractor.shareable?(suite) }
+    assert Ractor.shareable?(CipherSuite::SUITES)
+    by_suite = { CipherSuite::TLS_AES_128_GCM_SHA256 => :a }
+    assert_equal :a, by_suite[CipherSuite.find(0x1301)]
   end
 end

@@ -1,0 +1,387 @@
+module Raiha::QUIC
+  module Wire
+    module Frame
+      type t = Padding | Ping | HandshakeDone | Ack | Crypto | NewToken | Stream | ResetStream | StopSending
+             | MaxData | MaxStreamData | MaxStreams | DataBlocked | StreamDataBlocked | StreamsBlocked
+             | NewConnectionID | RetireConnectionID | PathChallenge | PathResponse | ConnectionClose
+             | Datagram
+
+      type packet_type = :initial | :handshake | :zero_rtt | :one_rtt
+
+      ALL_PACKETS: Array[packet_type]
+      NOT_ZERO_RTT: Array[packet_type]
+      APPLICATION_PACKETS: Array[packet_type]
+      ONE_RTT: Array[packet_type]
+
+      module Defaults
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+        def probing?: () -> bool
+      end
+
+      # What each kind of frame offers to `Frame.parse`.
+      interface _Kind
+        def read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> t
+      end
+
+      class Padding < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader length: Integer
+
+        def self.new: (length: Integer) -> instance
+                    | (Integer length) -> instance
+        def initialize: (length: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Padding
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+        def probing?: () -> bool
+      end
+
+      class Ping < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        def self.new: () -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ping
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+      end
+
+      class HandshakeDone < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        def self.new: () -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> HandshakeDone
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+      end
+
+      class Ack < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        class ECNCounts < Data
+          attr_reader ect0: Integer
+          attr_reader ect1: Integer
+          attr_reader ce: Integer
+
+          def self.new: (ect0: Integer, ect1: Integer, ce: Integer) -> instance
+                      | (Integer ect0, Integer ect1, Integer ce) -> instance
+        end
+
+        attr_reader ranges: Array[Range[Integer]]
+        attr_reader delay: Float
+        attr_reader ecn: ECNCounts?
+
+        def self.new: (ranges: Array[Range[Integer]], delay: Float, ?ecn: ECNCounts?) -> instance
+                    | (Array[Range[Integer]] ranges, Float delay, ?ECNCounts? ecn) -> instance
+        def initialize: (ranges: Array[Range[Integer]], delay: Float, ?ecn: ECNCounts?) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Ack
+
+        def largest: () -> Integer
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+      end
+
+      class Crypto < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader offset: Integer
+        attr_reader data: String
+
+        def self.new: (offset: Integer, data: String) -> instance
+                    | (Integer offset, String data) -> instance
+        def initialize: (offset: Integer, data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Crypto
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+      end
+
+      class NewToken < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader token: String
+
+        def self.new: (token: String) -> instance
+                    | (String token) -> instance
+        def initialize: (token: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewToken
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+      end
+
+      class Stream < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+        OFF: Integer
+        LEN: Integer
+        FIN: Integer
+
+        attr_reader stream_id: Integer
+        attr_reader offset: Integer
+        attr_reader data: String
+        attr_reader fin: bool
+
+        def self.new: (stream_id: Integer, offset: Integer, data: String, ?fin: bool) -> instance
+                    | (Integer stream_id, Integer offset, String data, ?bool fin) -> instance
+        def initialize: (stream_id: Integer, offset: Integer, data: String, ?fin: bool) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Stream
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class ResetStream < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader error_code: Integer
+        attr_reader final_size: Integer
+
+        def self.new: (stream_id: Integer, error_code: Integer, final_size: Integer) -> instance
+                    | (Integer stream_id, Integer error_code, Integer final_size) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> ResetStream
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StopSending < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader error_code: Integer
+
+        def self.new: (stream_id: Integer, error_code: Integer) -> instance
+                    | (Integer stream_id, Integer error_code) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StopSending
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class MaxData < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxData
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class MaxStreamData < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxStreamData
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      MAX_STREAM_COUNT: Integer
+
+      class MaxStreams < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+        def initialize: (bidirectional: bool, maximum: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> MaxStreams
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class DataBlocked < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader maximum: Integer
+
+        def self.new: (maximum: Integer) -> instance
+                    | (Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> DataBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StreamDataBlocked < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader stream_id: Integer
+        attr_reader maximum: Integer
+
+        def self.new: (stream_id: Integer, maximum: Integer) -> instance
+                    | (Integer stream_id, Integer maximum) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StreamDataBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class StreamsBlocked < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader bidirectional: bool
+        attr_reader maximum: Integer
+
+        def self.new: (bidirectional: bool, maximum: Integer) -> instance
+                    | (bool bidirectional, Integer maximum) -> instance
+        def initialize: (bidirectional: bool, maximum: Integer) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> StreamsBlocked
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      class NewConnectionID < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+        STATELESS_RESET_TOKEN_LENGTH: Integer
+
+        attr_reader sequence_number: Integer
+        attr_reader retire_prior_to: Integer
+        attr_reader connection_id: String
+        attr_reader stateless_reset_token: String
+
+        def self.new: (sequence_number: Integer, retire_prior_to: Integer, connection_id: String, stateless_reset_token: String) -> instance
+                    | (Integer sequence_number, Integer retire_prior_to, String connection_id, String stateless_reset_token) -> instance
+        def initialize: (sequence_number: Integer, retire_prior_to: Integer, connection_id: String, stateless_reset_token: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> NewConnectionID
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def probing?: () -> bool
+      end
+
+      class RetireConnectionID < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader sequence_number: Integer
+
+        def self.new: (sequence_number: Integer) -> instance
+                    | (Integer sequence_number) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> RetireConnectionID
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      PATH_DATA_LENGTH: Integer
+
+      class PathChallenge < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader data: String
+
+        def self.new: (data: String) -> instance
+                    | (String data) -> instance
+        def initialize: (data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathChallenge
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def probing?: () -> bool
+      end
+
+      class PathResponse < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader data: String
+
+        def self.new: (data: String) -> instance
+                    | (String data) -> instance
+        def initialize: (data: String) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> PathResponse
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def probing?: () -> bool
+      end
+
+      class ConnectionClose < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader code: Integer
+        attr_reader frame_type: Integer?
+        attr_reader reason: String
+        attr_reader application: bool
+
+        def self.new: (code: Integer, frame_type: Integer?, reason: String, application: bool) -> instance
+                    | (Integer code, Integer? frame_type, String reason, bool application) -> instance
+        def initialize: (code: Integer, frame_type: Integer?, reason: String, application: bool) -> void
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> ConnectionClose
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+        def permitted_in?: (packet_type packet_type) -> bool
+        def ack_eliciting?: () -> bool
+      end
+
+      class Datagram < Data
+        include Defaults
+
+        TYPES: Array[Integer]
+
+        attr_reader data: String
+
+        def self.new: (data: String) -> instance
+                    | (String data) -> instance
+        def self.read: (Reader reader, type: Integer, ack_delay_exponent: Integer) -> Datagram
+
+        def write: (Writer writer, ack_delay_exponent: Integer) -> Writer
+      end
+
+      KINDS: Array[_Kind]
+      BY_TYPE: Hash[Integer, _Kind]
+
+      def self.parse: (String payload, packet_type: packet_type, ack_delay_exponent: Integer) -> Array[t]
+      def self.encode: (Array[t] frames, ack_delay_exponent: Integer) -> String
+
+      private def self.read: (Reader reader, packet_type: packet_type, ack_delay_exponent: Integer) -> t
+    end
+  end
+end

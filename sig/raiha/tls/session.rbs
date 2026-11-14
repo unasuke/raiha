@@ -1,0 +1,48 @@
+module Raiha::TLS
+  class Session < Data
+    include MaskedInspect
+
+    MAX_AGE: Integer
+
+    attr_reader ticket: String
+    attr_reader ticket_nonce: String
+    attr_reader resumption_secret: String
+    attr_reader cipher_suite: Integer
+    attr_reader issued_at: Integer
+    attr_reader lifetime: Integer
+    attr_reader age_add: Integer
+    attr_reader max_early_data_size: Integer
+    attr_reader server_name: String?
+    attr_reader alpn: String?
+    attr_reader peer_certificates: Array[String]
+    attr_reader authenticated_at: Integer
+    attr_reader peer_verified: bool
+
+    def self.new: (ticket: String, ticket_nonce: String, resumption_secret: String, cipher_suite: Integer,
+                   issued_at: Integer, lifetime: Integer, age_add: Integer, max_early_data_size: Integer,
+                   server_name: String?, alpn: String?, peer_certificates: Array[String], authenticated_at: Integer,
+                   peer_verified: bool) -> instance
+                | (String ticket, String ticket_nonce, String resumption_secret, Integer cipher_suite, Integer issued_at,
+                   Integer lifetime, Integer age_add, Integer max_early_data_size, String? server_name, String? alpn,
+                   Array[String] peer_certificates, Integer authenticated_at, bool peer_verified) -> instance
+
+    def self.from_h: (Hash[Symbol, Object] hash) -> Session
+    def masked_members: () -> Array[Symbol]
+    def usable?: (now: Time) -> bool
+    def psk: () -> String
+    def obfuscated_ticket_age: (Time now) -> Integer
+  end
+
+  module SessionStore
+    class Memory
+      PER_SERVER: Integer
+
+      @sessions: Hash[String?, Array[Session]]
+      @lock: Thread::Mutex
+
+      def initialize: () -> void
+      def put: (Session session) -> self
+      def take: (String? server_name, now: Time) -> Session?
+    end
+  end
+end

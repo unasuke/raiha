@@ -1,0 +1,41 @@
+module Raiha::TLS
+  module AntiReplay
+    type result = :accepted | :replayed | :unavailable
+
+    interface _AntiReplay
+      def check: (String binder, expires_at: Time, now: Time) -> result
+    end
+
+    WINDOW: Integer
+
+    class Memory
+      @current: Hash[String, true]
+      @previous: Hash[String, true]
+      @rotated_at: Rational
+      @available_at: Rational
+      @lock: Thread::Mutex
+
+      def initialize: (now: Time, ?warmup: bool) -> void
+      def check: (String binder, expires_at: Time, now: Time) -> result
+      def inspect: () -> String
+
+      private def rotate: (Rational now) -> void
+    end
+
+    class Shared
+      include _AntiReplay
+
+      type request = [String, Time, Time, Ractor::Port[result]] | :stop
+
+      TIMEOUT: Float
+      STOP: :stop
+
+      @requests: Ractor::Port[request]
+
+      def self.start: (now: Time, ?warmup: bool) -> [Shared, Ractor]
+      def initialize: (Ractor::Port[request] requests) -> void
+      def stop: () -> void
+      def inspect: () -> String
+    end
+  end
+end

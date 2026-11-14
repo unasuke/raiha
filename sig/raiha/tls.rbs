@@ -1,14 +1,5 @@
-module Raiha
-  module TLS
-    class Error < Raiha::Error
-    end
-
-    class TranscriptRoundtripError < Error
-    end
-
-    class Context
-      @state: untyped
-    end
-
-  end
+module Raiha::TLS
+  # A generation of keys, named apart from the transport: plaintext records or
+  # Initial packets, early data or 0-RTT, handshake, application or 1-RTT.
+  type epoch = :initial | :early_data | :handshake | :application
 end

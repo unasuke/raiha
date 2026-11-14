@@ -1,137 +1,69 @@
 require "test_helper"
-require "raiha/http3"
-require "raiha/connection"
-require "support/test_certificate"
-require "socket"
-require "timeout"
-require "tempfile"
+require "support/http3_udp"
+require "fileutils"
+require "json"
 
-class RaihaHTTP3QuicheInteropTest < Minitest::Test
-  include TestCertificate
+# A server of raiha over UDP against quiche's HTTP/3
+# client (quiche-client of tmp/quiche), which checks the server's
+# certificate against the test CA, sends GREASE, and prints the responses
+# as JSON. The server answers every request with 200 and BODY.
+class HTTP3QuicheClientTest < Minitest::Test
+  include HTTP3UDP
 
-  QUICHE_SERVER = File.expand_path("../../../tmp/quiche/target/release/quiche-server", __dir__)
-  QUICHE_WWW = File.expand_path("../../../tmp/quiche-www", __dir__)
+  CLIENT = File.expand_path("../../../tmp/quiche/target/release/quiche-client", __dir__)
+  BODY = (0...100_000).map { ("a".ord + (_1 % 26)).chr }.join.b.freeze
 
   def setup
-    skip "quiche-server not found" unless File.executable?(QUICHE_SERVER)
-    skip "quiche-www/index.html not found" unless File.exist?(File.join(QUICHE_WWW, "index.html"))
+    skip "quiche-client not found" unless File.executable?(CLIENT)
+    @dir = Dir.mktmpdir("next-interop-quiche-client-", TMP)
+    @ca = File.join(@dir, "ca.pem").tap { File.write(_1, TLSPair.ca.certificate.to_pem) }
   end
 
-  def test_raiha_http3_client_get_request_to_quiche_server
-    cert_file, key_file = write_cert_files
-    port = find_available_udp_port
-
-    _server_rd, server_wr = IO.pipe
-    server_pid = Process.spawn(
-      QUICHE_SERVER,
-      "--listen", "127.0.0.1:#{port}",
-      "--cert", cert_file.path,
-      "--key", key_file.path,
-      "--root", QUICHE_WWW,
-      "--no-retry",
-      out: server_wr, err: server_wr
-    )
-    server_wr.close
-    sleep 0.5
-
-    client_socket = UDPSocket.new
-    client_socket.bind("127.0.0.1", 0)
-
-    client_connection = Raiha::Connection.new(
-      perspective: :client,
-      src_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      dest_connection_id: Raiha::Quic::Protocol::ConnectionID.generate,
-      alpn_protocols: ["h3"]
-    )
-
-    http3_client = Raiha::HTTP3::Client.new(connection: client_connection)
-
-    Timeout.timeout(20) do
-      # 1. QUIC handshake
-      client_connection.start_handshake
-      until client_connection.handshake_complete?
-        flush(client_connection, client_socket, port)
-        drain(client_socket, client_connection)
-      end
-      assert client_connection.handshake_complete?
-
-      # 2. HTTP/3 control streams + request
-      http3_client.setup_control_stream
-      http3_client.setup_qpack_streams
-
-      request_stream = http3_client.send_request(
-        method: "GET", scheme: "https", authority: "example.com", path: "/index.html"
-      )
-
-      expected_body = File.read(File.join(QUICHE_WWW, "index.html"))
-
-      # 3. Drive I/O until response stream has data with FIN
-      20.times do
-        flush(client_connection, client_socket, port)
-        drain(client_socket, client_connection, timeout: 0.5)
-
-        client_side_request_stream = client_connection.streams.get_stream(request_stream.stream_id.value)
-        next unless client_side_request_stream&.data_available?
-
-        response = http3_client.receive_response(client_side_request_stream)
-        assert_equal 200, response.status
-        assert_equal expected_body, response.body
-        return
-      end
-
-      flunk "Did not receive response from quiche-server in time"
-    end
-  ensure
-    Process.kill("TERM", server_pid) if server_pid rescue nil
-    Process.wait(server_pid) if server_pid rescue nil
-    client_socket&.close
-    cert_file&.close!
-    key_file&.close!
+  def teardown
+    FileUtils.rm_rf(@dir) if @dir
   end
 
-  private def flush(connection, socket, port)
-    connection.get_packets_to_send.each { |pkt| socket.send(pkt, 0, "127.0.0.1", port) }
-  end
-
-  private def drain(socket, connection, timeout: 0.3)
-    loop do
-      readable = IO.select([socket], nil, nil, timeout)
-      break unless readable
-
-      data, = socket.recvfrom_nonblock(65535)
-      connection.handle_packet(data)
-    rescue IO::WaitReadable
-      break
+  def test_requests_from_quiche_client
+    responses = run_client("-n", "3", "/test")
+    assert_equal 3, responses.size
+    responses.each do |response|
+      assert_includes response["headers"], { "name" => ":status", "value" => "200" }
+      assert_equal BODY, response["body"].pack("C*")
     end
   end
 
-  private def write_cert_files
-    key = OpenSSL::PKey::RSA.generate(2048)
-    cert = OpenSSL::X509::Certificate.new
-    cert.version = 2
-    cert.serial = 1
-    cert.subject = OpenSSL::X509::Name.new([["CN", "localhost"]])
-    cert.issuer = cert.subject
-    cert.public_key = key.public_key
-    cert.not_before = Time.now - 3600
-    cert.not_after = Time.now + 86400
-    cert.sign(key, "SHA256")
-
-    cert_file = Tempfile.new(["h3_cert", ".pem"])
-    key_file = Tempfile.new(["h3_key", ".pem"])
-    cert_file.write(cert.to_pem)
-    cert_file.flush
-    key_file.write(key.to_pem)
-    key_file.flush
-
-    [cert_file, key_file]
+  # RFC 9218: quiche-client sends PRIORITY_UPDATE for a URL that asks for
+  # an urgency, before the request.
+  def test_a_request_with_a_priority_update
+    responses = run_client("--send-priority-update", "/test?u=1&i")
+    assert_equal [BODY], responses.map { _1["body"].pack("C*") }
   end
 
-  private def find_available_udp_port
-    socket = UDPSocket.new
-    socket.bind("127.0.0.1", 0)
-    port = socket.addr[1]
-    socket.close
-    port
+  # Runs quiche-client with `arguments`, the last of them a path, against
+  # a server until it has printed the responses, and gives them.
+  private def run_client(*arguments, path)
+    printed = nil
+    server(alpn: ALPN) do |socket, quic|
+      app = Server.new(quic, body: BODY)
+      port = socket.addr[1]
+      command = [CLIENT, "--trust-origin-ca-pem", @ca, "--connect-to", "127.0.0.1:#{port}", "--dump-json", "--max-json-payload", BODY.bytesize.to_s,
+        *arguments, "https://localhost:#{port}#{path}"]
+      peer(*command) do |output|
+        assert drive(socket, quic, seconds: 20) {
+          app.step(mono)
+          printed = responses(output)
+        }, output
+      end
+    end
+    printed
+  end
+
+  # The responses quiche-client printed in JSON once it was done, each
+  # with its headers and its body as bytes; nil before.
+  private def responses(output)
+    json = output[/^\{\n.*/m] or return nil
+    JSON.parse(json).fetch("entries").map { _1.fetch("response") }
+  rescue JSON::ParserError
+    nil
   end
 end

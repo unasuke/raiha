@@ -1,4 +1,78 @@
-module Raiha::Quic
+module Raiha::QUIC
   module Crypto
+    # A source of random bytes: SecureRandom, or a seeded ::Random in tests.
+    interface _Random
+      def bytes: (Integer length) -> String
+    end
+
+    Random: _Random
+
+    class AEAD
+      CIPHERS: Hash[Symbol, String]
+
+      @name: String
+      @tag_length: Integer
+      @key: String
+      @iv_high: Integer
+      @iv_low: Integer
+      @sealer: OpenSSL::Cipher?
+      @opener: OpenSSL::Cipher?
+
+      attr_reader tag_length: Integer
+
+      def initialize: (suite: ::Raiha::TLS::CipherSuite, key: String, iv: String) -> void
+      def seal: (packet_number: Integer, header: String, plaintext: String) -> String
+      def open: (packet_number: Integer, header: String, ciphertext: String) -> String?
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+      private def nonce: (Integer packet_number) -> String
+      private def context: (:encrypt | :decrypt direction) -> OpenSSL::Cipher
+    end
+
+    class HeaderProtection
+      SAMPLE_LENGTH: Integer
+      MASK_LENGTH: Integer
+      CIPHERS: Hash[Symbol, String]
+      ZEROS: String
+
+      @name: String
+      @chacha20: bool
+      @cipher: OpenSSL::Cipher
+
+      def initialize: (suite: ::Raiha::TLS::CipherSuite, key: String) -> void
+      def mask: (String sample) -> String
+
+      private def instance_variables_to_inspect: () -> Array[Symbol]
+    end
+
+    class Keys < Data
+      attr_reader aead: AEAD
+      attr_reader header_protection: HeaderProtection
+
+      def self.new: (aead: AEAD, header_protection: HeaderProtection) -> instance
+                  | (AEAD aead, HeaderProtection header_protection) -> instance
+      def self.derive: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> Keys
+      def self.derive_aead: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> AEAD
+      def self.next_secret: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> String
+      def update: (suite: ::Raiha::TLS::CipherSuite, secret: String, version: Version) -> Keys
+    end
+
+    class Initial < Data
+      SUITE: ::Raiha::TLS::CipherSuite
+
+      attr_reader client: Keys
+      attr_reader server: Keys
+
+      def self.new: (client: Keys, server: Keys) -> instance
+                  | (Keys client, Keys server) -> instance
+      def self.derive: (dcid: String, version: Version) -> Initial
+    end
+  
+    module Mac
+      LENGTH: Integer
+
+      def self.digest: (String key, String data) -> String
+      def self.same?: (String a, String b) -> bool
+    end
   end
 end

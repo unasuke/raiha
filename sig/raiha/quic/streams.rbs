@@ -1,0 +1,244 @@
+module Raiha::QUIC
+  # The limits of the peer's transport parameters streams keep to: the
+  # server's, or a client's remembered ones for 0-RTT.
+  interface _PeerLimits
+    def initial_max_data: () -> Integer
+    def initial_max_streams_bidi: () -> Integer
+    def initial_max_streams_uni: () -> Integer
+    def initial_max_stream_data_uni: () -> Integer
+    def initial_max_stream_data_bidi_remote: () -> Integer
+    def initial_max_stream_data_bidi_local: () -> Integer
+  end
+
+  class Streams
+    SERVER_INITIATED: Integer
+    UNIDIRECTIONAL: Integer
+    CONNECTION_WINDOW_FACTOR: Float
+    MAX_VARINT_SIZE: Integer
+    STREAM_CREDIT_SHARE: Integer
+    DIRECTIONS: Array[:bidi | :uni]
+
+    @role: :client | :server
+    @config: Config
+    @events: Array[Event::t]
+    @tracer: _Tracer?
+    @connection_blocked: bool
+    @flow_blocked: Array[Integer]
+    @window: ReceiveWindow
+    @receivers: Hash[Integer, Receiver]
+    @senders: Hash[Integer, Sender]
+    @opened: Array[Integer]
+    @gaps: Integer
+    @max_gaps: Integer
+    @peer_parameters: _PeerLimits?
+    @peer_max_data: Integer
+    @written: Integer
+    @buffered: Integer
+    @peer_max_streams: Hash[:bidi | :uni, Integer]
+    @scheduler: Scheduler
+    @wanting: Array[Integer]
+    @data_blocked_at: Integer?
+    @data_blocked_due: bool
+    @streams_blocked_at: Hash[:bidi | :uni, Integer?]
+    @streams_blocked_due: Hash[:bidi | :uni, bool]
+    @local_max_streams: Hash[:bidi | :uni, Integer]
+    @ended: Hash[:bidi | :uni, Integer]
+    @max_streams_resend: Hash[:bidi | :uni, bool]
+    @blocked_sent: Integer
+    @blocked_received: Integer
+
+    attr_reader window: ReceiveWindow
+    attr_reader max_gaps: Integer
+    attr_reader buffered: Integer
+    attr_reader blocked_sent: Integer
+    attr_reader blocked_received: Integer
+
+    def initialize: (role: :client | :server, config: Config, events: Array[Event::t], now: Float, ?tracer: _Tracer?) -> void
+    def peer_parameters=: (_PeerLimits parameters) -> _PeerLimits
+    def roll_back_own_streams: () -> nil
+    def receive_stream: (Wire::Frame::Stream frame, now: Float) -> void
+    def read: (Integer stream_id, Integer max_bytes) -> String?
+    def readable: () -> Array[Integer]
+    def next_credit: (Integer room, now: Float, rtt: Float?) -> [Wire::Frame::MaxData | Wire::Frame::MaxStreams | Wire::Frame::MaxStreamData, Recovery::Duty::MaxData | Recovery::Duty::MaxStreams | Recovery::Duty::MaxStreamData]?
+    def max_data_lost: (Recovery::Duty::MaxData duty) -> void
+    def max_stream_data_lost: (Recovery::Duty::MaxStreamData duty) -> void
+    def open: (:bidi | :uni direction, now: Float) -> Integer?
+    def write: (Integer stream_id, String data, fin: bool, now: Float) -> Integer
+    def writable_bytes: (Integer stream_id) -> Integer
+    def writable: () -> Array[Integer]
+    def next_stream_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+    def urgency: () -> Integer?
+    def stream_data_acked: (Recovery::Duty::Stream duty) -> void
+    def stream_data_lost: (Recovery::Duty::Stream duty) -> void
+    def reset: (Integer stream_id, Integer error_code) -> void
+    def prioritize: (Integer stream_id, urgency: Integer, incremental: bool) -> void
+    def stop_sending: (Integer stream_id, Integer error_code) -> void
+    def receive_reset_stream: (Wire::Frame::ResetStream frame, now: Float) -> void
+    def receive_stop_sending: (Wire::Frame::StopSending frame, now: Float) -> void
+    def next_abandon: (Integer room) -> [Wire::Frame::ResetStream | Wire::Frame::StopSending, Recovery::Duty::ResetStream | Recovery::Duty::StopSending]?
+    def reset_stream_acked: (Recovery::Duty::ResetStream duty) -> void
+    def reset_stream_lost: (Recovery::Duty::ResetStream duty) -> void
+    def stop_sending_lost: (Recovery::Duty::StopSending duty) -> void
+    def receive_streams_blocked: (Wire::Frame::StreamsBlocked frame) -> void
+    def max_streams_lost: (Recovery::Duty::MaxStreams duty) -> void
+    def receive_max_data: (Wire::Frame::MaxData frame, now: Float) -> void
+    def receive_max_stream_data: (Wire::Frame::MaxStreamData frame, now: Float) -> void
+    def receive_max_streams: (Wire::Frame::MaxStreams frame) -> void
+    def receive_data_blocked: (Wire::Frame::DataBlocked frame) -> void
+    def receive_stream_data_blocked: (Wire::Frame::StreamDataBlocked frame, now: Float) -> void
+    def next_blocked: (Integer room) -> [Wire::Frame::DataBlocked | Wire::Frame::StreamsBlocked | Wire::Frame::StreamDataBlocked, Recovery::Duty::DataBlocked | Recovery::Duty::StreamsBlocked | Recovery::Duty::StreamDataBlocked]?
+    def data_blocked_lost: (Recovery::Duty::DataBlocked duty) -> void
+    def stream_data_blocked_lost: (Recovery::Duty::StreamDataBlocked duty) -> void
+    def streams_blocked_lost: (Recovery::Duty::StreamsBlocked duty) -> void
+    def local?: (Integer stream_id) -> bool
+
+    private def receiver_for: (Integer stream_id, frame_type: Integer, now: Float) -> Receiver?
+    private def check_opened: (Integer stream_id, frame_type: Integer) -> void
+    private def streams_allowed: (:bidi | :uni direction) -> Integer
+    private def max_streams_due?: (:bidi | :uni direction) -> bool
+    private def retire: (Integer stream_id) -> void
+    private def current_sender: () -> Sender?
+    private def over?: (Integer stream_id) -> bool
+    private def receives?: (Integer stream_id) -> bool
+    private def sends?: (Integer stream_id) -> bool
+    private def data_blocked: (Float now) -> void
+    private def stream_blocked: (Integer stream_id, Float now) -> void
+    private def streams_blocked: (:bidi | :uni direction, Integer limit) -> nil
+    private def fits?: (Wire::Frame::t frame, Integer room) -> bool
+    private def sender_part: (Integer stream_id, frame_type: Integer, now: Float) -> Sender?
+    private def sender_for: (Integer stream_id) -> Sender
+    private def abandon_sending: (Sender sender, Integer error_code) -> void
+    private def room_for: (Sender sender) -> Integer
+    private def writable_again: () -> void
+    private def open_peer_streams: (Integer stream_id, frame_type: Integer, now: Float) -> void
+    private def open_peer_stream: (Integer stream_id, Float now) -> void
+
+    class ReceiveWindow
+      UPDATE_THRESHOLD: Rational
+      ROUND_TRIPS: Integer
+
+      @size: Integer
+      @max: Integer
+      @limit: Integer
+      @received: Integer
+      @consumed: Integer
+      @blocked: bool
+      @resend: bool
+      @period_start: Float
+      @period_consumed: Integer
+
+      attr_reader size: Integer
+      attr_reader limit: Integer
+      attr_reader received: Integer
+      attr_reader consumed: Integer
+
+      def initialize: (size: Integer, max: Integer, now: Float) -> void
+      def receive: (Integer end_offset, frame_type: Integer) -> void
+      def consume: (Integer bytes) -> void
+      def blocked!: () -> bool
+      def lost: (Integer maximum) -> void
+      def update_due?: () -> bool
+      def advance: (now: Float, rtt: Float?) -> Integer
+      def grow_to: (Integer size, now: Float) -> void
+
+      private def credit_due?: () -> bool
+      private def next_limit: () -> Integer
+      private def tune: (Float now, Float? rtt) -> void
+      private def start_period: (Float now) -> void
+    end
+
+    class Receiver
+      class Chunk
+        attr_accessor offset: Integer
+        attr_accessor data: String
+
+        def initialize: (Integer offset, String data) -> void
+        def end_offset: () -> Integer
+      end
+
+      @window: ReceiveWindow
+      @ranges: Array[Chunk]
+      @read_offset: Integer
+      @final_size: Integer?
+      @stopped: bool
+      @reset: bool
+      @stop_code: Integer?
+      @stop_due: bool
+      @end_read: bool
+
+      attr_reader window: ReceiveWindow
+      attr_reader final_size: Integer?
+      attr_reader read_offset: Integer
+
+      def initialize: (window: ReceiveWindow) -> void
+      def admit: (Integer end_offset, fin: bool, frame_type: Integer) -> Integer
+      def gaps_with: (Integer offset, Integer length) -> Integer
+      def gaps: () -> Integer
+      def insert: (Integer offset, String data) -> void
+      def read: (Integer max_bytes) -> String?
+      def readable?: () -> bool
+      def stop!: (Integer error_code) -> Integer
+      def reset!: (Integer final_size) -> Integer
+      def reset?: () -> bool
+      def finished?: () -> bool
+      def abandoned?: () -> bool
+      def discard: () -> Integer
+      def stop_due: () -> Integer?
+      def stop_sent: () -> void
+      def stop_lost: () -> void
+
+      private def drop_to: (Integer offset) -> Integer
+      private def clip: (Integer offset, Integer length) -> [Integer, Integer]
+      private def touching: (Integer start, Integer finish) -> [Integer, Integer]
+    end
+
+    class Sender
+      @stream_id: Integer
+      @limit: Integer
+      @buffer: String
+      @base: Integer
+      @written: Integer
+      @next_offset: Integer
+      @lost: Array[Range[Integer]]
+      @acked: Array[Range[Integer]]
+      @fin: bool
+      @fin_sent: bool
+      @fin_acked: bool
+      @blocked_at: Integer?
+      @blocked_due: bool
+      @reset_code: Integer?
+      @reset_due: bool
+      @reset_acked: bool
+
+      attr_reader stream_id: Integer
+      attr_reader limit: Integer
+      attr_reader written: Integer
+
+      def initialize: (stream_id: Integer, limit: Integer) -> void
+      def credit: () -> Integer
+      def fin?: () -> bool
+      def write: (String data, fin: bool) -> void
+      def raise_limit: (Integer maximum) -> bool
+      def pending?: () -> bool
+      def next_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+      def acked: (Integer offset, Integer length, bool fin) -> Integer
+      def lost: (Integer offset, Integer length, bool fin) -> void
+      def blocked!: () -> bool
+      def blocked_due?: () -> bool
+      def blocked_sent: () -> void
+      def blocked_lost: (Integer maximum) -> void
+      def reset?: () -> bool
+      def final_size: () -> Integer
+      def reset!: (Integer error_code) -> [Integer, Integer]
+      def reset_due: () -> Integer?
+      def reset_sent: () -> void
+      def reset_acked: () -> void
+      def reset_acked?: () -> bool
+      def reset_lost: () -> void
+      def buffered: () -> Integer
+      def all_acked?: () -> bool
+
+      private def fin_frame: (Integer room) -> [Wire::Frame::Stream, Recovery::Duty::Stream]?
+    end
+  end
+end

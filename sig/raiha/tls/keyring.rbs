@@ -1,0 +1,64 @@
+module Raiha::TLS
+  class Keyring
+    # A source of random bytes: SecureRandom, or a seeded Random in tests.
+    interface _Random
+      def bytes: (Integer length) -> String
+    end
+
+    class Identity < Data
+      include MaskedInspect
+
+      attr_reader cert_der: Array[String]
+      attr_reader key_der: String
+
+      def self.new: (cert_der: Array[String], key_der: String) -> instance
+                  | (Array[String] cert_der, String key_der) -> instance
+      def masked_members: () -> Array[Symbol]
+    end
+
+    class Credential < Data
+      attr_reader chain: Array[OpenSSL::X509::Certificate]
+      attr_reader chain_der: Array[String]
+      attr_reader key: OpenSSL::PKey::PKey
+
+      def self.new: (chain: Array[OpenSSL::X509::Certificate], chain_der: Array[String], key: OpenSSL::PKey::PKey) -> instance
+                  | (Array[OpenSSL::X509::Certificate] chain, Array[String] chain_der, OpenSSL::PKey::PKey key) -> instance
+      def leaf: () -> OpenSSL::X509::Certificate
+    end
+
+    def self.client: (config: Config, ?identities: Array[Identity], ?random: _Random,
+                      ?key_exchange: KeyExchange::_Provider, ?verifier: Verifier::_Verifier?) -> Keyring
+    def self.server: (config: Config, identities: Array[Identity], ?random: _Random,
+                      ?key_exchange: KeyExchange::_Provider, ?verifier: Verifier::_Verifier?) -> Keyring
+
+    @random: _Random
+
+    attr_reader config: Config
+    attr_reader credentials: Array[Credential]
+    attr_reader key_exchange: KeyExchange::_Provider
+    attr_reader verifier: Verifier::_Verifier
+    attr_reader trust_anchor_subjects: Array[String]
+
+    def initialize: (config: Config, identities: Array[Identity], random: _Random, key_exchange: KeyExchange::_Provider,
+                     verifier: Verifier::_Verifier?) -> void
+    attr_reader random: _Random
+
+    def with_ticket_keys: (TicketKeys ticket_keys) -> Keyring
+
+    # protected
+    def bind: (Config config) -> self
+
+    def random_bytes: (Integer length) -> String
+    def peer_verified?: () -> bool
+    def client_credential: (signature_algorithms: Array[Integer], certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?
+    def server_credential: (server_name: String?, signature_algorithms: Array[Integer], signature_algorithms_cert: Array[Integer]?,
+                            certificate_authorities: Array[String]?) -> [Credential, SignatureScheme]?
+
+    private def scheme_for: (Credential credential, Array[Integer] offered) -> SignatureScheme?
+    private def chain_signatures_acceptable?: (Credential credential, Array[Integer] schemes) -> bool
+
+    private def instance_variables_to_inspect: () -> Array[Symbol]
+    private def parse: (Identity identity) -> Credential
+    private def default_verifier: (Config config) -> Verifier::Default
+  end
+end

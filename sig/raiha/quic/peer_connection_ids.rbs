@@ -1,0 +1,42 @@
+module Raiha::QUIC
+  class PeerConnectionIDs
+    FRAME_TYPE: Integer
+
+    class Entry < Data
+      attr_reader sequence_number: Integer
+      attr_reader connection_id: String
+      attr_reader stateless_reset_token: String?
+
+      def self.new: (sequence_number: Integer, connection_id: String, stateless_reset_token: String?) -> instance
+                  | (Integer sequence_number, String connection_id, String? stateless_reset_token) -> instance
+    end
+
+    @limit: Integer
+    @active: Array[Entry]
+    @current: String
+    @retire_prior_to: Integer
+    @to_retire: Array[Integer]
+    @retiring: Array[Integer]
+    @claimed: Array[String]
+
+    attr_reader current: String
+
+    def initialize: (String connection_id, stateless_reset_token: String?, limit: Integer,
+                     ?preferred_address: TransportParameters::PreferredAddress?) -> void
+    def reset_tokens: (Array[String] connection_ids) -> Array[String]
+    def spare?: () -> bool
+    def claim: () -> String?
+    def claimed?: (String connection_id) -> bool
+    def switch: (String connection_id) -> void
+    def release: (String connection_id) -> void
+    private def in_use?: (String connection_id) -> bool
+    def receive: (Wire::Frame::NewConnectionID frame) -> void
+    def next_frame: (Integer room) -> [Wire::Frame::RetireConnectionID, Recovery::Duty::RetireConnectionID]?
+    def retire_acked: (Recovery::Duty::RetireConnectionID duty) -> void
+    def retire_lost: (Recovery::Duty::RetireConnectionID duty) -> void
+
+    private def known?: (Wire::Frame::NewConnectionID frame) -> bool
+    private def retire_prior_to: (Integer limit) -> void
+    private def retire: (Integer sequence_number) -> void
+  end
+end

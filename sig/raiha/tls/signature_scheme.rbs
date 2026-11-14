@@ -1,0 +1,20 @@
+module Raiha::TLS
+  class SignatureScheme < Data
+    type family = :rsa_pkcs1 | :ecdsa | :rsa_pss_rsae | :rsa_pss_pss | :eddsa
+
+    attr_reader id: Integer
+    attr_reader name: Symbol
+    attr_reader family: family
+    attr_reader hash_algorithm: Symbol?
+    attr_reader curve: Symbol?
+
+    def self.new: (id: Integer, name: Symbol, family: family, hash_algorithm: Symbol?, curve: Symbol?) -> instance
+                | (Integer id, Symbol name, family family, Symbol? hash_algorithm, Symbol? curve) -> instance
+
+    def usable_in_certificate_verify?: () -> bool
+
+    SCHEMES: Hash[Integer, SignatureScheme]
+
+    def self.find: (Integer id) -> SignatureScheme?
+  end
+end

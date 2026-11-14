@@ -1,0 +1,80 @@
+module Raiha::QUIC
+  type address_family = :ipv4 | :ipv6
+
+  class Config < Data
+    include ::Raiha::TLS::MaskedInspect
+
+    MIN_KEY_LENGTH: Integer
+    ADDRESS_FAMILIES: Array[address_family]
+    TRANSPORT_PARAMETERS: Array[Symbol]
+    DEFAULT_CONGESTION_CONTROL: Congestion::_Algorithm
+    DEFAULT_INITIAL_WINDOW: Congestion::_InitialWindow
+
+    attr_reader max_idle_timeout: Float
+    attr_reader max_udp_payload_size: Integer
+    attr_reader initial_max_data: Integer
+    attr_reader initial_max_stream_data_bidi_local: Integer
+    attr_reader initial_max_stream_data_bidi_remote: Integer
+    attr_reader initial_max_stream_data_uni: Integer
+    attr_reader initial_max_streams_bidi: Integer
+    attr_reader initial_max_streams_uni: Integer
+    attr_reader max_ack_delay: Float
+    attr_reader ack_delay_exponent: Integer
+    attr_reader active_connection_id_limit: Integer
+    attr_reader disable_active_migration: bool
+    attr_reader max_datagram_frame_size: Integer?
+    attr_reader versions: Array[Version]
+    attr_reader connection_id_length: Integer
+    attr_reader initial_max_datagram_size: Integer
+    attr_reader enable_pmtud: bool
+    attr_reader max_stream_receive_window: Integer
+    attr_reader max_receive_window: Integer
+    attr_reader max_send_buffer: Integer
+    attr_reader congestion_control: Congestion::_Algorithm
+    attr_reader initial_window: Congestion::_InitialWindow
+    attr_reader startup: Congestion::_Startup?
+    attr_reader pacing_granularity: Float
+    attr_reader max_transmit_size: Integer?
+    attr_reader fast_convergence: bool
+    attr_reader beta_ecn: Float?
+    attr_reader retry_token_key: String?
+    attr_reader stateless_reset_key: String?
+    attr_reader preferred_address: Hash[address_family, address]?
+    attr_reader address_families: Array[address_family]
+    attr_reader ecn_address_families: Array[address_family]
+
+    def self.new: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
+                   ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                   ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
+                   ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
+                   ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
+                   ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
+                   ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer, ?enable_pmtud: bool,
+                   ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
+                   ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
+                   ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
+                   ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
+                   ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family],
+                   ?ecn_address_families: Array[address_family]) -> instance
+    def initialize: (?max_idle_timeout: Float, ?max_udp_payload_size: Integer,
+                     ?initial_max_data: Integer, ?initial_max_stream_data_bidi_local: Integer,
+                     ?initial_max_stream_data_bidi_remote: Integer, ?initial_max_stream_data_uni: Integer,
+                     ?initial_max_streams_bidi: Integer, ?initial_max_streams_uni: Integer,
+                     ?max_ack_delay: Float, ?ack_delay_exponent: Integer, ?active_connection_id_limit: Integer,
+                     ?disable_active_migration: bool, ?max_datagram_frame_size: Integer?,
+                     ?versions: Array[Version], ?connection_id_length: Integer, ?initial_max_datagram_size: Integer, ?enable_pmtud: bool,
+                     ?max_stream_receive_window: Integer, ?max_receive_window: Integer, ?max_send_buffer: Integer,
+                     ?congestion_control: Symbol | Congestion::_Algorithm, ?initial_window: Congestion::_InitialWindow,
+                     ?startup: Congestion::_Startup?, ?pacing_granularity: Float, ?max_transmit_size: Integer?,
+                     ?fast_convergence: bool, ?beta_ecn: Float?, ?retry_token_key: String?, ?stateless_reset_key: String?,
+                     ?preferred_address: Hash[address_family, address]?, ?address_families: Array[address_family],
+                   ?ecn_address_families: Array[address_family]) -> void
+    def masked_members: () -> Array[Symbol]
+
+    private def check_preferred_address: (Hash[address_family, address] preferred_address, Integer connection_id_length) -> void
+
+    def transport_parameters: (initial_source_connection_id: String, ?original_destination_connection_id: String?,
+                               ?retry_source_connection_id: String?, ?stateless_reset_token: String?,
+                               ?preferred_address: TransportParameters::PreferredAddress?) -> TransportParameters
+  end
+end
