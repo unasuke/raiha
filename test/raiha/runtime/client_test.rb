@@ -241,6 +241,19 @@ class RaihaRuntimeClientTest < Minitest::Test
     end
   end
 
+  # An IPv4-mapped address is tried as the IPv4 address it maps, which a
+  # socket of IPv4 takes where "::" takes no IPv4.
+  def test_an_ipv4_mapped_address
+    Sync do
+      server = server_owner
+      client = Runtime::Client.new(connect_timeout: 1, **options)
+      assert_equal :connected, client.connect("::ffff:127.0.0.1", server.port, server_name: "localhost") { :connected }
+      assert_equal [["127.0.0.1", 443]], client.send(:resolve, "::ffff:127.0.0.1", 443)
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   def test_a_name_that_does_not_resolve
     Sync do
       error = assert_raises(Runtime::ConnectError) { Addressed.new([], **options).connect("nowhere.test", 443) { flunk } }

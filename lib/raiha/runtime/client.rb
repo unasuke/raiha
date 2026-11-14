@@ -168,10 +168,12 @@ module Raiha::Runtime
       [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     end
 
-    # [address, port] of `host` for UDP, each once.
+    # [address, port] of `host` for UDP, each once; an IPv4-mapped address
+    # as the IPv4 address it maps, which a socket of IPv6 alone cannot
+    # send to.
     private def resolve(host, port)
       Addrinfo.getaddrinfo(host, port, nil, :DGRAM).map do |info|
-        [info.ip_address, info.ip_port] #: UDP::address
+        [UDP.unmapped(info.ip_address), info.ip_port] #: UDP::address
       end.uniq
     end
 
