@@ -137,7 +137,8 @@ class RaihaQUICConfigTest < Minitest::Test
 
   # A server's preferred address: either family or both, each of its own
   # family with a port, shareable without freezing the caller's; none with
-  # zero-length connection IDs (RFC 9000 "Preferred Address").
+  # zero-length connection IDs (RFC 9000 "Preferred Address"). An
+  # IPv4-mapped address is not one of IPv6.
   def test_preferred_address
     assert_nil Config.new.preferred_address
     ipv4 = ["192.0.2.2", 4434]
@@ -147,7 +148,7 @@ class RaihaQUICConfigTest < Minitest::Test
     refute ipv4.frozen?
     assert_equal({ ipv6: ["2001:db8::2", 4434] }, Config.new(preferred_address: { ipv6: ["2001:db8::2", 4434] }).preferred_address)
     [{}, { ipv4: ["2001:db8::2", 4434] }, { ipv6: ["192.0.2.2", 4434] }, { ipv4: ["192.0.2.2", 0] }, { ipv4: ["192.0.2.2", 65_536] },
-     { ipv5: ["192.0.2.2", 4434] }, { ipv4: ["example.com", 4434] }].each do |preferred_address|
+     { ipv5: ["192.0.2.2", 4434] }, { ipv4: ["example.com", 4434] }, { ipv6: ["::ffff:192.0.2.2", 4434] }].each do |preferred_address|
       assert_raises(ArgumentError, preferred_address.inspect) { Config.new(preferred_address:) }
     end
     assert_raises(ArgumentError) { Config.new(preferred_address: { ipv4: }, connection_id_length: 0) }

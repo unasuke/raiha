@@ -175,7 +175,8 @@ module Raiha::QUIC
       end
       preferred_address.each do |family, (host, port)|
         address = IPAddr.new(host)
-        raise ArgumentError, "#{host} is no #{family} address" unless family == :ipv4 ? address.ipv4? : address.ipv6?
+        # An IPv4-mapped address is IPv4's on the wire, and comes in as IPv4's.
+        raise ArgumentError, "#{host} is no #{family} address" unless family == :ipv4 ? address.ipv4? : address.ipv6? && !address.ipv4_mapped?
         raise ArgumentError, "a preferred address with port #{port}" unless port.between?(1, 65_535)
       end
     end
