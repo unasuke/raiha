@@ -294,7 +294,7 @@ module Raiha::Runtime
       segment = Socket::AncillaryData.new(@family, Socket::IPPROTO_UDP, UDP_SEGMENT, [size].pack("S"))
       @socket.sendmsg(payload, 0, destination, *controls, segment)
       nil
-    rescue *GSO_REFUSED, *DROPPED => error
+    rescue *GSO_REFUSED, *CONTROLS_REFUSED, *DROPPED => error
       error
     end
 

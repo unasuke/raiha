@@ -231,6 +231,18 @@ class RaihaRuntimeUDPTest < Minitest::Test
     assert_equal [1, ["a" * 1200, "c" * 500, "a" * 1200, "b" * 1200, "c" * 500]], [socket.segmented, socket.sent]
   end
 
+  # A control message GSO went with that sendmsg does not take
+  # (EOPNOTSUPP) is no reason to stop: the datagrams go one by one, the
+  # first again without it.
+  def test_gso_with_a_control_message_refused
+    skip "GSO is Linux's" unless RUBY_PLATFORM.include?("linux")
+    payload = "a".b * 1200 + "b".b * 1200 + "c".b * 500
+    socket = ScriptedSocket.new(Errno::EOPNOTSUPP, Errno::EOPNOTSUPP)
+    udp = UDP.new(socket)
+    assert udp.send(transmit(payload, ["127.0.0.1", 4434], segment_size: 1200, ecn: :ect0))
+    assert_equal [1, ["a" * 1200, "b" * 1200, "c" * 500]], [socket.segmented, socket.sent]
+  end
+
   # The Config of a runtime: MAX_TRANSMIT for max_transmit_size, unless the
   # application chose one.
   # IO.select waits on sockets of the runtime together.
