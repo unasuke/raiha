@@ -42,11 +42,13 @@ module Raiha::Runtime
   # (UDP.pmtud), and no ECN on IPv4 where the OS cannot mark it (UDP.ecn).
   #
   # Each socket is bound to "::", which sends to IPv4 too, so that a
-  # connection can move to a server's preferred address of either family;
-  # where IPv6 is off and it cannot be, or IPv4 does not come to it as on
-  # OpenBSD, to "0.0.0.0", and the connection takes IPv4 addresses alone
-  # (Config#address_families). The address a
-  # datagram goes from is the OS's to choose.
+  # connection can move to a server's preferred address of either family.
+  # Where IPv4 does not come to it, as on OpenBSD, it is kept for a server
+  # of IPv6, and the connection takes IPv6 addresses alone; for one of IPv4,
+  # and where IPv6 is off and "::" cannot be bound, the socket is bound to
+  # "0.0.0.0" and the connection takes IPv4 addresses alone
+  # (Config#address_families). The address a datagram goes from is the
+  # OS's to choose.
   #
   # With `session`, a ticket an earlier connection's Session#tickets gave,
   # the first connection tried resumes it, and with `token`, one of its
@@ -154,10 +156,12 @@ module Raiha::Runtime
       driver.stop
     end
 
-    # A socket for a connection, and the Config for its addresses.
-    private def bind
+    # A socket for a connection to `address`, and the Config for its
+    # addresses.
+    private def bind(address)
       udp = UDP.bind("::", 0)
       return [udp, @config] if udp.takes_ipv4?
+      return [udp, @config.with(address_families: %i[ipv6])] if address[0].include?(":")
       udp.close
       [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
     rescue SystemCallError
@@ -175,7 +179,7 @@ module Raiha::Runtime
     # begin once the driver starts: [driver, session].
     private def attempt(address, server_name, session:, token:, early_data:)
       made = false
-      udp, config = bind
+      udp, config = bind(address)
       endpoint = Raiha::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
