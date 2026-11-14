@@ -286,6 +286,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
     refute sender.send(transmit("x".b, ["::ffff:127.0.0.1", 0]))
     refute sender.send(transmit("x".b, ["::ffff:255.255.255.255", 443]))
     refute bind("127.0.0.1").send(transmit("x".b, ["127.0.0.1", 0], ecn: :ect0))
+    refute bind("127.0.0.1").send(transmit("x".b, ["::1", 443]))
   end
 
   # A datagram larger than UDP carries is dropped, not raised.

@@ -41,12 +41,13 @@ module Raiha::Runtime
     ECN = { 0b00 => :not_ect, 0b01 => :ect1, 0b10 => :ect0, 0b11 => :ce }.freeze
     MARKS = { ect0: 0b10, ect1: 0b01 }.freeze
     # A peer gone or a datagram too big for the path is no reason to stop,
-    # nor an address the OS will not send to, as port 0 (EINVAL) or a
-    # broadcast (EACCES): a peer that spoofs its source chooses where the
+    # nor an address the OS will not send to, as port 0 (EINVAL), a
+    # broadcast (EACCES) or one of a family the socket does not send to
+    # (EAFNOSUPPORT): a peer that spoofs its source chooses where the
     # responses of an Endpoint go. A firewall that refuses (EPERM) or a
     # kernel short of buffers (ENOBUFS) loses one datagram.
     DROPPED = [Errno::ECONNREFUSED, Errno::EMSGSIZE, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::EADDRNOTAVAIL,
-      Errno::EINVAL, Errno::EACCES, Errno::EPERM, Errno::ENOBUFS].freeze
+      Errno::EINVAL, Errno::EACCES, Errno::EPERM, Errno::ENOBUFS, Errno::EAFNOSUPPORT].freeze
     # Linux's UDP_SEGMENT, a control message at the level of UDP, which
     # Socket does not name.
     UDP_SEGMENT = 103
