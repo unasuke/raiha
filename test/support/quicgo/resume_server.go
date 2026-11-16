@@ -51,7 +51,7 @@ func main() {
 	}
 }
 
-func echo(conn quic.EarlyConnection) {
+func echo(conn *quic.Conn) {
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "AcceptStream error: %v\n", err)
