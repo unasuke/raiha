@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 func main() {
@@ -34,15 +33,17 @@ func main() {
 	}
 	// Enable qlog tracing for debugging interop issues
 	quicConfig := &quic.Config{
-		Tracer: func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+		Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
 			dir := "/tmp/raiha-qlog"
 			os.MkdirAll(dir, 0755)
-			name := fmt.Sprintf("%s/client-%s.qlog", dir, connID)
+			name := fmt.Sprintf("%s/client-%s.sqlog", dir, connID)
 			f, err := os.Create(name)
 			if err != nil {
 				return nil
 			}
-			return qlog.NewConnectionTracer(f, p, connID)
+			trace := qlogwriter.NewConnectionFileSeq(f, isClient, connID)
+			go trace.Run()
+			return trace
 		},
 	}
 

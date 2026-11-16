@@ -60,7 +60,7 @@ jobs:
           bundler-cache: true
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: '1.23'
+          go-version-file: test/support/quicgo/go.mod
           cache-dependency-path: test/support/quicgo/go.sum
       - run: bundle exec rake test:interop:quicgo
 
