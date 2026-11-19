@@ -26,7 +26,8 @@ module Raiha::TLS
 
       # Whether `key` is of the kind `scheme` signs with: an RSA key for
       # RSASSA-PSS with rsaEncryption, and a key on the scheme's curve for
-      # ECDSA and EdDSA.
+      # ECDSA and EdDSA. An EdDSA key is told by its name in lower case,
+      # since OpenSSL says "ED25519" where LibreSSL says "Ed25519".
       def self.key_matches?(scheme, key)
         case scheme.family
         when :rsa_pss_rsae, :rsa_pkcs1
@@ -37,7 +38,7 @@ module Raiha::TLS
           else false
           end
         when :eddsa
-          key.oid == scheme.curve.to_s.upcase
+          key.oid.downcase == scheme.curve.to_s
         else
           false
         end
