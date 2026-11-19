@@ -162,34 +162,14 @@ module Raiha::Runtime
       driver.stop
     end
 
-    # A socket for a connection to `address`, and the Config for its
-    # addresses.
-    private def bind(address)
-      udp = UDP.bind("::", 0)
-      return [udp, @config] if udp.takes_ipv4?
-      return [udp, @config.with(address_families: %i[ipv6])] if address[0].include?(":")
-      udp.close
-      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
-    rescue SystemCallError
-      # Without "::" there is no IPv6 to send to `address` by.
-      raise if address[0].include?(":")
-      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
-    end
-
-    # [address, port] of `host` for UDP, each once; an IPv4-mapped address
-    # as the IPv4 address it maps, which a socket of IPv6 alone cannot
-    # send to.
-    private def resolve(host, port)
-      Addrinfo.getaddrinfo(host, port, nil, :DGRAM).map do |info|
-        [UDP.unmapped(info.ip_address), info.ip_port] #: UDP::address
-      end.uniq
-    end
+    # The addresses to try, as Addresses.resolve finds them.
+    private def resolve(host, port) = Addresses.resolve(host, port)
 
     # A connection to `address` on a socket of its own, its handshake to
     # begin once the driver starts: [driver, session].
     private def attempt(address, server_name, session:, token:, early_data:)
       made = false
-      udp, config = bind(address)
+      udp, config = Addresses.bind(address, @config)
       endpoint = Raiha::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)
