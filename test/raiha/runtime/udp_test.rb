@@ -35,6 +35,12 @@ class RaihaRuntimeUDPTest < Minitest::Test
     skip "the codepoint of IPv4 is not read here" unless Socket.const_defined?(:IP_RECVTOS)
   end
 
+  # Skips the test where IPv4 does not come to `socket`, bound to "::": an
+  # OS whose IPv6 sockets are IPv6's alone, such as OpenBSD.
+  def need_ipv4_into(socket)
+    skip "IPv4 does not come to a socket bound to \"::\" here" unless socket.takes_ipv4?
+  end
+
   # What `socket` has received within a second.
   def received(socket)
     assert socket.wait_readable(1), "nothing came"
@@ -65,6 +71,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
   # keeping the mark both ways.
   def test_ipv4_into_a_socket_for_both
     server = bind("::")
+    need_ipv4_into(server)
     client = bind("127.0.0.1")
     client.send(transmit("hello".b, ["127.0.0.1", server.local_address[1]], ecn: :ect0))
     data, from, to, ecn = received(server).first
@@ -93,7 +100,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
 
   # A datagram goes from a socket from its own address and port, or any
   # address of its family on its port when bound to "0.0.0.0", any address
-  # at all when bound to "::".
+  # at all when bound to "::", IPv4's only where IPv4 comes to it.
   def test_what_a_socket_sends_from
     specific = bind("127.0.0.1")
     port = specific.local_address[1]
@@ -106,7 +113,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
     refute ipv4.sends_from?(["2001:db8::1", port])
     both = bind("::")
     port = both.local_address[1]
-    assert both.sends_from?(["192.0.2.1", port])
+    assert_equal both.takes_ipv4?, both.sends_from?(["192.0.2.1", port])
     assert both.sends_from?(["2001:db8::1", port])
     refute both.sends_from?(["2001:db8::1", port + 1])
   end
@@ -134,6 +141,8 @@ class RaihaRuntimeUDPTest < Minitest::Test
   def test_a_transmit_of_several_datagrams_marked
     receiver = bind("::")
     sender = bind("::")
+    need_ipv4_into(sender)
+    need_ipv4_ecn
     assert sender.send(transmit("a".b * 1200 + "b".b * 600, ["::ffff:127.0.0.1", receiver.local_address[1]], ecn: :ect0, segment_size: 1200))
     assert_equal [["a" * 1200, :ect0], ["b" * 600, :ect0]], received(receiver).map { [_1.first, _1.last] }
   end
