@@ -60,7 +60,9 @@ module TestPKI
       cert.add_extension(factory.create_extension("subjectAltName", names.join(","))) unless names.empty?
     end
     signer = issuer ? issuer.key : key
-    cert.sign(signer, signer.oid == "ED25519" ? nil : "SHA256")
+    # Ed25519 signs without a digest; OpenSSL names it "ED25519", LibreSSL
+    # "Ed25519".
+    cert.sign(signer, signer.oid.downcase == "ed25519" ? nil : "SHA256")
     Issued.new(certificate: cert, key:)
   end
 end
