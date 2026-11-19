@@ -29,6 +29,12 @@ class RaihaRuntimeUDPTest < Minitest::Test
     QUIC::Transmit.new(payload:, destination: to, source:, ecn:, segment_size:)
   end
 
+  # Skips the test where the codepoint of IPv4 is not read, an OS without
+  # IP_RECVTOS such as OpenBSD (UDP.ecn).
+  def need_ipv4_ecn
+    skip "the codepoint of IPv4 is not read here" unless Socket.const_defined?(:IP_RECVTOS)
+  end
+
   # What `socket` has received within a second.
   def received(socket)
     assert socket.wait_readable(1), "nothing came"
@@ -36,6 +42,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
   end
 
   def test_each_codepoint_on_ipv4
+    need_ipv4_ecn
     receiver = bind("127.0.0.1")
     sender = bind("127.0.0.1")
     %i[not_ect ect0 ect1].each { |ecn| assert sender.send(transmit(ecn.to_s.b, receiver.local_address, ecn:)) }
@@ -107,6 +114,7 @@ class RaihaRuntimeUDPTest < Minitest::Test
   # A peer can mark congestion; the codepoint is the low two bits of the
   # traffic class, whatever the rest says.
   def test_congestion_experienced_and_the_rest_of_the_class
+    need_ipv4_ecn
     receiver = bind("127.0.0.1")
     raw = UDPSocket.new.tap { @sockets << _1 }
     to = Socket.sockaddr_in(receiver.local_address[1], "127.0.0.1")
