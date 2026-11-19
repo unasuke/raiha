@@ -1,3 +1,4 @@
+require "ipaddr"
 require "openssl"
 
 # Certificates for tests of raiha: a CA and the leaves it
@@ -57,10 +58,27 @@ module TestPKI
     else
       cert.add_extension(factory.create_extension("basicConstraints", "CA:FALSE", true))
       cert.add_extension(factory.create_extension("extendedKeyUsage", purpose)) if purpose
-      cert.add_extension(factory.create_extension("subjectAltName", names.join(","))) unless names.empty?
+      cert.add_extension(subject_alt_name(names)) unless names.empty?
     end
     signer = issuer ? issuer.key : key
-    cert.sign(signer, signer.oid == "ED25519" ? nil : "SHA256")
+    # Ed25519 signs without a digest; OpenSSL names it "ED25519", LibreSSL
+    # "Ed25519".
+    cert.sign(signer, signer.oid.downcase == "ed25519" ? nil : "SHA256")
     Issued.new(certificate: cert, key:)
+  end
+
+  # subjectAltName of "DNS:..." and "IP:..." entries, built from the ASN.1
+  # rather than by ExtensionFactory: LibreSSL's refuses a dNSName with a
+  # trailing dot, which a test needs.
+  def subject_alt_name(names)
+    general_names = names.map do |name|
+      kind, value = name.split(":", 2)
+      case kind
+      when "DNS" then OpenSSL::ASN1::IA5String(value, 2, :IMPLICIT, :CONTEXT_SPECIFIC)
+      when "IP" then OpenSSL::ASN1::OctetString(IPAddr.new(value).hton, 7, :IMPLICIT, :CONTEXT_SPECIFIC)
+      else raise ArgumentError, "a name of #{kind}, not DNS or IP"
+      end
+    end
+    OpenSSL::X509::Extension.new("subjectAltName", OpenSSL::ASN1::Sequence(general_names).to_der)
   end
 end

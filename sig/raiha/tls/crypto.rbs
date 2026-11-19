@@ -58,6 +58,7 @@ module Raiha::TLS
       def self.public_bytes: (Symbol group, OpenSSL::PKey::PKey key) -> String
       def self.derive: (Symbol group, OpenSSL::PKey::PKey key, String peer_public_bytes) -> String?
       def self.curve_name: (Symbol group) -> String
+      def self.explicit: [T < OpenSSL::ASN1::Primitive] (T value, Integer tag) -> T
     end
   end
 end

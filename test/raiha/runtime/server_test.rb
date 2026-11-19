@@ -374,10 +374,22 @@ class RaihaRuntimeServerTest < Minitest::Test
     socket&.close
   end
 
+  # Skips the test where IPv4 does not come to a socket bound to "::": an
+  # OS whose IPv6 sockets are IPv6's alone, such as OpenBSD.
+  def need_ipv4_into_ipv6
+    socket = Runtime::UDP.bind("::", 0)
+    skip "IPv4 does not come to a socket bound to \"::\" here" unless socket.takes_ipv4?
+  ensure
+    socket&.close
+  end
+
   # A server on IPv4 that prefers an IPv6 address as well: its client,
-  # bound to "::", sends to either, and moves to IPv6.
+  # bound to "::", sends to either, and moves to IPv6. Where IPv4 does not
+  # come to a socket bound to "::", as on OpenBSD, the client is bound to
+  # "0.0.0.0" and stays on IPv4.
   def test_a_client_moves_to_ipv6_from_ipv4
     need_ipv6
+    need_ipv4_into_ipv6
     Sync do
       preferred = { ipv4: ["127.0.0.1", free_port], ipv6: ["::1", free_port] }
       serving(method(:echoes), config: QUIC::Config.new(preferred_address: preferred)) do |port|

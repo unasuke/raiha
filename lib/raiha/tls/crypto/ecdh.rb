@@ -21,15 +21,24 @@ module Raiha::TLS
       end
 
       # A private key from its raw bytes: the scalar for the NIST curves.
-      # Only fixed test keys need this.
+      # Only fixed test keys need this. The ECPrivateKey carries the public
+      # key too, the scalar times the generator: OpenSSL works it out where
+      # it is missing, but LibreSSL refuses such a key.
       def self.private_key(group, bytes)
         return OpenSSL::PKey.new_raw_private_key("X25519", bytes) if group == :x25519
-        curve = OpenSSL::ASN1::ObjectId(curve_name(group))
-        curve.tag = 0
-        curve.tagging = :EXPLICIT
-        curve.tag_class = :CONTEXT_SPECIFIC
-        der = OpenSSL::ASN1::Sequence([OpenSSL::ASN1::Integer(1), OpenSSL::ASN1::OctetString(bytes), curve]).to_der
+        name = curve_name(group)
+        point = OpenSSL::PKey::EC::Group.new(name).generator.mul(OpenSSL::BN.new(bytes, 2)) # steep:ignore
+        der = OpenSSL::ASN1::Sequence([OpenSSL::ASN1::Integer(1), OpenSSL::ASN1::OctetString(bytes),
+          explicit(OpenSSL::ASN1::ObjectId(name), 0), explicit(OpenSSL::ASN1::BitString(point.to_octet_string(:uncompressed)), 1)]).to_der
         OpenSSL::PKey::EC.new(der)
+      end
+
+      # `value` under the context-specific tag `tag`, EXPLICIT.
+      private_class_method def self.explicit(value, tag)
+        value.tag = tag
+        value.tagging = :EXPLICIT
+        value.tag_class = :CONTEXT_SPECIFIC
+        value
       end
 
       def self.public_bytes(group, key)
