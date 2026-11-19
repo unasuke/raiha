@@ -528,6 +528,16 @@ module Raiha::Runtime
 end
 
 module Raiha::Runtime
+  module Admission
+    def self.decide: (Raiha::QUIC::Route::Incoming route, full: bool, max_unvalidated: Integer) { () -> Integer } -> (:refuse | :retry | :admit)
+
+    def self.unvalidated: (Array[Raiha::QUIC::Endpoint::Handle] admitted, Array[Raiha::QUIC::Connection] connections, Float now) -> Integer
+
+    def self.advance_ticket_keys: (Raiha::TLS::Config tls_config, Raiha::TLS::Keyring keyring, Time time) -> Raiha::TLS::Keyring?
+  end
+end
+
+module Raiha::Runtime
   class Qlog
     BUDGET: Integer
     MAX_FILES: Integer
