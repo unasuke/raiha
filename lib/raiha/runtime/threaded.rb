@@ -17,8 +17,26 @@ module Raiha::Runtime
   # condition of it. The runtime of fibers and this one are not to be
   # mixed in one connection.
   module Threaded
+    # The budget of the traces of the current Ractor's clients and
+    # servers on threads, as Qlog.budget is of those on fibers: drivers
+    # that each hold a lock of their own spend it, so it holds one too.
+    class Budget < Raiha::QUIC::Qlog::Budget
+      def self.current
+        Ractor.current[:raiha_threaded_qlog_budget] ||= new(max_bytes: Qlog::BUDGET) #: Budget
+      end
+
+      def initialize(max_bytes:)
+        super
+        @lock = Thread::Mutex.new
+      end
+
+      def left = @lock.synchronize { super }
+
+      def spend(bytes) = @lock.synchronize { super }
+    end
   end
 end
 
 require_relative "threaded/driver"
 require_relative "threaded/session"
+require_relative "threaded/server"

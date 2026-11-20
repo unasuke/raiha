@@ -253,5 +253,84 @@ module Raiha::Runtime
 
       def close_write: () -> nil
     end
+
+    class Budget < Raiha::QUIC::Qlog::Budget
+      @lock: Thread::Mutex
+
+      def self.current: () -> Budget
+
+      def initialize: (max_bytes: Integer) -> void
+    end
+
+    class Server
+      MAX_CONNECTIONS: Integer
+      MAX_THREADS: Integer
+      STOP_TIMEOUT: Integer
+
+      @threads: Threads
+      @handlers: Threads
+      @stop_error_code: Integer
+      @config: Raiha::QUIC::Config
+      @tls_config: Raiha::TLS::Config
+      @keyring: Raiha::TLS::Keyring
+      @anti_replay: Raiha::TLS::AntiReplay::_AntiReplay
+      @app_early_data_context: String
+      @host: String
+      @port: Integer
+      @max_connections: Integer
+      @max_unvalidated: Integer
+      @admitted: Array[Raiha::QUIC::Endpoint::Handle]
+      @qlog: Qlog?
+      @tracing: Thread::Mutex
+      @traces: Hash[Session, Qlog::Pending]
+      @sessions: Array[Session]
+      @started: Hash[Session, true]
+      @handler: (^(Session) -> void)?
+      @driver: Driver?
+      @done: MonitorMixin::ConditionVariable?
+      @udp: UDP?
+      @stop: [Float | Integer, Integer]?
+      @stop_deadline: Float?
+      @wake: IO?
+
+      def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                       ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?max_threads: Integer,
+                       ?qlog_dir: String?, ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String,
+                       ?stop_error_code: Integer) -> void
+
+      def run: () { (Session session) -> void } -> nil
+
+      def local_address: () -> UDP::address?
+
+      def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
+
+      def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
+
+      def route: (Raiha::QUIC::Route::t route, Float now) -> void
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+
+      private def unvalidated: (Float now) -> Integer
+
+      private def driver!: () -> Driver
+
+      private def preferred_sockets: (UDP udp) -> Array[UDP]
+
+      private def advance_ticket_keys: () -> void
+
+      private def wake_on: (IO reader, Driver driver) -> void
+
+      private def stopping: (Float now) -> void
+
+      private def start: (Session session) -> void
+
+      private def internal_error: (Session session) -> void
+    end
   end
 end
