@@ -21,3 +21,4 @@ module Raiha::Runtime
 end
 
 require_relative "threaded/driver"
+require_relative "threaded/session"

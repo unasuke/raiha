@@ -72,5 +72,186 @@ module Raiha::Runtime
 
       private def fail: (StandardError error) -> void
     end
+
+    class Threads
+      attr_reader max: Integer
+
+      @lock: Thread::Mutex
+      @freed: Thread::ConditionVariable
+      @taken: Integer
+      @running: Hash[Thread, true]
+
+      def initialize: (Integer max) -> void
+
+      def taken: () -> Integer
+
+      def take: () { () -> bool } -> bool
+
+      def count: () -> nil
+
+      def give_back: () -> void
+
+      def wake: () -> void
+
+      def start: (String name) { () -> void } -> Thread
+
+      def running: () -> Array[Thread]
+
+      def join: (Float deadline) -> nil
+    end
+
+    # What a Session needs of its Driver: the core lock and its
+    # conditions.
+    interface _Core
+      def synchronize: [T] () { () -> T } -> T
+
+      def new_cond: () -> MonitorMixin::ConditionVariable
+
+      def mon_owned?: () -> bool
+    end
+
+    class Session
+      class Locked < BasicObject
+        @connection: Raiha::QUIC::Connection
+        @driver: Driver
+
+        def initialize: (Raiha::QUIC::Connection connection, Driver driver) -> void
+
+        def method_missing: (Symbol name, *untyped, **untyped) ?{ (*untyped) -> untyped } -> untyped
+
+        def respond_to_missing?: (Symbol name, ?bool include_private) -> bool
+      end
+
+      Track: singleton(Raiha::Runtime::Session::Track)
+      MAX_ACK_DELAY: Float
+      MAX_HELD: Integer
+
+      attr_reader tracer: Raiha::QUIC::Qlog::Tracer?
+      attr_reader server_name: String?
+      attr_reader resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil
+
+      @connection: Raiha::QUIC::Connection
+      @locked: Locked
+      @driver: Driver
+      @threads: Threads
+      @role: :client | :server
+      @changed: MonitorMixin::ConditionVariable
+      @waiting: Integer
+      @tracks: Hash[Integer, Raiha::Runtime::Session::Track]
+      @incoming: Array[Integer]
+      @peer_next: Array[Integer]
+      @aborted: StandardError?
+      @stopping: bool
+      @stop_deadline: Float?
+      @connected: Raiha::QUIC::Event::Connected?
+      @protocol: _Protocol?
+      @close_code: Integer
+      @kept: Kept
+      @generation: Integer
+      @ended: bool
+
+      def initialize: (Raiha::QUIC::Connection connection, Driver driver, role: :client | :server, threads: Threads,
+                       ?tracer: Raiha::QUIC::Qlog::Tracer?, ?server_name: String?,
+                       ?resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil) -> void
+
+      def connection: () -> Raiha::QUIC::Connection
+
+      def handshake: () -> Raiha::TLS::Event::HandshakeComplete?
+
+      def tickets: () -> Array[Raiha::QUIC::Session]
+
+      def tokens: () -> Array[String]
+
+      def attach: (_Protocol protocol, ?close_code: Integer) -> void
+
+      def changed: () -> void
+
+      def open_stream_id: (?direction: :bidi | :uni) -> Integer
+
+      def wait_for: [T < Object] (?drain: bool) { () -> T? } -> T
+                  | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
+
+      def open_stream: (?direction: :bidi | :uni) -> Stream
+
+      def wait_acknowledged: (Float | Integer seconds) -> bool
+
+      def close_when_acknowledged: (?error_code: Integer) -> void
+
+      def wait_handshake: () -> nil
+
+      def wait_ready: () -> nil
+
+      def accept_stream: () -> Stream?
+
+      def each_stream: () { (Stream stream) -> void } -> void
+
+      def close: (?error_code: Integer, ?reason: String) -> void
+
+      def closed?: () -> bool
+
+      def stopping?: () -> bool
+
+      def stop_deadline: () -> Float?
+
+      def stopping!: (?Float? deadline) -> void
+
+      def expire: (error_code: Integer) -> void
+
+      def abort: (?StandardError? failure) -> void
+
+      def turn: () -> void
+
+      def read: (Integer stream_id, Integer max_bytes, generation: Integer) -> String?
+
+      def write: (Integer stream_id, String data, fin: bool, generation: Integer) -> Integer
+
+      private def unlocked!: () -> void
+
+      private def start_stream: (Stream stream) { (Stream stream) -> void } -> void
+
+      private def give_up: (Integer stream_id) -> void
+
+      private def ended: () -> void
+
+      private def take_events: () -> void
+
+      private def zero_rtt_rejected: () -> void
+
+      private def current!: (Integer stream_id, Integer generation) -> void
+
+      private def take: (Raiha::QUIC::Event::t event) -> void
+
+      private def arrived: (Integer stream_id) -> void
+
+      private def forget_reset: (Integer stream_id) -> void
+
+      private def over: (Integer stream_id, :reading | :writing part) -> void
+
+      private def local?: (Integer stream_id) -> bool
+
+      private def notify: () -> void
+
+      private def wait: [T < Object] (?drain: bool) { () -> T? } -> T
+                      | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
+    end
+
+    class Stream
+      PIECE: Integer
+
+      attr_reader id: Integer
+
+      @session: Session
+      @generation: Integer
+
+      def initialize: (Session session, Integer id, Integer generation) -> void
+
+      def read: (?Integer? length) -> String?
+
+      def write: (String data) -> Integer
+
+      def <<: (String data) -> self
+
+      def close_write: () -> nil
+    end
   end
 end
