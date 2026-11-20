@@ -12,6 +12,9 @@ module ThreadedOwner
   Runtime = Raiha::Runtime
   Threaded = Raiha::Runtime::Threaded
 
+  # A port no socket is bound to, as far as anyone knows.
+  def free_port = UDPSocket.open { |socket| socket.bind("127.0.0.1", 0) && socket.addr[1] }
+
   # What a client or a server of the runtime would be to its driver: a
   # server takes every client, and each connection is in a Session, which
   # takes its turn with the driver's, under its lock. The streams of

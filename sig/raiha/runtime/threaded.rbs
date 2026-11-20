@@ -332,5 +332,50 @@ module Raiha::Runtime
 
       private def internal_error: (Session session) -> void
     end
+
+    class Client
+      CONNECT_TIMEOUT: Float
+      MAX_THREADS: Integer
+
+      @threads: Threads
+      @config: Raiha::QUIC::Config
+      @tls_config: Raiha::TLS::Config
+      @keyring: Raiha::TLS::Keyring
+      @connect_timeout: Float | Integer
+      @session: Session?
+      @driver: Driver?
+      @deadline: Float?
+      @qlog: Qlog?
+      @tracing: Thread::Mutex
+      @trace: Qlog::Pending?
+
+      def self.connect: [T] (String host, Integer port, config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                             ?server_name: String, ?connect_timeout: Float | Integer, ?qlog_dir: String?,
+                             ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil, ?token: String?, ?early_data: bool,
+                             ?max_threads: Integer) { (Session session) -> T } -> T
+
+      def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                       ?connect_timeout: Float | Integer, ?qlog_dir: String?, ?max_threads: Integer) -> void
+
+      def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
+                        ?token: String?, ?early_data: bool) { (Session session) -> T } -> T
+
+      def route: (Raiha::QUIC::Route::t route, Float now) -> nil
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+
+      private def finish: (Driver driver, Session session) -> void
+
+      private def resolve: (String host, Integer port) -> Array[UDP::address]
+
+      private def attempt: (UDP::address address, String server_name, session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
+                            token: String?, early_data: bool) -> [Driver, Session]
+    end
   end
 end

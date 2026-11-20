@@ -40,3 +40,4 @@ end
 require_relative "threaded/driver"
 require_relative "threaded/session"
 require_relative "threaded/server"
+require_relative "threaded/client"

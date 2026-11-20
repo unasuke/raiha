@@ -3,7 +3,7 @@ require "support/threaded_owner"
 require "json"
 require "tmpdir"
 
-# The server of the runtime on threads against clients on threads on the
+# The server of the runtime on threads against the client on threads on the
 # loopback interface: a Session for the block in a thread of each
 # connection, no scheduler needed, the connection closed when the block is
 # over or raises, handlers that block holding up no other connection, and
@@ -12,25 +12,15 @@ class RaihaRuntimeThreadedServerTest < Minitest::Test
   include ThreadedOwner
 
   # A client on threads connected to `port`, its Session given to the
-  # block once the handshake completes; closed and stopped after. Raises
-  # QUIC::ClosedError when the server does not take it.
-  def connect(port, config: QUIC::Config.new)
-    endpoint, owner = owner(:client, config)
+  # block. Raises Runtime::ConnectError when the server does not take it.
+  def connect(port, &)
     tls = client_config
-    owner.add(endpoint.connect(tls_config: tls, keyring: client_keyring(config: tls), server_name: "localhost",
-      remote: ["127.0.0.1", port], now: Threaded::Driver.clock))
-    owner.driver.start
-    session = owner.sessions.first
-    session.wait_handshake
-    yield session
-  ensure
-    if session
-      session.close unless session.closed?
-      owner.driver.flush
-    end
-    owner&.driver&.stop
-    owner&.driver&.join
+    Threaded::Client.connect("127.0.0.1", port, config: QUIC::Config.new, tls_config: tls, keyring: client_keyring(config: tls),
+      server_name: "localhost", connect_timeout: 2, &)
   end
+
+  # The code of the transport error that kept a client from connecting.
+  def refused_with(error) = error.errors.first.last.error.code
 
   # What a stream of `session` answers to `data`.
   def echo(session, data)
@@ -139,8 +129,8 @@ class RaihaRuntimeThreadedServerTest < Minitest::Test
     serving(method(:echoes), max_connections: 1) do |port|
       connect(port) do |session|
         assert_equal "ECHO:a", echo(session, "a")
-        error = assert_raises(QUIC::ClosedError) { connect(port) { nil } }
-        assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, error.error.code
+        error = assert_raises(Runtime::ConnectError) { connect(port) { nil } }
+        assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, refused_with(error)
       end
     end
   end
@@ -152,8 +142,8 @@ class RaihaRuntimeThreadedServerTest < Minitest::Test
     serving(->(_session) { held.pop }, max_connections: 1) do |port, server|
       connect(port) { |session| session.close(error_code: 0) }
       assert eventually { server.instance_variable_get(:@sessions).empty? }
-      error = assert_raises(QUIC::ClosedError) { connect(port) { nil } }
-      assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, error.error.code
+      error = assert_raises(Runtime::ConnectError) { connect(port) { nil } }
+      assert_equal QUIC::ErrorCode::CONNECTION_REFUSED, refused_with(error)
       held << true
       assert eventually { server.instance_variable_get(:@handlers).taken.zero? }
       held << true
