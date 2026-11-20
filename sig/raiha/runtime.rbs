@@ -302,8 +302,7 @@ module Raiha::Runtime
     @connected: Raiha::QUIC::Event::Connected?
     @protocol: _Protocol?
     @close_code: Integer
-    @tickets: Array[Raiha::QUIC::Session]
-    @tokens: Array[String]
+    @kept: Kept
     @generation: Integer
 
     attr_reader server_name: String?
@@ -368,8 +367,6 @@ module Raiha::Runtime
     private def current!: (Integer stream_id, Integer generation) -> void
 
     private def take: (Raiha::QUIC::Event::t event) -> void
-
-    private def ticket: (Raiha::QUIC::Session session) -> void
 
     private def arrived: (Integer stream_id) -> void
 
@@ -523,6 +520,26 @@ module Raiha::Runtime
     private def wake_on: (IO reader, Driver driver) -> void
 
     private def stopping: (Float now) -> void
+  end
+end
+
+module Raiha::Runtime
+  class Kept
+    MAX_HELD: Integer
+
+    @tracer: Raiha::QUIC::Qlog::Tracer?
+    @tickets: Array[Raiha::QUIC::Session]
+    @tokens: Array[String]
+
+    def initialize: (Raiha::QUIC::Qlog::Tracer? tracer) -> void
+
+    def tickets: () -> Array[Raiha::QUIC::Session]
+
+    def tokens: () -> Array[String]
+
+    def ticket: (Raiha::QUIC::Session session) -> void
+
+    def token: (String token) -> void
   end
 end
 

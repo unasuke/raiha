@@ -49,9 +49,8 @@ module Raiha::Runtime
     # The peer's max_ack_delay when it says none (RFC 9000 "Transport
     # Parameter Definitions"), for a PTO of the connection.
     MAX_ACK_DELAY = 0.025
-    # The most tickets and tokens kept: one more drops the oldest, so that a
-    # server sending them without end cannot make the client keep them all.
-    MAX_HELD = 8
+    # The most tickets and tokens kept (Kept::MAX_HELD).
+    MAX_HELD = Kept::MAX_HELD
 
     # The connection, and the qlog tracer of it, if it has one, which a
     # protocol records its own events with.
@@ -85,8 +84,7 @@ module Raiha::Runtime
       @protocol = nil #: _Protocol?
       # The application's error code a close with none given closes with.
       @close_code = 0
-      @tickets = [] #: Array[Raiha::QUIC::Session]
-      @tokens = [] #: Array[String]
+      @kept = Kept.new(tracer)
       # One more each time the server rejects 0-RTT; the Streams of this
       # client opened before are of an earlier one.
       @generation = 0
@@ -101,13 +99,13 @@ module Raiha::Runtime
     # ticket is for one connection: once used, the application drops it,
     # as one used again links the connections for those who watch (RFC 9846
     # "Client and Server Tracking Prevention").
-    def tickets = @tickets.dup
+    def tickets = @kept.tickets
 
     # The tokens the server gave in NEW_TOKEN frames, for
     # Client.connect(token:), the newest MAX_HELD of them, newest last. A
     # token is for one connection too (RFC 9000 "Address Validation for
     # Future Connections").
-    def tokens = @tokens.dup
+    def tokens = @kept.tokens
 
     # Puts `protocol` over the connection, which then closes with its
     # `close_code` when no other is given: H3_NO_ERROR for HTTP/3, say. A
@@ -324,19 +322,9 @@ module Raiha::Runtime
         @tracks[event.stream_id]&.reset = event.error_code
         forget_reset(event.stream_id)
       when Raiha::QUIC::Event::StopSending then @tracks[event.stream_id]&.stop = event.error_code
-      when Raiha::QUIC::Event::SessionTicket then ticket(event.session)
-      when Raiha::QUIC::Event::NewToken
-        @tokens.shift if @tokens.size >= MAX_HELD
-        @tokens << event.token
+      when Raiha::QUIC::Event::SessionTicket then @kept.ticket(event.session)
+      when Raiha::QUIC::Event::NewToken then @kept.token(event.token)
       end
-    end
-
-    private def ticket(session)
-      if @tickets.size >= MAX_HELD
-        @tickets.shift
-        @tracer&.tls_trace(Raiha::TLS::Trace::TicketIgnored.new(reason: :too_many_tickets))
-      end
-      @tickets << session
     end
 
     # A stream the peer opened comes to be known from its first event, and
