@@ -524,6 +524,20 @@ module Raiha::Runtime
 end
 
 module Raiha::Runtime
+  module HTTP3
+    module Fields
+      def self.split: (Array[[String, String]] headers) -> [Hash[String, String], Array[[String, String]]]
+
+      def self.request: (String method, String authority, String path) -> Array[[String, String]]
+
+      def self.priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
+
+      def self.status: (Array[[String, String]] headers) -> Integer?
+    end
+  end
+end
+
+module Raiha::Runtime
   class Kept
     MAX_HELD: Integer
 
@@ -736,7 +750,6 @@ module Raiha::Runtime
 
       private def remembered: () -> Raiha::HTTP3::Settings?
 
-      private def priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
 
       private def upload: (Integer stream_id, Exchange exchange, String | (_Readable & Object) body) -> void
 

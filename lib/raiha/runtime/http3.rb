@@ -3,6 +3,7 @@
 require "stringio"
 require_relative "../http3_binding"
 require_relative "../http3/session"
+require_relative "http3_fields"
 
 module Raiha::Runtime
   # The HTTP/3 the applications of the runtime use: a client over a Session
@@ -174,7 +175,7 @@ module Raiha::Runtime
       # response is read whole into a Response. A response the block left
       # unread is cancelled.
       def request(method, path, headers: [], body: nil, urgency: nil, incremental: nil)
-        stream_id, exchange = start(method, path, headers + priority(urgency, incremental), fin: body.nil?)
+        stream_id, exchange = start(method, path, headers + Fields.priority(urgency, incremental), fin: body.nil?)
         upload(stream_id, exchange, body) if body
         status = @session.wait_for(drain: true) do
           check(stream_id, exchange)
@@ -244,9 +245,8 @@ module Raiha::Runtime
       private def start(method, path, headers, fin:)
         stream_id = @session.open_stream_id
         exchange = @exchanges[stream_id] = Exchange.new
-        pseudo = [[":method", method], [":scheme", "https"], [":authority", @authority], [":path", path]] #: Array[[String, String]]
         begin
-          @http3.send_request(stream_id, pseudo + headers, fin:)
+          @http3.send_request(stream_id, Fields.request(method, @authority, path) + headers, fin:)
         rescue StandardError
           @exchanges.delete(stream_id)
           @session.connection.stream_reset(stream_id, error_code: Raiha::HTTP3::ErrorCode::REQUEST_CANCELLED)
@@ -263,12 +263,6 @@ module Raiha::Runtime
       private def remembered
         resumed = @session.resumed
         resumed.settings if resumed.is_a?(Raiha::HTTP3::Session) && @session.connection.zero_rtt_state == :pending
-      end
-
-      private def priority(urgency, incremental)
-        raise ArgumentError, "an urgency is 0 to 7, not #{urgency.inspect}" unless urgency.nil? || (urgency.is_a?(Integer) && urgency.between?(0, 7))
-        parameters = [("u=#{urgency}" if urgency), ("i" if incremental)].compact
-        parameters.empty? ? [] : [["priority", parameters.join(", ")]]
       end
 
       # Writes `body` as the request's content, as the stream takes it, and
@@ -340,10 +334,9 @@ module Raiha::Runtime
         case event
         when Raiha::HTTP3::Event::Headers
           exchange = @exchanges[event.stream_id] or return
-          status = event.headers.find { |name, _| name == ":status" }&.last.to_i
-          return if status.between?(100, 199)
+          status = Fields.status(event.headers) or return
           exchange.status = status
-          exchange.headers = event.headers.reject { |name, _| name.start_with?(":") }
+          exchange.headers = Fields.split(event.headers).last
           exchange.end! if event.fin
         when Raiha::HTTP3::Event::Data
           exchange = @exchanges[event.stream_id] or return
