@@ -144,6 +144,8 @@ module Raiha::Runtime
       ALPN = "h3"
 
       def initialize(session, authority: nil, settings: Raiha::HTTP3::Settings.new)
+        # One of threads would be called into with no lock taken.
+        raise Error::Usage, "a Session of the runtime on fibers, not #{session.class}" if session.is_a?(Threaded::Session)
         @session = session
         @settings = settings
         @tracer = (quic = session.tracer) && Raiha::HTTP3::Qlog::Tracer.new(quic)

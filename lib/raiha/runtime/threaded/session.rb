@@ -183,9 +183,32 @@ module Raiha::Runtime
         @ended = false
       end
 
+      # The threads the application's code runs in, which a protocol's
+      # take their places of too.
+      attr_reader :threads
+
       # The QUIC connection, each of its methods called under the core
       # lock.
       def connection = @locked # steep:ignore
+
+      # The QUIC connection itself, for a protocol that calls it holding the
+      # core lock, as it does in its turn.
+      def core = @connection
+
+      # Holds the core lock around the block, for a protocol whose method
+      # touches what the lock guards from its start to its end.
+      def synchronize(&) = @driver.synchronize(&)
+
+      # Whether the connection has closed or the driver stopped, read
+      # without the lock by what waits for a place of `threads`.
+      def ended? = @ended
+
+      # Raises Error::Usage where this thread holds the core lock, before
+      # the application's code runs on it: a thread that did would keep the
+      # driver from running while it waits.
+      def unlocked!
+        raise Error::Usage, "the core lock of the driver is held where the application runs" if @driver.mon_owned?
+      end
 
       def handshake = @driver.synchronize { @connected&.handshake }
 
@@ -398,11 +421,6 @@ module Raiha::Runtime
         end
       end
 
-      # The application's code runs on a thread that holds no core lock: one
-      # that did would keep the driver from running while it waits.
-      private def unlocked!
-        raise Error::Usage, "the core lock of the driver is held where the application runs" if @driver.mon_owned?
-      end
 
       # The thread of `stream`, which it is given apart from the loop of
       # each_stream that goes on to the next.

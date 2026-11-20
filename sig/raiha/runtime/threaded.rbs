@@ -154,7 +154,17 @@ module Raiha::Runtime
                        ?tracer: Raiha::QUIC::Qlog::Tracer?, ?server_name: String?,
                        ?resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil) -> void
 
+      attr_reader threads: Threads
+
       def connection: () -> Raiha::QUIC::Connection
+
+      def core: () -> Raiha::QUIC::Connection
+
+      def synchronize: [T] () { () -> T } -> T
+
+      def ended?: () -> bool
+
+      def unlocked!: () -> void
 
       def handshake: () -> Raiha::TLS::Event::HandshakeComplete?
 
@@ -204,8 +214,6 @@ module Raiha::Runtime
       def read: (Integer stream_id, Integer max_bytes, generation: Integer) -> String?
 
       def write: (Integer stream_id, String data, fin: bool, generation: Integer) -> Integer
-
-      private def unlocked!: () -> void
 
       private def start_stream: (Stream stream) { (Stream stream) -> void } -> void
 
@@ -376,6 +384,102 @@ module Raiha::Runtime
 
       private def attempt: (UDP::address address, String server_name, session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
                             token: String?, early_data: bool) -> [Driver, Session]
+    end
+
+    module HTTP3
+      StreamReset: singleton(Raiha::Runtime::HTTP3::StreamReset)
+      Response: singleton(Raiha::Runtime::HTTP3::Response)
+      Exchange: singleton(Raiha::Runtime::HTTP3::Exchange)
+      Fields: singleton(Raiha::Runtime::HTTP3::Fields)
+
+      # What a Body reads its chunks from: the HTTP/3 of a server's
+      # connection, or a client.
+      interface _ChunkReader
+        def read_chunk: (Integer stream_id) -> String?
+      end
+
+      class Body
+        @reader: _ChunkReader
+        @stream_id: Integer
+
+        def initialize: (_ChunkReader reader, Integer stream_id) -> void
+
+        def read_chunk: () -> String?
+
+        def each: () { (String chunk) -> void } -> void
+
+        def read: () -> String
+      end
+
+      class ResponseStream
+        attr_reader status: Integer
+        attr_reader headers: Array[[String, String]]
+        attr_reader body: Body
+
+        @client: Client
+        @stream_id: Integer
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+
+        def initialize: (Client client, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status) -> void
+
+        def trailers: () -> Array[[String, String]]
+
+        def cancel: () -> void
+      end
+
+      class Client
+        PIECE: Integer
+        ALPN: String
+
+        @session: Session
+        @settings: Raiha::HTTP3::Settings
+        @tracer: Raiha::HTTP3::Qlog::Tracer?
+        @http3: Raiha::HTTP3::Connection
+        @binding: Raiha::HTTP3Binding
+        @exchanges: Hash[Integer, Raiha::Runtime::HTTP3::Exchange]
+        @authority: String
+
+        def initialize: (Session session, ?authority: String?, ?settings: Raiha::HTTP3::Settings) -> void
+
+        def tickets: () -> Array[Raiha::HTTP3::Session]
+
+        def get: (String path, ?headers: Array[[String, String]]) -> Raiha::Runtime::HTTP3::Response
+
+        def request: (String method, String path, ?headers: Array[[String, String]], ?body: String | (Raiha::Runtime::HTTP3::_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) -> Raiha::Runtime::HTTP3::Response
+                   | [T] (String method, String path, ?headers: Array[[String, String]], ?body: String | (Raiha::Runtime::HTTP3::_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) { (ResponseStream response) -> T } -> T
+
+        def read_chunk: (Integer stream_id) -> String?
+
+        def cancel: (Integer stream_id) -> void
+
+        def take: (Raiha::QUIC::Event::t event, Float now) -> bool
+
+        def expire: () -> nil
+
+        def turn: (Float now) -> void
+
+        private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> [Integer, Raiha::Runtime::HTTP3::Exchange]
+
+        private def remembered: () -> Raiha::HTTP3::Settings?
+
+        private def upload: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String | (Raiha::Runtime::HTTP3::_Readable & Object) body) -> void
+
+        private def check_stopped: (Integer stream_id, Integer error_code) -> void
+
+        private def check: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def finish: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def zero_rtt_rejected: () -> void
+
+        private def resume: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def flush: () -> void
+
+        private def take_http3: (Raiha::HTTP3::Event::t event) -> void
+
+        private def pause: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+      end
     end
   end
 end
