@@ -97,21 +97,20 @@ module Raiha::Runtime
 
       # Stops the readers and the runner and closes the sockets; the owner
       # is told once, under the lock. The sockets close even when telling
-      # the owner fails: at once, unless this thread holds the lock while
-      # the runner runs, when the runner closes them once it has sent what
-      # is left.
+      # the owner fails: while the runner runs, it closes them once it has
+      # sent what is left, a flush's from the turn that stopped it say;
+      # otherwise they close at once, and the owner writes its traces.
       def stop
-        first = false
         @core.synchronize do
           next if @stopped
-          first = @stopped = true
+          @stopped = true
           @changed.signal
           @owner.stopped(@failure)
         end
       ensure
-        unless @core.mon_owned? && @runner&.alive?
+        unless @runner&.alive?
           close
-          @owner.flush_traces if first && !@core.mon_owned?
+          @owner.flush_traces unless @core.mon_owned?
         end
       end
 
