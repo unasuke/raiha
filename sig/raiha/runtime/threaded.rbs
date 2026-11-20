@@ -1,0 +1,76 @@
+module Raiha::Runtime
+  module Threaded
+    # What a Driver runs for: a client or a server of the runtime on
+    # threads.
+    interface _Owner
+      def route: (Raiha::QUIC::Route::t route, Float now) -> void
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+    end
+
+    class Driver
+      attr_reader endpoint: Raiha::QUIC::Endpoint
+
+      @udp: UDP
+      @udps: Array[UDP]
+      @owner: _Owner
+      @core: Monitor
+      @changed: MonitorMixin::ConditionVariable
+      @dirty: bool
+      @stopped: bool
+      @failure: StandardError?
+      @queued: Array[Raiha::QUIC::Transmit]
+      @sending: Hash[UDP, Thread::Mutex]
+      @readers: Array[Thread]
+      @runner: Thread?
+
+      def self.clock: () -> Float
+
+      def initialize: (Raiha::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP]) -> void
+
+      def start: () -> self
+
+      def synchronize: [T] () { () -> T } -> T
+
+      def new_cond: () -> MonitorMixin::ConditionVariable
+
+      def mon_owned?: () -> bool
+
+      def failure: () -> StandardError?
+
+      def changed: () -> void
+
+      def stopped?: () -> bool
+
+      def flush: () -> void
+
+      def stop: () -> void
+
+      def join: () -> nil
+
+      private def read: (UDP udp) -> void
+
+      private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::QUIC::Transmit]
+
+      private def run: () -> void
+
+      private def turn: (Float now) -> Array[Raiha::QUIC::Transmit]
+
+      private def last: () -> void
+
+      private def timeout: () -> Float?
+
+      private def emit: (Raiha::QUIC::Transmit transmit) -> bool
+
+      private def close: () -> void
+
+      private def fail: (StandardError error) -> void
+    end
+  end
+end
