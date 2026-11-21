@@ -1,4 +1,6 @@
 module Raiha::Runtime
+  def self.for: (?concurrency: Object) -> (singleton(Raiha::Runtime) | singleton(Raiha::Runtime::Threaded))
+
   module Error
     class Base < StandardError
     end
