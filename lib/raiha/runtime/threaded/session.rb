@@ -392,7 +392,13 @@ module Raiha::Runtime
             end
             @connection.stream_read(stream_id, max_bytes) || :end
           end
-          next data if data.is_a?(String)
+          if data.is_a?(String)
+            # What was read frees the peer's flow control, which the runner
+            # tells it of; asleep since before the read, it would wait for
+            # no more and the peer stay held back.
+            changed
+            next data
+          end
           over(stream_id, :reading)
           nil
         end
