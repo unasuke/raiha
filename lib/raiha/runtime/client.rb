@@ -151,12 +151,12 @@ module Raiha::Runtime
     end
 
     # Closes the connection once what was sent is acknowledged, or three
-    # PTOs have gone with no more of it acknowledged, and stops the driver.
+    # PTOs have gone with no more of it acknowledged, sends the
+    # CONNECTION_CLOSE, of a close in the block as well, and stops the
+    # driver.
     private def finish(driver, session)
-      unless session.closed?
-        session.close_when_acknowledged
-        driver.flush
-      end
+      session.close_when_acknowledged unless session.closed?
+      driver.flush
     rescue Raiha::QUIC::ClosedError
       nil
     ensure
