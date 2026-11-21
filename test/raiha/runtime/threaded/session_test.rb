@@ -179,6 +179,19 @@ class RaihaRuntimeThreadedSessionTest < Minitest::Test
     end
   end
 
+  # A protocol attached once the peer has closed is not, and raises: a
+  # handler's thread may come to it after the close.
+  def test_an_attach_once_closed
+    connected do |client, server_owner|
+      server = accepted(server_owner)
+      server.close(error_code: 3)
+      assert eventually { client.closed? }
+      error = assert_raises(Raiha::QUIC::ClosedError) { client.attach(Object.new) }
+      assert_equal 3, error.error.code
+      assert_nil client.instance_variable_get(:@protocol)
+    end
+  end
+
   def test_tickets_and_tokens
     connected(server_tls: server_config(ticket_key: "\x1c".b * 32)) do |client, _server_owner|
       client.wait_for(deadline: Threaded::Driver.clock + 2) { client.tokens.first && client.tickets[1] }

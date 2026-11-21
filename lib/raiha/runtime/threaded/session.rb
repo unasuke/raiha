@@ -218,9 +218,13 @@ module Raiha::Runtime
 
       # Puts `protocol` over the connection, which then closes with its
       # `close_code` when no other is given. A handshake completed before is
-      # told it with the Connected event it missed.
+      # told it with the Connected event it missed. A connection that has
+      # closed takes none, and raises QUIC::ClosedError, as a handler's
+      # thread may come to it after the peer has closed.
       def attach(protocol, close_code: @close_code)
         @driver.synchronize do
+          aborted = @aborted and raise aborted
+          reason = @connection.close_reason and raise Raiha::QUIC::ClosedError.new(reason)
           @protocol = protocol
           @close_code = close_code
           connected = @connected and protocol.take(connected, Driver.clock)
