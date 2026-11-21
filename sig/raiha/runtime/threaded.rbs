@@ -480,6 +480,136 @@ module Raiha::Runtime
 
         private def pause: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
       end
+
+      class ResponseBody
+        attr_reader trailers: Array[[String, String]]
+
+        @server: Serving
+        @stream_id: Integer
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+        @closed: bool
+
+        def initialize: (Serving server, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        def write: (String data) -> Integer
+
+        def <<: (String data) -> self
+
+        def trailers=: (Array[[String, String]] fields) -> void
+
+        def close: () -> void
+
+        def closed?: () -> bool
+
+        private def closed!: () -> void
+      end
+
+      class Request
+        attr_reader stream_id: Integer
+        attr_reader method: String
+        attr_reader path: String
+        attr_reader authority: String?
+        attr_reader scheme: String?
+        attr_reader protocol: String?
+        attr_reader headers: Array[[String, String]]
+        attr_reader body: Body
+
+        @server: Serving
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+        @responded: bool
+        @marked_early: bool
+
+        def initialize: (Serving server, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] headers) -> void
+
+        def trailers: () -> Array[[String, String]]
+
+        def early_data?: () -> bool
+
+        def responded?: () -> bool
+
+        def respond: (Integer status, ?Array[[String, String]] headers, ?String? body) -> void
+                   | (Integer status, ?Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+        def priority=: ({ ?urgency: Integer, ?incremental: bool } parameters) -> void
+      end
+
+      class Server
+        @settings: Raiha::HTTP3::Settings
+        @server: Threaded::Server
+
+        def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring, ?host: String?,
+                         ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?max_threads: Integer, ?qlog_dir: String?,
+                         ?settings: Raiha::HTTP3::Settings, ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?) -> void
+
+        def run: () { (Request request) -> void } -> nil
+
+        def local_address: () -> UDP::address?
+
+        def stop: (?timeout: Float | Integer) -> nil
+
+        def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
+      end
+
+      class Serving
+        LAST_REQUEST: Integer
+
+        type arrived = [Integer, Array[[String, String]]]
+
+        @session: Session
+        @http3: Raiha::HTTP3::Connection
+        @binding: Raiha::HTTP3Binding
+        @exchanges: Hash[Integer, Raiha::Runtime::HTTP3::Exchange]
+        @arrived: Array[arrived]
+        @requests: Hash[Integer, Thread?]
+
+        def initialize: (Session session, Raiha::HTTP3::Settings settings) -> void
+
+        def serve: () { (Request request) -> void } -> void
+
+        def expire: () -> void
+
+        def read_chunk: (Integer stream_id) -> String?
+
+        def respond: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status, Array[[String, String]] headers, String? body) -> void
+
+        def respond_with: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status, Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+        def finish_body: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] trailers) -> void
+
+        def write_body: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String data) -> void
+
+        def stream_early_data?: (Integer stream_id) -> bool
+
+        def prioritize: (Integer stream_id, urgency: Integer?, incremental: bool?) -> void
+
+        def take: (Raiha::QUIC::Event::t event, Float now) -> bool
+
+        def turn: (Float now) -> void
+
+        private def place_for: () { () -> (arrived | Symbol | nil) } -> (arrived | Symbol | nil)
+
+        private def start: (^(Request) -> void handler, arrived arrived) -> void
+
+        private def go_away: (^(Request) -> void handler) -> void
+
+        private def handle: (^(Request) -> void handler, Request request) -> void
+
+        private def failed: (Request request) -> void
+
+        private def send_header_section: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] fields, fin: bool) -> void
+
+        private def write: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String data, fin: bool) -> void
+
+        private def writable: [T < Object] (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) { () -> T? } -> T
+
+        private def forget: (Request request) -> void
+
+        private def resume: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def flush: () -> void
+
+        private def take_http3: (Raiha::HTTP3::Event::t event) -> void
+      end
     end
   end
 end
