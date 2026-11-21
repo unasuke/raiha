@@ -51,6 +51,9 @@ module Raiha::Runtime
     MAX_ACK_DELAY = 0.025
     # The most tickets and tokens kept (Kept::MAX_HELD).
     MAX_HELD = Kept::MAX_HELD
+    # The longest close_when_acknowledged waits in all, so that a peer that
+    # takes what was sent a little at a time does not keep it waiting.
+    CLOSE_TIMEOUT = 30
 
     # The connection, and the qlog tracer of it, if it has one, which a
     # protocol records its own events with.
@@ -155,15 +158,17 @@ module Raiha::Runtime
 
     # Closes the connection with the application's `error_code` once what the
     # streams sent is acknowledged, or three PTOs have gone with no more of
-    # it acknowledged, unless it has closed already: what is still going
-    # out when the application is done, a large write last, is not cut
-    # short however long it takes.
-    def close_when_acknowledged(error_code: @close_code)
+    # it acknowledged, or `timeout` seconds in all, unless it has closed
+    # already: what is still going out when the application is done, a
+    # large write last, is not cut short while it goes.
+    def close_when_acknowledged(error_code: @close_code, timeout: CLOSE_TIMEOUT)
       return if closed?
+      limit = Driver.clock + timeout
       while (left = @connection.stats.send_buffer_bytes).positive?
         stats = @connection.stats
         three_ptos = 3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY)
-        break unless wait(deadline: Driver.clock + three_ptos) { @connection.stats.send_buffer_bytes < left || nil }
+        deadline = [Driver.clock + three_ptos, limit].min
+        break unless wait(deadline:) { @connection.stats.send_buffer_bytes < left || nil }
       end
       close(error_code:)
     end

@@ -124,6 +124,7 @@ module Raiha::Runtime
 
       Track: singleton(Raiha::Runtime::Session::Track)
       MAX_ACK_DELAY: Float
+      CLOSE_TIMEOUT: Integer
       MAX_HELD: Integer
 
       attr_reader tracer: Raiha::QUIC::Qlog::Tracer?
@@ -185,7 +186,7 @@ module Raiha::Runtime
 
       def wait_acknowledged: (Float | Integer seconds) -> bool
 
-      def close_when_acknowledged: (?error_code: Integer) -> void
+      def close_when_acknowledged: (?error_code: Integer, ?timeout: Float | Integer) -> void
 
       def wait_handshake: () -> nil
 

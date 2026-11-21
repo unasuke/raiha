@@ -271,4 +271,17 @@ class RaihaRuntimeSessionTest < Minitest::Test
     assert_equal [0, 0], connection.closed_with
     assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.15
   end
+
+  # A peer that takes what was sent a little at a time is waited for no
+  # longer than the timeout in all, though more keeps being acknowledged.
+  def test_a_close_waits_no_longer_than_its_timeout
+    connection = DrainingConnection.new(1_000, 0.05)
+    driver = Object.new
+    def driver.changed = nil
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    Runtime::Session.new(connection, driver, role: :client).close_when_acknowledged(timeout: 0.3)
+    assert_equal 0, connection.closed_with.first
+    assert_operator connection.closed_with.last, :>, 0
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1
+  end
 end

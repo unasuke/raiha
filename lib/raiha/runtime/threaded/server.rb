@@ -24,11 +24,11 @@ module Raiha::Runtime
     # runner, and the one that waits for `stop` ("raiha-wake") besides.
     #
     # When the block is over, what the streams sent is let be acknowledged,
-    # until three PTOs go with no more of it acknowledged, and the
-    # connection closes with the application's
-    # error 0; when it raises, the connection closes with INTERNAL_ERROR,
-    # and the exception goes on, for its thread to report. Other
-    # connections are not touched.
+    # until three PTOs go with no more of it acknowledged or 30 seconds in
+    # all, and the connection closes with the application's error 0; when
+    # it raises, the connection closes with INTERNAL_ERROR, and the
+    # exception goes on, for its thread to report. Other connections are
+    # not touched.
     #
     # `stop` asks the server to stop, from a signal handler as well, as the
     # Server of fibers has it. Once the driver has stopped, `run` waits for

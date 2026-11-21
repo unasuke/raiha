@@ -147,6 +147,7 @@ module Raiha::Runtime
       Track = Raiha::Runtime::Session::Track
       MAX_ACK_DELAY = Raiha::Runtime::Session::MAX_ACK_DELAY
       MAX_HELD = Kept::MAX_HELD
+      CLOSE_TIMEOUT = Raiha::Runtime::Session::CLOSE_TIMEOUT
 
       # The qlog tracer of the connection, if it has one, which a protocol
       # records its own events with.
@@ -272,15 +273,17 @@ module Raiha::Runtime
 
       # Closes the connection with the application's `error_code` once what
       # the streams sent is acknowledged, or three PTOs have gone with no
-      # more of it acknowledged, unless it has closed already, as the
-      # Session of fibers does.
-      def close_when_acknowledged(error_code: @close_code)
+      # more of it acknowledged, or `timeout` seconds in all, unless it has
+      # closed already, as the Session of fibers does.
+      def close_when_acknowledged(error_code: @close_code, timeout: CLOSE_TIMEOUT)
         @driver.synchronize do
           next if closed?
+          limit = Driver.clock + timeout
           while (left = @connection.stats.send_buffer_bytes).positive?
             stats = @connection.stats
             three_ptos = 3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY)
-            break unless wait(deadline: Driver.clock + three_ptos) { @connection.stats.send_buffer_bytes < left || nil }
+            deadline = [Driver.clock + three_ptos, limit].min
+            break unless wait(deadline:) { @connection.stats.send_buffer_bytes < left || nil }
           end
           close(error_code:)
         end

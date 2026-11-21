@@ -16,10 +16,10 @@ module Raiha::Runtime
   # is. With 0, every such client is sent one.
   #
   # When the block is over, what the streams sent is let be acknowledged,
-  # until three PTOs go with no more of it acknowledged, and the connection
-  # closes with the application's error 0;
-  # when it raises, the connection closes with INTERNAL_ERROR, and the
-  # exception goes on to the scheduler. Other connections are not touched.
+  # until three PTOs go with no more of it acknowledged or 30 seconds in
+  # all, and the connection closes with the application's error 0; when it
+  # raises, the connection closes with INTERNAL_ERROR, and the exception
+  # goes on to the scheduler. Other connections are not touched.
   #
   # `stop` asks the server to stop, from a signal handler as well: no new
   # connection is taken, each Session is told it is `stopping?`, and the

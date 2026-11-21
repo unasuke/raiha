@@ -15,9 +15,9 @@ module Raiha::Runtime
     # wait for a place while that many run. The block's value is returned.
     #
     # Once the block is over, what the streams sent is let be acknowledged,
-    # until three PTOs go with no more of it acknowledged, the connection
-    # closes, and the threads of its
-    # streams are waited for, Server::STOP_TIMEOUT at most; those still
+    # until three PTOs go with no more of it acknowledged or 30 seconds in
+    # all, the connection closes, and the threads of its streams are waited
+    # for, Server::STOP_TIMEOUT at most; those still
     # running are left to. An attempt that fails has its driver's threads
     # ended before the next address is tried.
     class Client
@@ -121,10 +121,9 @@ module Raiha::Runtime
       end
 
       # Closes the connection once what was sent is acknowledged, or three
-      # PTOs have gone with no more of it acknowledged, sends the
-      # CONNECTION_CLOSE, of a close in the block
-      # as well, stops the driver, and waits for the threads of the
-      # streams.
+      # PTOs have gone with no more of it acknowledged, or 30 seconds in
+      # all; sends the CONNECTION_CLOSE, of a close in the block as well;
+      # stops the driver; and waits for the threads of the streams.
       private def finish(driver, session)
         session.close_when_acknowledged unless session.closed?
         driver.flush
