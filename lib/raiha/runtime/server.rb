@@ -15,8 +15,9 @@ module Raiha::Runtime
   # handshake has not validated yet, as one from a spoofed address never
   # is. With 0, every such client is sent one.
   #
-  # When the block is over, what the streams sent is given three PTOs to be
-  # acknowledged and the connection closes with the application's error 0;
+  # When the block is over, what the streams sent is let be acknowledged,
+  # until three PTOs go with no more of it acknowledged, and the connection
+  # closes with the application's error 0;
   # when it raises, the connection closes with INTERNAL_ERROR, and the
   # exception goes on to the scheduler. Other connections are not touched.
   #

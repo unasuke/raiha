@@ -1,5 +1,6 @@
 require "test_helper"
 require "support/runtime_owner"
+require "support/draining_connection"
 require "async"
 
 # A Session of the runtime between a client and a server on the loopback
@@ -257,5 +258,17 @@ class RaihaRuntimeSessionTest < Minitest::Test
     assert_equal sessions.last(Runtime::Session::MAX_HELD), session.tickets
     assert_equal tokens.last(Runtime::Session::MAX_HELD), session.tokens
     assert_equal [TLS::Trace::TicketIgnored.new(reason: :too_many_tickets)] * 2, tracer.values
+  end
+
+  # What is acknowledged slower than three PTOs, while more of it keeps
+  # being acknowledged, is waited for whole before the connection closes.
+  def test_a_close_waits_while_more_is_acknowledged
+    connection = DrainingConnection.new(4, 0.05)
+    driver = Object.new
+    def driver.changed = nil
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    Runtime::Session.new(connection, driver, role: :client).close_when_acknowledged
+    assert_equal [0, 0], connection.closed_with
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.15
   end
 end

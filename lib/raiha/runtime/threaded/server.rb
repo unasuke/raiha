@@ -23,8 +23,9 @@ module Raiha::Runtime
     # max_threads` at most, and those of the driver, its readers and its
     # runner, and the one that waits for `stop` ("raiha-wake") besides.
     #
-    # When the block is over, what the streams sent is given three PTOs to
-    # be acknowledged and the connection closes with the application's
+    # When the block is over, what the streams sent is let be acknowledged,
+    # until three PTOs go with no more of it acknowledged, and the
+    # connection closes with the application's
     # error 0; when it raises, the connection closes with INTERNAL_ERROR,
     # and the exception goes on, for its thread to report. Other
     # connections are not touched.

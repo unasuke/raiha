@@ -26,8 +26,9 @@ module Raiha::Runtime
   # (Alt-Svc, HTTPS records) and no fallback to TCP: the host and port are
   # taken to speak QUIC. The block's value is returned.
   #
-  # Once the block is over, what the streams sent is given three PTOs to be
-  # acknowledged, so a response written last is not cut short, and the
+  # Once the block is over, what the streams sent is let be acknowledged,
+  # until three PTOs go with no more of it acknowledged, so that a response
+  # written last is not cut short, and the
   # connection closes with the application's error 0, or that of the
   # protocol attached to the Session: H3_NO_ERROR for HTTP/3. The closing
   # period is not waited out: the CONNECTION_CLOSE goes, and the socket
@@ -149,8 +150,8 @@ module Raiha::Runtime
       @qlog&.flush
     end
 
-    # Closes the connection once what was sent is acknowledged or three PTOs
-    # have gone, and stops the driver.
+    # Closes the connection once what was sent is acknowledged, or three
+    # PTOs have gone with no more of it acknowledged, and stops the driver.
     private def finish(driver, session)
       unless session.closed?
         session.close_when_acknowledged

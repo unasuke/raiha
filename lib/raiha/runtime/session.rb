@@ -154,12 +154,17 @@ module Raiha::Runtime
     end
 
     # Closes the connection with the application's `error_code` once what the
-    # streams sent is acknowledged, or three PTOs have gone, unless it has
-    # closed already.
+    # streams sent is acknowledged, or three PTOs have gone with no more of
+    # it acknowledged, unless it has closed already: what is still going
+    # out when the application is done, a large write last, is not cut
+    # short however long it takes.
     def close_when_acknowledged(error_code: @close_code)
       return if closed?
-      stats = @connection.stats
-      wait_acknowledged(3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY))
+      while (left = @connection.stats.send_buffer_bytes).positive?
+        stats = @connection.stats
+        three_ptos = 3 * (stats.rtt + [4 * stats.rtt_var, 0.001].max + MAX_ACK_DELAY)
+        break unless wait(deadline: Driver.clock + three_ptos) { @connection.stats.send_buffer_bytes < left || nil }
+      end
       close(error_code:)
     end
 
