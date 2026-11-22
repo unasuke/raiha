@@ -15,10 +15,11 @@ module Raiha::Runtime
   # handshake has not validated yet, as one from a spoofed address never
   # is. With 0, every such client is sent one.
   #
-  # When the block is over, what the streams sent is given three PTOs to be
-  # acknowledged and the connection closes with the application's error 0;
-  # when it raises, the connection closes with INTERNAL_ERROR, and the
-  # exception goes on to the scheduler. Other connections are not touched.
+  # When the block is over, what the streams sent is let be acknowledged,
+  # until three PTOs go with no more of it acknowledged or 30 seconds in
+  # all, and the connection closes with the application's error 0; when it
+  # raises, the connection closes with INTERNAL_ERROR, and the exception
+  # goes on to the scheduler. Other connections are not touched.
   #
   # `stop` asks the server to stop, from a signal handler as well: no new
   # connection is taken, each Session is told it is `stopping?`, and the
@@ -174,8 +175,10 @@ module Raiha::Runtime
       endpoint = @driver&.endpoint or return
       case route
       when Raiha::QUIC::Route::Incoming
-        return endpoint.refuse(route.handle) if @stop || @sessions.size >= @max_connections
-        return endpoint.retry(route.handle, now:) if !route.address_validated && unvalidated(now) >= @max_unvalidated
+        case Admission.decide(route, full: !@stop.nil? || @sessions.size >= @max_connections, max_unvalidated: @max_unvalidated) { unvalidated(now) }
+        when :refuse then return endpoint.refuse(route.handle)
+        when :retry then return endpoint.retry(route.handle, now:)
+        end
         hello = endpoint.admit(route.handle, now:)
         return route(hello, now) if hello
         @admitted << route.handle unless route.address_validated
@@ -217,9 +220,7 @@ module Raiha::Runtime
 
     # How many of the offers admitted and the connections taken have
     # addresses not validated.
-    private def unvalidated(now)
-      @admitted.count { |handle| !handle.expired?(now) && !handle.failed? } + @sessions.count { |session| !session.connection.address_validated? }
-    end
+    private def unvalidated(now) = Admission.unvalidated(@admitted, @sessions.map(&:connection), now)
 
     def stopped(failure)
       @sessions.each { |session| session.abort(failure) }
@@ -277,15 +278,11 @@ module Raiha::Runtime
     end
 
     # A ticket is sealed with the key of the epoch it is issued in, and keys
-    # of epochs long gone stop opening any. A Keyring of another Config is
-    # left for the handshake to refuse.
+    # of epochs long gone stop opening any.
     private def advance_ticket_keys
-      keys = @tls_config.ticket_keys or return
-      at = keys.next_advance_at or return
-      time = Time.now
-      return if time < at || !@keyring.config.equal?(@tls_config)
-      @keyring = @keyring.with_ticket_keys(keys.advance(now: time))
-      @tls_config = @keyring.config
+      keyring = Admission.advance_ticket_keys(@tls_config, @keyring, Time.now) or return
+      @keyring = keyring
+      @tls_config = keyring.config
     end
 
     # Has the driver go round each time `stop` writes to the pipe.

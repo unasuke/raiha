@@ -1,4 +1,6 @@
 module Raiha::Runtime
+  def self.for: (?concurrency: Object) -> (singleton(Raiha::Runtime) | singleton(Raiha::Runtime::Threaded))
+
   module Error
     class Base < StandardError
     end
@@ -283,6 +285,7 @@ module Raiha::Runtime
     end
 
     MAX_ACK_DELAY: Float
+    CLOSE_TIMEOUT: Integer
     MAX_HELD: Integer
 
     attr_reader connection: Raiha::QUIC::Connection
@@ -302,8 +305,7 @@ module Raiha::Runtime
     @connected: Raiha::QUIC::Event::Connected?
     @protocol: _Protocol?
     @close_code: Integer
-    @tickets: Array[Raiha::QUIC::Session]
-    @tokens: Array[String]
+    @kept: Kept
     @generation: Integer
 
     attr_reader server_name: String?
@@ -331,7 +333,7 @@ module Raiha::Runtime
 
     def wait_acknowledged: (Float | Integer seconds) -> bool
 
-    def close_when_acknowledged: (?error_code: Integer) -> void
+    def close_when_acknowledged: (?error_code: Integer, ?timeout: Float | Integer) -> void
 
     def wait_handshake: () -> nil
 
@@ -368,8 +370,6 @@ module Raiha::Runtime
     private def current!: (Integer stream_id, Integer generation) -> void
 
     private def take: (Raiha::QUIC::Event::t event) -> void
-
-    private def ticket: (Raiha::QUIC::Session session) -> void
 
     private def arrived: (Integer stream_id) -> void
 
@@ -447,7 +447,6 @@ module Raiha::Runtime
 
     private def finish: (Driver driver, Session session) -> void
 
-    private def bind: (UDP::address address) -> [UDP, Raiha::QUIC::Config]
     private def resolve: (String host, Integer port) -> Array[UDP::address]
 
     private def attempt: (UDP::address address, String server_name, session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
@@ -528,6 +527,58 @@ module Raiha::Runtime
 end
 
 module Raiha::Runtime
+  module HTTP3
+    module Fields
+      def self.split: (Array[[String, String]] headers) -> [Hash[String, String], Array[[String, String]]]
+
+      def self.request: (String method, String authority, String path) -> Array[[String, String]]
+
+      def self.priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
+
+      def self.status: (Array[[String, String]] headers) -> Integer?
+    end
+  end
+end
+
+module Raiha::Runtime
+  class Kept
+    MAX_HELD: Integer
+
+    @tracer: Raiha::QUIC::Qlog::Tracer?
+    @tickets: Array[Raiha::QUIC::Session]
+    @tokens: Array[String]
+
+    def initialize: (Raiha::QUIC::Qlog::Tracer? tracer) -> void
+
+    def tickets: () -> Array[Raiha::QUIC::Session]
+
+    def tokens: () -> Array[String]
+
+    def ticket: (Raiha::QUIC::Session session) -> void
+
+    def token: (String token) -> void
+  end
+end
+
+module Raiha::Runtime
+  module Addresses
+    def self.resolve: (String host, Integer port) -> Array[UDP::address]
+
+    def self.bind: (UDP::address address, Raiha::QUIC::Config config) -> [UDP, Raiha::QUIC::Config]
+  end
+end
+
+module Raiha::Runtime
+  module Admission
+    def self.decide: (Raiha::QUIC::Route::Incoming route, full: bool, max_unvalidated: Integer) { () -> Integer } -> (:refuse | :retry | :admit)
+
+    def self.unvalidated: (Array[Raiha::QUIC::Endpoint::Handle] admitted, Array[Raiha::QUIC::Connection] connections, Float now) -> Integer
+
+    def self.advance_ticket_keys: (Raiha::TLS::Config tls_config, Raiha::TLS::Keyring keyring, Time time) -> Raiha::TLS::Keyring?
+  end
+end
+
+module Raiha::Runtime
   class Qlog
     BUDGET: Integer
     MAX_FILES: Integer
@@ -549,6 +600,10 @@ module Raiha::Runtime
 
       def flush: () -> bool
 
+      def take: () -> [String, bool]
+
+      def put: (String data, bool over) -> bool
+
       private def open_locked: () -> File?
     end
 
@@ -567,6 +622,12 @@ module Raiha::Runtime
     def trace: (:client | :server vantage_point, String name, tls_config: Raiha::TLS::Config) -> [Raiha::QUIC::Qlog::Tracer, Pending]
 
     def flush: () -> nil
+
+    def take: () -> Array[[Pending, String, bool]]
+
+    def put: (Array[[Pending, String, bool]] taken) -> Array[Pending]
+
+    def retire: (Array[Pending] done) -> nil
 
     private def files_by_age: () -> Array[[String, Integer]]
 
@@ -692,7 +753,6 @@ module Raiha::Runtime
 
       private def remembered: () -> Raiha::HTTP3::Settings?
 
-      private def priority: (Integer? urgency, bool? incremental) -> Array[[String, String]]
 
       private def upload: (Integer stream_id, Exchange exchange, String | (_Readable & Object) body) -> void
 

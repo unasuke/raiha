@@ -1,0 +1,616 @@
+module Raiha::Runtime
+  module Threaded
+    # What a Driver runs for: a client or a server of the runtime on
+    # threads.
+    interface _Owner
+      def route: (Raiha::QUIC::Route::t route, Float now) -> void
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+    end
+
+    class Driver
+      attr_reader endpoint: Raiha::QUIC::Endpoint
+
+      @udp: UDP
+      @udps: Array[UDP]
+      @owner: _Owner
+      @core: Monitor
+      @changed: MonitorMixin::ConditionVariable
+      @dirty: bool
+      @stopped: bool
+      @failure: StandardError?
+      @queued: Array[Raiha::QUIC::Transmit]
+      @sending: Hash[UDP, Thread::Mutex]
+      @readers: Array[Thread]
+      @runner: Thread?
+
+      def self.clock: () -> Float
+
+      def initialize: (Raiha::QUIC::Endpoint endpoint, UDP udp, _Owner owner, ?others: Array[UDP]) -> void
+
+      def start: () -> self
+
+      def synchronize: [T] () { () -> T } -> T
+
+      def new_cond: () -> MonitorMixin::ConditionVariable
+
+      def mon_owned?: () -> bool
+
+      def failure: () -> StandardError?
+
+      def changed: () -> void
+
+      def stopped?: () -> bool
+
+      def flush: () -> void
+
+      def stop: () -> void
+
+      def join: () -> nil
+
+      private def read: (UDP udp) -> void
+
+      private def take: (Array[[String, UDP::address, UDP::address?, UDP::ecn]] datagrams, Float now) -> Array[Raiha::QUIC::Transmit]
+
+      private def run: () -> void
+
+      private def turn: (Float now) -> Array[Raiha::QUIC::Transmit]
+
+      private def last: () -> void
+
+      private def timeout: () -> Float?
+
+      private def emit: (Raiha::QUIC::Transmit transmit) -> bool
+
+      private def close: () -> void
+
+      private def fail: (StandardError error) -> void
+    end
+
+    class Threads
+      attr_reader max: Integer
+
+      @lock: Thread::Mutex
+      @freed: Thread::ConditionVariable
+      @taken: Integer
+      @running: Hash[Thread, true]
+
+      def initialize: (Integer max) -> void
+
+      def taken: () -> Integer
+
+      def take: () { () -> bool } -> bool
+
+      def count: () -> nil
+
+      def give_back: () -> void
+
+      def wake: () -> void
+
+      def start: (String name) { () -> void } -> Thread
+
+      def running: () -> Array[Thread]
+
+      def join: (Float deadline) -> nil
+    end
+
+    # What a Session needs of its Driver: the core lock and its
+    # conditions.
+    interface _Core
+      def synchronize: [T] () { () -> T } -> T
+
+      def new_cond: () -> MonitorMixin::ConditionVariable
+
+      def mon_owned?: () -> bool
+    end
+
+    class Session
+      class Locked < BasicObject
+        @connection: Raiha::QUIC::Connection
+        @driver: Driver
+
+        def initialize: (Raiha::QUIC::Connection connection, Driver driver) -> void
+
+        def method_missing: (Symbol name, *untyped, **untyped) ?{ (*untyped) -> untyped } -> untyped
+
+        def respond_to_missing?: (Symbol name, ?bool include_private) -> bool
+      end
+
+      Track: singleton(Raiha::Runtime::Session::Track)
+      MAX_ACK_DELAY: Float
+      CLOSE_TIMEOUT: Integer
+      MAX_HELD: Integer
+
+      attr_reader tracer: Raiha::QUIC::Qlog::Tracer?
+      attr_reader server_name: String?
+      attr_reader resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil
+
+      @connection: Raiha::QUIC::Connection
+      @locked: Locked
+      @driver: Driver
+      @threads: Threads
+      @role: :client | :server
+      @changed: MonitorMixin::ConditionVariable
+      @waiting: Integer
+      @tracks: Hash[Integer, Raiha::Runtime::Session::Track]
+      @incoming: Array[Integer]
+      @peer_next: Array[Integer]
+      @aborted: StandardError?
+      @stopping: bool
+      @stop_deadline: Float?
+      @connected: Raiha::QUIC::Event::Connected?
+      @protocol: _Protocol?
+      @close_code: Integer
+      @kept: Kept
+      @generation: Integer
+      @ended: bool
+
+      def initialize: (Raiha::QUIC::Connection connection, Driver driver, role: :client | :server, threads: Threads,
+                       ?tracer: Raiha::QUIC::Qlog::Tracer?, ?server_name: String?,
+                       ?resumed: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil) -> void
+
+      attr_reader threads: Threads
+
+      def connection: () -> Raiha::QUIC::Connection
+
+      def core: () -> Raiha::QUIC::Connection
+
+      def synchronize: [T] () { () -> T } -> T
+
+      def ended?: () -> bool
+
+      def unlocked!: () -> void
+
+      def handshake: () -> Raiha::TLS::Event::HandshakeComplete?
+
+      def tickets: () -> Array[Raiha::QUIC::Session]
+
+      def tokens: () -> Array[String]
+
+      def attach: (_Protocol protocol, ?close_code: Integer) -> void
+
+      def changed: () -> void
+
+      def open_stream_id: (?direction: :bidi | :uni) -> Integer
+
+      def wait_for: [T < Object] (?drain: bool) { () -> T? } -> T
+                  | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
+
+      def open_stream: (?direction: :bidi | :uni) -> Stream
+
+      def wait_acknowledged: (Float | Integer seconds) -> bool
+
+      def close_when_acknowledged: (?error_code: Integer, ?timeout: Float | Integer) -> void
+
+      def wait_handshake: () -> nil
+
+      def wait_ready: () -> nil
+
+      def accept_stream: () -> Stream?
+
+      def each_stream: () { (Stream stream) -> void } -> void
+
+      def close: (?error_code: Integer, ?reason: String) -> void
+
+      def closed?: () -> bool
+
+      def stopping?: () -> bool
+
+      def stop_deadline: () -> Float?
+
+      def stopping!: (?Float? deadline) -> void
+
+      def expire: (error_code: Integer) -> void
+
+      def abort: (?StandardError? failure) -> void
+
+      def turn: () -> void
+
+      def read: (Integer stream_id, Integer max_bytes, generation: Integer) -> String?
+
+      def write: (Integer stream_id, String data, fin: bool, generation: Integer) -> Integer
+
+      private def start_stream: (Stream stream) { (Stream stream) -> void } -> void
+
+      private def give_up: (Integer stream_id) -> void
+
+      private def ended: () -> void
+
+      private def take_events: () -> void
+
+      private def zero_rtt_rejected: () -> void
+
+      private def current!: (Integer stream_id, Integer generation) -> void
+
+      private def take: (Raiha::QUIC::Event::t event) -> void
+
+      private def arrived: (Integer stream_id) -> void
+
+      private def forget_reset: (Integer stream_id) -> void
+
+      private def over: (Integer stream_id, :reading | :writing part) -> void
+
+      private def local?: (Integer stream_id) -> bool
+
+      private def notify: () -> void
+
+      private def wait: [T < Object] (?drain: bool) { () -> T? } -> T
+                      | [T < Object] (deadline: Float, ?drain: bool) { () -> T? } -> T?
+    end
+
+    class Stream
+      PIECE: Integer
+
+      attr_reader id: Integer
+
+      @session: Session
+      @generation: Integer
+
+      def initialize: (Session session, Integer id, Integer generation) -> void
+
+      def read: (?Integer? length) -> String?
+
+      def write: (String data) -> Integer
+
+      def <<: (String data) -> self
+
+      def close_write: () -> nil
+    end
+
+    class Budget < Raiha::QUIC::Qlog::Budget
+      @lock: Thread::Mutex
+
+      def self.current: () -> Budget
+
+      def initialize: (max_bytes: Integer) -> void
+    end
+
+    class Server
+      MAX_CONNECTIONS: Integer
+      MAX_THREADS: Integer
+      STOP_TIMEOUT: Integer
+
+      @threads: Threads
+      @handlers: Threads
+      @stop_error_code: Integer
+      @config: Raiha::QUIC::Config
+      @tls_config: Raiha::TLS::Config
+      @keyring: Raiha::TLS::Keyring
+      @anti_replay: Raiha::TLS::AntiReplay::_AntiReplay
+      @app_early_data_context: String
+      @host: String
+      @port: Integer
+      @max_connections: Integer
+      @max_unvalidated: Integer
+      @admitted: Array[Raiha::QUIC::Endpoint::Handle]
+      @qlog: Qlog?
+      @tracing: Thread::Mutex
+      @traces: Hash[Session, Qlog::Pending]
+      @sessions: Array[Session]
+      @started: Hash[Session, true]
+      @handler: (^(Session) -> void)?
+      @driver: Driver?
+      @done: MonitorMixin::ConditionVariable?
+      @udp: UDP?
+      @stop: [Float | Integer, Integer]?
+      @stop_deadline: Float?
+      @wake: IO?
+
+      def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                       ?host: String?, ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?max_threads: Integer,
+                       ?qlog_dir: String?, ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?, ?app_early_data_context: String,
+                       ?stop_error_code: Integer) -> void
+
+      def run: () { (Session session) -> void } -> nil
+
+      def local_address: () -> UDP::address?
+
+      def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
+
+      def stop: (?timeout: Float | Integer, ?error_code: Integer) -> nil
+
+      def route: (Raiha::QUIC::Route::t route, Float now) -> void
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+
+      private def unvalidated: (Float now) -> Integer
+
+      private def driver!: () -> Driver
+
+      private def preferred_sockets: (UDP udp) -> Array[UDP]
+
+      private def advance_ticket_keys: () -> void
+
+      private def wake_on: (IO reader, Driver driver) -> void
+
+      private def stopping: (Float now) -> void
+
+      private def start: (Session session) -> void
+
+      private def internal_error: (Session session) -> void
+    end
+
+    class Client
+      CONNECT_TIMEOUT: Float
+      MAX_THREADS: Integer
+
+      @threads: Threads
+      @config: Raiha::QUIC::Config
+      @tls_config: Raiha::TLS::Config
+      @keyring: Raiha::TLS::Keyring
+      @connect_timeout: Float | Integer
+      @session: Session?
+      @driver: Driver?
+      @deadline: Float?
+      @qlog: Qlog?
+      @tracing: Thread::Mutex
+      @trace: Qlog::Pending?
+
+      def self.connect: [T] (String host, Integer port, config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                             ?server_name: String, ?connect_timeout: Float | Integer, ?qlog_dir: String?,
+                             ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil, ?token: String?, ?early_data: bool,
+                             ?max_threads: Integer) { (Session session) -> T } -> T
+
+      def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring,
+                       ?connect_timeout: Float | Integer, ?qlog_dir: String?, ?max_threads: Integer) -> void
+
+      def connect: [T] (String host, Integer port, ?server_name: String, ?session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
+                        ?token: String?, ?early_data: bool) { (Session session) -> T } -> T
+
+      def route: (Raiha::QUIC::Route::t route, Float now) -> nil
+
+      def turn: (Float now) -> void
+
+      def next_timeout: () -> Float?
+
+      def stopped: (StandardError? failure) -> void
+
+      def flush_traces: () -> void
+
+      private def finish: (Driver driver, Session session) -> void
+
+      private def resolve: (String host, Integer port) -> Array[UDP::address]
+
+      private def attempt: (UDP::address address, String server_name, session: Raiha::QUIC::Session | Raiha::HTTP3::Session | nil,
+                            token: String?, early_data: bool) -> [Driver, Session]
+    end
+
+    module HTTP3
+      StreamReset: singleton(Raiha::Runtime::HTTP3::StreamReset)
+      Response: singleton(Raiha::Runtime::HTTP3::Response)
+      Exchange: singleton(Raiha::Runtime::HTTP3::Exchange)
+      Fields: singleton(Raiha::Runtime::HTTP3::Fields)
+
+      # What a Body reads its chunks from: the HTTP/3 of a server's
+      # connection, or a client.
+      interface _ChunkReader
+        def read_chunk: (Integer stream_id) -> String?
+      end
+
+      class Body
+        @reader: _ChunkReader
+        @stream_id: Integer
+
+        def initialize: (_ChunkReader reader, Integer stream_id) -> void
+
+        def read_chunk: () -> String?
+
+        def each: () { (String chunk) -> void } -> void
+
+        def read: () -> String
+      end
+
+      class ResponseStream
+        attr_reader status: Integer
+        attr_reader headers: Array[[String, String]]
+        attr_reader body: Body
+
+        @client: Client
+        @stream_id: Integer
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+
+        def initialize: (Client client, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status) -> void
+
+        def trailers: () -> Array[[String, String]]
+
+        def cancel: () -> void
+      end
+
+      class Client
+        PIECE: Integer
+        ALPN: String
+
+        @session: Session
+        @settings: Raiha::HTTP3::Settings
+        @tracer: Raiha::HTTP3::Qlog::Tracer?
+        @http3: Raiha::HTTP3::Connection
+        @binding: Raiha::HTTP3Binding
+        @exchanges: Hash[Integer, Raiha::Runtime::HTTP3::Exchange]
+        @authority: String
+
+        def initialize: (Session session, ?authority: String?, ?settings: Raiha::HTTP3::Settings) -> void
+
+        def tickets: () -> Array[Raiha::HTTP3::Session]
+
+        def get: (String path, ?headers: Array[[String, String]]) -> Raiha::Runtime::HTTP3::Response
+
+        def request: (String method, String path, ?headers: Array[[String, String]], ?body: String | (Raiha::Runtime::HTTP3::_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) -> Raiha::Runtime::HTTP3::Response
+                   | [T] (String method, String path, ?headers: Array[[String, String]], ?body: String | (Raiha::Runtime::HTTP3::_Readable & Object) | nil, ?urgency: Integer?, ?incremental: bool?) { (ResponseStream response) -> T } -> T
+
+        def read_chunk: (Integer stream_id) -> String?
+
+        def cancel: (Integer stream_id) -> void
+
+        def take: (Raiha::QUIC::Event::t event, Float now) -> bool
+
+        def expire: () -> nil
+
+        def turn: (Float now) -> void
+
+        private def start: (String method, String path, Array[[String, String]] headers, fin: bool) -> [Integer, Raiha::Runtime::HTTP3::Exchange]
+
+        private def remembered: () -> Raiha::HTTP3::Settings?
+
+        private def upload: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String | (Raiha::Runtime::HTTP3::_Readable & Object) body) -> void
+
+        private def check_stopped: (Integer stream_id, Integer error_code) -> void
+
+        private def check: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def finish: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def zero_rtt_rejected: () -> void
+
+        private def resume: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def flush: () -> void
+
+        private def take_http3: (Raiha::HTTP3::Event::t event) -> void
+
+        private def pause: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+      end
+
+      class ResponseBody
+        attr_reader trailers: Array[[String, String]]
+
+        @server: Serving
+        @stream_id: Integer
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+        @closed: bool
+
+        def initialize: (Serving server, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        def write: (String data) -> Integer
+
+        def <<: (String data) -> self
+
+        def trailers=: (Array[[String, String]] fields) -> void
+
+        def close: () -> void
+
+        def closed?: () -> bool
+
+        private def closed!: () -> void
+      end
+
+      class Request
+        attr_reader stream_id: Integer
+        attr_reader method: String
+        attr_reader path: String
+        attr_reader authority: String?
+        attr_reader scheme: String?
+        attr_reader protocol: String?
+        attr_reader headers: Array[[String, String]]
+        attr_reader body: Body
+
+        @server: Serving
+        @exchange: Raiha::Runtime::HTTP3::Exchange
+        @responded: bool
+        @marked_early: bool
+
+        def initialize: (Serving server, Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] headers) -> void
+
+        def trailers: () -> Array[[String, String]]
+
+        def early_data?: () -> bool
+
+        def responded?: () -> bool
+
+        def respond: (Integer status, ?Array[[String, String]] headers, ?String? body) -> void
+                   | (Integer status, ?Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+        def priority=: ({ ?urgency: Integer, ?incremental: bool } parameters) -> void
+      end
+
+      class Server
+        @settings: Raiha::HTTP3::Settings
+        @server: Threaded::Server
+
+        def initialize: (config: Raiha::QUIC::Config, tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring, ?host: String?,
+                         ?port: Integer?, ?max_connections: Integer, ?max_unvalidated: Integer, ?max_threads: Integer, ?qlog_dir: String?,
+                         ?settings: Raiha::HTTP3::Settings, ?anti_replay: Raiha::TLS::AntiReplay::_AntiReplay?) -> void
+
+        def run: () { (Request request) -> void } -> nil
+
+        def local_address: () -> UDP::address?
+
+        def stop: (?timeout: Float | Integer) -> nil
+
+        def reconfigure: (tls_config: Raiha::TLS::Config, keyring: Raiha::TLS::Keyring) -> nil
+      end
+
+      class Serving
+        LAST_REQUEST: Integer
+
+        type arrived = [Integer, Array[[String, String]]]
+
+        @session: Session
+        @http3: Raiha::HTTP3::Connection
+        @binding: Raiha::HTTP3Binding
+        @exchanges: Hash[Integer, Raiha::Runtime::HTTP3::Exchange]
+        @arrived: Array[arrived]
+        @requests: Hash[Integer, Thread?]
+
+        def initialize: (Session session, Raiha::HTTP3::Settings settings) -> void
+
+        def serve: () { (Request request) -> void } -> void
+
+        def expire: () -> void
+
+        def read_chunk: (Integer stream_id) -> String?
+
+        def respond: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status, Array[[String, String]] headers, String? body) -> void
+
+        def respond_with: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Integer status, Array[[String, String]] headers) { (ResponseBody body) -> void } -> void
+
+        def finish_body: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] trailers) -> void
+
+        def write_body: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String data) -> void
+
+        def stream_early_data?: (Integer stream_id) -> bool
+
+        def prioritize: (Integer stream_id, urgency: Integer?, incremental: bool?) -> void
+
+        def take: (Raiha::QUIC::Event::t event, Float now) -> bool
+
+        def turn: (Float now) -> void
+
+        private def place_for: () { () -> (arrived | Symbol | nil) } -> (arrived | Symbol | nil)
+
+        private def start: (^(Request) -> void handler, arrived arrived) -> void
+
+        private def go_away: (^(Request) -> void handler) -> void
+
+        private def handle: (^(Request) -> void handler, Request request) -> void
+
+        private def failed: (Request request) -> void
+
+        private def send_header_section: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, Array[[String, String]] fields, fin: bool) -> void
+
+        private def write: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange, String data, fin: bool) -> void
+
+        private def writable: [T < Object] (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) { () -> T? } -> T
+
+        private def forget: (Request request) -> void
+
+        private def resume: (Integer stream_id, Raiha::Runtime::HTTP3::Exchange exchange) -> void
+
+        private def flush: () -> void
+
+        private def take_http3: (Raiha::HTTP3::Event::t event) -> void
+      end
+    end
+  end
+end

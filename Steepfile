@@ -4,4 +4,5 @@ target :lib do
   library "ipaddr"
   library "securerandom"
   library "socket"
+  library "monitor"
 end

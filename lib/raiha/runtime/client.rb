@@ -26,8 +26,9 @@ module Raiha::Runtime
   # (Alt-Svc, HTTPS records) and no fallback to TCP: the host and port are
   # taken to speak QUIC. The block's value is returned.
   #
-  # Once the block is over, what the streams sent is given three PTOs to be
-  # acknowledged, so a response written last is not cut short, and the
+  # Once the block is over, what the streams sent is let be acknowledged,
+  # until three PTOs go with no more of it acknowledged or 30 seconds in
+  # all, so that a response written last is not cut short, and the
   # connection closes with the application's error 0, or that of the
   # protocol attached to the Session: H3_NO_ERROR for HTTP/3. The closing
   # period is not waited out: the CONNECTION_CLOSE goes, and the socket
@@ -149,47 +150,27 @@ module Raiha::Runtime
       @qlog&.flush
     end
 
-    # Closes the connection once what was sent is acknowledged or three PTOs
-    # have gone, and stops the driver.
+    # Closes the connection once what was sent is acknowledged, or three
+    # PTOs have gone with no more of it acknowledged, or 30 seconds in all;
+    # sends the CONNECTION_CLOSE, of a close in the block as well; and stops
+    # the driver.
     private def finish(driver, session)
-      unless session.closed?
-        session.close_when_acknowledged
-        driver.flush
-      end
+      session.close_when_acknowledged unless session.closed?
+      driver.flush
     rescue Raiha::QUIC::ClosedError
       nil
     ensure
       driver.stop
     end
 
-    # A socket for a connection to `address`, and the Config for its
-    # addresses.
-    private def bind(address)
-      udp = UDP.bind("::", 0)
-      return [udp, @config] if udp.takes_ipv4?
-      return [udp, @config.with(address_families: %i[ipv6])] if address[0].include?(":")
-      udp.close
-      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
-    rescue SystemCallError
-      # Without "::" there is no IPv6 to send to `address` by.
-      raise if address[0].include?(":")
-      [UDP.bind("0.0.0.0", 0), @config.with(address_families: %i[ipv4])]
-    end
-
-    # [address, port] of `host` for UDP, each once; an IPv4-mapped address
-    # as the IPv4 address it maps, which a socket of IPv6 alone cannot
-    # send to.
-    private def resolve(host, port)
-      Addrinfo.getaddrinfo(host, port, nil, :DGRAM).map do |info|
-        [UDP.unmapped(info.ip_address), info.ip_port] #: UDP::address
-      end.uniq
-    end
+    # The addresses to try, as Addresses.resolve finds them.
+    private def resolve(host, port) = Addresses.resolve(host, port)
 
     # A connection to `address` on a socket of its own, its handshake to
     # begin once the driver starts: [driver, session].
     private def attempt(address, server_name, session:, token:, early_data:)
       made = false
-      udp, config = bind(address)
+      udp, config = Addresses.bind(address, @config)
       endpoint = Raiha::QUIC::Endpoint.client(config:, random: SecureRandom, time: Time.now, now: Driver.clock)
       driver = Driver.new(endpoint, udp, self)
       tracer, @trace = @qlog&.trace(:client, Time.now.utc.strftime("%Y%m%dT%H%M%S.%6N"), tls_config: @tls_config)

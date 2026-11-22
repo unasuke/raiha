@@ -59,16 +59,31 @@ module Raiha::Runtime
       end
 
       # Puts what is pending in the file, opened the first time; whether the
-      # file is done with. The write may yield, so what the tracer writes
-      # meanwhile is kept for the next flush.
+      # file is done with.
       def flush
-        unless @data.empty?
-          data = @data
-          @data = "".b
+        data, over = take
+        put(data, over)
+      end
+
+      # What the tracer has written since, and whether the connection was
+      # over by then: for `put`, which may come later, so that the file is
+      # written outside the lock the tracer writes under.
+      def take
+        data = @data
+        @data = "".b
+        [data, @over]
+      end
+
+      # Puts `data` of `take` in the file, opened the first time; whether
+      # the file is done with, closed once the connection was `over`. The
+      # write may yield, so what the tracer writes meanwhile is kept for the
+      # next take.
+      def put(data, over)
+        unless data.empty?
           file = (@file ||= open_locked)
           file&.write(data)
         end
-        return false unless @over
+        return false unless over
         @file&.close
         true
       end
@@ -124,7 +139,27 @@ module Raiha::Runtime
     # Puts what the traces have written in their files, and lets go those
     # whose connections are over.
     def flush
-      done = @pending.select(&:flush)
+      retire(put(take))
+    end
+
+    # What each trace has written since, as Pending#take has it: for `put`,
+    # under the lock the tracers write under, as `trace` and `retire` are.
+    def take
+      @pending.map do |pending|
+        data, over = pending.take
+        [pending, data, over] #: [Pending, String, bool]
+      end
+    end
+
+    # Puts what `take` took in the files, outside that lock; the traces done
+    # with, for `retire`. It touches no list of the Qlog's.
+    def put(taken)
+      taken.filter_map { |pending, data, over| pending if pending.put(data, over) }
+    end
+
+    # Lets go the traces `put` was done with, counting their files among
+    # those to take away.
+    def retire(done)
       @pending -= done
       done.each { |pending| @closed << [pending.path, pending.size] }
       nil

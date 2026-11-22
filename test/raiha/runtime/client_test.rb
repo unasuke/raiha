@@ -206,6 +206,21 @@ class RaihaRuntimeClientTest < Minitest::Test
     end
   end
 
+  # A connection the block closes itself sends its CONNECTION_CLOSE all the
+  # same, so that the server lets it go at once, not at its idle timeout.
+  def test_a_close_in_the_block_reaches_the_server
+    Sync do
+      server = server_owner
+      Runtime::Client.connect("127.0.0.1", server.port, server_name: "localhost", **options) { |session| session.close(error_code: 9) }
+      connection = accepted(server).connection
+      limit = Runtime::Driver.clock + 2
+      sleep 0.01 until connection.close_reason || Runtime::Driver.clock > limit
+      assert_equal [9, true], connection.close_reason&.then { [_1.code, _1.application] }
+    ensure
+      server&.driver&.stop
+    end
+  end
+
   def test_the_next_address_after_one_that_does_not_answer
     Sync do
       server = server_owner

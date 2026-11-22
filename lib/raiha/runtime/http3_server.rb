@@ -60,13 +60,12 @@ module Raiha::Runtime
         @server = server
         @stream_id = stream_id
         @exchange = exchange
-        pseudo = headers.select { |name, _| name.start_with?(":") }.to_h
+        pseudo, @headers = Fields.split(headers)
         @method = pseudo.fetch(":method", "")
         @path = pseudo.fetch(":path", "")
         @authority = pseudo[":authority"]
         @scheme = pseudo[":scheme"]
         @protocol = pseudo[":protocol"]
-        @headers = headers.reject { |name, _| name.start_with?(":") }
         @body = Body.new(server, stream_id)
         @responded = false
         @marked_early = @headers.any? { |name, _| name == "early-data" }
