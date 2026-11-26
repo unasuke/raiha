@@ -18,3 +18,7 @@ gems:
   # It's unnecessary if you don't use rbs as a library.
   - name: rbs
     ignore: true
+  # The quic gem is installed only with the optional interop group, for the
+  # interop tests that steep does not check.
+  - name: quic
+    ignore: true

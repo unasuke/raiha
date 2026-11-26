@@ -7,7 +7,7 @@ This guide runs an HTTP/3 server on the loopback interface and fetches a page fr
 Add Raiha to your Gemfile and run `bundle install`:
 
 ```ruby
-gem "raiha", github: "unasuke/raiha"
+gem "raiha"
 ```
 
 QUIC always runs over TLS, so the server needs a certificate. For trying things out, make a self-signed one for `localhost`:
