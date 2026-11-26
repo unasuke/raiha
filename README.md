@@ -19,7 +19,7 @@ Raiha is QUIC, HTTP/3 and TLS 1.3 written in Ruby. The protocols are implemented
 Add Raiha to your Gemfile:
 
 ```ruby
-gem "raiha", github: "unasuke/raiha"
+gem "raiha"
 ```
 
 The runtime also needs a Fiber scheduler, such as the `async` gem; see [Fiber scheduler](docs/fiber-scheduler.md). The runtime on threads needs none; see [Threads](docs/threads.md).
