@@ -109,3 +109,7 @@ end
 - [Development](docs/development.md): tests, type checks and interop testing
 
 The [examples](examples/) directory has scripts that run on their own.
+
+## License
+
+Raiha is licensed under the [Apache License, Version 2.0](LICENSE).
