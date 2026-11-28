@@ -18,10 +18,11 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
+  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
   spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files         = Dir.chdir(File.expand_path('..', __FILE__)) do
-    `git ls-files -z -- lib sig docs examples README.md LICENSE`.split("\x0")
+    `git ls-files -z -- lib sig docs examples README.md CHANGELOG.md LICENSE`.split("\x0")
   end
   spec.require_paths = ["lib"]
 
